@@ -1,5 +1,6 @@
 import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
 import { requestAiAnalysis } from '../api/aiAnalysis'
+import { getCachedAnalysis, setCachedAnalysis } from '../api/aiAnalysisCache'
 import { recordAuditEvent } from '../api/audit'
 import {
   fetchAttendanceReportData,
@@ -24,10 +25,33 @@ export interface ReportRunContext {
   scopeLabel: string
   periodLabel: string
   generatedByLabel: string
+  profileId?: string | null
 }
 
 function pct(value: number): string {
   return `${value.toFixed(1)}%`
+}
+
+const MAX_RANKING_ITEMS = 5
+
+// Resumen compacto para el payload que se manda a Gemini: en vez de una fila
+// por cada registro (que en una regional grande puede ser un JSON enorme y
+// consume cuota/tokens sin necesidad), se manda solo el ranking de los
+// valores mas altos y mas bajos — alcanza para que la IA comente extremos y
+// tendencias sin tener que leer la tabla completa (que igual ya esta en el
+// PDF, visible para el lector humano).
+function topBottomRanking(
+  items: { label: string; value: number }[],
+): { top: { label: string; value: number }[]; bottom: { label: string; value: number }[]; omitted: number } {
+  if (items.length <= MAX_RANKING_ITEMS * 2) {
+    return { top: items.slice().sort((a, b) => b.value - a.value), bottom: [], omitted: 0 }
+  }
+  const sorted = items.slice().sort((a, b) => b.value - a.value)
+  return {
+    top: sorted.slice(0, MAX_RANKING_ITEMS),
+    bottom: sorted.slice(-MAX_RANKING_ITEMS),
+    omitted: items.length - MAX_RANKING_ITEMS * 2,
+  }
 }
 
 const NO_DATA_FALLBACK = 'No hay datos suficientes en este reporte para generar un análisis con IA.'
@@ -47,13 +71,18 @@ async function runAiAnalysis(
     return
   }
 
-  const result = await requestAiAnalysis({
-    reportKey,
-    reportLabel,
-    scopeLabel: ctx.scopeLabel,
-    periodLabel: ctx.periodLabel,
-    summary,
-  })
+  const profileId = ctx.profileId ?? null
+  const cached = getCachedAnalysis(reportKey, ctx.filters, profileId)
+  const result =
+    cached ??
+    (await requestAiAnalysis({
+      reportKey,
+      reportLabel,
+      scopeLabel: ctx.scopeLabel,
+      periodLabel: ctx.periodLabel,
+      summary,
+    }))
+  if (!cached) setCachedAnalysis(reportKey, ctx.filters, profileId, result)
 
   builder.addAiAnalysisSection(
     result.available && result.analysis ? result.analysis : null,
@@ -63,7 +92,7 @@ async function runAiAnalysis(
   await recordAuditEvent({
     action: 'analisis_ia_reporte',
     tableName: 'reports',
-    reason: `${reportLabel} · ${ctx.scopeLabel} · ${ctx.periodLabel} · ${result.available ? 'generado' : 'no disponible'}`,
+    reason: `${reportLabel} · ${ctx.scopeLabel} · ${ctx.periodLabel} · ${result.available ? (cached ? 'reutilizado de cache' : 'generado') : 'no disponible'}`,
   }).catch(() => undefined)
 }
 
@@ -118,16 +147,14 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
     [55, 40, 45, 'auto', 'auto', 'auto'],
   )
 
+  const attendanceRanking = topBottomRanking(rows.map((r) => ({ label: r.station?.name ?? '—', value: r.attendance_rate })))
   await runAiAnalysis(builder, 'asistencias', 'Reporte de Asistencias', ctx, {
     registros: rows.length,
     asistencia_promedio_pct: rows.length ? Number(average.toFixed(1)) : null,
     cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
-    detalle_por_cuartel: rows.map((r) => ({
-      cuartel: r.station?.name ?? '—',
-      periodo: `${r.period_start} a ${r.period_end}`,
-      asistencia_pct: r.attendance_rate,
-      miembros: r.total_members,
-    })),
+    ranking_asistencia_mas_alta: attendanceRanking.top,
+    ranking_asistencia_mas_baja: attendanceRanking.bottom,
+    cuarteles_no_incluidos_en_ranking: attendanceRanking.omitted,
   }, rows.length > 0)
 
   return builder.finalize()
@@ -235,11 +262,17 @@ export async function generateCoursesReport(ctx: ReportRunContext) {
     [70, 45, 35, 30, 30, 'auto'],
   )
 
+  const coursesByCategory = new Map<string, number>()
+  for (const row of rows) coursesByCategory.set(row.category, (coursesByCategory.get(row.category) ?? 0) + 1)
+  const enrollmentRanking = topBottomRanking(rows.map((c) => ({ label: c.title, value: c.enrolled_count })))
   await runAiAnalysis(builder, 'cursos', 'Reporte de Cursos y Escuela', ctx, {
     cursos: rows.length,
     en_curso: active,
     finalizados: finished,
-    detalle: rows.map((c) => ({ titulo: c.title, categoria: c.category, estado: c.status, inscriptos: c.enrolled_count })),
+    categorias: Array.from(coursesByCategory.entries()).map(([categoria, cantidad]) => ({ categoria, cantidad })),
+    ranking_inscriptos_mas_alto: enrollmentRanking.top,
+    ranking_inscriptos_mas_bajo: enrollmentRanking.bottom,
+    cursos_no_incluidos_en_ranking: enrollmentRanking.omitted,
   }, rows.length > 0)
 
   return builder.finalize()

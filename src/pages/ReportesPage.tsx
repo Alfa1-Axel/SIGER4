@@ -98,6 +98,7 @@ export function ReportesPage() {
         scopeLabel: scopeLabelFor(),
         periodLabel: periodLabelFor(),
         generatedByLabel: profile?.full_name ?? 'Usuario SIGER4',
+        profileId: profile?.id ?? null,
       })
 
       const fileName = `siger4-${slugify(reportDef.label)}-${new Date().toISOString().slice(0, 10)}.pdf`

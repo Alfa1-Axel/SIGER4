@@ -36,15 +36,16 @@ interface AnalyzeRequestBody {
   summary: Record<string, unknown>
 }
 
-type ErrorCode = 'auth' | 'config' | 'payload' | 'gemini_request' | 'gemini_response' | 'unknown'
+type ErrorCode = 'auth' | 'config' | 'payload' | 'quota' | 'gemini_request' | 'gemini_response' | 'unknown'
 
 // available siempre viaja junto con "reason" (mensaje institucional, sin
-// detalles técnicos) y opcionalmente "code"/"detail" (diagnóstico técnico,
-// nunca incluye la clave). El frontend muestra "reason" al usuario y puede
-// loguear "code"/"detail" en la consola del navegador para diagnóstico, sin
-// exponer nada sensible.
+// detalles técnicos) y opcionalmente "code"/"detail"/"model" (diagnóstico
+// técnico, nunca incluye la clave — el nombre del modelo no es sensible, solo
+// ayuda a diagnosticar problemas de "modelo dado de baja" desde la consola
+// del navegador). El frontend muestra "reason" al usuario y puede loguear el
+// resto para diagnóstico, sin exponer nada sensible.
 function jsonResponse(
-  body: { available: boolean; analysis?: string; reason?: string; code?: ErrorCode; detail?: string },
+  body: { available: boolean; analysis?: string; reason?: string; code?: ErrorCode; detail?: string; model?: string },
   status = 200,
 ): Response {
   return new Response(JSON.stringify(body), {
@@ -111,6 +112,12 @@ async function callGemini(prompt: string): Promise<string> {
     }
     if (response.status === 404) {
       throw geminiError('config', `Gemini respondió 404: el modelo "${GEMINI_MODEL}" no existe o fue dado de baja. Detalle: ${errText.slice(0, 300)}`)
+    }
+    if (response.status === 429) {
+      // Cuota/rate limit del nivel gratuito de Gemini, no un bug del sistema.
+      // No se arregla redesplegando ni cambiando codigo: hay que esperar a que
+      // se renueve la cuota, cambiar de API key/proyecto, o activar billing.
+      throw geminiError('quota', `Gemini respondió 429 (límite de cuota/rate limit alcanzado, modelo "${GEMINI_MODEL}"): ${errText.slice(0, 300)}`)
     }
     throw geminiError('gemini_request', `Gemini respondió ${response.status}: ${errText.slice(0, 300)}`)
   }
@@ -193,11 +200,16 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ available: true, analysis })
   } catch (err) {
     const code: ErrorCode = (err as Partial<GeminiCallError>)?.code ?? 'unknown'
+    const reason =
+      code === 'quota'
+        ? 'IA no disponible por límite de cuota de Gemini. El reporte se generó correctamente sin análisis automático.'
+        : 'No pudimos generar el análisis con IA en este momento. Podés reintentar más tarde.'
     return jsonResponse({
       available: false,
-      reason: 'No pudimos generar el análisis con IA en este momento. Podés reintentar más tarde.',
+      reason,
       code,
       detail: err instanceof Error ? err.message : String(err),
+      model: GEMINI_MODEL,
     })
   }
 })

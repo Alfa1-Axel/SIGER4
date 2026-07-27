@@ -23,6 +23,7 @@ export default [
         FileReader: 'readonly',
         URL: 'readonly',
         KeyboardEvent: 'readonly',
+        localStorage: 'readonly',
       },
     },
     plugins: {

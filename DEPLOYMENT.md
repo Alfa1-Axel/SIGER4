@@ -200,10 +200,29 @@ modelo desde ese secreto en cada llamada).
 
 **Diagnóstico si el análisis sigue sin funcionar:** abrí la consola del navegador (F12) en
 `/reportes` al generar un reporte. Si el análisis falla, el frontend loguea un
-`[SIGER4] Análisis IA no disponible` con un `code` (`auth`, `config`, `payload`, `gemini_request`,
-`gemini_response`) y un `detail` con el mensaje técnico exacto — nunca incluye la API key. `config`
-casi siempre es API key inválida/sin permisos o nombre de modelo incorrecto; `auth` es un problema
-de sesión del usuario, no de la IA en sí.
+`[SIGER4] Análisis IA no disponible` con un `code` (`auth`, `config`, `payload`, `quota`,
+`gemini_request`, `gemini_response`), una `categoria` en texto plano explicando qué significa ese
+código, el `modelo` usado, y un `detail` con el mensaje técnico exacto — nunca incluye la API key.
+`config` casi siempre es API key inválida/sin permisos o nombre de modelo incorrecto; `auth` es un
+problema de sesión del usuario, no de la IA en sí.
+
+**Error 429 (`code: "quota"`) — límite de cuota/rate limit de Gemini:** significa que se agotó la
+cuota gratuita de la API key configurada (o se superó el rate limit de requests por minuto), **no**
+que algo esté roto en SIGER4. El PDF se sigue generando normalmente, solo sin el análisis de IA —
+se muestra "IA no disponible por límite de cuota de Gemini. El reporte se generó correctamente sin
+análisis automático." Esto **no se soluciona re-desplegando la función ni cambiando código**.
+Opciones:
+- Esperar a que se renueve la cuota (el nivel gratuito de Gemini se resetea periódicamente).
+- Revisar los límites vigentes en https://ai.dev/rate-limit.
+- Cambiar a otra API key/proyecto de Google AI Studio con cuota disponible
+  (`supabase secrets set GEMINI_API_KEY=nueva-clave`, sin re-desplegar).
+- Activar facturación (billing) en el proyecto de Google Cloud si corresponde, para subir de nivel
+  de cuota.
+- Reducir la cantidad de llamadas: SIGER4 ya cachea en el navegador (localStorage) los análisis
+  exitosos por reporte + filtros + usuario + día, así que generar el mismo reporte varias veces el
+  mismo día no vuelve a consultar a Gemini. Los payloads enviados también están recortados a
+  resúmenes agregados (KPIs, rankings top/bottom, totales) en vez de mandar la tabla completa,
+  para no gastar cuota de más en reportes con muchos registros.
 
 ## 2. Vercel
 

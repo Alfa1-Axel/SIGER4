@@ -9,7 +9,7 @@ export interface AiAnalysisRequest {
   summary: Record<string, unknown>
 }
 
-export type AiAnalysisErrorCode = 'auth' | 'config' | 'payload' | 'gemini_request' | 'gemini_response' | 'unknown'
+export type AiAnalysisErrorCode = 'auth' | 'config' | 'payload' | 'quota' | 'gemini_request' | 'gemini_response' | 'unknown'
 
 export interface AiAnalysisResult {
   available: boolean
@@ -17,6 +17,17 @@ export interface AiAnalysisResult {
   reason?: string
   code?: AiAnalysisErrorCode
   detail?: string
+  model?: string
+}
+
+const ERROR_CODE_EXPLANATION: Record<AiAnalysisErrorCode, string> = {
+  auth: 'Sesión del usuario inválida o expirada (no es un problema de la IA en sí).',
+  config: 'La Edge Function no está configurada correctamente (API key inválida o modelo inexistente).',
+  payload: 'La solicitud enviada a la función tenía un formato inesperado.',
+  quota: 'Límite de cuota/rate limit del nivel gratuito de Gemini alcanzado. No se soluciona re-desplegando: hay que esperar a que se renueve la cuota, cambiar de API key/proyecto, revisar https://ai.dev/rate-limit, o activar billing si corresponde.',
+  gemini_request: 'No se pudo completar la llamada a la API de Gemini (red o error del servicio).',
+  gemini_response: 'Gemini respondió pero con un formato inesperado (posible bloqueo de contenido).',
+  unknown: 'Motivo no clasificado — ver "detail" para el mensaje técnico exacto.',
 }
 
 const GENERIC_FALLBACK_REASON = 'IA no disponible. El reporte se generará igualmente sin análisis automático.'
@@ -63,7 +74,14 @@ async function tryParseErrorBody(error: FunctionsHttpError): Promise<Partial<AiA
 
 // Diagnóstico en consola del navegador para que quien reporte el problema
 // pueda copiar el motivo técnico exacto (nunca incluye la API key: esta vive
-// solo como secreto de la Edge Function, nunca llega al frontend).
+// solo como secreto de la Edge Function, nunca llega al frontend). Incluye
+// una explicación en texto plano de la categoría de error, no solo el code.
 function logDiagnostics(info: Partial<AiAnalysisResult>) {
-  console.error('[SIGER4] Análisis IA no disponible', { code: info.code, detail: info.detail })
+  const code = info.code ?? 'unknown'
+  console.error('[SIGER4] Análisis IA no disponible', {
+    code,
+    categoria: ERROR_CODE_EXPLANATION[code],
+    modelo: info.model ?? '(no informado)',
+    detail: info.detail,
+  })
 }

@@ -23,7 +23,7 @@ export class ReportBuilder {
   private pageHeight: number
 
   constructor(private context: ReportContext) {
-    this.doc = new jsPDF({ unit: 'mm', format: 'a4' })
+    this.doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
     this.pageWidth = this.doc.internal.pageSize.getWidth()
     this.pageHeight = this.doc.internal.pageSize.getHeight()
   }
@@ -129,30 +129,51 @@ export class ReportBuilder {
     this.cursorY += 24
   }
 
-  addTable(head: string[], body: (string | number)[][], title?: string) {
+  // columnWidths es opcional: valores en mm para las columnas que necesitan
+  // ancho fijo (ej. nombres de cuartel/subsede, para que nunca se corten); las
+  // columnas sin ancho fijo se reparten el espacio restante ("auto").
+  addTable(head: string[], body: (string | number)[][], title?: string, columnWidths?: (number | 'auto')[]) {
     if (title) this.addSectionTitle(title)
     if (body.length === 0) {
       this.addEmptyState('No hay datos cargados para este período y alcance.')
       return
     }
+
+    const columnStyles: Record<number, { cellWidth: number | 'auto' | 'wrap' }> = {}
+    if (columnWidths) {
+      columnWidths.forEach((width, index) => {
+        columnStyles[index] = { cellWidth: width === 'auto' ? 'auto' : width }
+      })
+    }
+
     autoTable(this.doc, {
       startY: this.cursorY,
       head: [head],
       body,
       margin: { left: PAGE_MARGIN, right: PAGE_MARGIN },
-      styles: { fontSize: 8, textColor: SECONDARY_COLOR },
-      headStyles: { fillColor: [211, 47, 47], textColor: '#FFFFFF' },
+      styles: { fontSize: 9, textColor: SECONDARY_COLOR, cellPadding: 2.2, overflow: 'linebreak' },
+      headStyles: { fillColor: [211, 47, 47], textColor: '#FFFFFF', fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles,
     })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     this.cursorY = (this.doc as any).lastAutoTable.finalY + 8
   }
 
-  addBarChartImage(dataUrl: string, heightMm = 60) {
-    this.ensureSpace(heightMm + 4)
+  // maxHeightMm limita la altura para que gráficos con muchas filas no
+  // desborden la página; se respeta la relación de aspecto real de la imagen
+  // (los gráficos de barras horizontales crecen en alto según la cantidad de
+  // ítems, no tienen una proporción fija).
+  addBarChartImage(dataUrl: string, maxHeightMm = 110) {
+    const props = this.doc.getImageProperties(dataUrl)
     const width = this.pageWidth - PAGE_MARGIN * 2
-    this.doc.addImage(dataUrl, 'PNG', PAGE_MARGIN, this.cursorY, width, heightMm)
-    this.cursorY += heightMm + 6
+    const height = Math.min((props.height / props.width) * width, maxHeightMm)
+    const finalWidth = height === maxHeightMm ? (props.width / props.height) * height : width
+
+    this.ensureSpace(height + 4)
+    const x = PAGE_MARGIN + (width - finalWidth) / 2
+    this.doc.addImage(dataUrl, 'PNG', x, this.cursorY, finalWidth, height)
+    this.cursorY += height + 6
   }
 
   addEmptyState(message: string) {
@@ -223,63 +244,99 @@ export class ReportBuilder {
   }
 }
 
-// Renderiza un gráfico de barras simple a un canvas oculto y devuelve su dataURL,
-// para incrustarlo en el PDF (jsPDF no soporta SVG/recharts directamente).
-export function renderBarChartToDataUrl(labels: string[], values: number[], label: string): string | null {
+const MAX_CHART_ITEMS = 12
+
+// Cuando hay más de MAX_CHART_ITEMS barras, un gráfico único se vuelve
+// ilegible (etiquetas encimadas). En vez de recortar nombres, se prioriza
+// comparación clara: se ordena por valor y se muestran el top y el bottom del
+// ranking (con nota de cuántos quedaron afuera) — el detalle completo siempre
+// queda disponible en la tabla que acompaña al gráfico.
+function selectChartItems(labels: string[], values: number[]): { labels: string[]; values: number[]; omitted: number } {
+  if (labels.length <= MAX_CHART_ITEMS) return { labels, values, omitted: 0 }
+
+  const indices = labels.map((_, i) => i).sort((a, b) => values[b] - values[a])
+  const halfSize = Math.floor(MAX_CHART_ITEMS / 2)
+  const topIndices = indices.slice(0, halfSize)
+  const bottomIndices = indices.slice(-halfSize)
+  const picked = Array.from(new Set([...topIndices, ...bottomIndices]))
+
+  return {
+    labels: picked.map((i) => labels[i]),
+    values: picked.map((i) => values[i]),
+    omitted: labels.length - picked.length,
+  }
+}
+
+// Renderiza un gráfico de barras horizontales a un canvas oculto y devuelve su
+// dataURL para incrustarlo en el PDF (jsPDF no soporta SVG/recharts
+// directamente). Horizontal porque permite mostrar el nombre completo de cada
+// cuartel/categoría sin rotarlo ni recortarlo, que es lo que hacía ilegibles
+// los gráficos anteriores al comparar muchos cuarteles.
+export function renderBarChartToDataUrl(labels: string[], values: number[], label: string, unit = ''): string | null {
   if (labels.length === 0) return null
 
+  const { labels: chartLabels, values: chartValues, omitted } = selectChartItems(labels, values)
+
+  const rowHeight = 34
+  const topPadding = 50
+  const bottomPadding = omitted > 0 ? 46 : 20
+  const canvasWidth = 1400
+  const canvasHeight = topPadding + chartLabels.length * rowHeight + bottomPadding
+
   const canvas = document.createElement('canvas')
-  canvas.width = 900
-  canvas.height = 360
+  canvas.width = canvasWidth
+  canvas.height = canvasHeight
   const ctx = canvas.getContext('2d')
   if (!ctx) return null
 
   ctx.fillStyle = '#FFFFFF'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  const maxValue = Math.max(...values, 1)
-  const chartLeft = 50
-  const chartRight = canvas.width - 20
-  const chartTop = 30
-  const chartBottom = canvas.height - 50
-  const chartWidth = chartRight - chartLeft
-  const chartHeight = chartBottom - chartTop
-  const barGap = 12
-  const barWidth = Math.max(6, chartWidth / labels.length - barGap)
-
-  ctx.strokeStyle = '#E2E8F0'
-  ctx.beginPath()
-  ctx.moveTo(chartLeft, chartTop)
-  ctx.lineTo(chartLeft, chartBottom)
-  ctx.lineTo(chartRight, chartBottom)
-  ctx.stroke()
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight)
 
   ctx.fillStyle = '#0F172A'
-  ctx.font = '16px Arial'
+  ctx.font = 'bold 20px Arial'
   ctx.textAlign = 'center'
-  ctx.fillText(label, canvas.width / 2, 18)
+  ctx.fillText(label, canvasWidth / 2, 28)
 
-  labels.forEach((labelText, index) => {
-    const value = values[index] ?? 0
-    const barHeight = (value / maxValue) * chartHeight
-    const x = chartLeft + index * (barWidth + barGap) + barGap / 2
-    const y = chartBottom - barHeight
+  const labelColumnWidth = 340
+  const valueColumnWidth = 90
+  const chartLeft = labelColumnWidth
+  const chartRight = canvasWidth - valueColumnWidth
+  const chartWidth = chartRight - chartLeft
+  const maxValue = Math.max(...chartValues, 1)
 
-    ctx.fillStyle = '#D32F2F'
-    ctx.fillRect(x, y, barWidth, barHeight)
+  chartLabels.forEach((labelText, index) => {
+    const value = chartValues[index] ?? 0
+    const y = topPadding + index * rowHeight
+    const barHeight = rowHeight * 0.55
+    const barWidth = Math.max(2, (value / maxValue) * chartWidth)
 
     ctx.fillStyle = '#334155'
-    ctx.font = '11px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText(String(value), x + barWidth / 2, y - 4)
+    ctx.font = '15px Arial'
+    ctx.textAlign = 'right'
+    ctx.fillText(labelText, chartLeft - 14, y + barHeight / 2 + 5, labelColumnWidth - 14)
 
-    ctx.save()
-    ctx.translate(x + barWidth / 2, chartBottom + 14)
-    ctx.rotate(labels.length > 8 ? -Math.PI / 4 : 0)
-    ctx.textAlign = labels.length > 8 ? 'right' : 'center'
-    ctx.fillText(labelText.slice(0, 14), 0, 0)
-    ctx.restore()
+    ctx.fillStyle = '#F1F5F9'
+    ctx.fillRect(chartLeft, y, chartWidth, barHeight)
+
+    ctx.fillStyle = '#D32F2F'
+    ctx.fillRect(chartLeft, y, barWidth, barHeight)
+
+    ctx.fillStyle = '#0F172A'
+    ctx.font = 'bold 14px Arial'
+    ctx.textAlign = 'left'
+    ctx.fillText(`${value}${unit}`, chartLeft + barWidth + 10, y + barHeight / 2 + 5)
   })
+
+  if (omitted > 0) {
+    ctx.fillStyle = '#6B7280'
+    ctx.font = 'italic 14px Arial'
+    ctx.textAlign = 'center'
+    ctx.fillText(
+      `Se muestran los ${chartLabels.length} valores más altos y más bajos · ${omitted} más en la tabla de detalle`,
+      canvasWidth / 2,
+      canvasHeight - 16,
+    )
+  }
 
   return canvas.toDataURL('image/png')
 }

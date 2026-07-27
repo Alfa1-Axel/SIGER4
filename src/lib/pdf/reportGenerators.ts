@@ -99,20 +99,23 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
       rows.map((r) => r.station?.name ?? '—'),
       rows.map((r) => Math.round(r.attendance_rate)),
       'Tasa de asistencia (%) por cuartel',
+      '%',
     )
     if (chart) builder.addBarChartImage(chart)
   }
 
   builder.addTable(
-    ['Cuartel', 'Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
+    ['Cuartel', 'Subsede', 'Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
     rows.map((r) => [
       r.station?.name ?? '—',
+      r.station?.subsede?.name ?? '—',
       `${r.period_start} a ${r.period_end}`,
       pct(r.attendance_rate),
       r.total_members,
       r.present_average,
     ]),
     'Detalle',
+    [55, 40, 45, 'auto', 'auto', 'auto'],
   )
 
   await runAiAnalysis(builder, 'asistencias', 'Reporte de Asistencias', ctx, {
@@ -167,9 +170,16 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
   }
 
   builder.addTable(
-    ['Cuartel', 'Categoría', 'Período', 'Cantidad'],
-    rows.map((r) => [r.station?.name ?? '—', r.category, `${r.period_start} a ${r.period_end}`, r.total_count]),
+    ['Cuartel', 'Subsede', 'Categoría', 'Período', 'Cantidad'],
+    rows.map((r) => [
+      r.station?.name ?? '—',
+      r.station?.subsede?.name ?? '—',
+      r.category,
+      `${r.period_start} a ${r.period_end}`,
+      r.total_count,
+    ]),
     'Detalle',
+    [55, 40, 45, 45, 'auto'],
   )
 
   await runAiAnalysis(builder, 'intervenciones', 'Reporte de Intervenciones', ctx, {
@@ -211,6 +221,7 @@ export async function generateCoursesReport(ctx: ReportRunContext) {
     ['Título', 'Categoría', 'Estado', 'Inicio', 'Fin', 'Inscriptos'],
     rows.map((c) => [c.title, c.category, c.status, c.start_date ?? '—', c.end_date ?? '—', c.enrolled_count]),
     'Detalle',
+    [70, 45, 35, 30, 30, 'auto'],
   )
 
   await runAiAnalysis(builder, 'cursos', 'Reporte de Cursos y Escuela', ctx, {
@@ -252,9 +263,17 @@ export async function generateVehiclesReport(ctx: ReportRunContext) {
   )
 
   builder.addTable(
-    ['Cuartel', 'Código', 'Tipo', 'Estado', 'Patente'],
-    rows.map((v) => [v.station?.name ?? '—', v.internal_code, v.vehicle_type, v.status, v.plate ?? '—']),
+    ['Cuartel', 'Subsede', 'Código', 'Tipo', 'Estado', 'Patente'],
+    rows.map((v) => [
+      v.station?.name ?? '—',
+      v.station?.subsede?.name ?? '—',
+      v.internal_code,
+      v.vehicle_type,
+      v.status,
+      v.plate ?? '—',
+    ]),
     'Detalle',
+    [55, 40, 30, 40, 35, 'auto'],
   )
 
   await runAiAnalysis(builder, 'vehiculos', 'Reporte de Vehículos', ctx, {
@@ -293,7 +312,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   ])
 
   builder.addExecutiveSummary([
-    `Cuartel ${data.station.name} (${data.station.code}), estado ${data.station.status}.`,
+    `Cuartel ${data.station.name} (${data.station.code}), subsede ${data.station.subsede?.name ?? '—'}, estado ${data.station.status}.`,
     data.attendance.length
       ? `Asistencia promedio del período: ${pct(avgAttendance)}.`
       : 'Sin resúmenes de asistencia cargados en el período.',
@@ -306,12 +325,14 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
     ['Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
     data.attendance.map((r) => [`${r.period_start} a ${r.period_end}`, pct(r.attendance_rate), r.total_members, r.present_average]),
     'Asistencia',
+    [60, 'auto', 'auto', 'auto'],
   )
 
   builder.addTable(
     ['Categoría', 'Período', 'Cantidad'],
     data.interventions.map((r) => [r.category, `${r.period_start} a ${r.period_end}`, r.total_count]),
     'Intervenciones',
+    [60, 60, 'auto'],
   )
 
   builder.addTable(
@@ -380,14 +401,15 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
       const list = byStation.get(name) ?? []
       return Math.round(list.reduce((sum, v) => sum + v, 0) / list.length)
     })
-    const chart = renderBarChartToDataUrl(labels, values, 'Asistencia promedio (%) por cuartel')
+    const chart = renderBarChartToDataUrl(labels, values, 'Asistencia promedio (%) por cuartel', '%')
     if (chart) builder.addBarChartImage(chart)
   }
 
   builder.addTable(
     ['Cuartel', 'Subsede', 'Estado', 'Vehículos'],
-    data.stations.map((s) => [s.name, s.subsede_id ?? '—', s.status, s.vehicles_count]),
+    data.stations.map((s) => [s.name, s.subsede?.name ?? '—', s.status, s.vehicles_count]),
     'Cuarteles',
+    [65, 50, 45, 'auto'],
   )
 
   await runAiAnalysis(builder, 'regional_consolidado', 'Reporte Regional Consolidado', ctx, {

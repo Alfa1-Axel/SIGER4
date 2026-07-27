@@ -172,6 +172,20 @@ quien la llama sea un usuario autenticado real antes de consultar a Gemini.
 Cada intento de análisis (exitoso o no disponible) queda registrado en `audit_logs` con la acción
 `analisis_ia_reporte`.
 
+**Modelo de Gemini usado:** `gemini-2.0-flash` (nivel gratuito, vigente). El modelo anterior,
+`gemini-1.5-flash`, fue dado de baja por Google y devolvía error 404 en cada llamada — si el
+análisis dejó de funcionar de un momento a otro sin cambios de tu parte, esa es la causa más común.
+Si Google vuelve a cambiar los modelos disponibles, no hace falta re-desplegar la función: alcanza
+con `supabase secrets set GEMINI_MODEL=nombre-del-modelo-vigente` (la función lee el nombre del
+modelo desde ese secreto en cada llamada).
+
+**Diagnóstico si el análisis sigue sin funcionar:** abrí la consola del navegador (F12) en
+`/reportes` al generar un reporte. Si el análisis falla, el frontend loguea un
+`[SIGER4] Análisis IA no disponible` con un `code` (`auth`, `config`, `payload`, `gemini_request`,
+`gemini_response`) y un `detail` con el mensaje técnico exacto — nunca incluye la API key. `config`
+casi siempre es API key inválida/sin permisos o nombre de modelo incorrecto; `auth` es un problema
+de sesión del usuario, no de la IA en sí.
+
 ## 2. Vercel
 
 ### 2.1 Importar el repositorio

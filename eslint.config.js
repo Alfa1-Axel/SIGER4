@@ -22,6 +22,7 @@ export default [
         fetch: 'readonly',
         FileReader: 'readonly',
         URL: 'readonly',
+        KeyboardEvent: 'readonly',
       },
     },
     plugins: {

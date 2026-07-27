@@ -8,11 +8,17 @@
 // un error 500 — el frontend debe mostrar un fallback claro sin romper el PDF.
 //
 // Despliegue: ver la sección "Análisis IA de reportes" en DEPLOYMENT.md.
+//
+// Nota sobre el modelo: "gemini-1.5-flash" fue dado de baja por Google: los
+// modelos 1.5 dejaron de estar disponibles en la API pública. El modelo por
+// defecto es "gemini-2.0-flash" (vigente, nivel gratuito). Si Google vuelve a
+// cambiar los modelos disponibles, configurar el secreto GEMINI_MODEL en
+// Supabase con el nombre del modelo vigente, sin re-desplegar código.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY')
-const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-1.5-flash'
+const GEMINI_MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.0-flash'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
@@ -30,7 +36,17 @@ interface AnalyzeRequestBody {
   summary: Record<string, unknown>
 }
 
-function jsonResponse(body: unknown, status = 200): Response {
+type ErrorCode = 'auth' | 'config' | 'payload' | 'gemini_request' | 'gemini_response' | 'unknown'
+
+// available siempre viaja junto con "reason" (mensaje institucional, sin
+// detalles técnicos) y opcionalmente "code"/"detail" (diagnóstico técnico,
+// nunca incluye la clave). El frontend muestra "reason" al usuario y puede
+// loguear "code"/"detail" en la consola del navegador para diagnóstico, sin
+// exponer nada sensible.
+function jsonResponse(
+  body: { available: boolean; analysis?: string; reason?: string; code?: ErrorCode; detail?: string },
+  status = 200,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
@@ -57,62 +73,118 @@ Si los datos son insuficientes o están vacíos, decilo explícitamente en vez d
 información. No repitas los números crudos del JSON, interpretalos.`
 }
 
+interface GeminiCallError extends Error {
+  code: ErrorCode
+}
+
+function geminiError(code: ErrorCode, message: string): GeminiCallError {
+  const err = new Error(message) as GeminiCallError
+  err.code = code
+  return err
+}
+
 async function callGemini(prompt: string): Promise<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
-    }),
-  })
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.4, maxOutputTokens: 500 },
+      }),
+    })
+  } catch (err) {
+    throw geminiError('gemini_request', `No se pudo contactar a Gemini: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   if (!response.ok) {
     const errText = await response.text().catch(() => '')
-    throw new Error(`Gemini respondió ${response.status}: ${errText.slice(0, 300)}`)
+    // 400 en Gemini suele ser modelo inexistente/API key invalida; 403 es
+    // clave sin permisos o facturacion; 404 es modelo no encontrado (nombre
+    // de modelo dado de baja). Se distinguen para que el diagnostico en
+    // consola apunte directo a la causa en vez de un generico "fallo Gemini".
+    if (response.status === 400 || response.status === 403) {
+      throw geminiError('config', `Gemini respondió ${response.status} (posible API key inválida o sin permisos): ${errText.slice(0, 300)}`)
+    }
+    if (response.status === 404) {
+      throw geminiError('config', `Gemini respondió 404: el modelo "${GEMINI_MODEL}" no existe o fue dado de baja. Detalle: ${errText.slice(0, 300)}`)
+    }
+    throw geminiError('gemini_request', `Gemini respondió ${response.status}: ${errText.slice(0, 300)}`)
   }
 
-  const data = await response.json()
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text || typeof text !== 'string') throw new Error('Gemini no devolvió texto de análisis.')
+  let data: unknown
+  try {
+    data = await response.json()
+  } catch (err) {
+    throw geminiError('gemini_response', `Gemini devolvió una respuesta no JSON: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  const blockReason = (data as { promptFeedback?: { blockReason?: string } })?.promptFeedback?.blockReason
+  if (blockReason) {
+    throw geminiError('gemini_response', `Gemini bloqueó la respuesta (blockReason: ${blockReason}).`)
+  }
+
+  const text = (data as { candidates?: { content?: { parts?: { text?: string }[] } }[] })?.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text || typeof text !== 'string') {
+    throw geminiError('gemini_response', `Gemini no devolvió texto de análisis. Respuesta: ${JSON.stringify(data).slice(0, 300)}`)
+  }
   return text.trim()
 }
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS })
-  if (req.method !== 'POST') return jsonResponse({ available: false, reason: 'Método no permitido.' }, 405)
+  if (req.method !== 'POST') {
+    return jsonResponse({ available: false, reason: 'Método no permitido.', code: 'payload' }, 405)
+  }
 
   let body: AnalyzeRequestBody
   try {
     body = await req.json()
   } catch {
-    return jsonResponse({ available: false, reason: 'Solicitud inválida.' }, 400)
+    return jsonResponse({ available: false, reason: 'Solicitud inválida.', code: 'payload' }, 400)
   }
 
   if (!body.reportKey || !body.summary) {
-    return jsonResponse({ available: false, reason: 'Faltan datos del reporte.' }, 400)
+    return jsonResponse({ available: false, reason: 'Faltan datos del reporte.', code: 'payload' }, 400)
   }
 
   // Requiere un usuario autenticado real (no expone la función a anónimos):
   // se valida el JWT recibido contra Supabase Auth usando la anon key del
   // proyecto, igual que cualquier llamado autenticado del frontend.
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
-    return jsonResponse({ available: false, reason: 'No autenticado.' }, 401)
+  if (!authHeader) {
+    return jsonResponse({ available: false, reason: 'No autenticado.', code: 'auth', detail: 'Falta el header Authorization.' }, 401)
   }
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return jsonResponse({
+      available: false,
+      reason: 'La función de IA no está configurada correctamente en el servidor.',
+      code: 'config',
+      detail: 'Faltan las variables de entorno SUPABASE_URL/SUPABASE_ANON_KEY (deberían estar disponibles automáticamente en toda Edge Function).',
+    })
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
   })
   const { data: userData, error: userError } = await supabase.auth.getUser()
   if (userError || !userData?.user) {
-    return jsonResponse({ available: false, reason: 'No autenticado.' }, 401)
+    return jsonResponse({
+      available: false,
+      reason: 'No autenticado.',
+      code: 'auth',
+      detail: userError?.message ?? 'No se pudo resolver el usuario a partir del token recibido.',
+    }, 401)
   }
 
   if (!GEMINI_API_KEY) {
     return jsonResponse({
       available: false,
       reason: 'El análisis con IA todavía no está configurado (falta GEMINI_API_KEY en el proyecto de Supabase).',
+      code: 'config',
     })
   }
 
@@ -120,9 +192,11 @@ Deno.serve(async (req: Request) => {
     const analysis = await callGemini(buildPrompt(body))
     return jsonResponse({ available: true, analysis })
   } catch (err) {
+    const code: ErrorCode = (err as Partial<GeminiCallError>)?.code ?? 'unknown'
     return jsonResponse({
       available: false,
       reason: 'No pudimos generar el análisis con IA en este momento. Podés reintentar más tarde.',
+      code,
       detail: err instanceof Error ? err.message : String(err),
     })
   }

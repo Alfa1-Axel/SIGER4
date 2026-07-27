@@ -5,7 +5,8 @@ import { Icon } from '../components/ui/Icon'
 import { fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
-import type { AttendanceSummary, Station, Vehicle } from '../types/database'
+import { fetchInterventionsByStation } from '../lib/api/interventions'
+import type { AttendanceSummary, InterventionSummary, Station, Vehicle } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
@@ -21,21 +22,26 @@ export function CuartelDetallePage() {
   const [station, setStation] = useState<Station | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
+  const [interventions, setInterventions] = useState<InterventionSummary[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!id) return
     let active = true
-    Promise.all([fetchStationById(id), fetchVehiclesByStation(id), fetchAttendanceByStation(id)]).then(
-      ([stationData, vehiclesData, attendanceData]) => {
-        if (active) {
-          setStation(stationData)
-          setVehicles(vehiclesData)
-          setAttendance(attendanceData)
-          setLoading(false)
-        }
-      },
-    )
+    Promise.all([
+      fetchStationById(id),
+      fetchVehiclesByStation(id),
+      fetchAttendanceByStation(id),
+      fetchInterventionsByStation(id),
+    ]).then(([stationData, vehiclesData, attendanceData, interventionsData]) => {
+      if (active) {
+        setStation(stationData)
+        setVehicles(vehiclesData)
+        setAttendance(attendanceData)
+        setInterventions(interventionsData)
+        setLoading(false)
+      }
+    })
     return () => {
       active = false
     }
@@ -174,6 +180,44 @@ export function CuartelDetallePage() {
                   </div>
                 </div>
                 <span className="badge badge-info">{summary.attendance_rate}%</span>
+              </Link>
+            ))}
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Intervenciones</h2>
+            {canEdit && (
+              <Link to={`/cuarteles/${station.id}/intervenciones/nueva`} className="link-muted">
+                + Agregar
+              </Link>
+            )}
+          </div>
+          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+            {interventions.length === 0 && (
+              <div className="empty-state">No hay resúmenes de intervenciones cargados para este cuartel.</div>
+            )}
+            {interventions.map((summary, i) => (
+              <Link
+                key={summary.id}
+                to={canEdit ? `/intervenciones/${summary.id}/editar` : '#'}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  pointerEvents: canEdit ? 'auto' : 'none',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{summary.category}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {summary.period_start} — {summary.period_end}
+                  </div>
+                </div>
+                <span className="badge badge-danger">{summary.total_count}</span>
               </Link>
             ))}
           </div>

@@ -4,9 +4,12 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchStationById } from '../lib/api/stations'
 import type { Station } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'presidente_regional', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -26,9 +29,17 @@ export function CuartelDetallePage() {
 
   return (
     <AppShell title="Detalle Cuartel">
-      <Link to="/cuarteles" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
-        ← Volver a Cuarteles
-      </Link>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Link to="/cuarteles" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          ← Volver a Cuarteles
+        </Link>
+        {canEdit && station && (
+          <Link to={`/cuarteles/${station.id}/editar`} className="btn btn-outlined" style={{ padding: '6px 14px', fontSize: 13 }}>
+            <Icon name="edit" size={14} />
+            Editar
+          </Link>
+        )}
+      </div>
 
       {loading && <div className="empty-state">Cargando información del cuartel…</div>}
       {!loading && !station && <div className="empty-state">No se encontró el cuartel solicitado.</div>}

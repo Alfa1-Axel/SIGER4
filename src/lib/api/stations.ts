@@ -18,9 +18,15 @@ export interface StationInput {
   code: string
   address?: string | null
   zone?: string | null
+  phone?: string | null
+  email?: string | null
+  social_media?: Record<string, string> | null
+  description?: string | null
   status?: Station['status']
   region_id: string
   subsede_id: string
+  cover_image_url?: string | null
+  logo_url?: string | null
 }
 
 export async function createStation(input: StationInput): Promise<Station> {

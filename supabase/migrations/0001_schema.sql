@@ -40,18 +40,28 @@ create table if not exists stations (
   code text not null,
   address text,
   zone text,
+  phone text,
+  email text,
+  social_media jsonb,
+  description text,
   status station_status not null default 'operativo',
   response_time_minutes integer,
   personnel_count integer not null default 0,
   vehicles_count integer not null default 0,
   founded_year integer,
   cover_image_url text,
+  logo_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (region_id, code)
 );
 
 comment on table stations is 'Cuarteles de bomberos dependientes de una regional y una subsede.';
+comment on column stations.phone is 'Telefono de contacto del cuartel.';
+comment on column stations.email is 'Email institucional del cuartel.';
+comment on column stations.social_media is 'Redes sociales del cuartel, formato libre {"facebook": "...", "instagram": "..."}.';
+comment on column stations.description is 'Descripcion institucional libre del cuartel.';
+comment on column stations.logo_url is 'Logo/escudo institucional del cuartel (Supabase Storage). Distinto de cover_image_url (foto de portada).';
 
 -- ============================================================
 -- PERFILES, ROLES Y ALCANCES (SCOPES)
@@ -64,6 +74,9 @@ create table if not exists profiles (
   email text not null,
   avatar_url text,
   rank text,
+  phone text,
+  "position" text,
+  seniority_start_date date,
   region_id uuid references regions(id) on delete set null,
   station_id uuid references stations(id) on delete set null,
   is_active boolean not null default true,
@@ -72,6 +85,9 @@ create table if not exists profiles (
 );
 
 comment on table profiles is 'Perfil institucional de cada usuario autenticado en Supabase Auth.';
+comment on column profiles.phone is 'Telefono de contacto del usuario.';
+comment on column profiles."position" is 'Cargo o funcion del usuario (distinto de rank, que es la jerarquia).';
+comment on column profiles.seniority_start_date is 'Fecha de ingreso, usada para calcular antiguedad.';
 
 create type role_key as enum (
   'informatica_r4',

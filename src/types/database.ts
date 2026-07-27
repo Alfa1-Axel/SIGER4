@@ -25,12 +25,17 @@ export interface Station {
   code: string
   address: string | null
   zone: string | null
+  phone: string | null
+  email: string | null
+  social_media: Record<string, string> | null
+  description: string | null
   status: StationStatus
   response_time_minutes: number | null
   personnel_count: number
   vehicles_count: number
   founded_year: number | null
   cover_image_url: string | null
+  logo_url: string | null
   created_at: string
   updated_at: string
 }
@@ -42,6 +47,9 @@ export interface Profile {
   email: string
   avatar_url: string | null
   rank: string | null
+  phone: string | null
+  position: string | null
+  seniority_start_date: string | null
   region_id: string | null
   station_id: string | null
   is_active: boolean

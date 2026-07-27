@@ -124,3 +124,30 @@ as $$
 $$;
 
 comment on function my_subsede_ids() is 'IDs de subsede a los que el usuario actual tiene acceso via user_scopes (scope_type = subsede).';
+
+create or replace function prevent_self_scope_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if is_informatica_r4() then
+    return new;
+  end if;
+
+  if new.auth_user_id = auth.uid() then
+    if new.station_id is distinct from old.station_id or new.region_id is distinct from old.region_id then
+      raise exception 'No podés cambiar tu propio cuartel o región. Pedile a un administrador que lo haga.';
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+comment on function prevent_self_scope_change() is 'Impide que un usuario cambie su propio station_id/region_id al editar su perfil; solo informatica_r4 puede hacerlo.';
+
+create trigger trg_prevent_self_scope_change
+  before update on profiles
+  for each row execute function prevent_self_scope_change();

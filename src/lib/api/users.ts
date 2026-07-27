@@ -34,6 +34,10 @@ export interface ProfileInput {
   full_name: string
   email: string
   rank?: string | null
+  phone?: string | null
+  position?: string | null
+  seniority_start_date?: string | null
+  avatar_url?: string | null
   region_id?: string | null
   station_id?: string | null
 }

@@ -16,7 +16,7 @@ const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole } = useAuth()
-  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'presidente_regional', 'secretario_regional')
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'director_escuela', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loading, setLoading] = useState(true)

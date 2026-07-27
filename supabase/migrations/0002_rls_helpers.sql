@@ -24,7 +24,7 @@ as $$
     from user_roles ur
     join profiles p on p.id = ur.profile_id
     where p.auth_user_id = auth.uid()
-      and ur.role in ('informatica_r4', 'coordinador_informatica', 'integrante_informatica')
+      and ur.role in ('informatica_r4', 'integrante_informatica')
   );
 $$;
 
@@ -58,9 +58,11 @@ as $$
     from user_roles ur
     join profiles p on p.id = ur.profile_id
     where p.auth_user_id = auth.uid()
-      and ur.role in ('presidente_regional', 'secretario_regional')
+      and ur.role in ('secretario_regional', 'director_escuela')
   );
 $$;
+
+comment on function is_regional_role() is 'Devuelve true si el usuario tiene autoridad de alcance regional (secretario_regional o director_escuela). director_escuela es la maxima autoridad regional (no existe presidente_regional).';
 
 create or replace function is_escuela_role()
 returns boolean

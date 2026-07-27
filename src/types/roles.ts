@@ -3,18 +3,14 @@
 // puede ver, cargar, editar, auditar y administrar todo.
 export type RoleKey =
   | 'informatica_r4'
-  | 'coordinador_informatica'
   | 'integrante_informatica'
   | 'director_escuela'
   | 'instructor'
-  | 'presidente_regional'
   | 'secretario_regional'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
   | 'usuario_carga_cuartel'
   | 'secretario_comision'
-  | 'bombero'
-  | 'aspirante'
   | 'administrativo'
   | 'invitado'
 
@@ -33,12 +29,6 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     scope: 'system',
   },
   {
-    key: 'coordinador_informatica',
-    label: 'Coordinador de Informática',
-    description: 'Coordina el área de informática y estadística regional.',
-    scope: 'system',
-  },
-  {
     key: 'integrante_informatica',
     label: 'Integrante de Informática',
     description: 'Integrante del equipo de informática y estadística.',
@@ -47,7 +37,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
     key: 'director_escuela',
     label: 'Director de Escuela Regional',
-    description: 'Responsable de la Escuela Regional, cursos y capacitaciones.',
+    description: 'Máxima autoridad institucional de la Regional 4 y responsable de la Escuela Regional, cursos y capacitaciones.',
     scope: 'escuela',
   },
   {
@@ -57,15 +47,9 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     scope: 'escuela',
   },
   {
-    key: 'presidente_regional',
-    label: 'Presidente Regional',
-    description: 'Máxima autoridad institucional de la Regional 4.',
-    scope: 'regional',
-  },
-  {
     key: 'secretario_regional',
     label: 'Secretario Regional',
-    description: 'Gestión administrativa a nivel regional.',
+    description: 'Gestión administrativa a nivel regional, reporta al Director de Escuela.',
     scope: 'regional',
   },
   {
@@ -90,18 +74,6 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     key: 'secretario_comision',
     label: 'Secretario de Comisión',
     description: 'Gestión administrativa de la comisión directiva del cuartel.',
-    scope: 'cuartel',
-  },
-  {
-    key: 'bombero',
-    label: 'Bombero',
-    description: 'Integrante del cuerpo activo del cuartel.',
-    scope: 'cuartel',
-  },
-  {
-    key: 'aspirante',
-    label: 'Aspirante',
-    description: 'Aspirante en formación dentro del cuartel.',
     scope: 'cuartel',
   },
   {

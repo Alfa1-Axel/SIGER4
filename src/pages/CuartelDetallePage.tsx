@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { fetchStationById } from '../lib/api/stations'
+import { fetchStationAuthorities, fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
 import { fetchInterventionsByStation } from '../lib/api/interventions'
-import type { AttendanceSummary, InterventionSummary, Station, Vehicle } from '../types/database'
+import type { AttendanceSummary, InterventionSummary, Profile, Station, Vehicle } from '../types/database'
+import type { RoleKey } from '../types/roles'
+import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
@@ -23,6 +25,7 @@ export function CuartelDetallePage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
   const [interventions, setInterventions] = useState<InterventionSummary[]>([])
+  const [authorities, setAuthorities] = useState<{ profile: Profile; role: RoleKey }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -33,12 +36,14 @@ export function CuartelDetallePage() {
       fetchVehiclesByStation(id),
       fetchAttendanceByStation(id),
       fetchInterventionsByStation(id),
-    ]).then(([stationData, vehiclesData, attendanceData, interventionsData]) => {
+      fetchStationAuthorities(id),
+    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData]) => {
       if (active) {
         setStation(stationData)
         setVehicles(vehiclesData)
         setAttendance(attendanceData)
         setInterventions(interventionsData)
+        setAuthorities(authoritiesData)
         setLoading(false)
       }
     })
@@ -80,7 +85,16 @@ export function CuartelDetallePage() {
               marginBottom: 16,
             }}
           >
-            <h1 style={{ margin: 0, fontSize: 20 }}>{station.name}</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {station.logo_url && (
+                <img
+                  src={station.logo_url}
+                  alt={`Logo ${station.name}`}
+                  style={{ height: 40, width: 40, borderRadius: 8, objectFit: 'cover', border: '2px solid #fff' }}
+                />
+              )}
+              <h1 style={{ margin: 0, fontSize: 20 }}>{station.name}</h1>
+            </div>
             <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>{station.address ?? station.zone}</p>
           </div>
 
@@ -103,9 +117,31 @@ export function CuartelDetallePage() {
             <h2 className="section-title">Autoridades y Contacto</h2>
           </div>
           <div className="card" style={{ marginBottom: 20 }}>
-            <div className="empty-state">
-              Los datos de autoridades se cargarán desde el módulo de personal (próxima fase).
-            </div>
+            {authorities.length === 0 ? (
+              <div className="empty-state">Todavía no hay autoridades asignadas para este cuartel.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
+                {authorities.map(({ profile, role }) => (
+                  <div key={`${profile.id}-${role}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.full_name}</span>
+                    <span className="badge badge-info">{ROLE_DEFINITIONS.find((r) => r.key === role)?.label ?? role}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(station.phone || station.email || station.social_media) && (
+              <div style={{ borderTop: authorities.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: authorities.length > 0 ? 12 : 0 }}>
+                {station.phone && <p style={{ margin: '0 0 4px', fontSize: 13 }}>📞 {station.phone}</p>}
+                {station.email && <p style={{ margin: '0 0 4px', fontSize: 13 }}>✉️ {station.email}</p>}
+                {station.social_media?.facebook && <p style={{ margin: '0 0 4px', fontSize: 13 }}>Facebook: {station.social_media.facebook}</p>}
+                {station.social_media?.instagram && <p style={{ margin: 0, fontSize: 13 }}>Instagram: {station.social_media.instagram}</p>}
+              </div>
+            )}
+
+            {station.description && (
+              <p style={{ marginTop: 12, fontSize: 13, color: 'var(--color-text-secondary)' }}>{station.description}</p>
+            )}
           </div>
 
           <div className="section-header">

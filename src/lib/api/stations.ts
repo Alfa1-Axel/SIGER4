@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
-import type { Station } from '../../types/database'
+import type { Profile, Station } from '../../types/database'
+import type { RoleKey } from '../../types/roles'
 
 export async function fetchStations(): Promise<Station[]> {
   const { data, error } = await supabase.from('stations').select('*').order('name', { ascending: true })
@@ -39,4 +40,22 @@ export async function updateStation(id: string, input: Partial<StationInput>): P
   const { data, error } = await supabase.from('stations').update(input).eq('id', id).select('*').single()
   if (error) throw error
   return data as Station
+}
+
+const STATION_AUTHORITY_ROLES: RoleKey[] = ['presidente_cuartel', 'jefe_cuerpo_activo', 'secretario_comision']
+
+// Perfiles del cuartel con roles de autoridad (presidente, jefe de cuerpo
+// activo, secretario de comisión), para mostrar en "Autoridades y Contacto".
+export async function fetchStationAuthorities(stationId: string): Promise<{ profile: Profile; role: RoleKey }[]> {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('role, profiles!inner(*)')
+    .in('role', STATION_AUTHORITY_ROLES)
+    .eq('profiles.station_id', stationId)
+  if (error) throw error
+
+  return ((data ?? []) as unknown as { role: RoleKey; profiles: Profile }[]).map((row) => ({
+    profile: row.profiles,
+    role: row.role,
+  }))
 }

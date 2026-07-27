@@ -5,6 +5,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
+import { uploadStationMedia } from '../lib/api/storage'
 import type { Region, StationStatus, Subsede } from '../types/database'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
@@ -23,9 +24,18 @@ export function CuartelFormPage() {
   const [code, setCode] = useState('')
   const [address, setAddress] = useState('')
   const [zone, setZone] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [facebook, setFacebook] = useState('')
+  const [instagram, setInstagram] = useState('')
+  const [description, setDescription] = useState('')
   const [status, setStatus] = useState<StationStatus>('operativo')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [existingLogoUrl, setExistingLogoUrl] = useState<string | null>(null)
+  const [existingCoverUrl, setExistingCoverUrl] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
@@ -61,9 +71,16 @@ export function CuartelFormPage() {
       setCode(station.code)
       setAddress(station.address ?? '')
       setZone(station.zone ?? '')
+      setPhone(station.phone ?? '')
+      setEmail(station.email ?? '')
+      setFacebook(station.social_media?.facebook ?? '')
+      setInstagram(station.social_media?.instagram ?? '')
+      setDescription(station.description ?? '')
       setStatus(station.status)
       setRegionId(station.region_id)
       setSubsedeId(station.subsede_id ?? '')
+      setExistingLogoUrl(station.logo_url)
+      setExistingCoverUrl(station.cover_image_url)
       setLoading(false)
     })
     return () => {
@@ -76,22 +93,40 @@ export function CuartelFormPage() {
     setError(null)
     setSubmitting(true)
     try {
+      const socialMedia =
+        facebook || instagram
+          ? { ...(facebook && { facebook }), ...(instagram && { instagram }) }
+          : null
+
       const input = {
         name,
         code,
         address: address || null,
         zone: zone || null,
+        phone: phone || null,
+        email: email || null,
+        social_media: socialMedia,
+        description: description || null,
         status,
         region_id: regionId,
         subsede_id: subsedeId,
       }
+
+      const stationId = isEditing && id ? id : (await createStation(input)).id
       if (isEditing && id) {
         await updateStation(id, input)
-        navigate(`/cuarteles/${id}`)
-      } else {
-        const created = await createStation(input)
-        navigate(`/cuarteles/${created.id}`)
       }
+
+      if (logoFile) {
+        const logoUrl = await uploadStationMedia(stationId, logoFile)
+        await updateStation(stationId, { logo_url: logoUrl })
+      }
+      if (coverFile) {
+        const coverUrl = await uploadStationMedia(stationId, coverFile)
+        await updateStation(stationId, { cover_image_url: coverUrl })
+      }
+
+      navigate(`/cuarteles/${stationId}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos guardar el cuartel.')
     } finally {
@@ -159,6 +194,47 @@ export function CuartelFormPage() {
           <div className="field">
             <label htmlFor="zone">Zona</label>
             <input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Zona Norte" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="phone">Teléfono (opcional)</label>
+            <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="email">Email institucional (opcional)</label>
+            <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="cuartel@bomberos.gob.ar" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="facebook">Facebook (opcional)</label>
+            <input id="facebook" value={facebook} onChange={(e) => setFacebook(e.target.value)} placeholder="facebook.com/cuartel" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="instagram">Instagram (opcional)</label>
+            <input id="instagram" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@cuartel" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="description">Descripción institucional (opcional)</label>
+            <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="logoFile">Logo / escudo institucional (opcional)</label>
+            {existingLogoUrl && !logoFile && (
+              <img src={existingLogoUrl} alt="Logo actual" style={{ height: 48, width: 48, borderRadius: 8, objectFit: 'cover', marginBottom: 6 }} />
+            )}
+            <input id="logoFile" type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
+          </div>
+
+          <div className="field">
+            <label htmlFor="coverFile">Foto de portada (opcional)</label>
+            {existingCoverUrl && !coverFile && (
+              <img src={existingCoverUrl} alt="Portada actual" style={{ height: 80, width: '100%', borderRadius: 8, objectFit: 'cover', marginBottom: 6 }} />
+            )}
+            <input id="coverFile" type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} />
           </div>
 
           <div className="field">

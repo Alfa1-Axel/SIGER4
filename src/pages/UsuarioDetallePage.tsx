@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
+import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import {
   addRole,
@@ -14,7 +15,15 @@ import {
 } from '../lib/api/users'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
-import type { Profile, Region, ScopeType, Station, UserRole, UserScope } from '../types/database'
+import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
+
+const SCOPE_LABEL: Record<ScopeType, string> = {
+  system: 'Informática (Sistema)',
+  region: 'Regional',
+  subsede: 'Subsede',
+  station: 'Cuartel',
+  escuela: 'Escuela',
+}
 
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -23,6 +32,7 @@ export function UsuarioDetallePage() {
   const [roles, setRoles] = useState<UserRole[]>([])
   const [scopes, setScopes] = useState<UserScope[]>([])
   const [regions, setRegions] = useState<Region[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
 
   const [fullName, setFullName] = useState('')
@@ -33,6 +43,7 @@ export function UsuarioDetallePage() {
   const [newScopeType, setNewScopeType] = useState<ScopeType>('station')
   const [newScopeStationId, setNewScopeStationId] = useState('')
   const [newScopeRegionId, setNewScopeRegionId] = useState('')
+  const [newScopeSubsedeId, setNewScopeSubsedeId] = useState('')
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -53,10 +64,11 @@ export function UsuarioDetallePage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchStations(), id ? fetchProfileWithRoles(id) : null]).then(
-      ([regionsData, stationsData, profileData]) => {
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), id ? fetchProfileWithRoles(id) : null]).then(
+      ([regionsData, subsedesData, stationsData, profileData]) => {
         if (!active) return
         setRegions(regionsData)
+        setSubsedes(subsedesData)
         setStations(stationsData)
         if (profileData) {
           setProfile(profileData.profile)
@@ -117,6 +129,7 @@ export function UsuarioDetallePage() {
       await addScope(id, {
         scope_type: newScopeType,
         region_id: newScopeType === 'region' ? newScopeRegionId || null : null,
+        subsede_id: newScopeType === 'subsede' ? newScopeSubsedeId || null : null,
         station_id: newScopeType === 'station' ? newScopeStationId || null : null,
       })
       await reload()
@@ -262,8 +275,9 @@ export function UsuarioDetallePage() {
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}
           >
             <span style={{ fontSize: 13 }}>
-              {scope.scope_type}
+              {SCOPE_LABEL[scope.scope_type]}
               {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? scope.station_id}`}
+              {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
               {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? scope.region_id}`}
             </span>
             <button type="button" className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleRemoveScope(scope.id)}>
@@ -276,12 +290,26 @@ export function UsuarioDetallePage() {
           <div className="field" style={{ marginBottom: 0 }}>
             <label htmlFor="scopeType">Tipo</label>
             <select id="scopeType" value={newScopeType} onChange={(e) => setNewScopeType(e.target.value as ScopeType)}>
-              <option value="system">Sistema</option>
-              <option value="region">Región</option>
+              <option value="system">Informática (Sistema)</option>
+              <option value="region">Regional</option>
+              <option value="subsede">Subsede</option>
               <option value="station">Cuartel</option>
               <option value="escuela">Escuela</option>
             </select>
           </div>
+          {newScopeType === 'subsede' && (
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="scopeSubsede">Subsede</label>
+              <select id="scopeSubsede" value={newScopeSubsedeId} onChange={(e) => setNewScopeSubsedeId(e.target.value)}>
+                <option value="">Seleccionar</option>
+                {subsedes.map((subsede) => (
+                  <option key={subsede.id} value={subsede.id}>
+                    {subsede.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           {newScopeType === 'station' && (
             <div className="field" style={{ marginBottom: 0 }}>
               <label htmlFor="scopeStation">Cuartel</label>

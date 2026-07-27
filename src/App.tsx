@@ -16,6 +16,7 @@ import { AjustesPage } from './pages/AjustesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
 import { UsuarioFormPage } from './pages/UsuarioFormPage'
 import { UsuarioDetallePage } from './pages/UsuarioDetallePage'
+import { NotificacionesPage } from './pages/NotificacionesPage'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/usuarios" element={<AdminRoute><UsuariosPage /></AdminRoute>} />
         <Route path="/usuarios/nuevo" element={<AdminRoute><UsuarioFormPage /></AdminRoute>} />
         <Route path="/usuarios/:id" element={<AdminRoute><UsuarioDetallePage /></AdminRoute>} />
+        <Route path="/notificaciones" element={<ProtectedRoute><NotificacionesPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

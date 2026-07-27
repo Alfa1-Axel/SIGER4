@@ -135,6 +135,10 @@ export interface Course {
   end_date: string | null
   progress_percent: number
   enrolled_count: number
+  attendees_count: number | null
+  hours: number | null
+  days: number | null
+  speakers: string | null
   instructor_profile_id: string | null
   created_at: string
   updated_at: string

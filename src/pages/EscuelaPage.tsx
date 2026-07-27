@@ -53,12 +53,13 @@ export function EscuelaPage() {
                 {course.category}
               </div>
               <h3 style={{ margin: '4px 0 12px', fontSize: 15 }}>{course.title}</h3>
-              <div className="progress-track">
-                <div className="progress-fill" style={{ width: `${course.progress_percent}%` }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                <span>{course.enrolled_count} inscriptos</span>
-                <span>{course.progress_percent}%</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {course.attendees_count != null && <span>{course.attendees_count} asistentes</span>}
+                {course.hours != null && <span>{course.hours} hs cátedra</span>}
+                {course.days != null && <span>{course.days} días</span>}
+                {course.attendees_count == null && course.hours == null && course.days == null && (
+                  <span style={{ fontStyle: 'italic' }}>Inscripciones y progreso: próxima fase</span>
+                )}
               </div>
             </>
           )

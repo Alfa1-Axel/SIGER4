@@ -1,0 +1,38 @@
+{
+  "name": "siger4",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SIGER4 - Sistema Integral de Gestion de la Regional 4 de Bomberos Voluntarios",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.18.1",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "eslint": "^9.9.1",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.11",
+    "typescript": "^5.5.4",
+    "vite": "^7.0.0",
+    "vite-plugin-pwa": "^1.3.0"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8",
+    "ejs": "^6.0.1"
+  }
+}

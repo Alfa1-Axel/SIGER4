@@ -18,6 +18,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   hasRole: (...role: RoleKey[]) => boolean
+  refreshProfile: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
@@ -94,6 +95,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     hasRole(...checked) {
       return checked.some((r) => roles.includes(r))
+    },
+    async refreshProfile() {
+      if (!session?.user) return
+      const ctx = await fetchCurrentUserContext(session.user.id)
+      if (ctx) {
+        setProfile(ctx.profile)
+        setUserRoles(ctx.roles)
+        setScopes(ctx.scopes)
+      }
     },
   }
 

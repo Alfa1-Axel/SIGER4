@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
-import { supabase } from '../lib/supabaseClient'
+import { Icon } from '../components/ui/Icon'
+import { fetchCourses } from '../lib/api/courses'
 import type { Course } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 export function EscuelaPage() {
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('director_escuela', 'instructor')
   const [courses, setCourses] = useState<Course[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
-    supabase
-      .from('courses')
-      .select('*')
-      .order('start_date', { ascending: true })
-      .then(({ data }) => {
-        if (active) {
-          setCourses((data ?? []) as Course[])
-          setLoading(false)
-        }
-      })
+    fetchCourses()
+      .then((data) => active && setCourses(data))
+      .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
@@ -48,22 +46,44 @@ export function EscuelaPage() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {courses.map((course) => (
-          <div key={course.id} className="card-solid">
-            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-              {course.category}
+        {courses.map((course) => {
+          const content = (
+            <>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+                {course.category}
+              </div>
+              <h3 style={{ margin: '4px 0 12px', fontSize: 15 }}>{course.title}</h3>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${course.progress_percent}%` }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                <span>{course.enrolled_count} inscriptos</span>
+                <span>{course.progress_percent}%</span>
+              </div>
+            </>
+          )
+          return canEdit ? (
+            <Link key={course.id} to={`/escuela/${course.id}/editar`} className="card-solid" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+              {content}
+            </Link>
+          ) : (
+            <div key={course.id} className="card-solid">
+              {content}
             </div>
-            <h3 style={{ margin: '4px 0 12px', fontSize: 15 }}>{course.title}</h3>
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${course.progress_percent}%` }} />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-              <span>{course.enrolled_count} inscriptos</span>
-              <span>{course.progress_percent}%</span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
+
+      {canEdit && (
+        <Link
+          to="/escuela/nuevo"
+          className="btn btn-primary btn-icon"
+          style={{ position: 'fixed', bottom: 84, right: 20, zIndex: 25 }}
+          aria-label="Nuevo curso"
+        >
+          <Icon name="plus" size={20} />
+        </Link>
+      )}
     </AppShell>
   )
 }

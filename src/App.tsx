@@ -10,6 +10,7 @@ import { CuartelDetallePage } from './pages/CuartelDetallePage'
 import { CuartelFormPage } from './pages/CuartelFormPage'
 import { VehiculoFormPage } from './pages/VehiculoFormPage'
 import { EscuelaPage } from './pages/EscuelaPage'
+import { CursoFormPage } from './pages/CursoFormPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
@@ -30,6 +31,8 @@ export default function App() {
         <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
         <Route path="/vehiculos/:id/editar" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
         <Route path="/escuela" element={<ProtectedRoute><EscuelaPage /></ProtectedRoute>} />
+        <Route path="/escuela/nuevo" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
+        <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/reportes" element={<ProtectedRoute><ReportesPage /></ProtectedRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<AdminRoute><UsuariosPage /></AdminRoute>} />

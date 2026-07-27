@@ -1,0 +1,150 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { AppShell } from '../components/layout/AppShell'
+import { Icon } from '../components/ui/Icon'
+import { fetchStations } from '../lib/api/stations'
+import type { Station, StationStatus } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
+
+const STATUS_LABEL: Record<StationStatus, string> = {
+  operativo: 'Operativo',
+  mantenimiento: 'Mantenimiento',
+  alerta: 'Alerta',
+}
+
+const STATUS_BADGE: Record<StationStatus, string> = {
+  operativo: 'badge-success',
+  mantenimiento: 'badge-warning',
+  alerta: 'badge-danger',
+}
+
+export function CuartelesPage() {
+  const { isAdmin } = useAuth()
+  const [stations, setStations] = useState<Station[]>([])
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StationStatus | 'todos'>('todos')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    fetchStations()
+      .then((data) => active && setStations(data))
+      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar cuarteles'))
+      .finally(() => active && setLoading(false))
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const filtered = useMemo(() => {
+    return stations.filter((s) => {
+      const matchesQuery =
+        !query ||
+        s.name.toLowerCase().includes(query.toLowerCase()) ||
+        (s.zone ?? '').toLowerCase().includes(query.toLowerCase())
+      const matchesStatus = statusFilter === 'todos' || s.status === statusFilter
+      return matchesQuery && matchesStatus
+    })
+  }, [stations, query, statusFilter])
+
+  return (
+    <AppShell title="Cuarteles">
+      <h1 className="page-title">Gestión de Cuarteles</h1>
+      <p className="page-subtitle">Listado de cuarteles dependientes de la Regional 4</p>
+
+      <div className="search-input" style={{ marginBottom: 12 }}>
+        <Icon name="search" size={16} />
+        <input
+          placeholder="Buscar cuartel por nombre o zona..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {(['todos', 'operativo', 'mantenimiento', 'alerta'] as const).map((status) => (
+          <button
+            key={status}
+            type="button"
+            onClick={() => setStatusFilter(status)}
+            className={`btn ${statusFilter === status ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '6px 14px', fontSize: 13 }}
+          >
+            {status === 'todos' ? 'Todos' : STATUS_LABEL[status]}
+          </button>
+        ))}
+      </div>
+
+      {error && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <p className="field-error">{error}</p>
+        </div>
+      )}
+
+      {loading && <div className="empty-state">Cargando cuarteles…</div>}
+      {!loading && filtered.length === 0 && (
+        <div className="empty-state">No se encontraron cuarteles con ese criterio.</div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {filtered.map((station) => (
+          <Link
+            key={station.id}
+            to={`/cuarteles/${station.id}`}
+            className="card-solid"
+            style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <span className={`badge ${STATUS_BADGE[station.status]}`}>{STATUS_LABEL[station.status]}</span>
+                <h3 style={{ margin: '8px 0 2px', fontSize: 16 }}>{station.name}</h3>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  {station.address ?? station.zone ?? 'Sin dirección registrada'}
+                </p>
+              </div>
+              <Icon name="chevronRight" size={18} />
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                marginTop: 16,
+                paddingTop: 12,
+                borderTop: '1px solid var(--color-border)',
+                textAlign: 'center',
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700 }}>{String(station.personnel_count).padStart(2, '0')}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>PERSONAL</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700 }}>{String(station.vehicles_count).padStart(2, '0')}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>VEHÍCULOS</div>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                  {station.response_time_minutes != null ? `${station.response_time_minutes}min` : '—'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>RESPUESTA</div>
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {isAdmin && (
+        <Link
+          to="/cuarteles/nuevo"
+          className="btn btn-primary btn-icon"
+          style={{ position: 'fixed', bottom: 84, right: 20, zIndex: 25 }}
+          aria-label="Nuevo cuartel"
+        >
+          <Icon name="plus" size={20} />
+        </Link>
+      )}
+    </AppShell>
+  )
+}

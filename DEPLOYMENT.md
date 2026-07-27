@@ -29,6 +29,7 @@
    - `supabase/migrations/0013_vehicles_count_sync.sql`
    - `supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
    - `supabase/migrations/0015_notifications_subsede_and_audit.sql`
+   - `supabase/migrations/0016_attendance_intervention_audit.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -37,10 +38,14 @@ solo necesitás correr las migraciones que todavía no ejecutaste, siempre respe
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones), pero igual conviene correr
-las 15 migraciones en orden para mantener el historial consistente.
+las 16 migraciones en orden para mantener el historial consistente.
 
 **Nota sobre 0015:** agrega `subsede_id` a `notifications` y el trigger de auditoría que esa tabla
 no tenía. Corre como una sola query (no hay enum nuevo, a diferencia de 0009/0010).
+
+**Nota sobre 0016:** agrega los triggers de auditoría que faltaban en `attendance_summaries` e
+`intervention_summaries` (ninguna de las dos tenía). No agrega columnas ni cambia RLS — ambas
+tablas ya tenían el esquema y las políticas completas desde antes.
 
 **Nota sobre 0014:** agrega `region_id`/`subsede_id`/`station_id` a `audit_logs` y reescribe la
 función de auditoría para resolver ese contexto por tabla. Los registros de auditoría **anteriores**
@@ -138,11 +143,11 @@ módulo correspondiente:
 - **`courses.enrolled_count`**: cantidad de inscriptos a un curso. No hay módulo de inscripciones
   (una persona anotándose a un curso) todavía. Distinto de `courses.attendees_count`, que sí es
   real y editable desde el formulario (asistencia registrada manualmente al finalizar la actividad).
-- **`attendance_summaries`** e **`intervention_summaries`**: ambas tablas tienen esquema y
-  políticas RLS completas, pero no existe ningún archivo `src/lib/api/*.ts` ni pantalla que
-  escriba filas en ellas. Los KPIs "Asistencia promedio" e "Intervenciones (período)" del
-  Dashboard (`PanelPage.tsx`) consultan estas tablas de verdad, pero van a mostrar `—`/`0` hasta
-  que existan los módulos reales de asistencia e intervenciones.
+- **`attendance_summaries`** e **`intervention_summaries`**: ✅ construidos (alta/edición de
+  resúmenes por período y cuartel desde el detalle de cuartel, con auditoría). Modelan un
+  **resumen agregado** por período (no asistencia individual por persona/día — eso requeriría un
+  módulo de personal que no existe). Los KPIs "Asistencia promedio" e "Intervenciones (período)"
+  del Dashboard ya muestran datos reales en cuanto se carga al menos un resumen.
 - **Reportes PDF reales e IA institucional** (`ReportesPage.tsx`): la página solo registra la
   solicitud en `audit_logs`; no genera ningún archivo ni corre ningún análisis todavía. Queda para
   una fase posterior (edge function + servicio de IA institucional).

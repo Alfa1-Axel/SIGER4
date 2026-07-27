@@ -57,7 +57,7 @@ async function runAiAnalysis(
 
   builder.addAiAnalysisSection(
     result.available && result.analysis ? result.analysis : null,
-    result.reason ?? 'El análisis con IA no está disponible en este momento.',
+    result.reason ?? 'IA no disponible. El reporte se generará igualmente sin análisis automático.',
   )
 
   await recordAuditEvent({

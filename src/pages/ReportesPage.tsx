@@ -231,9 +231,13 @@ export function ReportesPage() {
           <h2 className="section-title">Asistente Institucional de Análisis</h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Próximamente este módulo podrá resumir reportes, detectar tendencias, comparar períodos, detectar
-          anomalías y redactar conclusiones sobre los datos regionales. Cada PDF ya incluye un espacio reservado
-          para este análisis.
+          Este módulo utiliza inteligencia artificial para asistir en la interpretación de reportes
+          institucionales. Puede resumir datos, detectar tendencias, destacar puntos relevantes, señalar
+          posibles alertas y redactar conclusiones iniciales. El análisis se genera automáticamente al crear
+          un reporte, siempre que la función de IA esté configurada correctamente.
+        </p>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+          Si la función de IA no está disponible, el reporte se genera igualmente sin análisis automático.
         </p>
         <AiDisclaimer />
       </div>

@@ -23,10 +23,10 @@ export async function requestAiAnalysis(input: AiAnalysisRequest): Promise<AiAna
   try {
     const { data, error } = await supabase.functions.invoke('analyze-report', { body: input })
     if (error) {
-      return { available: false, reason: 'El análisis con IA no está disponible en este momento.' }
+      return { available: false, reason: 'IA no disponible. El reporte se generará igualmente sin análisis automático.' }
     }
     return data as AiAnalysisResult
   } catch {
-    return { available: false, reason: 'El análisis con IA no está disponible en este momento.' }
+    return { available: false, reason: 'IA no disponible. El reporte se generará igualmente sin análisis automático.' }
   }
 }

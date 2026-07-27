@@ -3,22 +3,31 @@ import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchStationById } from '../lib/api/stations'
-import type { Station } from '../types/database'
+import { fetchVehiclesByStation } from '../lib/api/vehicles'
+import type { Station, Vehicle } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+
+const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
+  operativo: 'Operativo',
+  mantenimiento: 'Mantenimiento',
+  fuera_de_servicio: 'Fuera de servicio',
+}
 
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole } = useAuth()
   const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'presidente_regional', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!id) return
     let active = true
-    fetchStationById(id).then((data) => {
+    Promise.all([fetchStationById(id), fetchVehiclesByStation(id)]).then(([stationData, vehiclesData]) => {
       if (active) {
-        setStation(data)
+        setStation(stationData)
+        setVehicles(vehiclesData)
         setLoading(false)
       }
     })
@@ -86,6 +95,42 @@ export function CuartelDetallePage() {
             <div className="empty-state">
               Los datos de autoridades se cargarán desde el módulo de personal (próxima fase).
             </div>
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Vehículos</h2>
+            {canEdit && (
+              <Link to={`/cuarteles/${station.id}/vehiculos/nuevo`} className="link-muted">
+                + Agregar
+              </Link>
+            )}
+          </div>
+          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+            {vehicles.length === 0 && <div className="empty-state">No hay vehículos cargados para este cuartel.</div>}
+            {vehicles.map((vehicle, i) => (
+              <Link
+                key={vehicle.id}
+                to={canEdit ? `/vehiculos/${vehicle.id}/editar` : '#'}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  pointerEvents: canEdit ? 'auto' : 'none',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{vehicle.internal_code} · {vehicle.vehicle_type}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{vehicle.plate ?? 'Sin patente'}</div>
+                </div>
+                <span className={`badge ${vehicle.status === 'operativo' ? 'badge-success' : 'badge-warning'}`}>
+                  {VEHICLE_STATUS_LABEL[vehicle.status]}
+                </span>
+              </Link>
+            ))}
           </div>
 
           <div className="section-header">

@@ -22,14 +22,24 @@
      `0`, seguir sin problema (no hace falta backfill de `subsede_id`).
    - `supabase/migrations/0007_subsedes.sql`
    - `supabase/migrations/0008_role_key_simplify.sql`
+   - `supabase/migrations/0009_scope_type_add_subsede.sql`
+   - `supabase/migrations/0010_user_scopes_subsede.sql`
+   - `supabase/migrations/0011_vehicles_fields.sql`
+   - `supabase/migrations/0012_courses_fields.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
 **Nota:** si tu proyecto Supabase ya tenía el esquema aplicado desde antes (instalación previa),
 solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
-la versión final del esquema (subsedes y roles simplificados), pero igual conviene correr las 8
-migraciones en orden para mantener el historial consistente.
+la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
+vehículos/cursos), pero igual conviene correr las 12 migraciones en orden para mantener el
+historial consistente.
+
+**Nota sobre 0009 y 0010:** deben ejecutarse como dos queries separadas (dos "Run" distintos). La
+0009 agrega el valor `'subsede'` al enum `scope_type`; Postgres no permite usar un valor de enum
+recién agregado dentro de la misma transacción que lo creó, por eso todo lo que depende de
+`'subsede'` (columna, políticas, función helper) está en la 0010, no en la misma query.
 
 ### 1.3 Verificar que RLS esté activo
 1. Ir a **Table Editor** → seleccionar cada tabla (stations, profiles, courses, etc.).

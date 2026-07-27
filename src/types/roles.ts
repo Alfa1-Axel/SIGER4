@@ -90,4 +90,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   },
 ]
 
-export const ADMIN_ROLES: RoleKey[] = ['informatica_r4']
+// Debe reflejar exactamente los roles que is_informatica_r4() considera
+// administrador maximo en Supabase (0002_rls_helpers.sql), para que el gate de
+// admin del frontend (isAdmin en useAuth) coincida con lo que RLS ya permite.
+export const ADMIN_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']

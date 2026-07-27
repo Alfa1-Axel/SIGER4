@@ -23,6 +23,7 @@ import { NotificacionFormPage } from './pages/NotificacionFormPage'
 import { DocumentosPage } from './pages/DocumentosPage'
 import { DocumentoFormPage } from './pages/DocumentoFormPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
+import { PersonalFormPage } from './pages/PersonalFormPage'
 
 export default function App() {
   return (
@@ -55,6 +56,8 @@ export default function App() {
         <Route path="/documentos/nuevo" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/documentos/:id/editar" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
+        <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
+        <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

@@ -32,7 +32,7 @@ begin
       v_region_id := rec.region_id;
       v_station_id := rec.station_id;
       select subsede_id into v_subsede_id from stations where id = rec.station_id;
-    when 'vehicles' then
+    when 'vehicles', 'personnel' then
       v_station_id := rec.station_id;
       select region_id, subsede_id into v_region_id, v_subsede_id from stations where id = rec.station_id;
     when 'courses' then
@@ -165,4 +165,8 @@ create trigger trg_audit_intervention_summaries
 
 create trigger trg_audit_document_versions
   after insert or update or delete on document_versions
+  for each row execute function audit_row_change();
+
+create trigger trg_audit_personnel
+  after insert or update or delete on personnel
   for each row execute function audit_row_change();

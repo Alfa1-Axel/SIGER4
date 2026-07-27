@@ -27,6 +27,7 @@ alter table course_stations enable row level security;
 alter table vehicles enable row level security;
 alter table documents enable row level security;
 alter table document_versions enable row level security;
+alter table personnel enable row level security;
 
 -- ---------------- regions ----------------
 
@@ -248,6 +249,32 @@ create policy "vehicles_select_scope" on vehicles
   );
 
 create policy "vehicles_write_admin_regional_station" on vehicles
+  for all using (
+    is_informatica_r4()
+    or is_regional_role()
+    or (station_id in (select my_station_ids()) and (
+      has_role('usuario_carga_cuartel') or has_role('jefe_cuerpo_activo') or has_role('presidente_cuartel')
+    ))
+  )
+  with check (
+    is_informatica_r4()
+    or is_regional_role()
+    or (station_id in (select my_station_ids()) and (
+      has_role('usuario_carga_cuartel') or has_role('jefe_cuerpo_activo') or has_role('presidente_cuartel')
+    ))
+  );
+
+-- ---------------- personnel ----------------
+
+create policy "personnel_select_scope" on personnel
+  for select using (
+    is_informatica_r4()
+    or station_id in (select my_station_ids())
+    or (is_regional_role() and station_id in (select id from stations where region_id in (select my_region_ids())))
+    or station_id in (select id from stations where subsede_id in (select my_subsede_ids()))
+  );
+
+create policy "personnel_write_admin_regional_station" on personnel
   for all using (
     is_informatica_r4()
     or is_regional_role()

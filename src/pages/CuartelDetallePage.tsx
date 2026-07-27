@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
@@ -6,7 +6,8 @@ import { fetchStationAuthorities, fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
 import { fetchInterventionsByStation } from '../lib/api/interventions'
-import type { AttendanceSummary, InterventionSummary, Profile, Station, Vehicle } from '../types/database'
+import { fetchPersonnelByStation, updatePersonnel, deletePersonnel } from '../lib/api/personnel'
+import type { AttendanceSummary, InterventionSummary, Personnel, PersonnelStatus, Profile, Station, Vehicle } from '../types/database'
 import type { RoleKey } from '../types/roles'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
@@ -15,6 +16,33 @@ const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
   operativo: 'Operativo',
   mantenimiento: 'Mantenimiento',
   fuera_de_servicio: 'Fuera de servicio',
+}
+
+const PERSONNEL_STATUS_LABEL: Record<PersonnelStatus, string> = {
+  activo: 'Activo',
+  licencia: 'Licencia',
+  baja: 'Baja',
+  reserva: 'Reserva',
+  aspirante: 'Aspirante',
+}
+
+const PERSONNEL_STATUS_BADGE: Record<PersonnelStatus, string> = {
+  activo: 'badge-success',
+  licencia: 'badge-warning',
+  baja: 'badge-danger',
+  reserva: 'badge-info',
+  aspirante: 'badge-info',
+}
+
+function calculateSeniority(joinDate: string | null): string | null {
+  if (!joinDate) return null
+  const start = new Date(joinDate)
+  const now = new Date()
+  let years = now.getFullYear() - start.getFullYear()
+  const hasHadAnniversaryThisYear = now.getMonth() > start.getMonth() || (now.getMonth() === start.getMonth() && now.getDate() >= start.getDate())
+  if (!hasHadAnniversaryThisYear) years -= 1
+  if (years < 1) return 'Menos de 1 año'
+  return `${years} ${years === 1 ? 'año' : 'años'}`
 }
 
 export function CuartelDetallePage() {
@@ -26,7 +54,18 @@ export function CuartelDetallePage() {
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
   const [interventions, setInterventions] = useState<InterventionSummary[]>([])
   const [authorities, setAuthorities] = useState<{ profile: Profile; role: RoleKey }[]>([])
+  const [personnel, setPersonnel] = useState<Personnel[]>([])
   const [loading, setLoading] = useState(true)
+
+  const [personnelStatusFilter, setPersonnelStatusFilter] = useState('')
+  const [personnelRankFilter, setPersonnelRankFilter] = useState('')
+  const [personnelDepartmentFilter, setPersonnelDepartmentFilter] = useState('')
+
+  async function reloadPersonnel(stationId: string) {
+    const [personnelData, stationData] = await Promise.all([fetchPersonnelByStation(stationId), fetchStationById(stationId)])
+    setPersonnel(personnelData)
+    if (stationData) setStation(stationData)
+  }
 
   useEffect(() => {
     if (!id) return
@@ -37,13 +76,15 @@ export function CuartelDetallePage() {
       fetchAttendanceByStation(id),
       fetchInterventionsByStation(id),
       fetchStationAuthorities(id),
-    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData]) => {
+      fetchPersonnelByStation(id),
+    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData]) => {
       if (active) {
         setStation(stationData)
         setVehicles(vehiclesData)
         setAttendance(attendanceData)
         setInterventions(interventionsData)
         setAuthorities(authoritiesData)
+        setPersonnel(personnelData)
         setLoading(false)
       }
     })
@@ -51,6 +92,39 @@ export function CuartelDetallePage() {
       active = false
     }
   }, [id])
+
+  const personnelRanks = useMemo(
+    () => Array.from(new Set(personnel.map((p) => p.rank).filter((r): r is string => Boolean(r)))).sort(),
+    [personnel],
+  )
+  const personnelDepartments = useMemo(
+    () => Array.from(new Set(personnel.map((p) => p.department).filter((d): d is string => Boolean(d)))).sort(),
+    [personnel],
+  )
+  const filteredPersonnel = useMemo(
+    () =>
+      personnel.filter(
+        (p) =>
+          (!personnelStatusFilter || p.status === personnelStatusFilter) &&
+          (!personnelRankFilter || p.rank === personnelRankFilter) &&
+          (!personnelDepartmentFilter || p.department === personnelDepartmentFilter),
+      ),
+    [personnel, personnelStatusFilter, personnelRankFilter, personnelDepartmentFilter],
+  )
+  const activePersonnelCount = useMemo(() => personnel.filter((p) => p.status === 'activo').length, [personnel])
+
+  async function handlePersonnelStatusChange(personId: string, status: PersonnelStatus) {
+    if (!id) return
+    await updatePersonnel(personId, { status })
+    await reloadPersonnel(id)
+  }
+
+  async function handlePersonnelDelete(personId: string) {
+    if (!id) return
+    if (!window.confirm('¿Eliminar este integrante de la dotación? Esta acción no se puede deshacer.')) return
+    await deletePersonnel(personId)
+    await reloadPersonnel(id)
+  }
 
   return (
     <AppShell title="Detalle Cuartel">
@@ -142,6 +216,120 @@ export function CuartelDetallePage() {
             {station.description && (
               <p style={{ marginTop: 12, fontSize: 13, color: 'var(--color-text-secondary)' }}>{station.description}</p>
             )}
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Personal / Dotación</h2>
+            {canEdit && (
+              <Link to={`/cuarteles/${station.id}/personal/nuevo`} className="link-muted">
+                + Agregar
+              </Link>
+            )}
+          </div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                Dotación activa: <strong>{activePersonnelCount}</strong> · Total cargado: {personnel.length}
+              </span>
+            </div>
+
+            {personnel.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <select value={personnelStatusFilter} onChange={(e) => setPersonnelStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+                  <option value="">Todos los estados</option>
+                  {Object.entries(PERSONNEL_STATUS_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {personnelRanks.length > 0 && (
+                  <select value={personnelRankFilter} onChange={(e) => setPersonnelRankFilter(e.target.value)} style={{ fontSize: 12 }}>
+                    <option value="">Todas las jerarquías</option>
+                    {personnelRanks.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {personnelDepartments.length > 0 && (
+                  <select value={personnelDepartmentFilter} onChange={(e) => setPersonnelDepartmentFilter(e.target.value)} style={{ fontSize: 12 }}>
+                    <option value="">Todos los departamentos</option>
+                    {personnelDepartments.map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {personnel.length === 0 && <div className="empty-state">No hay personal cargado para este cuartel.</div>}
+            {personnel.length > 0 && filteredPersonnel.length === 0 && (
+              <div className="empty-state">No hay personal que coincida con estos filtros.</div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {filteredPersonnel.map((person, i) => (
+                <div
+                  key={person.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '10px 0',
+                    borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>
+                      {person.last_name}, {person.first_name}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                      {[person.rank, person.role_function, person.department].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+                      {person.join_date && ` · Antigüedad: ${calculateSeniority(person.join_date)}`}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {canEdit ? (
+                      <select
+                        value={person.status}
+                        onChange={(e) => handlePersonnelStatusChange(person.id, e.target.value as PersonnelStatus)}
+                        style={{ fontSize: 12, padding: '2px 4px' }}
+                      >
+                        {Object.entries(PERSONNEL_STATUS_LABEL).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={`badge ${PERSONNEL_STATUS_BADGE[person.status]}`}>{PERSONNEL_STATUS_LABEL[person.status]}</span>
+                    )}
+                    {canEdit && (
+                      <>
+                        <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 8px' }}>
+                          <Icon name="edit" size={14} />
+                        </Link>
+                        <button
+                          type="button"
+                          className="btn btn-outlined"
+                          style={{ padding: '4px 8px' }}
+                          onClick={() => handlePersonnelDelete(person.id)}
+                          aria-label="Eliminar"
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="section-header">

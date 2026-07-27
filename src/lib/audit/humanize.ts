@@ -9,6 +9,7 @@ export const TABLE_LABELS: Record<string, string> = {
   courses: 'Escuela / Cursos',
   course_stations: 'Cuarteles participantes de un curso',
   vehicles: 'Vehículos',
+  personnel: 'Personal / Dotación',
   documents: 'Documentos',
   document_versions: 'Versiones de documentos',
   subsedes: 'Subsedes',
@@ -53,6 +54,12 @@ export const FIELD_LABELS: Record<string, string> = {
   auth_user_id: 'Cuenta de acceso',
   name: 'Nombre',
   full_name: 'Nombre completo',
+  first_name: 'Nombre',
+  last_name: 'Apellido',
+  national_id: 'DNI',
+  role_function: 'Cargo / función',
+  department: 'Departamento',
+  join_date: 'Fecha de ingreso',
   code: 'Código',
   title: 'Título',
   category: 'Categoría',
@@ -122,6 +129,11 @@ const STATUS_LABELS: Record<string, string> = {
   en_curso: 'En curso',
   finalizado: 'Finalizado',
   cancelado: 'Cancelado',
+  activo: 'Activo',
+  licencia: 'Licencia',
+  baja: 'Baja',
+  reserva: 'Reserva',
+  aspirante: 'Aspirante',
 }
 
 const SCOPE_TYPE_LABELS: Record<string, string> = {

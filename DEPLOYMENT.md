@@ -34,6 +34,7 @@
    - `supabase/migrations/0018_super_admin_protection.sql`
    - `supabase/migrations/0019_documents_module.sql`
    - `supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
+   - `supabase/migrations/0021_personnel_module.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -42,8 +43,17 @@ solo necesitás correr las migraciones que todavía no ejecutaste, siempre respe
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
-de documentos), pero igual conviene correr las 20 migraciones en orden para mantener el historial
-consistente.
+de documentos, personal/dotación por cuartel), pero igual conviene correr las 21 migraciones en
+orden para mantener el historial consistente.
+
+**Nota sobre 0021:** agrega el módulo de Personal/Dotación: tabla `personnel` (nombre, apellido, DNI
+opcional, jerarquía, cargo/función, estado, departamento, fecha de ingreso, teléfono/email,
+observaciones), RLS con el mismo patrón de alcance que `vehicles`, auditoría, y un trigger que
+recalcula `stations.personnel_count` automáticamente a partir del personal en estado `activo` (deja
+de ser un valor manual). Después de correr la migración, `personnel_count` va a quedar en `0` para
+todos los cuarteles hasta que se cargue la dotación real desde la nueva sección "Personal /
+Dotación" del detalle de cada cuartel — esto es esperado, el valor manual anterior no era
+confiable (mismo criterio que se usó para `vehicles_count` en 0013).
 
 **Nota sobre 0020:** agrega dos políticas de lectura a `audit_logs` para que usuarios con alcance de
 subsede o de cuartel (no solo `informatica_r4` o roles regionales) puedan ver la actividad de su
@@ -198,11 +208,11 @@ Estos campos y tablas existen en el esquema pero todavía no tienen un flujo rea
 alimente. No son bugs a corregir con un parche — quedan pendientes hasta que se construya el
 módulo correspondiente:
 
-- **`stations.personnel_count`**: columna de conteo de personal por cuartel. No hay módulo de
-  personal/dotación (altas, bajas, roles internos) todavía, así que este número no refleja datos
-  reales. Cuando se construya ese módulo, agregar un trigger de sincronización igual al que ya
-  tiene `stations.vehicles_count` (ver `supabase/migrations/0013_vehicles_count_sync.sql` como
-  referencia del patrón).
+- **`stations.personnel_count`**: ✅ construido (migración 0021). Tabla `personnel` con alta/edición/
+  baja desde la sección "Personal / Dotación" del detalle de cuartel, filtros por estado/jerarquía/
+  departamento, y un trigger que recalcula `personnel_count` automáticamente a partir del personal
+  en estado `activo` (mismo patrón que `vehicles_count`, ver 0013). El módulo mide capacidad
+  institucional real, no es un padrón completo de RRHH — el DNI es opcional y no obligatorio.
 - **`courses.enrolled_count`**: cantidad de inscriptos a un curso. No hay módulo de inscripciones
   (una persona anotándose a un curso) todavía. Distinto de `courses.attendees_count`, que sí es
   real y editable desde el formulario (asistencia registrada manualmente al finalizar la actividad).

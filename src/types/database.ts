@@ -170,6 +170,26 @@ export interface Vehicle {
   updated_at: string
 }
 
+export type PersonnelStatus = 'activo' | 'licencia' | 'baja' | 'reserva' | 'aspirante'
+
+export interface Personnel {
+  id: string
+  station_id: string
+  first_name: string
+  last_name: string
+  national_id: string | null
+  rank: string | null
+  role_function: string | null
+  status: PersonnelStatus
+  department: string | null
+  join_date: string | null
+  phone: string | null
+  email: string | null
+  observations: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface DocumentRecord {
   id: string
   region_id: string | null

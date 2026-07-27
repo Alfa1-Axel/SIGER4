@@ -313,6 +313,79 @@ create trigger trg_sync_station_vehicles_count
   for each row execute function sync_station_vehicles_count();
 
 -- ============================================================
+-- PERSONAL / DOTACION
+-- ============================================================
+-- Mide capacidad institucional real (dotacion activa, distribucion por
+-- cuartel/subsede, necesidades de capacitacion), no es un padron de RRHH
+-- completo. DNI queda opcional y sin destacarse visualmente.
+
+create type personnel_status as enum ('activo', 'licencia', 'baja', 'reserva', 'aspirante');
+
+create table if not exists personnel (
+  id uuid primary key default gen_random_uuid(),
+  station_id uuid not null references stations(id) on delete cascade,
+  first_name text not null,
+  last_name text not null,
+  national_id text,
+  rank text,
+  role_function text,
+  status personnel_status not null default 'activo',
+  department text,
+  join_date date,
+  phone text,
+  email text,
+  observations text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+comment on table personnel is 'Personal/dotacion real por cuartel: mide capacidad institucional, no es un padron de RRHH completo.';
+comment on column personnel.national_id is 'DNI, opcional. No se usa como requisito ni se destaca visualmente en los listados.';
+comment on column personnel.rank is 'Jerarquia dentro del cuerpo activo (ej. Bombero, Cabo, Sargento, Oficial).';
+comment on column personnel.role_function is 'Cargo o funcion dentro del cuartel (ej. Conductor, Instructor interno, Tesorero).';
+comment on column personnel.department is 'Departamento/area al que pertenece dentro del cuartel (ej. Cuerpo Activo, Comision Directiva, Escuela).';
+comment on column personnel.join_date is 'Fecha de ingreso; la antiguedad se calcula en la aplicacion a partir de esta fecha, no se almacena.';
+
+create index if not exists idx_personnel_station_id on personnel(station_id);
+create index if not exists idx_personnel_status on personnel(status);
+
+-- personnel_count deja de ser manual: se recalcula solo (solo cuenta personal
+-- en estado 'activo'), igual que vehicles_count.
+create or replace function sync_station_personnel_count()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if (tg_op = 'INSERT') then
+    update stations set personnel_count = (select count(*) from personnel where station_id = new.station_id and status = 'activo')
+    where id = new.station_id;
+    return new;
+  elsif (tg_op = 'UPDATE') then
+    update stations set personnel_count = (select count(*) from personnel where station_id = new.station_id and status = 'activo')
+    where id = new.station_id;
+    if (old.station_id is distinct from new.station_id) then
+      update stations set personnel_count = (select count(*) from personnel where station_id = old.station_id and status = 'activo')
+      where id = old.station_id;
+    end if;
+    return new;
+  elsif (tg_op = 'DELETE') then
+    update stations set personnel_count = (select count(*) from personnel where station_id = old.station_id and status = 'activo')
+    where id = old.station_id;
+    return old;
+  end if;
+  return null;
+end;
+$$;
+
+comment on function sync_station_personnel_count() is 'Recalcula stations.personnel_count (solo personal activo) desde la tabla personnel cada vez que cambia.';
+
+create trigger trg_sync_station_personnel_count
+  after insert or update or delete on personnel
+  for each row execute function sync_station_personnel_count();
+
+-- ============================================================
 -- GESTION DOCUMENTAL
 -- ============================================================
 
@@ -368,6 +441,8 @@ create trigger trg_courses_updated_at before update on courses
 create trigger trg_vehicles_updated_at before update on vehicles
   for each row execute function set_updated_at();
 create trigger trg_documents_updated_at before update on documents
+  for each row execute function set_updated_at();
+create trigger trg_personnel_updated_at before update on personnel
   for each row execute function set_updated_at();
 
 -- ============================================================

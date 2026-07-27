@@ -7,11 +7,20 @@ export interface Region {
   created_at: string
 }
 
+export interface Subsede {
+  id: string
+  region_id: string
+  name: string
+  code: string
+  created_at: string
+}
+
 export type StationStatus = 'operativo' | 'no_operativo'
 
 export interface Station {
   id: string
   region_id: string
+  subsede_id: string | null
   name: string
   code: string
   address: string | null

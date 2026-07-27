@@ -19,11 +19,23 @@ create table if not exists regions (
 
 comment on table regions is 'Regionales de Bomberos Voluntarios (ej. Regional 4). Preparado para futuras regionales.';
 
+create table if not exists subsedes (
+  id uuid primary key default gen_random_uuid(),
+  region_id uuid not null references regions(id) on delete restrict,
+  name text not null,
+  code text not null,
+  created_at timestamptz not null default now(),
+  unique (region_id, code)
+);
+
+comment on table subsedes is 'Subsedes de una regional (ej. SubSede Las Varillas, Subsede Luque, Subsede Rio Primero). Cada cuartel pertenece a una subsede.';
+
 create type station_status as enum ('operativo', 'no_operativo');
 
 create table if not exists stations (
   id uuid primary key default gen_random_uuid(),
   region_id uuid not null references regions(id) on delete restrict,
+  subsede_id uuid references subsedes(id) on delete restrict,
   name text not null,
   code text not null,
   address text,
@@ -39,7 +51,7 @@ create table if not exists stations (
   unique (region_id, code)
 );
 
-comment on table stations is 'Cuarteles de bomberos dependientes de una regional.';
+comment on table stations is 'Cuarteles de bomberos dependientes de una regional y una subsede.';
 
 -- ============================================================
 -- PERFILES, ROLES Y ALCANCES (SCOPES)
@@ -63,18 +75,14 @@ comment on table profiles is 'Perfil institucional de cada usuario autenticado e
 
 create type role_key as enum (
   'informatica_r4',
-  'coordinador_informatica',
   'integrante_informatica',
   'director_escuela',
   'instructor',
-  'presidente_regional',
   'secretario_regional',
   'presidente_cuartel',
   'jefe_cuerpo_activo',
   'usuario_carga_cuartel',
   'secretario_comision',
-  'bombero',
-  'aspirante',
   'administrativo',
   'invitado'
 );
@@ -270,3 +278,15 @@ create trigger trg_documents_updated_at before update on documents
 insert into regions (name, code)
 values ('Regional 4', 'R4')
 on conflict (code) do nothing;
+
+insert into subsedes (region_id, name, code)
+select r.id, v.name, v.code
+from regions r
+cross join (
+  values
+    ('SubSede Las Varillas', 'LV'),
+    ('Subsede Luque', 'LQ'),
+    ('Subsede Rio Primero', 'RP')
+) as v(name, code)
+where r.code = 'R4'
+on conflict (region_id, code) do nothing;

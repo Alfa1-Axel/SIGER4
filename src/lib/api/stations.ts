@@ -20,6 +20,7 @@ export interface StationInput {
   zone?: string | null
   status?: Station['status']
   region_id: string
+  subsede_id: string
 }
 
 export async function createStation(input: StationInput): Promise<Station> {

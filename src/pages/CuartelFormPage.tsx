@@ -3,8 +3,9 @@ import type { FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
+import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
-import type { Region, StationStatus } from '../types/database'
+import type { Region, StationStatus, Subsede } from '../types/database'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
@@ -17,28 +18,39 @@ export function CuartelFormPage() {
   const navigate = useNavigate()
 
   const [regions, setRegions] = useState<Region[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [address, setAddress] = useState('')
   const [zone, setZone] = useState('')
   const [status, setStatus] = useState<StationStatus>('operativo')
   const [regionId, setRegionId] = useState('')
+  const [subsedeId, setSubsedeId] = useState('')
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const subsedesForRegion = subsedes.filter((s) => s.region_id === regionId)
+
   useEffect(() => {
     let active = true
-    fetchRegions().then((data) => {
+    Promise.all([fetchRegions(), fetchSubsedes()]).then(([regionsData, subsedesData]) => {
       if (!active) return
-      setRegions(data)
-      setRegionId((prev) => prev || data[0]?.id || '')
+      setRegions(regionsData)
+      setSubsedes(subsedesData)
+      setRegionId((prev) => prev || regionsData[0]?.id || '')
     })
     return () => {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (subsedeId || subsedesForRegion.length === 0) return
+    setSubsedeId(subsedesForRegion[0].id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subsedesForRegion])
 
   useEffect(() => {
     if (!id) return
@@ -51,6 +63,7 @@ export function CuartelFormPage() {
       setZone(station.zone ?? '')
       setStatus(station.status)
       setRegionId(station.region_id)
+      setSubsedeId(station.subsede_id ?? '')
       setLoading(false)
     })
     return () => {
@@ -70,6 +83,7 @@ export function CuartelFormPage() {
         zone: zone || null,
         status,
         region_id: regionId,
+        subsede_id: subsedeId,
       }
       if (isEditing && id) {
         await updateStation(id, input)
@@ -106,10 +120,32 @@ export function CuartelFormPage() {
 
           <div className="field">
             <label htmlFor="region">Región</label>
-            <select id="region" required value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+            <select
+              id="region"
+              required
+              value={regionId}
+              onChange={(e) => {
+                setRegionId(e.target.value)
+                setSubsedeId('')
+              }}
+            >
               {regions.map((region) => (
                 <option key={region.id} value={region.id}>
                   {region.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="subsede">Subsede</label>
+            <select id="subsede" required value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
+              <option value="" disabled>
+                Seleccionar subsede
+              </option>
+              {subsedesForRegion.map((subsede) => (
+                <option key={subsede.id} value={subsede.id}>
+                  {subsede.name}
                 </option>
               ))}
             </select>

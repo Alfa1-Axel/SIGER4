@@ -1,17 +1,19 @@
 -- SIGER4 - Politicas de Row Level Security
 --
 -- Reglas generales:
---  - informatica_r4 / coordinador_informatica / integrante_informatica: acceso total (lectura y escritura).
---  - presidente_regional / secretario_regional: lectura y escritura de todo lo que pertenezca a su(s) region(es).
+--  - informatica_r4 / integrante_informatica: acceso total (lectura y escritura).
+--  - director_escuela / secretario_regional: lectura y escritura de todo lo que pertenezca a su(s) region(es).
+--    director_escuela es ademas la maxima autoridad regional (no existe presidente_regional).
 --  - director_escuela / instructor: lectura y escritura de cursos y datos de la Escuela Regional.
 --  - roles de cuartel (presidente_cuartel, jefe_cuerpo_activo, usuario_carga_cuartel, secretario_comision,
---    bombero, aspirante, administrativo): lectura/escritura limitada a su propio cuartel.
+--    administrativo): lectura/escritura limitada a su propio cuartel.
 --  - invitado: solo lectura, alcance limitado a su cuartel si lo tiene asignado.
 --
 -- NOTA: estas policies son una base inicial. Antes de produccion, revisar caso por caso
 -- que actividad_reciente/documentos sensibles no queden expuestos a roles de solo lectura.
 
 alter table regions enable row level security;
+alter table subsedes enable row level security;
 alter table stations enable row level security;
 alter table profiles enable row level security;
 alter table user_roles enable row level security;
@@ -30,6 +32,14 @@ create policy "regions_select_authenticated" on regions
   for select using (auth.role() = 'authenticated');
 
 create policy "regions_write_admin" on regions
+  for all using (is_informatica_r4()) with check (is_informatica_r4());
+
+-- ---------------- subsedes ----------------
+
+create policy "subsedes_select_authenticated" on subsedes
+  for select using (auth.role() = 'authenticated');
+
+create policy "subsedes_write_admin" on subsedes
   for all using (is_informatica_r4()) with check (is_informatica_r4());
 
 -- ---------------- stations ----------------

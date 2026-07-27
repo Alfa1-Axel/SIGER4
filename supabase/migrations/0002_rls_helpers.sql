@@ -125,6 +125,24 @@ $$;
 
 comment on function my_subsede_ids() is 'IDs de subsede a los que el usuario actual tiene acceso via user_scopes (scope_type = subsede).';
 
+create or replace function is_super_admin()
+returns boolean
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from user_roles ur
+    join profiles p on p.id = ur.profile_id
+    where p.auth_user_id = auth.uid()
+      and ur.role = 'informatica_r4'
+  );
+$$;
+
+comment on function is_super_admin() is 'Devuelve true solo para el rol informatica_r4 (no integrante_informatica). Es el superadmin real: puede editar cualquier cosa, incluido su propio rol/scope/cuartel.';
+
 create or replace function prevent_self_scope_change()
 returns trigger
 language plpgsql
@@ -132,7 +150,7 @@ security definer
 set search_path = public
 as $$
 begin
-  if is_informatica_r4() then
+  if is_super_admin() then
     return new;
   end if;
 
@@ -146,8 +164,46 @@ begin
 end;
 $$;
 
-comment on function prevent_self_scope_change() is 'Impide que un usuario cambie su propio station_id/region_id al editar su perfil; solo informatica_r4 puede hacerlo.';
+comment on function prevent_self_scope_change() is 'Impide que un usuario cambie su propio station_id/region_id al editar su perfil. Solo informatica_r4 (superadmin real) puede hacerlo; integrante_informatica no.';
 
 create trigger trg_prevent_self_scope_change
   before update on profiles
   for each row execute function prevent_self_scope_change();
+
+create or replace function protect_super_admin_roles_scopes()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  target_profile_id uuid;
+  target_is_super_admin boolean;
+begin
+  target_profile_id := coalesce(new.profile_id, old.profile_id);
+
+  select exists (
+    select 1 from user_roles where profile_id = target_profile_id and role = 'informatica_r4'
+  ) into target_is_super_admin;
+
+  if tg_table_name = 'user_roles' and tg_op <> 'DELETE' and new.role = 'informatica_r4' then
+    target_is_super_admin := true;
+  end if;
+
+  if target_is_super_admin and not is_super_admin() then
+    raise exception 'No podés modificar los roles o alcances de un usuario Informática R4. Solo otro Informática R4 puede hacerlo.';
+  end if;
+
+  return coalesce(new, old);
+end;
+$$;
+
+comment on function protect_super_admin_roles_scopes() is 'Impide que alguien que no sea informatica_r4 modifique user_roles/user_scopes de un perfil que ya tiene el rol informatica_r4, u otorgue el rol informatica_r4 por primera vez.';
+
+create trigger trg_protect_super_admin_user_roles
+  before insert or update or delete on user_roles
+  for each row execute function protect_super_admin_roles_scopes();
+
+create trigger trg_protect_super_admin_user_scopes
+  before insert or update or delete on user_scopes
+  for each row execute function protect_super_admin_roles_scopes();

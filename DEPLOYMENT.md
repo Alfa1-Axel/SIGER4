@@ -26,6 +26,8 @@
    - `supabase/migrations/0010_user_scopes_subsede.sql`
    - `supabase/migrations/0011_vehicles_fields.sql`
    - `supabase/migrations/0012_courses_fields.sql`
+   - `supabase/migrations/0013_vehicles_count_sync.sql`
+   - `supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -33,8 +35,13 @@
 solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
-vehículos/cursos), pero igual conviene correr las 12 migraciones en orden para mantener el
-historial consistente.
+vehículos/cursos, contexto territorial de auditoría), pero igual conviene correr las 14
+migraciones en orden para mantener el historial consistente.
+
+**Nota sobre 0014:** agrega `region_id`/`subsede_id`/`station_id` a `audit_logs` y reescribe la
+función de auditoría para resolver ese contexto por tabla. Los registros de auditoría **anteriores**
+a esta migración quedan con esas 3 columnas en `null` (no se hace backfill histórico) — esto es
+intencional, no un error; ver la sección de deuda técnica más abajo.
 
 **Nota sobre 0009 y 0010:** deben ejecutarse como dos queries separadas (dos "Run" distintos). La
 0009 agrega el valor `'subsede'` al enum `scope_type`; Postgres no permite usar un valor de enum

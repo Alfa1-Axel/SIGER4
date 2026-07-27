@@ -154,6 +154,7 @@ create table if not exists notifications (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid references profiles(id) on delete cascade,
   region_id uuid references regions(id) on delete cascade,
+  subsede_id uuid references subsedes(id) on delete cascade,
   station_id uuid references stations(id) on delete cascade,
   type notification_type not null,
   title text not null,
@@ -162,7 +163,8 @@ create table if not exists notifications (
   created_at timestamptz not null default now()
 );
 
-comment on table notifications is 'Notificaciones internas. profile_id nulo = notificacion masiva para la region/cuartel indicado.';
+comment on table notifications is 'Notificaciones internas. profile_id nulo = notificacion masiva para la region/subsede/cuartel indicado.';
+comment on column notifications.subsede_id is 'Subsede destino cuando la notificacion es masiva para toda una subsede (no un cuartel especifico).';
 
 -- ============================================================
 -- ASISTENCIA E INTERVENCIONES (RESUMENES)

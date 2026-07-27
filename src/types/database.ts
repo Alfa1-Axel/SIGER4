@@ -94,6 +94,7 @@ export interface Notification {
   id: string
   profile_id: string | null
   region_id: string | null
+  subsede_id: string | null
   station_id: string | null
   type: NotificationType
   title: string

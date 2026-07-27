@@ -140,6 +140,7 @@ create policy "notifications_select_own_or_scope" on notifications
     or (profile_id is null and region_id in (select my_region_ids()))
     or (profile_id is null and station_id in (select my_station_ids()))
     or (profile_id is null and station_id in (select id from stations where subsede_id in (select my_subsede_ids())))
+    or (profile_id is null and subsede_id in (select my_subsede_ids()))
   );
 
 create policy "notifications_update_own" on notifications

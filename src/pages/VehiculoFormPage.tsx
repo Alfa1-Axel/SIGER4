@@ -21,6 +21,9 @@ export function VehiculoFormPage() {
   const [vehicleType, setVehicleType] = useState('')
   const [status, setStatus] = useState<VehicleStatus>('operativo')
   const [plate, setPlate] = useState('')
+  const [waterCapacityLiters, setWaterCapacityLiters] = useState('')
+  const [crewCapacity, setCrewCapacity] = useState('')
+  const [observations, setObservations] = useState('')
   const [lastServiceAt, setLastServiceAt] = useState('')
 
   const [loading, setLoading] = useState(isEditing)
@@ -37,6 +40,9 @@ export function VehiculoFormPage() {
       setVehicleType(vehicle.vehicle_type)
       setStatus(vehicle.status)
       setPlate(vehicle.plate ?? '')
+      setWaterCapacityLiters(vehicle.water_capacity_liters != null ? String(vehicle.water_capacity_liters) : '')
+      setCrewCapacity(vehicle.crew_capacity != null ? String(vehicle.crew_capacity) : '')
+      setObservations(vehicle.observations ?? '')
       setLastServiceAt(vehicle.last_service_at ?? '')
       setLoading(false)
     })
@@ -56,6 +62,9 @@ export function VehiculoFormPage() {
         vehicle_type: vehicleType,
         status,
         plate: plate || null,
+        water_capacity_liters: waterCapacityLiters ? Number(waterCapacityLiters) : null,
+        crew_capacity: crewCapacity ? Number(crewCapacity) : null,
+        observations: observations || null,
         last_service_at: lastServiceAt || null,
       }
       if (isEditing && id) {
@@ -93,6 +102,35 @@ export function VehiculoFormPage() {
           <div className="field">
             <label htmlFor="plate">Patente (opcional)</label>
             <input id="plate" value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="AB123CD" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="waterCapacityLiters">Capacidad de agua en litros (opcional)</label>
+            <input
+              id="waterCapacityLiters"
+              type="number"
+              min="0"
+              value={waterCapacityLiters}
+              onChange={(e) => setWaterCapacityLiters(e.target.value)}
+              placeholder="3000"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="crewCapacity">Capacidad de personal (opcional)</label>
+            <input
+              id="crewCapacity"
+              type="number"
+              min="0"
+              value={crewCapacity}
+              onChange={(e) => setCrewCapacity(e.target.value)}
+              placeholder="6"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="observations">Observaciones (opcional)</label>
+            <textarea id="observations" value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} />
           </div>
 
           <div className="field">

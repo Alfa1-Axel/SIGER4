@@ -149,6 +149,9 @@ export interface Vehicle {
   vehicle_type: string
   status: VehicleStatus
   plate: string | null
+  water_capacity_liters: number | null
+  crew_capacity: number | null
+  observations: string | null
   last_service_at: string | null
   created_at: string
   updated_at: string

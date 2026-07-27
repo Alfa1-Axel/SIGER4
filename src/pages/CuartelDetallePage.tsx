@@ -4,7 +4,8 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation } from '../lib/api/vehicles'
-import type { Station, Vehicle } from '../types/database'
+import { fetchAttendanceByStation } from '../lib/api/attendance'
+import type { AttendanceSummary, Station, Vehicle } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
@@ -19,18 +20,22 @@ export function CuartelDetallePage() {
   const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'director_escuela', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!id) return
     let active = true
-    Promise.all([fetchStationById(id), fetchVehiclesByStation(id)]).then(([stationData, vehiclesData]) => {
-      if (active) {
-        setStation(stationData)
-        setVehicles(vehiclesData)
-        setLoading(false)
-      }
-    })
+    Promise.all([fetchStationById(id), fetchVehiclesByStation(id), fetchAttendanceByStation(id)]).then(
+      ([stationData, vehiclesData, attendanceData]) => {
+        if (active) {
+          setStation(stationData)
+          setVehicles(vehiclesData)
+          setAttendance(attendanceData)
+          setLoading(false)
+        }
+      },
+    )
     return () => {
       active = false
     }
@@ -129,6 +134,46 @@ export function CuartelDetallePage() {
                 <span className={`badge ${vehicle.status === 'operativo' ? 'badge-success' : 'badge-warning'}`}>
                   {VEHICLE_STATUS_LABEL[vehicle.status]}
                 </span>
+              </Link>
+            ))}
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Asistencia</h2>
+            {canEdit && (
+              <Link to={`/cuarteles/${station.id}/asistencia/nueva`} className="link-muted">
+                + Agregar
+              </Link>
+            )}
+          </div>
+          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+            {attendance.length === 0 && (
+              <div className="empty-state">No hay resúmenes de asistencia cargados para este cuartel.</div>
+            )}
+            {attendance.map((summary, i) => (
+              <Link
+                key={summary.id}
+                to={canEdit ? `/asistencia/${summary.id}/editar` : '#'}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  pointerEvents: canEdit ? 'auto' : 'none',
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    {summary.period_start} — {summary.period_end}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {summary.total_members} miembros · promedio {summary.present_average} presentes
+                  </div>
+                </div>
+                <span className="badge badge-info">{summary.attendance_rate}%</span>
               </Link>
             ))}
           </div>

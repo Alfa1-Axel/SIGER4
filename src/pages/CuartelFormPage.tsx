@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
+import { ImagePicker } from '../components/ui/ImagePicker'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
@@ -221,21 +222,26 @@ export function CuartelFormPage() {
             <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} />
           </div>
 
-          <div className="field">
-            <label htmlFor="logoFile">Logo / escudo institucional (opcional)</label>
-            {existingLogoUrl && !logoFile && (
-              <img src={existingLogoUrl} alt="Logo actual" style={{ height: 48, width: 48, borderRadius: 8, objectFit: 'cover', marginBottom: 6 }} />
-            )}
-            <input id="logoFile" type="file" accept="image/*" onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)} />
-          </div>
+          <ImagePicker
+            label="Logo / escudo institucional (opcional)"
+            currentUrl={existingLogoUrl}
+            onFileSelected={setLogoFile}
+            shape="rounded"
+            width={72}
+            height={72}
+          />
 
-          <div className="field">
-            <label htmlFor="coverFile">Foto de portada (opcional)</label>
-            {existingCoverUrl && !coverFile && (
-              <img src={existingCoverUrl} alt="Portada actual" style={{ height: 80, width: '100%', borderRadius: 8, objectFit: 'cover', marginBottom: 6 }} />
-            )}
-            <input id="coverFile" type="file" accept="image/*" onChange={(e) => setCoverFile(e.target.files?.[0] ?? null)} />
-          </div>
+          <ImagePicker
+            label="Foto de portada (opcional)"
+            currentUrl={existingCoverUrl}
+            onFileSelected={setCoverFile}
+            shape="rounded"
+            width={160}
+            height={90}
+          />
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+            Ambas imágenes se recortan automáticamente centradas, manteniendo su proporción sin deformarse.
+          </p>
 
           <div className="field">
             <label>Estado</label>

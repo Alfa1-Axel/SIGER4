@@ -170,9 +170,6 @@ img {
     padding: 24px 32px;
     padding-bottom: 48px;
   }
-  .bottom-nav {
-    display: none;
-  }
 }
 
 /* ---------- Sidebar ---------- */
@@ -265,6 +262,17 @@ img {
 
 .bottom-nav-link.active {
   color: var(--color-primary);
+}
+
+/* En escritorio se usa solo el sidebar lateral, nunca los dos juntos. Esta
+   regla debe ir DESPUÉS de ".bottom-nav { display: flex }" en el archivo: con
+   la misma especificidad, CSS aplica la que aparece última en el código, sin
+   importar el media query — si esta regla se mueve antes de la base, el menú
+   inferior vuelve a duplicarse en desktop. */
+@media (min-width: 900px) {
+  .bottom-nav {
+    display: none;
+  }
 }
 
 /* ---------- Footer institucional ---------- */
@@ -381,6 +389,22 @@ img {
 
 .btn-block {
   width: 100%;
+}
+
+/* Botón de acción flotante ("+"): en mobile deja lugar a la navegación
+   inferior; en desktop, donde el bottom-nav está oculto, baja hasta quedar a
+   una distancia normal del borde de la pantalla. */
+.fab {
+  position: fixed;
+  bottom: calc(var(--bottomnav-height) + 20px);
+  right: 20px;
+  z-index: 25;
+}
+
+@media (min-width: 900px) {
+  .fab {
+    bottom: 24px;
+  }
 }
 
 /* ---------- Forms ---------- */

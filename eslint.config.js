@@ -21,6 +21,7 @@ export default [
         File: 'readonly',
         fetch: 'readonly',
         FileReader: 'readonly',
+        URL: 'readonly',
       },
     },
     plugins: {

@@ -171,8 +171,7 @@ export function CuartelesPage() {
       {isAdmin && (
         <Link
           to="/cuarteles/nuevo"
-          className="btn btn-primary btn-icon"
-          style={{ position: 'fixed', bottom: 84, right: 20, zIndex: 25 }}
+          className="btn btn-primary btn-icon fab"
           aria-label="Nuevo cuartel"
         >
           <Icon name="plus" size={20} />

@@ -89,8 +89,7 @@ export function DocumentosPage() {
       {canCreate && (
         <Link
           to="/documentos/nuevo"
-          className="btn btn-primary btn-icon"
-          style={{ position: 'fixed', bottom: 84, right: 20, zIndex: 25 }}
+          className="btn btn-primary btn-icon fab"
           aria-label="Nuevo documento"
         >
           <Icon name="plus" size={20} />

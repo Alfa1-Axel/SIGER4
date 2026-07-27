@@ -81,8 +81,7 @@ export function UsuariosPage() {
 
       <Link
         to="/usuarios/nuevo"
-        className="btn btn-primary btn-icon"
-        style={{ position: 'fixed', bottom: 84, right: 20, zIndex: 25 }}
+        className="btn btn-primary btn-icon fab"
         aria-label="Nuevo usuario"
       >
         <Icon name="plus" size={20} />

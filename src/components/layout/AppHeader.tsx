@@ -6,9 +6,10 @@ import { fetchNotificationsForProfile } from '../../lib/api/notifications'
 
 interface AppHeaderProps {
   title: string
+  onOpenMenu: () => void
 }
 
-export function AppHeader({ title }: AppHeaderProps) {
+export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [unreadCount, setUnreadCount] = useState(0)
@@ -32,6 +33,14 @@ export function AppHeader({ title }: AppHeaderProps) {
   return (
     <header className="app-header">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          type="button"
+          className="btn btn-icon btn-outlined hamburger-button"
+          aria-label="Abrir menú"
+          onClick={onOpenMenu}
+        >
+          <Icon name="menu" size={18} />
+        </button>
         <img
           src="/logos/logo-informatica.png"
           alt="Dpto. Informática y Estadística R4"

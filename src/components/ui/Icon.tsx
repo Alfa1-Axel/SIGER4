@@ -26,6 +26,7 @@ const PATHS: Record<string, string> = {
     'M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1ZM6 6h12a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM8 11h8M8 15h8M8 19h5',
   close: 'M18 6 6 18M6 6l12 12',
   zoomIn: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.35-4.35M11 8v6M8 11h6',
+  menu: 'M4 6h16M4 12h16M4 18h16',
 }
 
 export function Icon({ name, size = 20 }: IconProps) {

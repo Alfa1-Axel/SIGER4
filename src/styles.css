@@ -42,7 +42,6 @@
   --shadow-elevated: 0 8px 24px rgba(15, 23, 42, 0.12);
 
   --sidebar-width: 248px;
-  --bottomnav-height: 64px;
   --header-height: 56px;
   --footer-height: 40px;
 
@@ -120,17 +119,23 @@ img {
   width: 100%;
 }
 
+/* En escritorio el sidebar es una columna fija de la grilla (position:
+   sticky). En mobile/tablet (<900px) se convierte en un drawer off-canvas:
+   position fixed, corrido fuera de pantalla con translateX, y se desliza al
+   agregar .open. El botón hamburguesa del header lo controla. */
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
   background: var(--color-bg-card);
   border-right: 1px solid var(--color-border);
-  display: none;
+  display: flex;
   flex-direction: column;
   padding: 20px 16px;
   position: sticky;
   top: 0;
   height: 100vh;
+  transition: transform 0.2s ease;
+  z-index: 50;
 }
 
 .app-main-column {
@@ -156,23 +161,65 @@ img {
 .app-content {
   flex: 1;
   padding: 16px;
-  padding-bottom: calc(var(--bottomnav-height) + 24px);
+  padding-bottom: 24px;
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
 }
 
-@media (min-width: 900px) {
+.sidebar-drawer-backdrop {
+  display: none;
+}
+
+@media (max-width: 899px) {
   .app-sidebar {
-    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
   }
+  .app-sidebar.open {
+    transform: translateX(0);
+    box-shadow: var(--shadow-elevated);
+  }
+  .sidebar-drawer-backdrop.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    z-index: 40;
+  }
+  .hamburger-button {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 900px) {
   .app-content {
     padding: 24px 32px;
-    padding-bottom: 48px;
+  }
+  .hamburger-button {
+    display: none;
   }
 }
 
 /* ---------- Sidebar ---------- */
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-close-button {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  .sidebar-close-button {
+    display: inline-flex;
+  }
+}
 
 .sidebar-brand {
   display: flex;
@@ -231,50 +278,6 @@ img {
   gap: 8px;
 }
 
-/* ---------- Bottom nav (mobile) ---------- */
-
-.bottom-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--bottomnav-height);
-  background: var(--color-bg-card);
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  z-index: 30;
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-.bottom-nav-link {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-decoration: none;
-  flex: 1;
-  padding: 6px 0;
-}
-
-.bottom-nav-link.active {
-  color: var(--color-primary);
-}
-
-/* En escritorio se usa solo el sidebar lateral, nunca los dos juntos. Esta
-   regla debe ir DESPUÉS de ".bottom-nav { display: flex }" en el archivo: con
-   la misma especificidad, CSS aplica la que aparece última en el código, sin
-   importar el media query — si esta regla se mueve antes de la base, el menú
-   inferior vuelve a duplicarse en desktop. */
-@media (min-width: 900px) {
-  .bottom-nav {
-    display: none;
-  }
-}
-
 /* ---------- Footer institucional ---------- */
 
 .app-footer {
@@ -284,12 +287,6 @@ img {
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--color-border);
   background: var(--color-bg-card);
-}
-
-@media (max-width: 899px) {
-  .app-footer {
-    margin-bottom: var(--bottomnav-height);
-  }
 }
 
 /* ---------- Cards ---------- */
@@ -391,20 +388,14 @@ img {
   width: 100%;
 }
 
-/* Botón de acción flotante ("+"): en mobile deja lugar a la navegación
-   inferior; en desktop, donde el bottom-nav está oculto, baja hasta quedar a
-   una distancia normal del borde de la pantalla. */
+/* Botón de acción flotante ("+"): posición fija a distancia normal del borde
+   en cualquier tamaño de pantalla (ya no hay navegación inferior de la cual
+   esquivar). */
 .fab {
   position: fixed;
-  bottom: calc(var(--bottomnav-height) + 20px);
+  bottom: calc(20px + env(safe-area-inset-bottom));
   right: 20px;
   z-index: 25;
-}
-
-@media (min-width: 900px) {
-  .fab {
-    bottom: 24px;
-  }
 }
 
 /* ---------- Forms ---------- */

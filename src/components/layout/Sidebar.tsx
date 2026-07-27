@@ -12,17 +12,32 @@ function UserAvatar({ avatarUrl, fullName }: { avatarUrl: string | null | undefi
   )
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  open: boolean
+  onClose: () => void
+}
+
+// En desktop (≥900px) el sidebar es una columna fija de la grilla, siempre
+// visible: "open"/"onClose" no tienen efecto ahí (el CSS ignora .open en ese
+// breakpoint). En mobile/tablet es un drawer off-canvas que se desliza según
+// la clase "open"; se cierra solo al elegir una opción, tocar el botón de
+// cierre, o el backdrop (manejado por AppShell).
+export function Sidebar({ open, onClose }: SidebarProps) {
   const { profile, signOut, isAdmin, roles } = useAuth()
   const visibleItems = NAV_ITEMS.filter(
     (item) => (!item.adminOnly || isAdmin) && !item.hideForRoles?.some((r) => roles.includes(r)),
   )
 
   return (
-    <aside className="app-sidebar">
-      <div className="sidebar-brand">
-        <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
-        <span>SIGER4</span>
+    <aside className={`app-sidebar${open ? ' open' : ''}`}>
+      <div className="sidebar-brand-row">
+        <div className="sidebar-brand">
+          <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
+          <span>SIGER4</span>
+        </div>
+        <button type="button" className="btn btn-icon btn-outlined sidebar-close-button" onClick={onClose} aria-label="Cerrar menú">
+          <Icon name="close" size={18} />
+        </button>
       </div>
 
       <nav className="sidebar-nav">
@@ -30,6 +45,7 @@ export function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={onClose}
             className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
           >
             <Icon name={item.icon} size={18} />

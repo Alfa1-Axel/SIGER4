@@ -4,7 +4,8 @@ import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
 export function Sidebar() {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, isAdmin } = useAuth()
+  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
 
   return (
     <aside className="app-sidebar">
@@ -14,7 +15,7 @@ export function Sidebar() {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map((item) => (
+        {visibleItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

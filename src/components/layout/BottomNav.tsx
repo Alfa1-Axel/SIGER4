@@ -1,11 +1,15 @@
 import { NavLink } from 'react-router-dom'
 import { NAV_ITEMS } from './navigation'
 import { Icon } from '../ui/Icon'
+import { useAuth } from '../../hooks/useAuth'
 
 export function BottomNav() {
+  const { isAdmin } = useAuth()
+  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+
   return (
     <nav className="bottom-nav">
-      {NAV_ITEMS.map((item) => (
+      {visibleItems.map((item) => (
         <NavLink
           key={item.to}
           to={item.to}

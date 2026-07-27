@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { Footer } from '../components/layout/Footer'
 
 export function LoginPage() {
   const { session, loading, signIn } = useAuth()
@@ -68,6 +69,7 @@ export function LoginPage() {
           </button>
         </form>
       </div>
+      <Footer />
     </div>
   )
 }

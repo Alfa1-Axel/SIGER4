@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { supabase } from '../lib/supabaseClient'
+import { Footer } from '../components/layout/Footer'
 
 export function RegistroPage() {
   const { session, loading } = useAuth()
@@ -36,7 +37,11 @@ export function RegistroPage() {
     setSubmitting(false)
 
     if (signUpError) {
-      setError(signUpError.message)
+      setError(
+        signUpError.message.toLowerCase().includes('already registered')
+          ? 'Ese email ya tiene una cuenta activada. Probá ingresar directamente.'
+          : 'No pudimos activar tu cuenta. Verificá tus datos e intentá de nuevo.',
+      )
       return
     }
     setDone(true)
@@ -59,6 +64,7 @@ export function RegistroPage() {
             Ir a Ingresar
           </Link>
         </div>
+        <Footer />
       </div>
     )
   }
@@ -120,6 +126,7 @@ export function RegistroPage() {
           </button>
         </form>
       </div>
+      <Footer />
     </div>
   )
 }

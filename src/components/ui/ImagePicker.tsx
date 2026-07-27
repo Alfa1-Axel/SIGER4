@@ -34,7 +34,7 @@ export function ImagePicker({ label, currentUrl, onFileSelected, shape = 'circle
   return (
     <div className="field">
       <label>{label}</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div
           style={{
             width,

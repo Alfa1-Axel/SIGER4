@@ -8,6 +8,7 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
 import { deleteStationMedia, uploadStationMedia } from '../lib/api/storage'
 import type { Region, StationStatus, Subsede } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
@@ -18,6 +19,13 @@ export function CuartelFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  // Alta: solo informatica_r4/integrante_informatica o roles regionales (igual
+  // que la politica de insert de RLS). Edicion: tambien roles de cuartel,
+  // igual que el "canEdit" del detalle de cuartel.
+  const canAccess = isEditing
+    ? isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'director_escuela', 'secretario_regional')
+    : isAdmin || hasRole('director_escuela', 'secretario_regional')
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -135,6 +143,14 @@ export function CuartelFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canAccess) {
+    return (
+      <AppShell title="Cuarteles">
+        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'crear'} cuarteles.</div>
+      </AppShell>
+    )
   }
 
   return (

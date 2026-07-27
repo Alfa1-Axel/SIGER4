@@ -58,7 +58,7 @@ export function EscuelaPage() {
                 {course.hours != null && <span>{course.hours} hs cátedra</span>}
                 {course.days != null && <span>{course.days} días</span>}
                 {course.attendees_count == null && course.hours == null && course.days == null && (
-                  <span style={{ fontStyle: 'italic' }}>Inscripciones y progreso: próxima fase</span>
+                  <span style={{ fontStyle: 'italic' }}>Sin datos de asistentes, horas o duración cargados.</span>
                 )}
               </div>
             </>

@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { createVehicle, fetchVehicleById, updateVehicle } from '../lib/api/vehicles'
 import type { VehicleStatus } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const STATUS_OPTIONS: { value: VehicleStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
@@ -15,6 +16,8 @@ export function VehiculoFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
   const [internalCode, setInternalCode] = useState('')
@@ -78,6 +81,14 @@ export function VehiculoFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canEdit) {
+    return (
+      <AppShell title="Vehículos">
+        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} vehículos.</div>
+      </AppShell>
+    )
   }
 
   return (

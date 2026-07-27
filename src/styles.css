@@ -134,6 +134,7 @@ img {
   position: sticky;
   top: 0;
   height: 100vh;
+  overflow-y: auto;
   transition: transform 0.2s ease;
   z-index: 50;
 }
@@ -513,10 +514,17 @@ img {
 .login-page {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 16px;
   background: var(--color-bg-app);
   padding: 24px;
+}
+
+.login-page .app-footer {
+  border-top: none;
+  background: transparent;
 }
 
 .login-card {

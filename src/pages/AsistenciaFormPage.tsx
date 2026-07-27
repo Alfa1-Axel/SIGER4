@@ -7,11 +7,14 @@ import {
   fetchAttendanceSummaryById,
   updateAttendanceSummary,
 } from '../lib/api/attendance'
+import { useAuth } from '../hooks/useAuth'
 
 export function AsistenciaFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
   const [periodStart, setPeriodStart] = useState('')
@@ -66,6 +69,14 @@ export function AsistenciaFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canEdit) {
+    return (
+      <AppShell title="Asistencia">
+        <div className="empty-state">No tenés permisos para cargar resúmenes de asistencia.</div>
+      </AppShell>
+    )
   }
 
   return (

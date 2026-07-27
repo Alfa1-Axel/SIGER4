@@ -13,6 +13,7 @@ import {
   updateCourse,
 } from '../lib/api/courses'
 import type { CourseStatus, Profile, Region, Station } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const STATUS_OPTIONS: { value: CourseStatus; label: string }[] = [
   { value: 'planificado', label: 'Planificado' },
@@ -25,6 +26,8 @@ export function CursoFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('director_escuela', 'instructor')
 
   const [regions, setRegions] = useState<Region[]>([])
   const [instructors, setInstructors] = useState<Profile[]>([])
@@ -118,6 +121,14 @@ export function CursoFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canEdit) {
+    return (
+      <AppShell title="Escuela">
+        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'crear'} cursos.</div>
+      </AppShell>
+    )
   }
 
   return (

@@ -8,6 +8,7 @@ import {
   updateInterventionSummary,
 } from '../lib/api/interventions'
 import type { InterventionTimeOfDay } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const TIME_OF_DAY_OPTIONS: { value: InterventionTimeOfDay; label: string }[] = [
   { value: 'diurno', label: 'Diurno' },
@@ -19,6 +20,8 @@ export function IntervencionFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
   const [periodStart, setPeriodStart] = useState('')
@@ -85,6 +88,14 @@ export function IntervencionFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canEdit) {
+    return (
+      <AppShell title="Intervenciones">
+        <div className="empty-state">No tenés permisos para cargar resúmenes de intervenciones.</div>
+      </AppShell>
+    )
   }
 
   return (

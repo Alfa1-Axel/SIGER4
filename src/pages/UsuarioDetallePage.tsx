@@ -16,6 +16,7 @@ import {
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const SCOPE_LABEL: Record<ScopeType, string> = {
   system: 'Informática (Sistema)',
@@ -27,6 +28,8 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
 
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
+  const { profile: currentProfile, hasRole: currentHasRole } = useAuth()
+  const isCurrentUserSuperAdmin = currentHasRole('informatica_r4')
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [roles, setRoles] = useState<UserRole[]>([])
@@ -175,6 +178,17 @@ export function UsuarioDetallePage() {
     )
   }
 
+  // Refleja en la UI las mismas protecciones que ya aplica la base de datos
+  // (migración 0018): nadie salvo otro informatica_r4 puede tocar los
+  // roles/alcances de un informatica_r4 existente, y nadie puede cambiar su
+  // propio cuartel/región salvo que sea informatica_r4. Mostrarlo en la UI
+  // evita que alguien complete el formulario entero y recién se entere del
+  // bloqueo con un error crudo de Postgres al guardar.
+  const targetIsSuperAdmin = roles.some((r) => r.role === 'informatica_r4')
+  const rolesScopesLocked = targetIsSuperAdmin && !isCurrentUserSuperAdmin
+  const isEditingSelf = currentProfile?.id === profile.id
+  const scopeFieldsLocked = isEditingSelf && !isCurrentUserSuperAdmin
+
   return (
     <AppShell title="Usuario">
       <Link to="/usuarios" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
@@ -216,7 +230,7 @@ export function UsuarioDetallePage() {
         </div>
         <div className="field">
           <label htmlFor="region">Región</label>
-          <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+          <select id="region" value={regionId} disabled={scopeFieldsLocked} onChange={(e) => setRegionId(e.target.value)}>
             <option value="">Sin asignar</option>
             {regions.map((region) => (
               <option key={region.id} value={region.id}>
@@ -227,7 +241,7 @@ export function UsuarioDetallePage() {
         </div>
         <div className="field">
           <label htmlFor="station">Cuartel</label>
-          <select id="station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+          <select id="station" value={stationId} disabled={scopeFieldsLocked} onChange={(e) => setStationId(e.target.value)}>
             <option value="">Sin asignar</option>
             {stations.map((station) => (
               <option key={station.id} value={station.id}>
@@ -236,6 +250,11 @@ export function UsuarioDetallePage() {
             ))}
           </select>
         </div>
+        {scopeFieldsLocked && (
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
+            No podés cambiar tu propio cuartel o región. Pedile a un administrador que lo haga.
+          </p>
+        )}
         <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSaveBasics}>
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
@@ -245,6 +264,11 @@ export function UsuarioDetallePage() {
         <h2 className="section-title">Roles</h2>
       </div>
       <div className="card-solid" style={{ marginBottom: 20 }}>
+        {rolesScopesLocked && (
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+            Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus roles.
+          </p>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {ROLE_DEFINITIONS.map((role) => {
             const active = roles.some((r) => r.role === role.key)
@@ -252,6 +276,7 @@ export function UsuarioDetallePage() {
               <button
                 key={role.key}
                 type="button"
+                disabled={rolesScopesLocked}
                 onClick={() => handleToggleRole(role.key)}
                 className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
                 style={{ padding: '6px 12px', fontSize: 12 }}
@@ -268,6 +293,11 @@ export function UsuarioDetallePage() {
         <h2 className="section-title">Alcances (scopes)</h2>
       </div>
       <div className="card-solid" style={{ marginBottom: 20 }}>
+        {rolesScopesLocked && (
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+            Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus alcances.
+          </p>
+        )}
         {scopes.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Sin alcances adicionales.</p>}
         {scopes.map((scope) => (
           <div
@@ -280,7 +310,13 @@ export function UsuarioDetallePage() {
               {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
               {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? scope.region_id}`}
             </span>
-            <button type="button" className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => handleRemoveScope(scope.id)}>
+            <button
+              type="button"
+              className="btn btn-outlined"
+              style={{ padding: '4px 10px', fontSize: 12 }}
+              disabled={rolesScopesLocked}
+              onClick={() => handleRemoveScope(scope.id)}
+            >
               Quitar
             </button>
           </div>
@@ -289,7 +325,12 @@ export function UsuarioDetallePage() {
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="field" style={{ marginBottom: 0 }}>
             <label htmlFor="scopeType">Tipo</label>
-            <select id="scopeType" value={newScopeType} onChange={(e) => setNewScopeType(e.target.value as ScopeType)}>
+            <select
+              id="scopeType"
+              value={newScopeType}
+              disabled={rolesScopesLocked}
+              onChange={(e) => setNewScopeType(e.target.value as ScopeType)}
+            >
               <option value="system">Informática (Sistema)</option>
               <option value="region">Regional</option>
               <option value="subsede">Subsede</option>
@@ -336,7 +377,7 @@ export function UsuarioDetallePage() {
               </select>
             </div>
           )}
-          <button type="button" className="btn btn-primary" onClick={handleAddScope}>
+          <button type="button" className="btn btn-primary" disabled={rolesScopesLocked} onClick={handleAddScope}>
             Agregar alcance
           </button>
         </div>

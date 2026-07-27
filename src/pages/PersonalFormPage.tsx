@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { createPersonnel, fetchPersonnelById, updatePersonnel } from '../lib/api/personnel'
 import type { PersonnelStatus } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 const STATUS_OPTIONS: { value: PersonnelStatus; label: string }[] = [
   { value: 'activo', label: 'Activo' },
@@ -17,6 +18,8 @@ export function PersonalFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const { isAdmin, hasRole } = useAuth()
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
   const [firstName, setFirstName] = useState('')
@@ -89,6 +92,14 @@ export function PersonalFormPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  if (!canEdit) {
+    return (
+      <AppShell title="Personal / Dotación">
+        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} personal.</div>
+      </AppShell>
+    )
   }
 
   return (

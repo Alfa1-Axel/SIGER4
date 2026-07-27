@@ -6,6 +6,7 @@ import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
 import type { DashboardSummary } from '../lib/api/dashboard'
 import type { Station } from '../types/database'
+import { translateAction, translateTable } from '../lib/audit/humanize'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -149,10 +150,8 @@ export function PanelPage() {
             }}
           >
             <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{log.action}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                Tabla: {log.table_name}
-              </div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{translateAction(log.action)}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{translateTable(log.table_name)}</div>
             </div>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
               {timeAgo(log.created_at)}

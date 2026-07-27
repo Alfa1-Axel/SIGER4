@@ -7,7 +7,7 @@ export interface Region {
   created_at: string
 }
 
-export type StationStatus = 'operativo' | 'mantenimiento' | 'alerta'
+export type StationStatus = 'operativo' | 'no_operativo'
 
 export interface Station {
   id: string

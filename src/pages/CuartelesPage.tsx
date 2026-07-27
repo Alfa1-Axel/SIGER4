@@ -8,14 +8,12 @@ import { useAuth } from '../hooks/useAuth'
 
 const STATUS_LABEL: Record<StationStatus, string> = {
   operativo: 'Operativo',
-  mantenimiento: 'Mantenimiento',
-  alerta: 'Alerta',
+  no_operativo: 'No operativo',
 }
 
 const STATUS_BADGE: Record<StationStatus, string> = {
   operativo: 'badge-success',
-  mantenimiento: 'badge-warning',
-  alerta: 'badge-danger',
+  no_operativo: 'badge-danger',
 }
 
 export function CuartelesPage() {
@@ -63,7 +61,7 @@ export function CuartelesPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-        {(['todos', 'operativo', 'mantenimiento', 'alerta'] as const).map((status) => (
+        {(['todos', 'operativo', 'no_operativo'] as const).map((status) => (
           <button
             key={status}
             type="button"

@@ -8,8 +8,7 @@ import type { Region, StationStatus } from '../types/database'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
-  { value: 'mantenimiento', label: 'Mantenimiento' },
-  { value: 'alerta', label: 'Alerta' },
+  { value: 'no_operativo', label: 'No operativo' },
 ]
 
 export function CuartelFormPage() {

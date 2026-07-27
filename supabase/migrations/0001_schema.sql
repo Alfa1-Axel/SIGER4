@@ -19,7 +19,7 @@ create table if not exists regions (
 
 comment on table regions is 'Regionales de Bomberos Voluntarios (ej. Regional 4). Preparado para futuras regionales.';
 
-create type station_status as enum ('operativo', 'mantenimiento', 'alerta');
+create type station_status as enum ('operativo', 'no_operativo');
 
 create table if not exists stations (
   id uuid primary key default gen_random_uuid(),

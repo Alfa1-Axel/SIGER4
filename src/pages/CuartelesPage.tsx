@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchStations } from '../lib/api/stations'
-import type { Station, StationStatus } from '../types/database'
+import { fetchSubsedes } from '../lib/api/subsedes'
+import type { Station, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
 const STATUS_LABEL: Record<StationStatus, string> = {
@@ -19,21 +20,29 @@ const STATUS_BADGE: Record<StationStatus, string> = {
 export function CuartelesPage() {
   const { isAdmin } = useAuth()
   const [stations, setStations] = useState<Station[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StationStatus | 'todos'>('todos')
+  const [subsedeFilter, setSubsedeFilter] = useState<string | 'todas'>('todas')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    fetchStations()
-      .then((data) => active && setStations(data))
+    Promise.all([fetchStations(), fetchSubsedes()])
+      .then(([stationsData, subsedesData]) => {
+        if (!active) return
+        setStations(stationsData)
+        setSubsedes(subsedesData)
+      })
       .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar cuarteles'))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
   }, [])
+
+  const subsedeById = useMemo(() => new Map(subsedes.map((s) => [s.id, s])), [subsedes])
 
   const filtered = useMemo(() => {
     return stations.filter((s) => {
@@ -42,9 +51,10 @@ export function CuartelesPage() {
         s.name.toLowerCase().includes(query.toLowerCase()) ||
         (s.zone ?? '').toLowerCase().includes(query.toLowerCase())
       const matchesStatus = statusFilter === 'todos' || s.status === statusFilter
-      return matchesQuery && matchesStatus
+      const matchesSubsede = subsedeFilter === 'todas' || s.subsede_id === subsedeFilter
+      return matchesQuery && matchesStatus && matchesSubsede
     })
-  }, [stations, query, statusFilter])
+  }, [stations, query, statusFilter, subsedeFilter])
 
   return (
     <AppShell title="Cuarteles">
@@ -74,6 +84,28 @@ export function CuartelesPage() {
         ))}
       </div>
 
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setSubsedeFilter('todas')}
+          className={`btn ${subsedeFilter === 'todas' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ padding: '6px 14px', fontSize: 13 }}
+        >
+          Todas las subsedes
+        </button>
+        {subsedes.map((subsede) => (
+          <button
+            key={subsede.id}
+            type="button"
+            onClick={() => setSubsedeFilter(subsede.id)}
+            className={`btn ${subsedeFilter === subsede.id ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ padding: '6px 14px', fontSize: 13 }}
+          >
+            {subsede.name}
+          </button>
+        ))}
+      </div>
+
       {error && (
         <div className="card" style={{ marginBottom: 20 }}>
           <p className="field-error">{error}</p>
@@ -99,6 +131,9 @@ export function CuartelesPage() {
                 <h3 style={{ margin: '8px 0 2px', fontSize: 16 }}>{station.name}</h3>
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {station.address ?? station.zone ?? 'Sin dirección registrada'}
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  {station.subsede_id ? subsedeById.get(station.subsede_id)?.name ?? 'Subsede desconocida' : 'Sin subsede'}
                 </p>
               </div>
               <Icon name="chevronRight" size={18} />

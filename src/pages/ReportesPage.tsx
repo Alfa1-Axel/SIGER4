@@ -13,17 +13,21 @@ const REPORT_TYPES = [
 
 export function ReportesPage() {
   const [generating, setGenerating] = useState<string | null>(null)
+  const [confirmedKey, setConfirmedKey] = useState<string | null>(null)
 
   async function handleGenerate(reportKey: string, label: string) {
     setGenerating(reportKey)
+    setConfirmedKey(null)
     try {
       await recordAuditEvent({
-        action: 'generar_reporte',
+        action: 'solicitud_reporte',
         tableName: 'reports',
         reason: label,
       })
       // La generación real de PDF y el análisis con IA se implementan en la
-      // siguiente fase (edge function + servicio de IA institucional).
+      // siguiente fase (edge function + servicio de IA institucional). Por
+      // ahora solo queda registrada la solicitud en la auditoría.
+      setConfirmedKey(reportKey)
     } finally {
       setGenerating(null)
     }
@@ -49,8 +53,14 @@ export function ReportesPage() {
               disabled={generating === report.key}
               onClick={() => handleGenerate(report.key, report.label)}
             >
-              {generating === report.key ? 'Generando…' : 'Generar reporte'}
+              {generating === report.key ? 'Registrando solicitud…' : 'Solicitar reporte'}
             </button>
+            {confirmedKey === report.key && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 8, fontStyle: 'italic' }}>
+                Solicitud registrada en auditoría. La generación real del PDF está en fase preparada:
+                todavía no produce un archivo descargable.
+              </p>
+            )}
           </div>
         ))}
       </div>

@@ -30,6 +30,7 @@
    - `supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
    - `supabase/migrations/0015_notifications_subsede_and_audit.sql`
    - `supabase/migrations/0016_attendance_intervention_audit.sql`
+   - `supabase/migrations/0017_institutional_profiles_and_storage.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -37,8 +38,14 @@
 solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
-vehículos/cursos, contexto territorial de auditoría, notificaciones), pero igual conviene correr
-las 16 migraciones en orden para mantener el historial consistente.
+vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional), pero
+igual conviene correr las 17 migraciones en orden para mantener el historial consistente.
+
+**Nota sobre 0017:** crea dos buckets de Supabase Storage (`station-media`, `avatars`) vía SQL
+(`insert into storage.buckets ...`). Después de correr la migración, andá a **Storage** en el
+dashboard de Supabase y confirmá que ambos buckets aparecen listados y marcados como públicos — si
+por algún motivo el `insert` no tomó efecto (poco común, pero el dashboard es la fuente de verdad),
+podés crearlos manualmente ahí con esos mismos nombres, marcados como público.
 
 **Nota sobre 0015:** agrega `subsede_id` a `notifications` y el trigger de auditoría que esa tabla
 no tenía. Corre como una sola query (no hay enum nuevo, a diferencia de 0009/0010).

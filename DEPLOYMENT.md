@@ -35,6 +35,7 @@
    - `supabase/migrations/0019_documents_module.sql`
    - `supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
    - `supabase/migrations/0021_personnel_module.sql`
+   - `supabase/migrations/0022_intervention_summaries_operational_fields.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -43,8 +44,15 @@ solo necesitás correr las migraciones que todavía no ejecutaste, siempre respe
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
-de documentos, personal/dotación por cuartel), pero igual conviene correr las 21 migraciones en
-orden para mantener el historial consistente.
+de documentos, personal/dotación por cuartel, campos operativos de intervenciones), pero igual
+conviene correr las 22 migraciones en orden para mantener el historial consistente.
+
+**Nota sobre 0022:** agrega columnas operativas a `intervention_summaries` para estadística real:
+`time_of_day` (diurno/nocturno/mixto), `observations`, `personnel_count`, `vehicles_count` y
+`work_hours`. Todas con default (`0` para los conteos/horas, `null` para franja horaria/
+observaciones), así que los resúmenes ya cargados no se rompen — solo quedan con esos campos vacíos
+hasta que se editen. Deliberadamente no se agrega nada que identifique víctimas, direcciones exactas
+o personas involucradas: sigue siendo un resumen agregado por período/cuartel.
 
 **Nota sobre 0021:** agrega el módulo de Personal/Dotación: tabla `personnel` (nombre, apellido, DNI
 opcional, jerarquía, cargo/función, estado, departamento, fecha de ingreso, teléfono/email,

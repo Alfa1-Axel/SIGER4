@@ -92,6 +92,8 @@ export const FIELD_LABELS: Record<string, string> = {
   total_members: 'Total de miembros',
   present_average: 'Presentes (promedio)',
   total_count: 'Cantidad total',
+  time_of_day: 'Franja horaria',
+  work_hours: 'Horas de trabajo',
   start_date: 'Fecha de inicio',
   end_date: 'Fecha de fin',
   progress_percent: 'Progreso (%)',

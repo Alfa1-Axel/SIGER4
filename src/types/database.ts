@@ -122,6 +122,8 @@ export interface AttendanceSummary {
   created_at: string
 }
 
+export type InterventionTimeOfDay = 'diurno' | 'nocturno' | 'mixto'
+
 export interface InterventionSummary {
   id: string
   station_id: string
@@ -129,6 +131,11 @@ export interface InterventionSummary {
   period_end: string
   category: string
   total_count: number
+  time_of_day: InterventionTimeOfDay | null
+  observations: string | null
+  personnel_count: number
+  vehicles_count: number
+  work_hours: number
   created_at: string
 }
 

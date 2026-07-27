@@ -7,6 +7,13 @@ import {
   fetchInterventionSummaryById,
   updateInterventionSummary,
 } from '../lib/api/interventions'
+import type { InterventionTimeOfDay } from '../types/database'
+
+const TIME_OF_DAY_OPTIONS: { value: InterventionTimeOfDay; label: string }[] = [
+  { value: 'diurno', label: 'Diurno' },
+  { value: 'nocturno', label: 'Nocturno' },
+  { value: 'mixto', label: 'Mixto' },
+]
 
 export function IntervencionFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
@@ -18,6 +25,11 @@ export function IntervencionFormPage() {
   const [periodEnd, setPeriodEnd] = useState('')
   const [category, setCategory] = useState('')
   const [totalCount, setTotalCount] = useState('')
+  const [timeOfDay, setTimeOfDay] = useState<InterventionTimeOfDay | ''>('')
+  const [personnelCount, setPersonnelCount] = useState('')
+  const [vehiclesCount, setVehiclesCount] = useState('')
+  const [workHours, setWorkHours] = useState('')
+  const [observations, setObservations] = useState('')
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
@@ -33,6 +45,11 @@ export function IntervencionFormPage() {
       setPeriodEnd(summary.period_end)
       setCategory(summary.category)
       setTotalCount(String(summary.total_count))
+      setTimeOfDay(summary.time_of_day ?? '')
+      setPersonnelCount(String(summary.personnel_count))
+      setVehiclesCount(String(summary.vehicles_count))
+      setWorkHours(String(summary.work_hours))
+      setObservations(summary.observations ?? '')
       setLoading(false)
     })
     return () => {
@@ -51,6 +68,11 @@ export function IntervencionFormPage() {
         period_end: periodEnd,
         category,
         total_count: Number(totalCount),
+        time_of_day: timeOfDay || null,
+        personnel_count: personnelCount ? Number(personnelCount) : 0,
+        vehicles_count: vehiclesCount ? Number(vehiclesCount) : 0,
+        work_hours: workHours ? Number(workHours) : 0,
+        observations: observations || null,
       }
       if (isEditing && id) {
         await updateInterventionSummary(id, input)
@@ -74,18 +96,19 @@ export function IntervencionFormPage() {
         <div className="empty-state">Cargando datos del resumen…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
-          <div className="field">
-            <label htmlFor="periodStart">Inicio del período</label>
-            <input id="periodStart" type="date" required value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: 1, minWidth: 160 }}>
+              <label htmlFor="periodStart">Inicio del período</label>
+              <input id="periodStart" type="date" required value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+            </div>
+            <div className="field" style={{ flex: 1, minWidth: 160 }}>
+              <label htmlFor="periodEnd">Fin del período</label>
+              <input id="periodEnd" type="date" required value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+            </div>
           </div>
 
           <div className="field">
-            <label htmlFor="periodEnd">Fin del período</label>
-            <input id="periodEnd" type="date" required value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
-          </div>
-
-          <div className="field">
-            <label htmlFor="category">Categoría</label>
+            <label htmlFor="category">Tipo de intervención</label>
             <input
               id="category"
               required
@@ -96,15 +119,82 @@ export function IntervencionFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="totalCount">Cantidad total</label>
-            <input
-              id="totalCount"
-              type="number"
-              min="0"
-              required
-              value={totalCount}
-              onChange={(e) => setTotalCount(e.target.value)}
-              placeholder="3"
+            <label>Franja horaria predominante (opcional)</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {TIME_OF_DAY_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setTimeOfDay((current) => (current === option.value ? '' : option.value))}
+                  className={`btn ${timeOfDay === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ padding: '6px 14px', fontSize: 13 }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="totalCount">Cantidad total</label>
+              <input
+                id="totalCount"
+                type="number"
+                min="0"
+                required
+                value={totalCount}
+                onChange={(e) => setTotalCount(e.target.value)}
+                placeholder="3"
+              />
+            </div>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="personnelCount">Cantidad de personal</label>
+              <input
+                id="personnelCount"
+                type="number"
+                min="0"
+                value={personnelCount}
+                onChange={(e) => setPersonnelCount(e.target.value)}
+                placeholder="8"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="vehiclesCount">Cantidad de móviles</label>
+              <input
+                id="vehiclesCount"
+                type="number"
+                min="0"
+                value={vehiclesCount}
+                onChange={(e) => setVehiclesCount(e.target.value)}
+                placeholder="2"
+              />
+            </div>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="workHours">Horas de trabajo</label>
+              <input
+                id="workHours"
+                type="number"
+                min="0"
+                step="0.5"
+                value={workHours}
+                onChange={(e) => setWorkHours(e.target.value)}
+                placeholder="12.5"
+              />
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="observations">Observaciones (opcional)</label>
+            <textarea
+              id="observations"
+              value={observations}
+              onChange={(e) => setObservations(e.target.value)}
+              rows={3}
+              placeholder="Notas generales del período (sin datos de víctimas ni direcciones exactas)."
             />
           </div>
 

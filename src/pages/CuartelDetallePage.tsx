@@ -456,6 +456,10 @@ export function CuartelDetallePage() {
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{summary.category}</div>
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {summary.period_start} — {summary.period_end}
+                    {summary.time_of_day && ` · ${summary.time_of_day}`}
+                    {summary.personnel_count > 0 && ` · ${summary.personnel_count} personal`}
+                    {summary.vehicles_count > 0 && ` · ${summary.vehicles_count} móviles`}
+                    {summary.work_hours > 0 && ` · ${summary.work_hours}h`}
                   </div>
                 </div>
                 <span className="badge badge-danger">{summary.total_count}</span>

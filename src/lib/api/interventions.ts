@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { InterventionSummary } from '../../types/database'
+import type { InterventionSummary, InterventionTimeOfDay } from '../../types/database'
 
 export async function fetchInterventionsByStation(stationId: string): Promise<InterventionSummary[]> {
   const { data, error } = await supabase
@@ -23,6 +23,11 @@ export interface InterventionSummaryInput {
   period_end: string
   category: string
   total_count: number
+  time_of_day?: InterventionTimeOfDay | null
+  observations?: string | null
+  personnel_count?: number
+  vehicles_count?: number
+  work_hours?: number
 }
 
 export async function createInterventionSummary(input: InterventionSummaryInput): Promise<InterventionSummary> {

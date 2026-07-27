@@ -147,11 +147,14 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
   const total = rows.reduce((sum, r) => sum + r.total_count, 0)
   const byCategory = new Map<string, number>()
   for (const row of rows) byCategory.set(row.category, (byCategory.get(row.category) ?? 0) + row.total_count)
+  const predominantCategory = Array.from(byCategory.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  const totalWorkHours = rows.reduce((sum, r) => sum + r.work_hours, 0)
 
   builder.addKpiRow([
     { label: 'Total intervenciones', value: String(total) },
-    { label: 'Categorías', value: String(byCategory.size) },
+    { label: 'Tipo predominante', value: predominantCategory ?? '—' },
     { label: 'Cuarteles con datos', value: String(new Set(rows.map((r) => r.station_id)).size) },
+    { label: 'Horas de trabajo', value: totalWorkHours ? String(totalWorkHours) : '—' },
   ])
 
   builder.addExecutiveSummary(
@@ -170,22 +173,30 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
   }
 
   builder.addTable(
-    ['Cuartel', 'Subsede', 'Categoría', 'Período', 'Cantidad'],
+    ['Cuartel', 'Subsede', 'Tipo', 'Período', 'Horario', 'Cantidad', 'Personal', 'Móviles', 'Horas'],
     rows.map((r) => [
       r.station?.name ?? '—',
       r.station?.subsede?.name ?? '—',
       r.category,
       `${r.period_start} a ${r.period_end}`,
+      r.time_of_day ?? '—',
       r.total_count,
+      r.personnel_count,
+      r.vehicles_count,
+      r.work_hours,
     ]),
     'Detalle',
-    [55, 40, 45, 45, 'auto'],
+    [50, 35, 40, 40, 25, 'auto', 'auto', 'auto', 'auto'],
   )
 
   await runAiAnalysis(builder, 'intervenciones', 'Reporte de Intervenciones', ctx, {
     total_intervenciones: total,
     categorias: Array.from(byCategory.entries()).map(([categoria, cantidad]) => ({ categoria, cantidad })),
+    tipo_predominante: predominantCategory,
     cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
+    total_personal_involucrado: rows.reduce((sum, r) => sum + r.personnel_count, 0),
+    total_moviles_involucrados: rows.reduce((sum, r) => sum + r.vehicles_count, 0),
+    total_horas_trabajo: totalWorkHours,
   }, rows.length > 0)
 
   return builder.finalize()

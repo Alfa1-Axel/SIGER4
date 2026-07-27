@@ -199,6 +199,8 @@ create table if not exists attendance_summaries (
 
 comment on table attendance_summaries is 'Resumenes periodicos de asistencia por cuartel, usados para estadisticas y dashboard.';
 
+create type intervention_time_of_day as enum ('diurno', 'nocturno', 'mixto');
+
 create table if not exists intervention_summaries (
   id uuid primary key default gen_random_uuid(),
   station_id uuid not null references stations(id) on delete cascade,
@@ -206,10 +208,20 @@ create table if not exists intervention_summaries (
   period_end date not null,
   category text not null,
   total_count integer not null default 0,
+  time_of_day intervention_time_of_day,
+  observations text,
+  personnel_count integer not null default 0,
+  vehicles_count integer not null default 0,
+  work_hours numeric(6, 1) not null default 0,
   created_at timestamptz not null default now()
 );
 
 comment on table intervention_summaries is 'Resumenes periodicos de intervenciones (incendios, rescates, accidentes, etc.) por cuartel.';
+comment on column intervention_summaries.time_of_day is 'Franja horaria predominante de las intervenciones del resumen: diurno, nocturno, o mixto si hubo de ambas.';
+comment on column intervention_summaries.observations is 'Notas libres del resumen (sin datos de victimas ni direcciones exactas).';
+comment on column intervention_summaries.personnel_count is 'Cantidad de personal que participo de las intervenciones del periodo (para relacionar dotacion vs. actividad operativa).';
+comment on column intervention_summaries.vehicles_count is 'Cantidad de moviles/vehiculos que participaron de las intervenciones del periodo.';
+comment on column intervention_summaries.work_hours is 'Horas de trabajo totales dedicadas a las intervenciones del periodo.';
 
 -- ============================================================
 -- CURSOS (ESCUELA REGIONAL)

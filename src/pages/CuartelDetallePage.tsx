@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { Lightbox } from '../components/ui/Lightbox'
+import { ZoomableImage } from '../components/ui/ZoomableImage'
 import { fetchStationAuthorities, fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
@@ -56,6 +58,7 @@ export function CuartelDetallePage() {
   const [authorities, setAuthorities] = useState<{ profile: Profile; role: RoleKey }[]>([])
   const [personnel, setPersonnel] = useState<Personnel[]>([])
   const [loading, setLoading] = useState(true)
+  const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
 
   const [personnelStatusFilter, setPersonnelStatusFilter] = useState('')
   const [personnelRankFilter, setPersonnelRankFilter] = useState('')
@@ -147,6 +150,13 @@ export function CuartelDetallePage() {
         <>
           <div
             className="card-solid"
+            role={station.cover_image_url ? 'button' : undefined}
+            tabIndex={station.cover_image_url ? 0 : undefined}
+            aria-label={station.cover_image_url ? 'Ampliar foto de portada' : undefined}
+            onClick={() => station.cover_image_url && setCoverLightboxOpen(true)}
+            onKeyDown={(e) => {
+              if (station.cover_image_url && (e.key === 'Enter' || e.key === ' ')) setCoverLightboxOpen(true)
+            }}
             style={{
               backgroundImage: station.cover_image_url ? `url(${station.cover_image_url})` : undefined,
               backgroundSize: 'cover',
@@ -157,20 +167,27 @@ export function CuartelDetallePage() {
               flexDirection: 'column',
               justifyContent: 'flex-end',
               marginBottom: 16,
+              cursor: station.cover_image_url ? 'zoom-in' : undefined,
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {station.logo_url && (
-                <img
-                  src={station.logo_url}
-                  alt={`Logo ${station.name}`}
-                  style={{ height: 40, width: 40, borderRadius: 8, objectFit: 'cover', border: '2px solid #fff' }}
-                />
+                <div onClick={(e) => e.stopPropagation()}>
+                  <ZoomableImage
+                    src={station.logo_url}
+                    alt={`Logo ${station.name}`}
+                    style={{ height: 40, width: 40, borderRadius: 8, border: '2px solid #fff', overflow: 'hidden' }}
+                  />
+                </div>
               )}
               <h1 style={{ margin: 0, fontSize: 20 }}>{station.name}</h1>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>{station.address ?? station.zone}</p>
           </div>
+
+          {coverLightboxOpen && station.cover_image_url && (
+            <Lightbox src={station.cover_image_url} alt={`Portada de ${station.name}`} onClose={() => setCoverLightboxOpen(false)} />
+          )}
 
           <div className="card-grid" style={{ marginBottom: 20 }}>
             <div className="kpi-card" style={{ textAlign: 'center' }}>

@@ -121,6 +121,41 @@ recién agregado dentro de la misma transacción que lo creó, por eso todo lo q
 - Los cursos, vehículos, resúmenes de asistencia/intervenciones y notificaciones se cargan de la
   misma forma hasta que existan formularios de alta en la app (próxima fase).
 
+### 1.7 Análisis IA de reportes (Edge Function)
+
+El módulo de Reportes (`/reportes`) genera PDFs reales y, al final de cada uno, intenta agregar un
+análisis institucional breve generado con IA (Gemini) a partir de los datos agregados del reporte.
+Esto requiere desplegar la Edge Function `analyze-report` incluida en `supabase/functions/`. Si no
+la desplegás, o no configurás la clave, **los reportes igual se generan sin romperse** — el bloque
+de IA simplemente muestra un mensaje de "no disponible" en vez de un análisis.
+
+1. Instalar el CLI de Supabase si no lo tenés: `npm install -g supabase` (o usar `npx supabase`).
+2. Autenticarte y vincular el proyecto (una sola vez):
+   ```
+   supabase login
+   supabase link --project-ref TU-PROJECT-REF
+   ```
+   (El `project-ref` es el ID que aparece en la URL del proyecto en el dashboard de Supabase.)
+3. Conseguir una API key gratuita de Gemini en https://aistudio.google.com/app/apikey.
+4. Configurar la clave como secreto de la función (nunca va en `.env` del frontend):
+   ```
+   supabase secrets set GEMINI_API_KEY=tu-clave-de-gemini
+   ```
+5. Desplegar la función:
+   ```
+   supabase functions deploy analyze-report
+   ```
+6. Verificar en el dashboard de Supabase, **Edge Functions → analyze-report**, que quedó desplegada
+   y que el secreto `GEMINI_API_KEY` figura en **Edge Functions → Secrets**.
+
+No hace falta ninguna variable nueva en `.env`/Vercel para esto — la función se invoca desde el
+frontend con `supabase.functions.invoke('analyze-report', ...)`, usando las mismas
+`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` que ya tenés configuradas, y la función valida que
+quien la llama sea un usuario autenticado real antes de consultar a Gemini.
+
+Cada intento de análisis (exitoso o no disponible) queda registrado en `audit_logs` con la acción
+`analisis_ia_reporte`.
+
 ## 2. Vercel
 
 ### 2.1 Importar el repositorio

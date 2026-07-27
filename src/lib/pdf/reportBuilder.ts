@@ -164,24 +164,44 @@ export class ReportBuilder {
     this.cursorY += 10
   }
 
-  addAiPlaceholder() {
-    this.ensureSpace(24)
+  // Cuando availableText viene con contenido, se asume que es el análisis real
+  // devuelto por la Edge Function de IA; si no, se muestra fallbackText (motivo
+  // de indisponibilidad) — en ambos casos se incluye la leyenda institucional
+  // obligatoria sobre el origen del análisis.
+  addAiAnalysisSection(availableText: string | null, fallbackText: string) {
+    const bodyText = availableText ?? fallbackText
+    const disclaimer =
+      'El siguiente análisis fue generado automáticamente mediante Inteligencia Artificial y constituye una ' +
+      'asistencia para la interpretación de los datos. La validación final corresponde a los responsables institucionales.'
+
+    const contentWidth = this.pageWidth - PAGE_MARGIN * 2 - 8
+    const bodyLines = this.doc.splitTextToSize(bodyText, contentWidth) as string[]
+    const disclaimerLines = availableText ? (this.doc.splitTextToSize(disclaimer, contentWidth) as string[]) : []
+    const boxHeight = 10 + bodyLines.length * 4.2 + (disclaimerLines.length ? disclaimerLines.length * 3.4 + 3 : 0) + 4
+
+    this.ensureSpace(boxHeight)
     this.doc.setDrawColor(203, 213, 225)
     this.doc.setFillColor(248, 250, 252)
-    this.doc.roundedRect(PAGE_MARGIN, this.cursorY, this.pageWidth - PAGE_MARGIN * 2, 20, 2, 2, 'FD')
+    this.doc.roundedRect(PAGE_MARGIN, this.cursorY, this.pageWidth - PAGE_MARGIN * 2, boxHeight, 2, 2, 'FD')
+
     this.doc.setFont('helvetica', 'bold')
     this.doc.setFontSize(9)
     this.doc.setTextColor(SECONDARY_COLOR)
     this.doc.text('Análisis con Inteligencia Artificial', PAGE_MARGIN + 4, this.cursorY + 7)
-    this.doc.setFont('helvetica', 'normal')
+
+    this.doc.setFont('helvetica', availableText ? 'normal' : 'italic')
     this.doc.setFontSize(8)
-    this.doc.setTextColor(MUTED_COLOR)
-    const text = this.doc.splitTextToSize(
-      'Espacio reservado para el análisis automático de tendencias y anomalías (próxima fase). Este reporte contiene únicamente datos reales.',
-      this.pageWidth - PAGE_MARGIN * 2 - 8,
-    )
-    this.doc.text(text, PAGE_MARGIN + 4, this.cursorY + 13)
-    this.cursorY += 24
+    this.doc.setTextColor(availableText ? SECONDARY_COLOR : MUTED_COLOR)
+    this.doc.text(bodyLines, PAGE_MARGIN + 4, this.cursorY + 13)
+
+    if (disclaimerLines.length) {
+      this.doc.setFont('helvetica', 'italic')
+      this.doc.setFontSize(7)
+      this.doc.setTextColor(MUTED_COLOR)
+      this.doc.text(disclaimerLines, PAGE_MARGIN + 4, this.cursorY + 13 + bodyLines.length * 4.2 + 3)
+    }
+
+    this.cursorY += boxHeight + 4
   }
 
   finalize(): jsPDF {

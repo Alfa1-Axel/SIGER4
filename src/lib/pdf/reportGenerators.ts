@@ -1,4 +1,6 @@
 import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
+import { requestAiAnalysis } from '../api/aiAnalysis'
+import { recordAuditEvent } from '../api/audit'
 import {
   fetchAttendanceReportData,
   fetchCoursesReportData,
@@ -26,6 +28,43 @@ export interface ReportRunContext {
 
 function pct(value: number): string {
   return `${value.toFixed(1)}%`
+}
+
+const NO_DATA_FALLBACK = 'No hay datos suficientes en este reporte para generar un análisis con IA.'
+
+// Pide el análisis a la Edge Function (o usa el fallback si no está disponible)
+// y lo agrega al PDF, dejando registro en auditoría del intento.
+async function runAiAnalysis(
+  builder: ReportBuilder,
+  reportKey: ReportKey,
+  reportLabel: string,
+  ctx: ReportRunContext,
+  summary: Record<string, unknown>,
+  hasData: boolean,
+) {
+  if (!hasData) {
+    builder.addAiAnalysisSection(null, NO_DATA_FALLBACK)
+    return
+  }
+
+  const result = await requestAiAnalysis({
+    reportKey,
+    reportLabel,
+    scopeLabel: ctx.scopeLabel,
+    periodLabel: ctx.periodLabel,
+    summary,
+  })
+
+  builder.addAiAnalysisSection(
+    result.available && result.analysis ? result.analysis : null,
+    result.reason ?? 'El análisis con IA no está disponible en este momento.',
+  )
+
+  await recordAuditEvent({
+    action: 'analisis_ia_reporte',
+    tableName: 'reports',
+    reason: `${reportLabel} · ${ctx.scopeLabel} · ${ctx.periodLabel} · ${result.available ? 'generado' : 'no disponible'}`,
+  }).catch(() => undefined)
 }
 
 export async function generateAttendanceReport(ctx: ReportRunContext) {
@@ -76,7 +115,18 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
     'Detalle',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'asistencias', 'Reporte de Asistencias', ctx, {
+    registros: rows.length,
+    asistencia_promedio_pct: rows.length ? Number(average.toFixed(1)) : null,
+    cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
+    detalle_por_cuartel: rows.map((r) => ({
+      cuartel: r.station?.name ?? '—',
+      periodo: `${r.period_start} a ${r.period_end}`,
+      asistencia_pct: r.attendance_rate,
+      miembros: r.total_members,
+    })),
+  }, rows.length > 0)
+
   return builder.finalize()
 }
 
@@ -122,7 +172,12 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
     'Detalle',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'intervenciones', 'Reporte de Intervenciones', ctx, {
+    total_intervenciones: total,
+    categorias: Array.from(byCategory.entries()).map(([categoria, cantidad]) => ({ categoria, cantidad })),
+    cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
+  }, rows.length > 0)
+
   return builder.finalize()
 }
 
@@ -158,7 +213,13 @@ export async function generateCoursesReport(ctx: ReportRunContext) {
     'Detalle',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'cursos', 'Reporte de Cursos y Escuela', ctx, {
+    cursos: rows.length,
+    en_curso: active,
+    finalizados: finished,
+    detalle: rows.map((c) => ({ titulo: c.title, categoria: c.category, estado: c.status, inscriptos: c.enrolled_count })),
+  }, rows.length > 0)
+
   return builder.finalize()
 }
 
@@ -196,7 +257,13 @@ export async function generateVehiclesReport(ctx: ReportRunContext) {
     'Detalle',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'vehiculos', 'Reporte de Vehículos', ctx, {
+    total_vehiculos: rows.length,
+    operativos: operational,
+    en_mantenimiento: maintenance,
+    fuera_de_servicio: outOfService,
+  }, rows.length > 0)
+
   return builder.finalize()
 }
 
@@ -253,7 +320,14 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
     'Vehículos',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'cuartel_general', `Reporte General — ${data.station.name}`, ctx, {
+    cuartel: data.station.name,
+    estado: data.station.status,
+    asistencia_promedio_pct: data.attendance.length ? Number(avgAttendance.toFixed(1)) : null,
+    total_intervenciones: totalInterventions,
+    vehiculos: data.vehicles.length,
+  }, data.attendance.length > 0 || totalInterventions > 0 || data.vehicles.length > 0)
+
   return builder.finalize()
 }
 
@@ -316,7 +390,14 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
     'Cuarteles',
   )
 
-  builder.addAiPlaceholder()
+  await runAiAnalysis(builder, 'regional_consolidado', 'Reporte Regional Consolidado', ctx, {
+    cuarteles: data.stations.length,
+    asistencia_promedio_pct: data.attendance.length ? Number(avgAttendance.toFixed(1)) : null,
+    total_intervenciones: totalInterventions,
+    cursos: data.courses.length,
+    vehiculos: data.vehicles.length,
+  }, data.stations.length > 0)
+
   return builder.finalize()
 }
 

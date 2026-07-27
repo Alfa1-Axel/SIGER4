@@ -124,10 +124,16 @@ create table if not exists audit_logs (
   old_value jsonb,
   new_value jsonb,
   reason text,
+  region_id uuid references regions(id) on delete set null,
+  subsede_id uuid references subsedes(id) on delete set null,
+  station_id uuid references stations(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
 comment on table audit_logs is 'Bitacora institucional: quien hizo que, cuando, sobre que registro, y valores antes/despues.';
+comment on column audit_logs.region_id is 'Region asociada al evento, resuelta segun la tabla auditada.';
+comment on column audit_logs.subsede_id is 'Subsede asociada al evento, resuelta segun la tabla auditada.';
+comment on column audit_logs.station_id is 'Cuartel asociado al evento, resuelto segun la tabla auditada.';
 
 -- ============================================================
 -- NOTIFICACIONES

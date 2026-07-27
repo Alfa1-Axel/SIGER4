@@ -123,7 +123,10 @@ create policy "audit_logs_select_admin" on audit_logs
   for select using (is_informatica_r4());
 
 create policy "audit_logs_select_regional" on audit_logs
-  for select using (is_regional_role());
+  for select using (
+    is_regional_role()
+    and (region_id is null or region_id in (select my_region_ids()))
+  );
 
 create policy "audit_logs_insert_authenticated" on audit_logs
   for insert with check (auth.role() = 'authenticated');
@@ -136,6 +139,7 @@ create policy "notifications_select_own_or_scope" on notifications
     or profile_id = current_profile_id()
     or (profile_id is null and region_id in (select my_region_ids()))
     or (profile_id is null and station_id in (select my_station_ids()))
+    or (profile_id is null and station_id in (select id from stations where subsede_id in (select my_subsede_ids())))
   );
 
 create policy "notifications_update_own" on notifications
@@ -151,6 +155,7 @@ create policy "attendance_select_scope" on attendance_summaries
     is_informatica_r4()
     or station_id in (select my_station_ids())
     or (is_regional_role() and station_id in (select id from stations where region_id in (select my_region_ids())))
+    or station_id in (select id from stations where subsede_id in (select my_subsede_ids()))
   );
 
 create policy "attendance_write_admin_regional_station" on attendance_summaries
@@ -178,6 +183,7 @@ create policy "interventions_select_scope" on intervention_summaries
     is_informatica_r4()
     or station_id in (select my_station_ids())
     or (is_regional_role() and station_id in (select id from stations where region_id in (select my_region_ids())))
+    or station_id in (select id from stations where subsede_id in (select my_subsede_ids()))
   );
 
 create policy "interventions_write_admin_regional_station" on intervention_summaries
@@ -249,6 +255,7 @@ create policy "documents_select_scope" on documents
     is_informatica_r4()
     or (region_id is not null and region_id in (select my_region_ids()))
     or (station_id is not null and station_id in (select my_station_ids()))
+    or (station_id is not null and station_id in (select id from stations where subsede_id in (select my_subsede_ids())))
   );
 
 create policy "documents_write_admin_regional_station" on documents

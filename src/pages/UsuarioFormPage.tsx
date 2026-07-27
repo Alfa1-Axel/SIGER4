@@ -3,16 +3,26 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
+import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import { addRole, inviteProfile } from '../lib/api/users'
+import { addRole, addScope, inviteProfile } from '../lib/api/users'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
-import type { Region, Station } from '../types/database'
+import type { Region, ScopeType, Station, Subsede } from '../types/database'
+
+const SCOPE_OPTIONS: { value: ScopeType; label: string }[] = [
+  { value: 'region', label: 'Regional' },
+  { value: 'subsede', label: 'Subsede' },
+  { value: 'station', label: 'Cuartel' },
+  { value: 'escuela', label: 'Escuela' },
+  { value: 'system', label: 'Informática' },
+]
 
 export function UsuarioFormPage() {
   const navigate = useNavigate()
 
   const [regions, setRegions] = useState<Region[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -21,18 +31,26 @@ export function UsuarioFormPage() {
   const [stationId, setStationId] = useState('')
   const [selectedRoles, setSelectedRoles] = useState<RoleKey[]>([])
 
+  const [scopeType, setScopeType] = useState<ScopeType>('station')
+  const [scopeRegionId, setScopeRegionId] = useState('')
+  const [scopeSubsedeId, setScopeSubsedeId] = useState('')
+  const [scopeStationId, setScopeStationId] = useState('')
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [inviteLink, setInviteLink] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchStations()]).then(([regionsData, stationsData]) => {
-      if (!active) return
-      setRegions(regionsData)
-      setStations(stationsData)
-      setRegionId((prev) => prev || regionsData[0]?.id || '')
-    })
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()]).then(
+      ([regionsData, subsedesData, stationsData]) => {
+        if (!active) return
+        setRegions(regionsData)
+        setSubsedes(subsedesData)
+        setStations(stationsData)
+        setRegionId((prev) => prev || regionsData[0]?.id || '')
+      },
+    )
     return () => {
       active = false
     }
@@ -51,6 +69,19 @@ export function UsuarioFormPage() {
       return
     }
 
+    if (scopeType === 'region' && !scopeRegionId) {
+      setError('Seleccioná la región del alcance.')
+      return
+    }
+    if (scopeType === 'subsede' && !scopeSubsedeId) {
+      setError('Seleccioná la subsede del alcance.')
+      return
+    }
+    if (scopeType === 'station' && !scopeStationId) {
+      setError('Seleccioná el cuartel del alcance.')
+      return
+    }
+
     setSubmitting(true)
     try {
       const profile = await inviteProfile({
@@ -62,6 +93,13 @@ export function UsuarioFormPage() {
       })
 
       await Promise.all(selectedRoles.map((role) => addRole(profile.id, role)))
+
+      await addScope(profile.id, {
+        scope_type: scopeType,
+        region_id: scopeType === 'region' ? scopeRegionId || null : null,
+        subsede_id: scopeType === 'subsede' ? scopeSubsedeId || null : null,
+        station_id: scopeType === 'station' ? scopeStationId || null : null,
+      })
 
       const link = `${window.location.origin}/registro?email=${encodeURIComponent(email)}`
       setInviteLink(link)
@@ -151,6 +189,56 @@ export function UsuarioFormPage() {
               </option>
             ))}
           </select>
+        </div>
+
+        <div className="field">
+          <label>Alcance</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            {SCOPE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setScopeType(option.value)}
+                className={`btn ${scopeType === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ padding: '6px 12px', fontSize: 12 }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {scopeType === 'region' && (
+            <select value={scopeRegionId} onChange={(e) => setScopeRegionId(e.target.value)}>
+              <option value="">Seleccionar región</option>
+              {regions.map((region) => (
+                <option key={region.id} value={region.id}>
+                  {region.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {scopeType === 'subsede' && (
+            <select value={scopeSubsedeId} onChange={(e) => setScopeSubsedeId(e.target.value)}>
+              <option value="">Seleccionar subsede</option>
+              {subsedes.map((subsede) => (
+                <option key={subsede.id} value={subsede.id}>
+                  {subsede.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {scopeType === 'station' && (
+            <select value={scopeStationId} onChange={(e) => setScopeStationId(e.target.value)}>
+              <option value="">Seleccionar cuartel</option>
+              {stations.map((station) => (
+                <option key={station.id} value={station.id}>
+                  {station.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="field">

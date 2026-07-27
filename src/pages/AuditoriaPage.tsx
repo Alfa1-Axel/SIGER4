@@ -12,7 +12,16 @@ import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
+import { fetchCourses } from '../lib/api/courses'
+import { fetchDocuments } from '../lib/api/documents'
 import type { Profile, Region, Station, Subsede } from '../types/database'
+import {
+  buildEventSummary,
+  buildFieldDiff,
+  translateAction,
+  translateTable,
+  type EntityLookup,
+} from '../lib/audit/humanize'
 
 function actionBadgeClass(action: string): string {
   const a = action.toLowerCase()
@@ -26,64 +35,71 @@ function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
 }
 
-function JsonBlock({ label, value, variant }: { label: string; value: unknown; variant: 'before' | 'after' }) {
-  const [expanded, setExpanded] = useState(false)
-  if (value === null || value === undefined) {
-    return (
-      <div style={{ flex: 1, minWidth: 200 }}>
-        <div className="kpi-label" style={{ marginBottom: 4 }}>
-          {label}
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Sin datos</p>
-      </div>
-    )
-  }
+function entityDisplayName(log: AuditLogRow): string | null {
+  const row = (log.new_value ?? log.old_value) as Record<string, unknown> | null
+  if (!row) return null
+  const name = row.name ?? row.full_name ?? row.title ?? row.internal_code
+  return typeof name === 'string' ? name : null
+}
 
-  const text = JSON.stringify(value, null, 2)
-  const isLong = text.length > 300
-
+function TechnicalJson({ oldValue, newValue }: { oldValue: unknown; newValue: unknown }) {
+  const [open, setOpen] = useState(false)
   return (
-    <div style={{ flex: 1, minWidth: 200 }}>
-      <div className="kpi-label" style={{ marginBottom: 4 }}>
-        {label}
-      </div>
-      <pre
-        style={{
-          margin: 0,
-          fontSize: 11,
-          padding: 8,
-          borderRadius: 6,
-          overflowX: 'auto',
-          maxHeight: expanded ? 'none' : 160,
-          background: variant === 'before' ? 'rgba(211, 47, 47, 0.06)' : 'rgba(34, 197, 94, 0.08)',
-          border: `1px solid ${variant === 'before' ? 'rgba(211, 47, 47, 0.25)' : 'rgba(34, 197, 94, 0.3)'}`,
-        }}
-      >
-        {text}
-      </pre>
-      {isLong && (
-        <button
-          type="button"
-          className="btn btn-outlined"
-          style={{ padding: '3px 8px', fontSize: 11, marginTop: 4 }}
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? 'Ver menos' : 'Ver todo'}
-        </button>
+    <div style={{ marginTop: 10 }}>
+      <button type="button" className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setOpen((v) => !v)}>
+        {open ? 'Ocultar datos técnicos' : 'Ver datos técnicos'}
+      </button>
+      {open && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8 }}>
+          <pre
+            style={{
+              flex: 1,
+              minWidth: 200,
+              margin: 0,
+              fontSize: 11,
+              padding: 8,
+              borderRadius: 6,
+              overflowX: 'auto',
+              maxHeight: 220,
+              background: 'rgba(211, 47, 47, 0.06)',
+              border: '1px solid rgba(211, 47, 47, 0.25)',
+            }}
+          >
+            {oldValue ? JSON.stringify(oldValue, null, 2) : 'Sin datos'}
+          </pre>
+          <pre
+            style={{
+              flex: 1,
+              minWidth: 200,
+              margin: 0,
+              fontSize: 11,
+              padding: 8,
+              borderRadius: 6,
+              overflowX: 'auto',
+              maxHeight: 220,
+              background: 'rgba(34, 197, 94, 0.08)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+            }}
+          >
+            {newValue ? JSON.stringify(newValue, null, 2) : 'Sin datos'}
+          </pre>
+        </div>
       )}
     </div>
   )
 }
 
-function AuditLogDetail({ log }: { log: AuditLogRow }) {
+function AuditLogDetail({ log, lookup }: { log: AuditLogRow; lookup: EntityLookup }) {
+  const diffs = useMemo(
+    () => buildFieldDiff(log.old_value as Record<string, unknown> | null, log.new_value as Record<string, unknown> | null, lookup),
+    [log, lookup],
+  )
+
   return (
     <div style={{ padding: '12px 16px', background: 'var(--color-surface-alt, #F8FAFC)', borderTop: '1px solid var(--color-border)' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 10, fontSize: 12, color: 'var(--color-text-secondary)' }}>
         <span>
-          <strong>Registro:</strong> {log.record_id ?? '—'}
-        </span>
-        <span>
-          <strong>Región:</strong> {log.region?.name ?? '—'}
+          <strong>Regional:</strong> {log.region?.name ?? '—'}
         </span>
         <span>
           <strong>Subsede:</strong> {log.subsede?.name ?? '—'}
@@ -97,10 +113,39 @@ function AuditLogDetail({ log }: { log: AuditLogRow }) {
           </span>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <JsonBlock label="Valor anterior" value={log.old_value} variant="before" />
-        <JsonBlock label="Valor nuevo" value={log.new_value} variant="after" />
-      </div>
+
+      {diffs.length === 0 ? (
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', margin: 0 }}>
+          No hay campos con cambios registrados para este evento.
+        </p>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+            <thead>
+              <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                <th style={{ padding: '6px 8px' }}>Campo</th>
+                <th style={{ padding: '6px 8px' }}>Antes</th>
+                <th style={{ padding: '6px 8px' }}>Después</th>
+              </tr>
+            </thead>
+            <tbody>
+              {diffs.map((diff) => (
+                <tr key={diff.field} style={{ borderTop: '1px solid var(--color-border)', fontSize: 12 }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{diff.label}</td>
+                  <td style={{ padding: '6px 8px', color: '#B91C1C', background: diff.changed ? 'rgba(211, 47, 47, 0.06)' : undefined }}>
+                    {diff.before}
+                  </td>
+                  <td style={{ padding: '6px 8px', color: '#15803D', background: diff.changed ? 'rgba(34, 197, 94, 0.08)' : undefined }}>
+                    {diff.after}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <TechnicalJson oldValue={log.old_value} newValue={log.new_value} />
     </div>
   )
 }
@@ -119,6 +164,7 @@ export function AuditoriaPage() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [actions, setActions] = useState<string[]>([])
   const [tables, setTables] = useState<string[]>([])
+  const [entityNames, setEntityNames] = useState<Map<string, string>>(new Map())
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -131,17 +177,37 @@ export function AuditoriaPage() {
   const [searchText, setSearchText] = useState('')
 
   useEffect(() => {
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchProfiles(), fetchDistinctAuditActions(), fetchDistinctAuditTables()])
-      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData]) => {
+    Promise.all([
+      fetchRegions(),
+      fetchSubsedes(),
+      fetchStations(),
+      fetchProfiles(),
+      fetchDistinctAuditActions(),
+      fetchDistinctAuditTables(),
+      fetchCourses().catch(() => []),
+      fetchDocuments().catch(() => []),
+    ])
+      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData, coursesData, documentsData]) => {
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
         setProfiles(profilesData)
         setActions(actionsData)
         setTables(tablesData)
+
+        const names = new Map<string, string>()
+        for (const r of regionsData) names.set(r.id, r.name)
+        for (const s of subsedesData) names.set(s.id, s.name)
+        for (const s of stationsData) names.set(s.id, s.name)
+        for (const p of profilesData) names.set(p.id, p.full_name)
+        for (const c of coursesData) names.set(c.id, c.title)
+        for (const d of documentsData) names.set(d.id, d.title)
+        setEntityNames(names)
       })
       .catch(() => undefined)
   }, [])
+
+  const lookup = useMemo(() => (uuid: string) => entityNames.get(uuid) ?? null, [entityNames])
 
   const filters: AuditLogFilters = useMemo(
     () => ({
@@ -241,7 +307,7 @@ export function AuditoriaPage() {
               <option value="">Todas</option>
               {actions.map((a) => (
                 <option key={a} value={a}>
-                  {a}
+                  {translateAction(a)}
                 </option>
               ))}
             </select>
@@ -259,7 +325,7 @@ export function AuditoriaPage() {
               <option value="">Todas</option>
               {tables.map((t) => (
                 <option key={t} value={t}>
-                  {t}
+                  {translateTable(t)}
                 </option>
               ))}
             </select>
@@ -357,9 +423,9 @@ export function AuditoriaPage() {
             <thead>
               <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--color-text-muted)' }}>
                 <th style={{ padding: '10px 12px' }}>Fecha/hora</th>
-                <th style={{ padding: '10px 12px' }}>Usuario</th>
+                <th style={{ padding: '10px 12px' }}>Evento</th>
                 <th style={{ padding: '10px 12px' }}>Acción</th>
-                <th style={{ padding: '10px 12px' }}>Tabla</th>
+                <th style={{ padding: '10px 12px' }}>Módulo</th>
                 <th style={{ padding: '10px 12px' }}>Alcance</th>
                 <th style={{ padding: '10px 12px' }} />
               </tr>
@@ -369,11 +435,13 @@ export function AuditoriaPage() {
                 <Fragment key={log.id}>
                   <tr style={{ borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{formatDateTime(log.created_at)}</td>
-                    <td style={{ padding: '10px 12px' }}>{log.actor?.full_name ?? 'Sistema'}</td>
                     <td style={{ padding: '10px 12px' }}>
-                      <span className={`badge ${actionBadgeClass(log.action)}`}>{log.action}</span>
+                      {buildEventSummary(log.actor?.full_name ?? null, log.action, log.table_name, entityDisplayName(log))}
                     </td>
-                    <td style={{ padding: '10px 12px' }}>{log.table_name}</td>
+                    <td style={{ padding: '10px 12px' }}>
+                      <span className={`badge ${actionBadgeClass(log.action)}`}>{translateAction(log.action)}</span>
+                    </td>
+                    <td style={{ padding: '10px 12px' }}>{translateTable(log.table_name)}</td>
                     <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
                       {log.station?.name ?? log.subsede?.name ?? log.region?.name ?? '—'}
                     </td>
@@ -391,7 +459,7 @@ export function AuditoriaPage() {
                   {expandedId === log.id && (
                     <tr>
                       <td colSpan={6} style={{ padding: 0 }}>
-                        <AuditLogDetail log={log} />
+                        <AuditLogDetail log={log} lookup={lookup} />
                       </td>
                     </tr>
                   )}

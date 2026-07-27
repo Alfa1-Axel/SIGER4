@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { ImagePicker } from '../components/ui/ImagePicker'
 import { useAuth } from '../hooks/useAuth'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
@@ -137,10 +138,11 @@ export function AjustesPage() {
           <input id="position" value={position} onChange={(e) => setPosition(e.target.value)} placeholder="Jefe de Cuerpo Activo" />
         </div>
 
-        <div className="field">
-          <label htmlFor="avatarFile">Foto de perfil (opcional)</label>
-          <input id="avatarFile" type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)} />
-        </div>
+        <ImagePicker label="Foto de perfil (opcional)" currentUrl={profile?.avatar_url} onFileSelected={setAvatarFile} />
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+          La imagen se recorta automáticamente en formato cuadrado, centrada. Para mejores resultados, usá una foto
+          donde tu rostro esté centrado.
+        </p>
 
         {profile?.rank && (
           <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
@@ -184,7 +186,7 @@ export function AjustesPage() {
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <img src="/logos/logo-escuela.png" alt="Escuela Regional" style={{ height: 40, borderRadius: 8 }} />
-          <img src="/logos/logo-informatica.jpeg" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 8 }} />
+          <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 8 }} />
         </div>
       </div>
 

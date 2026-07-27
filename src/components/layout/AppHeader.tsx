@@ -33,7 +33,7 @@ export function AppHeader({ title }: AppHeaderProps) {
     <header className="app-header">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <img
-          src="/logos/logo-informatica.jpeg"
+          src="/logos/logo-informatica.png"
           alt="Dpto. Informática y Estadística R4"
           style={{ height: 24, width: 24, borderRadius: 6, objectFit: 'cover' }}
         />

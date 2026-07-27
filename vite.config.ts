@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/siger4-icon.svg', 'logos/logo-escuela.png', 'logos/logo-informatica.jpeg'],
+      includeAssets: ['icons/siger4-icon.svg', 'logos/logo-escuela.png', 'logos/logo-informatica.png'],
       manifest: {
         id: '/',
         name: 'SIGER4 - Sistema Integral de Gestion de la Regional 4',
@@ -22,14 +22,14 @@ export default defineConfig({
         lang: 'es',
         icons: [
           {
-            src: '/logos/logo-informatica.jpeg',
-            sizes: '1225x1225',
-            type: 'image/jpeg',
+            src: '/logos/logo-informatica.png',
+            sizes: '1254x1254',
+            type: 'image/png',
           },
           {
-            src: '/logos/logo-informatica.jpeg',
-            sizes: '1225x1225',
-            type: 'image/jpeg',
+            src: '/logos/logo-informatica.png',
+            sizes: '1254x1254',
+            type: 'image/png',
             purpose: 'maskable',
           },
         ],

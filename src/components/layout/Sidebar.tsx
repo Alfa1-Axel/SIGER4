@@ -3,6 +3,15 @@ import { NAV_ITEMS } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
+function UserAvatar({ avatarUrl, fullName }: { avatarUrl: string | null | undefined; fullName: string }) {
+  if (avatarUrl) return <img src={avatarUrl} alt={fullName} className="avatar" style={{ width: 28, height: 28, flexShrink: 0 }} />
+  return (
+    <div className="btn btn-icon btn-inverted" style={{ width: 28, height: 28, flexShrink: 0 }} aria-label={fullName}>
+      <Icon name="user" size={14} />
+    </div>
+  )
+}
+
 export function Sidebar() {
   const { profile, signOut, isAdmin, roles } = useAuth()
   const visibleItems = NAV_ITEMS.filter(
@@ -31,11 +40,7 @@ export function Sidebar() {
 
       <div className="sidebar-footer">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px' }}>
-          <img
-            src="/logos/logo-informatica.jpeg"
-            alt="Dpto. Informática y Estadística R4"
-            style={{ height: 28, width: 28, borderRadius: 8, objectFit: 'cover' }}
-          />
+          <UserAvatar avatarUrl={profile?.avatar_url} fullName={profile?.full_name ?? 'Usuario'} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {profile?.full_name ?? 'Usuario'}

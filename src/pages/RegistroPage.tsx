@@ -48,7 +48,7 @@ export function RegistroPage() {
         <div className="login-card">
           <div className="login-logos">
             <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
-            <img src="/logos/logo-informatica.jpeg" alt="Dpto. Informática y Estadística R4" />
+            <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" />
           </div>
           <h1 className="login-title">¡Listo!</h1>
           <p className="login-subtitle">
@@ -68,7 +68,7 @@ export function RegistroPage() {
       <div className="login-card">
         <div className="login-logos">
           <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
-          <img src="/logos/logo-informatica.jpeg" alt="Dpto. Informática y Estadística R4" />
+          <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" />
         </div>
         <h1 className="login-title">Completar registro</h1>
         <p className="login-subtitle">

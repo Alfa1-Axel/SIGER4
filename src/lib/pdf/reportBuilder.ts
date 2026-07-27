@@ -31,7 +31,7 @@ export class ReportBuilder {
   async init(): Promise<this> {
     const [logoEscuela, logoInformatica] = await Promise.all([
       loadImageAsDataUrl('/logos/logo-escuela.png').catch(() => null),
-      loadImageAsDataUrl('/logos/logo-informatica.jpeg').catch(() => null),
+      loadImageAsDataUrl('/logos/logo-informatica.png').catch(() => null),
     ])
     this.drawHeader(logoEscuela, logoInformatica)
     return this
@@ -41,7 +41,7 @@ export class ReportBuilder {
     const { title, subtitle, scopeLabel, periodLabel, generatedByLabel, generatedAt } = this.context
 
     if (logoEscuela) this.doc.addImage(logoEscuela, 'PNG', PAGE_MARGIN, this.cursorY, 18, 18)
-    if (logoInformatica) this.doc.addImage(logoInformatica, 'JPEG', this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
+    if (logoInformatica) this.doc.addImage(logoInformatica, 'PNG', this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
 
     this.doc.setFont('helvetica', 'bold')
     this.doc.setFontSize(14)

@@ -10,12 +10,26 @@
 
 ### 1.2 Cargar el esquema SQL
 1. En el panel del proyecto, ir a **SQL Editor** → **New query**.
-2. Pegar y ejecutar, en este orden, el contenido de:
+2. Pegar y ejecutar, **en este orden exacto**, el contenido de cada archivo (una migración por
+   query, esperando a que cada una termine antes de pasar a la siguiente):
    - `supabase/migrations/0001_schema.sql`
    - `supabase/migrations/0002_rls_helpers.sql`
    - `supabase/migrations/0003_rls_policies.sql`
    - `supabase/migrations/0004_audit_triggers.sql`
-3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`.
+   - `supabase/migrations/0005_user_invites.sql`
+   - `supabase/migrations/0006_station_status_simplify.sql`
+   - Antes de continuar, verificar en el SQL Editor: `select count(*) from stations;` → si da
+     `0`, seguir sin problema (no hace falta backfill de `subsede_id`).
+   - `supabase/migrations/0007_subsedes.sql`
+   - `supabase/migrations/0008_role_key_simplify.sql`
+3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
+   (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
+
+**Nota:** si tu proyecto Supabase ya tenía el esquema aplicado desde antes (instalación previa),
+solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
+numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
+la versión final del esquema (subsedes y roles simplificados), pero igual conviene correr las 8
+migraciones en orden para mantener el historial consistente.
 
 ### 1.3 Verificar que RLS esté activo
 1. Ir a **Table Editor** → seleccionar cada tabla (stations, profiles, courses, etc.).

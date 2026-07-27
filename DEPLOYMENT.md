@@ -28,6 +28,7 @@
    - `supabase/migrations/0012_courses_fields.sql`
    - `supabase/migrations/0013_vehicles_count_sync.sql`
    - `supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
+   - `supabase/migrations/0015_notifications_subsede_and_audit.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -35,8 +36,11 @@
 solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
-vehículos/cursos, contexto territorial de auditoría), pero igual conviene correr las 14
-migraciones en orden para mantener el historial consistente.
+vehículos/cursos, contexto territorial de auditoría, notificaciones), pero igual conviene correr
+las 15 migraciones en orden para mantener el historial consistente.
+
+**Nota sobre 0015:** agrega `subsede_id` a `notifications` y el trigger de auditoría que esa tabla
+no tenía. Corre como una sola query (no hay enum nuevo, a diferencia de 0009/0010).
 
 **Nota sobre 0014:** agrega `region_id`/`subsede_id`/`station_id` a `audit_logs` y reescribe la
 función de auditoría para resolver ese contexto por tabla. Los registros de auditoría **anteriores**
@@ -142,9 +146,10 @@ módulo correspondiente:
 - **Reportes PDF reales e IA institucional** (`ReportesPage.tsx`): la página solo registra la
   solicitud en `audit_logs`; no genera ningún archivo ni corre ningún análisis todavía. Queda para
   una fase posterior (edge function + servicio de IA institucional).
-- **Notificaciones** (`notifications` table + `src/lib/api/notifications.ts`): el esquema, RLS y
-  las funciones de lectura ya existen, pero ninguna pantalla las consume todavía — el módulo de
-  notificaciones (campanita, lista, marcado de leídas) queda pendiente de construir.
+- **Notificaciones**: ✅ construido (campanita, lista, marcado de leída, alta manual desde
+  `/notificaciones/nueva`, auditoría). Pendiente como mejora futura: creación automática desde
+  otros flujos (ej. curso nuevo, cambio de estado) y una opción de "notificar a todos" sin scope
+  (hoy no soportada por RLS — un registro sin alcance solo lo ve `informatica_r4`).
 - **Documentos** (`documents` table): esquema, RLS y auditoría completos, pero no existe
   `src/lib/api/documents.ts` ni ninguna pantalla — falta construir el CRUD y la integración con
   Supabase Storage.

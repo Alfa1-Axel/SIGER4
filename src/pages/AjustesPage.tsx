@@ -6,7 +6,7 @@ import { ImagePicker } from '../components/ui/ImagePicker'
 import { useAuth } from '../hooks/useAuth'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
-import { uploadAvatar } from '../lib/api/storage'
+import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { supabase } from '../lib/supabaseClient'
 
 export function AjustesPage() {
@@ -35,7 +35,9 @@ export function AjustesPage() {
     try {
       let avatarUrl = profile.avatar_url
       if (avatarFile) {
+        const previousAvatarUrl = profile.avatar_url
         avatarUrl = await uploadAvatar(profile.id, avatarFile)
+        await deleteAvatar(previousAvatarUrl)
       }
       await updateProfile(profile.id, {
         full_name: fullName,

@@ -6,7 +6,7 @@ import { ImagePicker } from '../components/ui/ImagePicker'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
-import { uploadStationMedia } from '../lib/api/storage'
+import { deleteStationMedia, uploadStationMedia } from '../lib/api/storage'
 import type { Region, StationStatus, Subsede } from '../types/database'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
@@ -121,10 +121,12 @@ export function CuartelFormPage() {
       if (logoFile) {
         const logoUrl = await uploadStationMedia(stationId, logoFile)
         await updateStation(stationId, { logo_url: logoUrl })
+        await deleteStationMedia(existingLogoUrl)
       }
       if (coverFile) {
         const coverUrl = await uploadStationMedia(stationId, coverFile)
         await updateStation(stationId, { cover_image_url: coverUrl })
+        await deleteStationMedia(existingCoverUrl)
       }
 
       navigate(`/cuarteles/${stationId}`)

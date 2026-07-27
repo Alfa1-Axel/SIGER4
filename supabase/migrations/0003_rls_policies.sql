@@ -164,6 +164,13 @@ create policy "notifications_update_own" on notifications
 create policy "notifications_write_admin_regional_escuela" on notifications
   for insert with check (is_informatica_r4() or is_regional_role() or is_escuela_role());
 
+-- Cualquier usuario autenticado puede insertarse una notificacion a si mismo
+-- (ej. confirmacion de "reporte generado", que se inserta desde el cliente
+-- porque no existe una tabla "reports" ni un trigger que lo dispare). No es
+-- un broadcast: profile_id debe ser el propio perfil del usuario.
+create policy "notifications_write_self" on notifications
+  for insert with check (profile_id = current_profile_id());
+
 -- ---------------- attendance_summaries ----------------
 
 create policy "attendance_select_scope" on attendance_summaries

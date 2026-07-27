@@ -458,6 +458,181 @@ create trigger trg_personnel_updated_at before update on personnel
   for each row execute function set_updated_at();
 
 -- ============================================================
+-- NOTIFICACIONES AUTOMATICAS
+-- ============================================================
+-- Ademas de las notificaciones manuales (creadas desde /notificaciones/nueva),
+-- estos triggers generan notificaciones automaticas desde eventos del sistema,
+-- respetando el mismo alcance (region/subsede/cuartel/usuario) del evento que
+-- las origina. Escriben en "notifications", que ya tiene su propio trigger de
+-- auditoria (trg_audit_notifications, mas abajo), asi que cada notificacion
+-- automatica queda registrada en audit_logs sin trabajo adicional.
+
+create or replace function notify_course_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (region_id, type, title, body)
+  values (new.region_id, 'curso_nuevo', 'Nuevo curso: ' || new.title, 'Se publicó un nuevo curso de la Escuela Regional: ' || new.category || '.');
+  return new;
+end;
+$$;
+
+comment on function notify_course_created() is 'Crea una notificacion regional cuando se publica un curso nuevo.';
+
+create trigger trg_notify_course_created
+  after insert on courses
+  for each row execute function notify_course_created();
+
+create or replace function notify_document_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into notifications (profile_id, region_id, subsede_id, station_id, type, title, body)
+  values (
+    new.profile_id,
+    case when new.profile_id is null then new.region_id else null end,
+    case when new.profile_id is null then new.subsede_id else null end,
+    case when new.profile_id is null then new.station_id else null end,
+    'documento_actualizado',
+    'Nuevo documento: ' || new.title,
+    'Se cargó un nuevo documento (' || new.category || ') en tu alcance.'
+  );
+  return new;
+end;
+$$;
+
+comment on function notify_document_created() is 'Crea una notificacion con el mismo alcance del documento (region/subsede/cuartel/usuario especifico) cuando se carga un documento nuevo.';
+
+create trigger trg_notify_document_created
+  after insert on documents
+  for each row execute function notify_document_created();
+
+create or replace function notify_station_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.status is distinct from new.status then
+    insert into notifications (region_id, subsede_id, station_id, type, title, body)
+    values (new.region_id, new.subsede_id, new.id, 'cambio_estado', 'Cambio de estado: ' || new.name, 'El cuartel ' || new.name || ' pasó a estado "' || new.status || '".');
+  end if;
+  return new;
+end;
+$$;
+
+comment on function notify_station_status_change() is 'Crea una notificacion cuando cambia el estado operativo de un cuartel (no en cualquier otra edicion).';
+
+create trigger trg_notify_station_status_change
+  after update on stations
+  for each row execute function notify_station_status_change();
+
+create or replace function notify_vehicle_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_region_id uuid;
+  v_subsede_id uuid;
+begin
+  if old.status is distinct from new.status then
+    select region_id, subsede_id into v_region_id, v_subsede_id from stations where id = new.station_id;
+    insert into notifications (region_id, subsede_id, station_id, type, title, body)
+    values (v_region_id, v_subsede_id, new.station_id, 'cambio_estado', 'Cambio de estado: vehículo ' || new.internal_code, 'El vehículo ' || new.internal_code || ' pasó a estado "' || new.status || '".');
+  end if;
+  return new;
+end;
+$$;
+
+comment on function notify_vehicle_status_change() is 'Crea una notificacion cuando cambia el estado de un vehiculo (no en cualquier otra edicion).';
+
+create trigger trg_notify_vehicle_status_change
+  after update on vehicles
+  for each row execute function notify_vehicle_status_change();
+
+create or replace function notify_personnel_status_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_region_id uuid;
+  v_subsede_id uuid;
+begin
+  if old.status is distinct from new.status then
+    select region_id, subsede_id into v_region_id, v_subsede_id from stations where id = new.station_id;
+    insert into notifications (region_id, subsede_id, station_id, type, title, body)
+    values (v_region_id, v_subsede_id, new.station_id, 'cambio_estado', 'Cambio de estado: ' || new.first_name || ' ' || new.last_name, 'Un integrante de la dotación pasó a estado "' || new.status || '".');
+  end if;
+  return new;
+end;
+$$;
+
+comment on function notify_personnel_status_change() is 'Crea una notificacion cuando cambia el estado de un integrante del personal (no en cualquier otra edicion). No incluye DNI ni datos sensibles.';
+
+create trigger trg_notify_personnel_status_change
+  after update on personnel
+  for each row execute function notify_personnel_status_change();
+
+create or replace function notify_attendance_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_region_id uuid;
+  v_subsede_id uuid;
+  v_station_name text;
+begin
+  select region_id, subsede_id, name into v_region_id, v_subsede_id, v_station_name from stations where id = new.station_id;
+  insert into notifications (region_id, subsede_id, station_id, type, title, body)
+  values (v_region_id, v_subsede_id, new.station_id, 'estadisticas_nuevas', 'Asistencia cargada: ' || v_station_name, 'Se cargó un resumen de asistencia del período ' || new.period_start || ' a ' || new.period_end || '.');
+  return new;
+end;
+$$;
+
+comment on function notify_attendance_created() is 'Crea una notificacion cuando se carga un nuevo resumen de asistencia.';
+
+create trigger trg_notify_attendance_created
+  after insert on attendance_summaries
+  for each row execute function notify_attendance_created();
+
+create or replace function notify_intervention_created()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_region_id uuid;
+  v_subsede_id uuid;
+  v_station_name text;
+begin
+  select region_id, subsede_id, name into v_region_id, v_subsede_id, v_station_name from stations where id = new.station_id;
+  insert into notifications (region_id, subsede_id, station_id, type, title, body)
+  values (v_region_id, v_subsede_id, new.station_id, 'estadisticas_nuevas', 'Intervención cargada: ' || v_station_name, 'Se cargó un resumen de intervenciones (' || new.category || ') del período ' || new.period_start || ' a ' || new.period_end || '.');
+  return new;
+end;
+$$;
+
+comment on function notify_intervention_created() is 'Crea una notificacion cuando se carga un nuevo resumen de intervenciones.';
+
+create trigger trg_notify_intervention_created
+  after insert on intervention_summaries
+  for each row execute function notify_intervention_created();
+
+-- ============================================================
 -- DATOS INICIALES: Regional 4
 -- ============================================================
 

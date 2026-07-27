@@ -36,6 +36,7 @@
    - `supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
    - `supabase/migrations/0021_personnel_module.sql`
    - `supabase/migrations/0022_intervention_summaries_operational_fields.sql`
+   - `supabase/migrations/0023_automatic_notifications.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -44,8 +45,18 @@ solo necesitás correr las migraciones que todavía no ejecutaste, siempre respe
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
-de documentos, personal/dotación por cuartel, campos operativos de intervenciones), pero igual
-conviene correr las 22 migraciones en orden para mantener el historial consistente.
+de documentos, personal/dotación por cuartel, campos operativos de intervenciones, notificaciones
+automáticas), pero igual conviene correr las 23 migraciones en orden para mantener el historial
+consistente.
+
+**Nota sobre 0023:** agrega notificaciones automáticas (además de las manuales existentes) para:
+curso nuevo, documento nuevo, cambio de estado de cuartel/vehículo/personal, y carga de un resumen
+de asistencia o de intervenciones. Se implementan como triggers (mismo patrón que la auditoría
+automática), así que respetan el alcance del evento que las origina y quedan auditadas solas (la
+tabla `notifications` ya tiene su propio trigger de auditoría desde 0004). También agrega una
+política de RLS (`notifications_write_self`) que permite a cualquier usuario autenticado insertarse
+una notificación a sí mismo — la necesita la confirmación de "reporte generado", que se inserta
+desde el frontend porque no existe una tabla `reports` de la cual disparar un trigger.
 
 **Nota sobre 0022:** agrega columnas operativas a `intervention_summaries` para estadística real:
 `time_of_day` (diurno/nocturno/mixto), `observations`, `personnel_count`, `vehicles_count` y

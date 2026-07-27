@@ -3,6 +3,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { AiDisclaimer } from '../components/ui/AiDisclaimer'
 import { recordAuditEvent } from '../lib/api/audit'
+import { createNotification } from '../lib/api/notifications'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
@@ -107,6 +108,15 @@ export function ReportesPage() {
         tableName: 'reports',
         reason: `${reportDef.label} · ${scopeLabelFor()} · ${periodLabelFor()}`,
       })
+
+      if (profile?.id) {
+        await createNotification({
+          type: 'reporte_generado',
+          title: `Reporte generado: ${reportDef.label}`,
+          body: `${scopeLabelFor()} · ${periodLabelFor()}`,
+          profile_id: profile.id,
+        }).catch(() => undefined)
+      }
 
       setConfirmedKey(reportKey)
     } catch (err) {

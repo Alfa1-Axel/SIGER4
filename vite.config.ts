@@ -22,19 +22,14 @@ export default defineConfig({
         lang: 'es',
         icons: [
           {
-            src: '/icons/siger4-192.png',
-            sizes: '192x192',
-            type: 'image/png',
+            src: '/logos/logo-informatica.jpeg',
+            sizes: '1225x1225',
+            type: 'image/jpeg',
           },
           {
-            src: '/icons/siger4-512.png',
-            sizes: '512x512',
-            type: 'image/png',
-          },
-          {
-            src: '/icons/siger4-512.png',
-            sizes: '512x512',
-            type: 'image/png',
+            src: '/logos/logo-informatica.jpeg',
+            sizes: '1225x1225',
+            type: 'image/jpeg',
             purpose: 'maskable',
           },
         ],
@@ -75,6 +70,7 @@ export default defineConfig({
           charts: ['recharts'],
           vendor: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
+          pdf: ['jspdf', 'jspdf-autotable'],
         },
       },
     },

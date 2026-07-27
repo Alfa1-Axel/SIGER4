@@ -1,5 +1,34 @@
 # SIGER4 — Guía de despliegue (Supabase + Vercel)
 
+## 0. Checklist rápido antes de desplegar
+
+Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
+de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
+
+- [ ] **Migraciones**: las 23 migraciones de `supabase/migrations/` corridas en orden (`0001` a
+      `0023`) en el SQL Editor del proyecto de Supabase real. Ver sección 1.2 para la lista exacta.
+- [ ] **RLS activo**: todas las tablas con el ícono de RLS en verde en **Table Editor** (sección 1.3).
+- [ ] **Variables de entorno del frontend**: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`
+      configuradas en Vercel (Production, Preview y Development) — nunca la `service_role`.
+- [ ] **Edge Function `analyze-report` desplegada** (opcional pero recomendado): sin esto, los
+      reportes PDF se generan igual, solo sin análisis de IA. Ver sección 1.7.
+      - [ ] Secreto `GEMINI_API_KEY` configurado.
+      - [ ] `supabase functions deploy analyze-report` corrido después de cualquier cambio en
+            `supabase/functions/analyze-report/index.ts`.
+- [ ] **Buckets de Storage**: `station-media` y `avatars` (públicos), `documents` (privado) —
+      se crean solos al correr las migraciones 0017/0019, pero conviene confirmar en **Storage**
+      que existen y tienen la visibilidad correcta.
+- [ ] **Al menos un usuario `informatica_r4` creado** (sección 1.5), para poder administrar el
+      sistema apenas esté desplegado.
+- [ ] **Build/lint/audit locales sin errores nuevos**: `npm run build`, `npm run lint`,
+      `npm audit --audit-level=high` (la única advisory esperada es la de React Router en modo RSC,
+      no aplicable a esta SPA — ver sección 4).
+- [ ] **Vercel**: Build Command `npm run build`, Output Directory `dist`, Framework Preset Vite
+      (sección 2.2).
+- [ ] **PWA verificada** en la URL de producción real (sección 2.5) — el manifest/service worker
+      usan rutas absolutas, así que solo se puede confirmar del todo en el dominio final, no en
+      `localhost`.
+
 ## 1. Supabase
 
 ### 1.1 Crear el proyecto
@@ -254,35 +283,35 @@ En **Project Settings → Environment Variables**, agregar (en Production, Previ
    aviso de "Sin conexión" en el header.
 5. En DevTools → Application → Service Workers, confirmar que `sw.js` está activo.
 
-## 3. Deuda técnica conocida (campos y módulos pendientes)
+## 3. Estado de los módulos y deuda técnica conocida
 
-Estos campos y tablas existen en el esquema pero todavía no tienen un flujo real que los
-alimente. No son bugs a corregir con un parche — quedan pendientes hasta que se construya el
-módulo correspondiente:
+Resumen de qué está construido y qué queda pendiente, para no asumir por el nombre de una tabla o
+columna que un módulo ya tiene flujo real detrás:
 
-- **`stations.personnel_count`**: ✅ construido (migración 0021). Tabla `personnel` con alta/edición/
-  baja desde la sección "Personal / Dotación" del detalle de cuartel, filtros por estado/jerarquía/
-  departamento, y un trigger que recalcula `personnel_count` automáticamente a partir del personal
-  en estado `activo` (mismo patrón que `vehicles_count`, ver 0013). El módulo mide capacidad
-  institucional real, no es un padrón completo de RRHH — el DNI es opcional y no obligatorio.
+- **Cuarteles, subsedes, regiones**: ✅ completo (alta/edición, logo/portada con recorte y
+  lightbox para ampliar, filtros, permisos por rol).
+- **Usuarios, roles y alcances (scopes)**: ✅ completo (invitación por link, roles múltiples,
+  alcances region/subsede/cuartel/escuela/sistema, protección de superadmin `informatica_r4`
+  reflejada tanto en RLS como en la UI de `/usuarios/:id`).
+- **Vehículos, Personal/Dotación, Asistencias, Intervenciones**: ✅ completo (alta/edición desde
+  el detalle de cuartel, con permisos visuales por rol además de RLS). Intervenciones incluye
+  franja horaria, personal/móviles involucrados y horas de trabajo (migración 0022) para poder
+  cruzar carga operativa con dotación.
 - **`courses.enrolled_count`**: cantidad de inscriptos a un curso. No hay módulo de inscripciones
   (una persona anotándose a un curso) todavía. Distinto de `courses.attendees_count`, que sí es
   real y editable desde el formulario (asistencia registrada manualmente al finalizar la actividad).
-- **`attendance_summaries`** e **`intervention_summaries`**: ✅ construidos (alta/edición de
-  resúmenes por período y cuartel desde el detalle de cuartel, con auditoría). Modelan un
-  **resumen agregado** por período (no asistencia individual por persona/día — eso requeriría un
-  módulo de personal que no existe). Los KPIs "Asistencia promedio" e "Intervenciones (período)"
-  del Dashboard ya muestran datos reales en cuanto se carga al menos un resumen.
-- **Reportes PDF reales e IA institucional** (`ReportesPage.tsx`): la página solo registra la
-  solicitud en `audit_logs`; no genera ningún archivo ni corre ningún análisis todavía. Queda para
-  una fase posterior (edge function + servicio de IA institucional).
-- **Notificaciones**: ✅ construido (campanita, lista, marcado de leída, alta manual desde
-  `/notificaciones/nueva`, auditoría). Pendiente como mejora futura: creación automática desde
-  otros flujos (ej. curso nuevo, cambio de estado) y una opción de "notificar a todos" sin scope
-  (hoy no soportada por RLS — un registro sin alcance solo lo ve `informatica_r4`).
-- **Documentos** (`documents` table): esquema, RLS y auditoría completos, pero no existe
-  `src/lib/api/documents.ts` ni ninguna pantalla — falta construir el CRUD y la integración con
-  Supabase Storage.
+- **Documentos**: ✅ completo (alta/edición con alcance region/subsede/cuartel/usuario específico,
+  historial de versiones, descarga vía signed URL desde el bucket privado `documents`).
+- **Notificaciones**: ✅ completo, manuales y automáticas (migración 0023): curso nuevo, documento
+  nuevo, cambio de estado de cuartel/vehículo/personal, carga de asistencia/intervención, y
+  confirmación de reporte generado. Pendiente como mejora futura: una opción de "notificar a
+  todos" sin alcance específico (hoy no soportada por RLS — un registro sin alcance solo lo ve
+  `informatica_r4`).
+- **Auditoría**: ✅ completo (`/auditoria`, filtros, detalle humanizado campo por campo en vez de
+  JSON crudo, permisos por alcance).
+- **Reportes PDF + análisis con IA**: ✅ completo (6 tipos de reporte, PDFs reales en horizontal,
+  gráficos, análisis con Gemini con cache local y manejo claro de errores de cuota — ver sección
+  1.7). Sigue dependiendo de la disponibilidad de cuota gratuita de Gemini.
 
 ## 4. Notas de seguridad
 

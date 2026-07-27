@@ -113,7 +113,36 @@ En **Project Settings → Environment Variables**, agregar (en Production, Previ
    aviso de "Sin conexión" en el header.
 5. En DevTools → Application → Service Workers, confirmar que `sw.js` está activo.
 
-## 3. Notas de seguridad
+## 3. Deuda técnica conocida (campos y módulos pendientes)
+
+Estos campos y tablas existen en el esquema pero todavía no tienen un flujo real que los
+alimente. No son bugs a corregir con un parche — quedan pendientes hasta que se construya el
+módulo correspondiente:
+
+- **`stations.personnel_count`**: columna de conteo de personal por cuartel. No hay módulo de
+  personal/dotación (altas, bajas, roles internos) todavía, así que este número no refleja datos
+  reales. Cuando se construya ese módulo, agregar un trigger de sincronización igual al que ya
+  tiene `stations.vehicles_count` (ver `supabase/migrations/0013_vehicles_count_sync.sql` como
+  referencia del patrón).
+- **`courses.enrolled_count`**: cantidad de inscriptos a un curso. No hay módulo de inscripciones
+  (una persona anotándose a un curso) todavía. Distinto de `courses.attendees_count`, que sí es
+  real y editable desde el formulario (asistencia registrada manualmente al finalizar la actividad).
+- **`attendance_summaries`** e **`intervention_summaries`**: ambas tablas tienen esquema y
+  políticas RLS completas, pero no existe ningún archivo `src/lib/api/*.ts` ni pantalla que
+  escriba filas en ellas. Los KPIs "Asistencia promedio" e "Intervenciones (período)" del
+  Dashboard (`PanelPage.tsx`) consultan estas tablas de verdad, pero van a mostrar `—`/`0` hasta
+  que existan los módulos reales de asistencia e intervenciones.
+- **Reportes PDF reales e IA institucional** (`ReportesPage.tsx`): la página solo registra la
+  solicitud en `audit_logs`; no genera ningún archivo ni corre ningún análisis todavía. Queda para
+  una fase posterior (edge function + servicio de IA institucional).
+- **Notificaciones** (`notifications` table + `src/lib/api/notifications.ts`): el esquema, RLS y
+  las funciones de lectura ya existen, pero ninguna pantalla las consume todavía — el módulo de
+  notificaciones (campanita, lista, marcado de leídas) queda pendiente de construir.
+- **Documentos** (`documents` table): esquema, RLS y auditoría completos, pero no existe
+  `src/lib/api/documents.ts` ni ninguna pantalla — falta construir el CRUD y la integración con
+  Supabase Storage.
+
+## 4. Notas de seguridad
 
 - Nunca subir el archivo `.env` con claves reales al repositorio (ya está en `.gitignore`).
 - La clave `anon` de Supabase es pública por diseño; la seguridad real la dan las políticas RLS,

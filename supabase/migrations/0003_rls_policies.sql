@@ -116,7 +116,8 @@ create policy "user_scopes_write_admin" on user_scopes
   for all using (is_informatica_r4()) with check (is_informatica_r4());
 
 -- ---------------- audit_logs ----------------
--- Solo el Dpto. de Informatica y Estadistica puede leer la bitacora completa.
+-- El Dpto. de Informatica y Estadistica lee la bitacora completa. Los demas
+-- roles solo ven la actividad de su propio alcance (region/subsede/cuartel).
 -- La escritura queda abierta a cualquier usuario autenticado porque el registro
 -- se genera desde triggers y desde la propia app en nombre del usuario actual.
 
@@ -127,6 +128,18 @@ create policy "audit_logs_select_regional" on audit_logs
   for select using (
     is_regional_role()
     and (region_id is null or region_id in (select my_region_ids()))
+  );
+
+create policy "audit_logs_select_subsede" on audit_logs
+  for select using (
+    subsede_id is not null
+    and subsede_id in (select my_subsede_ids())
+  );
+
+create policy "audit_logs_select_station" on audit_logs
+  for select using (
+    station_id is not null
+    and station_id in (select my_station_ids())
   );
 
 create policy "audit_logs_insert_authenticated" on audit_logs

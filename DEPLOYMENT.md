@@ -33,6 +33,7 @@
    - `supabase/migrations/0017_institutional_profiles_and_storage.sql`
    - `supabase/migrations/0018_super_admin_protection.sql`
    - `supabase/migrations/0019_documents_module.sql`
+   - `supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -41,8 +42,13 @@ solo necesitás correr las migraciones que todavía no ejecutaste, siempre respe
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
-de documentos), pero igual conviene correr las 19 migraciones en orden para mantener el historial
+de documentos), pero igual conviene correr las 20 migraciones en orden para mantener el historial
 consistente.
+
+**Nota sobre 0020:** agrega dos políticas de lectura a `audit_logs` para que usuarios con alcance de
+subsede o de cuartel (no solo `informatica_r4` o roles regionales) puedan ver la actividad de su
+propio alcance en la nueva pantalla `/auditoria`. No agrega columnas ni cambia la escritura de la
+bitácora.
 
 **Nota sobre 0019:** agrega el módulo de Documentos: columnas `description`/`subsede_id`/`profile_id`
 en `documents`, la tabla `document_versions` (historial simple, se archiva la ruta anterior del

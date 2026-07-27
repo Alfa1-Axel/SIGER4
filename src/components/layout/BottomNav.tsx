@@ -4,8 +4,10 @@ import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
 export function BottomNav() {
-  const { isAdmin } = useAuth()
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+  const { isAdmin, roles } = useAuth()
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => (!item.adminOnly || isAdmin) && !item.hideForRoles?.some((r) => roles.includes(r)),
+  )
 
   return (
     <nav className="bottom-nav">

@@ -4,8 +4,10 @@ import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
 export function Sidebar() {
-  const { profile, signOut, isAdmin } = useAuth()
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+  const { profile, signOut, isAdmin, roles } = useAuth()
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => (!item.adminOnly || isAdmin) && !item.hideForRoles?.some((r) => roles.includes(r)),
+  )
 
   return (
     <aside className="app-sidebar">

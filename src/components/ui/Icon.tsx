@@ -21,6 +21,7 @@ const PATHS: Record<string, string> = {
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   plus: 'M12 5v14M5 12h14',
   wifiOff: 'M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.58 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01',
+  file: 'M14 3v5a1 1 0 0 0 1 1h5M6 21h10a2 2 0 0 0 2-2V8l-6-6H8a2 2 0 0 0-2 2v2M4 12h4M4 16h6',
 }
 
 export function Icon({ name, size = 20 }: IconProps) {

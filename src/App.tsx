@@ -20,6 +20,8 @@ import { UsuarioFormPage } from './pages/UsuarioFormPage'
 import { UsuarioDetallePage } from './pages/UsuarioDetallePage'
 import { NotificacionesPage } from './pages/NotificacionesPage'
 import { NotificacionFormPage } from './pages/NotificacionFormPage'
+import { DocumentosPage } from './pages/DocumentosPage'
+import { DocumentoFormPage } from './pages/DocumentoFormPage'
 
 export default function App() {
   return (
@@ -48,6 +50,9 @@ export default function App() {
         <Route path="/usuarios/:id" element={<AdminRoute><UsuarioDetallePage /></AdminRoute>} />
         <Route path="/notificaciones" element={<ProtectedRoute><NotificacionesPage /></ProtectedRoute>} />
         <Route path="/notificaciones/nueva" element={<ProtectedRoute><NotificacionFormPage /></ProtectedRoute>} />
+        <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
+        <Route path="/documentos/nuevo" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
+        <Route path="/documentos/:id/editar" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

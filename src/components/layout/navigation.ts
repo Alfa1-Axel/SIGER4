@@ -10,6 +10,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building' },
   { to: '/escuela', label: 'Escuela', icon: 'school' },
   { to: '/reportes', label: 'Reportes', icon: 'chart' },
+  { to: '/documentos', label: 'Documentos', icon: 'file' },
   { to: '/usuarios', label: 'Usuarios', icon: 'user', adminOnly: true },
   { to: '/ajustes', label: 'Ajustes', icon: 'settings' },
 ]

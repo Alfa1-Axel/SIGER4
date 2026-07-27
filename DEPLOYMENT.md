@@ -31,6 +31,8 @@
    - `supabase/migrations/0015_notifications_subsede_and_audit.sql`
    - `supabase/migrations/0016_attendance_intervention_audit.sql`
    - `supabase/migrations/0017_institutional_profiles_and_storage.sql`
+   - `supabase/migrations/0018_super_admin_protection.sql`
+   - `supabase/migrations/0019_documents_module.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -38,14 +40,27 @@
 solo necesitás correr las migraciones que todavía no ejecutaste, siempre respetando el orden
 numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpers.sql` ya incluyen
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
-vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional), pero
-igual conviene correr las 17 migraciones en orden para mantener el historial consistente.
+vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
+de documentos), pero igual conviene correr las 19 migraciones en orden para mantener el historial
+consistente.
 
-**Nota sobre 0017:** crea dos buckets de Supabase Storage (`station-media`, `avatars`) vía SQL
-(`insert into storage.buckets ...`). Después de correr la migración, andá a **Storage** en el
-dashboard de Supabase y confirmá que ambos buckets aparecen listados y marcados como públicos — si
-por algún motivo el `insert` no tomó efecto (poco común, pero el dashboard es la fuente de verdad),
-podés crearlos manualmente ahí con esos mismos nombres, marcados como público.
+**Nota sobre 0019:** agrega el módulo de Documentos: columnas `description`/`subsede_id`/`profile_id`
+en `documents`, la tabla `document_versions` (historial simple, se archiva la ruta anterior del
+archivo cada vez que se reemplaza), políticas RLS actualizadas y el bucket de Storage `documents`
+(a diferencia de `station-media`/`avatars`, este bucket se crea **privado** — `public: false` — así
+que la descarga/visualización se hace siempre con una signed URL, nunca con una URL pública directa).
+Después de correr la migración, confirmá en **Storage** que el bucket `documents` aparece listado y
+marcado como **privado**.
+
+**Nota sobre 0018:** hace que `informatica_r4` sea superadmin real: puede editar cualquier cosa,
+incluido su propio rol/alcance/cuartel/región. Antes, la función `is_informatica_r4()` trataba a
+`informatica_r4` e `integrante_informatica` como equivalentes, lo que permitía que un
+`integrante_informatica` modificara o degradara el rol/alcance de un usuario `informatica_r4`, y que
+ninguno de los dos pudiera cambiar su propio alcance ni siquiera cuando correspondía. Se agrega
+`is_super_admin()` (true solo para `informatica_r4`) y dos triggers que bloquean cualquier
+modificación de `user_roles`/`user_scopes` de un perfil `informatica_r4` —o el otorgamiento del rol
+por primera vez— a menos que quien la haga sea también `informatica_r4`. No agrega columnas ni
+requiere pasos manuales en el dashboard.
 
 **Nota sobre 0015:** agrega `subsede_id` a `notifications` y el trigger de auditoría que esa tabla
 no tenía. Corre como una sola query (no hay enum nuevo, a diferencia de 0009/0010).

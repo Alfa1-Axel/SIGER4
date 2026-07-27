@@ -111,3 +111,16 @@ as $$
 $$;
 
 comment on function my_region_ids() is 'IDs de region a los que el usuario actual tiene acceso via user_scopes o su perfil.';
+
+create or replace function my_subsede_ids()
+returns setof uuid
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select subsede_id from user_scopes
+  where profile_id = current_profile_id() and subsede_id is not null;
+$$;
+
+comment on function my_subsede_ids() is 'IDs de subsede a los que el usuario actual tiene acceso via user_scopes (scope_type = subsede).';

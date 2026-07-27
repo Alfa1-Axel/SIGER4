@@ -97,18 +97,19 @@ create table if not exists user_roles (
 
 comment on table user_roles is 'Roles institucionales asignados a cada perfil. informatica_r4 es el rol administrador maximo.';
 
-create type scope_type as enum ('system', 'region', 'station', 'escuela');
+create type scope_type as enum ('system', 'region', 'subsede', 'station', 'escuela');
 
 create table if not exists user_scopes (
   id uuid primary key default gen_random_uuid(),
   profile_id uuid not null references profiles(id) on delete cascade,
   scope_type scope_type not null,
   region_id uuid references regions(id) on delete cascade,
+  subsede_id uuid references subsedes(id) on delete cascade,
   station_id uuid references stations(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
-comment on table user_scopes is 'Alcance de datos visible para cada perfil: sistema completo, una region, un cuartel o la escuela regional.';
+comment on table user_scopes is 'Alcance de datos visible para cada perfil: sistema completo, una region, una subsede, un cuartel o la escuela regional.';
 
 -- ============================================================
 -- AUDITORIA
@@ -202,12 +203,29 @@ create table if not exists courses (
   end_date date,
   progress_percent integer not null default 0 check (progress_percent between 0 and 100),
   enrolled_count integer not null default 0,
+  attendees_count integer,
+  hours integer,
+  days integer,
+  speakers text,
   instructor_profile_id uuid references profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 comment on table courses is 'Cursos y capacitaciones de la Escuela Regional.';
+comment on column courses.attendees_count is 'Cantidad de asistentes reales (asistencia registrada al finalizar), distinto de enrolled_count (inscriptos).';
+comment on column courses.hours is 'Cantidad total de horas catedra del curso/actividad.';
+comment on column courses.days is 'Cantidad de dias que dura el curso/actividad (numero simple, no fechas puntuales).';
+comment on column courses.speakers is 'Disertantes del curso/actividad, texto libre separado por comas. No referencia profiles.';
+
+create table if not exists course_stations (
+  course_id uuid not null references courses(id) on delete cascade,
+  station_id uuid not null references stations(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (course_id, station_id)
+);
+
+comment on table course_stations is 'Cuarteles que participan de un curso/actividad de la Escuela Regional (relacion muchos-a-muchos).';
 
 -- ============================================================
 -- VEHICULOS
@@ -222,6 +240,9 @@ create table if not exists vehicles (
   vehicle_type text not null,
   status vehicle_status not null default 'operativo',
   plate text,
+  water_capacity_liters integer,
+  crew_capacity integer,
+  observations text,
   last_service_at date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -229,6 +250,9 @@ create table if not exists vehicles (
 );
 
 comment on table vehicles is 'Vehiculos/moviles registrados por cuartel.';
+comment on column vehicles.water_capacity_liters is 'Capacidad de agua en litros (si aplica al tipo de vehiculo).';
+comment on column vehicles.crew_capacity is 'Capacidad de personal/tripulantes (si aplica al tipo de vehiculo).';
+comment on column vehicles.observations is 'Observaciones libres sobre el estado/uso del vehiculo.';
 
 -- ============================================================
 -- GESTION DOCUMENTAL

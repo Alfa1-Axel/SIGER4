@@ -56,13 +56,14 @@ export interface UserRole {
   created_at: string
 }
 
-export type ScopeType = 'system' | 'region' | 'station' | 'escuela'
+export type ScopeType = 'system' | 'region' | 'subsede' | 'station' | 'escuela'
 
 export interface UserScope {
   id: string
   profile_id: string
   scope_type: ScopeType
   region_id: string | null
+  subsede_id: string | null
   station_id: string | null
   created_at: string
 }

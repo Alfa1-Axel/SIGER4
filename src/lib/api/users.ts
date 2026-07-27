@@ -79,6 +79,7 @@ export async function removeRole(roleRowId: string): Promise<void> {
 export interface ScopeInput {
   scope_type: ScopeType
   region_id?: string | null
+  subsede_id?: string | null
   station_id?: string | null
 }
 

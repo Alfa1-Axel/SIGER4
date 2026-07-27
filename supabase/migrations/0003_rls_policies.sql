@@ -23,6 +23,7 @@ alter table notifications enable row level security;
 alter table attendance_summaries enable row level security;
 alter table intervention_summaries enable row level security;
 alter table courses enable row level security;
+alter table course_stations enable row level security;
 alter table vehicles enable row level security;
 alter table documents enable row level security;
 
@@ -49,6 +50,7 @@ create policy "stations_select_scope" on stations
     is_informatica_r4()
     or is_regional_role() and region_id in (select my_region_ids())
     or id in (select my_station_ids())
+    or subsede_id in (select my_subsede_ids())
     or has_role('invitado') and id in (select my_station_ids())
   );
 
@@ -80,6 +82,9 @@ create policy "profiles_select_regional" on profiles
 
 create policy "profiles_select_station_scope" on profiles
   for select using (station_id in (select my_station_ids()));
+
+create policy "profiles_select_subsede_scope" on profiles
+  for select using (station_id in (select id from stations where subsede_id in (select my_subsede_ids())));
 
 create policy "profiles_update_self" on profiles
   for update using (auth_user_id = auth.uid());
@@ -202,6 +207,15 @@ create policy "courses_write_admin_escuela" on courses
   for all using (is_informatica_r4() or is_escuela_role())
   with check (is_informatica_r4() or is_escuela_role());
 
+-- ---------------- course_stations (cuarteles participantes) ----------------
+
+create policy "course_stations_select_authenticated" on course_stations
+  for select using (auth.role() = 'authenticated');
+
+create policy "course_stations_write_admin_escuela" on course_stations
+  for all using (is_informatica_r4() or is_escuela_role())
+  with check (is_informatica_r4() or is_escuela_role());
+
 -- ---------------- vehicles ----------------
 
 create policy "vehicles_select_scope" on vehicles
@@ -209,6 +223,7 @@ create policy "vehicles_select_scope" on vehicles
     is_informatica_r4()
     or station_id in (select my_station_ids())
     or (is_regional_role() and station_id in (select id from stations where region_id in (select my_region_ids())))
+    or station_id in (select id from stations where subsede_id in (select my_subsede_ids()))
   );
 
 create policy "vehicles_write_admin_regional_station" on vehicles

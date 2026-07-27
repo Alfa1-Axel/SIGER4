@@ -39,8 +39,9 @@ begin
       v_region_id := rec.region_id;
     when 'documents' then
       v_region_id := rec.region_id;
+      v_subsede_id := rec.subsede_id;
       v_station_id := rec.station_id;
-      if v_station_id is not null then
+      if v_subsede_id is null and v_station_id is not null then
         select subsede_id into v_subsede_id from stations where id = v_station_id;
       end if;
     when 'user_roles', 'user_scopes' then
@@ -160,4 +161,8 @@ create trigger trg_audit_attendance_summaries
 
 create trigger trg_audit_intervention_summaries
   after insert or update or delete on intervention_summaries
+  for each row execute function audit_row_change();
+
+create trigger trg_audit_document_versions
+  after insert or update or delete on document_versions
   for each row execute function audit_row_change();

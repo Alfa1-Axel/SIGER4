@@ -26,6 +26,7 @@ alter table courses enable row level security;
 alter table course_stations enable row level security;
 alter table vehicles enable row level security;
 alter table documents enable row level security;
+alter table document_versions enable row level security;
 
 -- ---------------- regions ----------------
 
@@ -257,6 +258,8 @@ create policy "documents_select_scope" on documents
     or (region_id is not null and region_id in (select my_region_ids()))
     or (station_id is not null and station_id in (select my_station_ids()))
     or (station_id is not null and station_id in (select id from stations where subsede_id in (select my_subsede_ids())))
+    or (subsede_id is not null and subsede_id in (select my_subsede_ids()))
+    or (profile_id is not null and profile_id = current_profile_id())
   );
 
 create policy "documents_write_admin_regional_station" on documents
@@ -273,4 +276,37 @@ create policy "documents_write_admin_regional_station" on documents
     or (station_id in (select my_station_ids()) and (
       has_role('usuario_carga_cuartel') or has_role('presidente_cuartel') or has_role('secretario_comision')
     ))
+  );
+
+-- ---------------- document_versions ----------------
+
+create policy "document_versions_select_scope" on document_versions
+  for select using (
+    exists (
+      select 1 from documents d
+      where d.id = document_versions.document_id
+      and (
+        is_informatica_r4()
+        or (d.region_id is not null and d.region_id in (select my_region_ids()))
+        or (d.station_id is not null and d.station_id in (select my_station_ids()))
+        or (d.station_id is not null and d.station_id in (select id from stations where subsede_id in (select my_subsede_ids())))
+        or (d.subsede_id is not null and d.subsede_id in (select my_subsede_ids()))
+        or (d.profile_id is not null and d.profile_id = current_profile_id())
+      )
+    )
+  );
+
+create policy "document_versions_write_admin_regional_station" on document_versions
+  for insert with check (
+    exists (
+      select 1 from documents d
+      where d.id = document_versions.document_id
+      and (
+        is_informatica_r4()
+        or is_regional_role()
+        or (d.station_id in (select my_station_ids()) and (
+          has_role('usuario_carga_cuartel') or has_role('presidente_cuartel') or has_role('secretario_comision')
+        ))
+      )
+    )
   );

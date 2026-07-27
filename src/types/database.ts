@@ -173,11 +173,23 @@ export interface Vehicle {
 export interface DocumentRecord {
   id: string
   region_id: string | null
+  subsede_id: string | null
   station_id: string | null
+  profile_id: string | null
   title: string
   category: string
+  description: string | null
   storage_path: string
   uploaded_by_profile_id: string | null
   created_at: string
   updated_at: string
+}
+
+export interface DocumentVersion {
+  id: string
+  document_id: string
+  storage_path: string
+  uploaded_by_profile_id: string | null
+  note: string | null
+  created_at: string
 }

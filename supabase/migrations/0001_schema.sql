@@ -319,9 +319,12 @@ create trigger trg_sync_station_vehicles_count
 create table if not exists documents (
   id uuid primary key default gen_random_uuid(),
   region_id uuid references regions(id) on delete cascade,
+  subsede_id uuid references subsedes(id) on delete cascade,
   station_id uuid references stations(id) on delete cascade,
+  profile_id uuid references profiles(id) on delete cascade,
   title text not null,
   category text not null,
+  description text,
   storage_path text not null,
   uploaded_by_profile_id uuid references profiles(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -329,6 +332,20 @@ create table if not exists documents (
 );
 
 comment on table documents is 'Documentacion institucional (circulares, actas, manuales). storage_path referencia a Supabase Storage.';
+comment on column documents.subsede_id is 'Subsede destino cuando el documento es para toda una subsede.';
+comment on column documents.profile_id is 'Perfil destino cuando el documento es para un usuario especifico.';
+comment on column documents.description is 'Descripcion libre del documento.';
+
+create table if not exists document_versions (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references documents(id) on delete cascade,
+  storage_path text not null,
+  uploaded_by_profile_id uuid references profiles(id) on delete set null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+comment on table document_versions is 'Historial de versiones de un documento: cada fila es un archivo subido previamente. La version vigente es documents.storage_path.';
 
 -- ============================================================
 -- TRIGGERS: updated_at automatico

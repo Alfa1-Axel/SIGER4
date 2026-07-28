@@ -25,3 +25,21 @@ dev-dist
 *.tsbuildinfo
 
 supabase/.temp
+
+# Copias originales de logos en la raiz (fuente de donde se copiaron a
+# public/logos/, que es lo que la app realmente usa) — no hace falta
+# versionarlas dos veces.
+/Logo escuela.png
+/LG INFORMATICA Y ESTADÍSTICA.png
+
+# Salidas generadas/temporales que no deben versionarse (reportes de prueba,
+# capturas, backups de base de datos, exports puntuales).
+*.pdf
+!public/**/*.pdf
+*.bak
+*.backup
+*.dump
+*.sql.gz
+/screenshots/
+/exports/
+*.log

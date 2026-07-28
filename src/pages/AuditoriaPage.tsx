@@ -96,7 +96,7 @@ function AuditLogDetail({ log, lookup }: { log: AuditLogRow; lookup: EntityLooku
   )
 
   return (
-    <div style={{ padding: '12px 16px', background: 'var(--color-surface-alt, #F8FAFC)', borderTop: '1px solid var(--color-border)' }}>
+    <div style={{ padding: '12px 16px', background: 'var(--color-bg-card-soft)', borderTop: '1px solid var(--color-border)' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 10, fontSize: 12, color: 'var(--color-text-secondary)' }}>
         <span>
           <strong>Regional:</strong> {log.region?.name ?? '—'}

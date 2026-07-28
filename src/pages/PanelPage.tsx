@@ -49,7 +49,7 @@ export function PanelPage() {
     <AppShell title="Dashboard">
       <div
         className="card"
-        style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', marginBottom: 16, padding: '16px 20px' }}
+        style={{ background: 'var(--color-primary-dark)', border: 'none', color: '#fff', marginBottom: 16, padding: '16px 20px' }}
       >
         <span className="badge badge-danger" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
           ● Sistema en tiempo real

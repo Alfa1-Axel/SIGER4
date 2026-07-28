@@ -30,6 +30,13 @@
   --color-warning: #d97706;
   --color-danger: #d32f2f;
 
+  --color-badge-success-bg: #dcfce7;
+  --color-badge-success-text: #166534;
+  --color-badge-warning-bg: #fef3c7;
+  --color-badge-warning-text: #92400e;
+  --color-badge-info-bg: #e0e7ff;
+  --color-badge-info-text: var(--color-secondary);
+
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 
@@ -48,25 +55,47 @@
   color-scheme: light;
 }
 
-/* SIGER4 no tiene selector de tema propio: es un sistema institucional con
-   una identidad visual fija (clara/rosada, según el design system SIGER4
-   Core), no una app con modo oscuro opcional. Antes este bloque seguía
-   @media (prefers-color-scheme: dark) y oscurecía todo el sistema apenas el
-   SO/navegador del usuario tenía dark mode activado (default común en
-   Windows/mobile), lo que rompía la fidelidad visual sin que nadie lo haya
-   pedido. Se deja solo el override manual data-theme="dark" por si en el
-   futuro se agrega un toggle explícito.
-   TODO(fase futura): si se agrega un toggle de tema real, retomar esta
-   paleta oscura como punto de partida. */
+/* Modo oscuro: elección manual del usuario (botón sol/luna en el header, ver
+   useTheme.ts) — nunca se activa solo por prefers-color-scheme del sistema
+   operativo. Paleta basada en slate (misma familia que --color-secondary,
+   #0f172a, del design system SIGER4 Core) en vez de negro puro, para que
+   cards/inputs/tablas mantengan jerarquía visual y buen contraste. El rojo
+   institucional se aclara levemente para no perder legibilidad sobre fondos
+   oscuros. */
 :root[data-theme='dark'] {
-  --color-bg-app: #120a09;
-  --color-bg-card: #1c1210;
-  --color-bg-card-soft: #241512;
-  --color-border: #3a201d;
+  --color-primary: #ef5350;
+  --color-primary-dark: #d32f2f;
+  --color-primary-darker: #ffcdd2;
+  --color-primary-light: #7f1d1d;
+  --color-primary-lighter: #4c1d1d;
 
-  --color-text-primary: #f5f0ee;
-  --color-text-secondary: #c9bdb9;
-  --color-text-muted: #8a7a76;
+  --color-secondary-light: #cbd5e1;
+  --color-secondary-lighter: #64748b;
+
+  --color-bg-app: #0b1220;
+  --color-bg-card: #16213a;
+  --color-bg-card-soft: #1c2b4a;
+  --color-border: #2c3e5e;
+
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #b6c2d4;
+  --color-text-muted: #7f8fa8;
+  --color-text-on-primary: #0b1220;
+
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #ef5350;
+
+  --color-badge-success-bg: #14532d;
+  --color-badge-success-text: #bbf7d0;
+  --color-badge-warning-bg: #78350f;
+  --color-badge-warning-text: #fde68a;
+  --color-badge-info-bg: #1e3a5f;
+  --color-badge-info-text: #bfdbfe;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.45);
+
   color-scheme: dark;
 }
 
@@ -472,13 +501,13 @@ img {
 }
 
 .badge-success {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--color-badge-success-bg);
+  color: var(--color-badge-success-text);
 }
 
 .badge-warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--color-badge-warning-bg);
+  color: var(--color-badge-warning-text);
 }
 
 .badge-danger {
@@ -487,8 +516,8 @@ img {
 }
 
 .badge-info {
-  background: #e0e7ff;
-  color: var(--color-secondary);
+  background: var(--color-badge-info-bg);
+  color: var(--color-badge-info-text);
 }
 
 /* ---------- Progress ---------- */

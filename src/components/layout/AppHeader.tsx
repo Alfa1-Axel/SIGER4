@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
+import { useTheme } from '../../hooks/useTheme'
 import { fetchNotificationsForProfile } from '../../lib/api/notifications'
 
 interface AppHeaderProps {
@@ -12,6 +13,7 @@ interface AppHeaderProps {
 export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
@@ -49,6 +51,15 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         <strong style={{ fontSize: 14 }}>{title}</strong>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          className="btn btn-icon btn-outlined"
+          aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          onClick={toggleTheme}
+        >
+          <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={18} />
+        </button>
         <button type="button" className="btn btn-icon btn-outlined" aria-label="Buscar">
           <Icon name="search" size={18} />
         </button>

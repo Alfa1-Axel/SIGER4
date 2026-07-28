@@ -2,6 +2,7 @@ import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
 import { requestAiAnalysis } from '../api/aiAnalysis'
 import { getCachedAnalysis, setCachedAnalysis } from '../api/aiAnalysisCache'
 import { recordAuditEvent } from '../api/audit'
+import { truncateDecimals } from '../format'
 import {
   fetchAttendanceReportData,
   fetchCoursesReportData,
@@ -28,8 +29,9 @@ export interface ReportRunContext {
   profileId?: string | null
 }
 
+// Nunca redondea: 89.94 se muestra "89.9%", no "90%" ni "89%".
 function pct(value: number): string {
-  return `${value.toFixed(1)}%`
+  return `${truncateDecimals(value, 1)}%`
 }
 
 const MAX_RANKING_ITEMS = 5
@@ -126,7 +128,7 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
   if (rows.length) {
     const chart = renderBarChartToDataUrl(
       rows.map((r) => r.station?.name ?? '—'),
-      rows.map((r) => Math.round(r.attendance_rate)),
+      rows.map((r) => truncateDecimals(r.attendance_rate, 1)),
       'Tasa de asistencia (%) por cuartel',
       '%',
     )
@@ -150,7 +152,7 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
   const attendanceRanking = topBottomRanking(rows.map((r) => ({ label: r.station?.name ?? '—', value: r.attendance_rate })))
   await runAiAnalysis(builder, 'asistencias', 'Reporte de Asistencias', ctx, {
     registros: rows.length,
-    asistencia_promedio_pct: rows.length ? Number(average.toFixed(1)) : null,
+    asistencia_promedio_pct: rows.length ? truncateDecimals(average, 1) : null,
     cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
     ranking_asistencia_mas_alta: attendanceRanking.top,
     ranking_asistencia_mas_baja: attendanceRanking.bottom,
@@ -388,7 +390,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   await runAiAnalysis(builder, 'cuartel_general', `Reporte General — ${data.station.name}`, ctx, {
     cuartel: data.station.name,
     estado: data.station.status,
-    asistencia_promedio_pct: data.attendance.length ? Number(avgAttendance.toFixed(1)) : null,
+    asistencia_promedio_pct: data.attendance.length ? truncateDecimals(avgAttendance, 1) : null,
     total_intervenciones: totalInterventions,
     vehiculos: data.vehicles.length,
   }, data.attendance.length > 0 || totalInterventions > 0 || data.vehicles.length > 0)
@@ -443,7 +445,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
     const labels = Array.from(byStation.keys())
     const values = labels.map((name) => {
       const list = byStation.get(name) ?? []
-      return Math.round(list.reduce((sum, v) => sum + v, 0) / list.length)
+      return truncateDecimals(list.reduce((sum, v) => sum + v, 0) / list.length, 1)
     })
     const chart = renderBarChartToDataUrl(labels, values, 'Asistencia promedio (%) por cuartel', '%')
     if (chart) builder.addBarChartImage(chart)
@@ -458,7 +460,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
 
   await runAiAnalysis(builder, 'regional_consolidado', 'Reporte Regional Consolidado', ctx, {
     cuarteles: data.stations.length,
-    asistencia_promedio_pct: data.attendance.length ? Number(avgAttendance.toFixed(1)) : null,
+    asistencia_promedio_pct: data.attendance.length ? truncateDecimals(avgAttendance, 1) : null,
     total_intervenciones: totalInterventions,
     cursos: data.courses.length,
     vehiculos: data.vehicles.length,

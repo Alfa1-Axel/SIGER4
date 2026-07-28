@@ -7,6 +7,7 @@ import { fetchStations } from '../lib/api/stations'
 import type { DashboardSummary } from '../lib/api/dashboard'
 import type { Station } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
+import { formatPercent } from '../lib/format'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -77,7 +78,7 @@ export function PanelPage() {
           <div className="kpi-value">
             {loading || summary?.averageAttendanceRate == null
               ? '—'
-              : `${Math.round(summary.averageAttendanceRate)}%`}
+              : formatPercent(summary.averageAttendanceRate)}
           </div>
         </div>
         <div className="kpi-card">

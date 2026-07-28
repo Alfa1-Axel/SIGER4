@@ -47,12 +47,15 @@ export function PanelPage() {
 
   return (
     <AppShell title="Dashboard">
-      <div className="card" style={{ background: 'var(--color-primary)', color: '#fff', marginBottom: 20 }}>
+      <div
+        className="card"
+        style={{ background: 'var(--color-primary)', border: 'none', color: '#fff', marginBottom: 16, padding: '16px 20px' }}
+      >
         <span className="badge badge-danger" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
           ● Sistema en tiempo real
         </span>
-        <h1 style={{ margin: '10px 0 4px', fontSize: 20 }}>Resumen Regional</h1>
-        <p style={{ margin: '0 0 16px', fontSize: 13, opacity: 0.9 }}>
+        <h1 style={{ margin: '8px 0 4px', fontSize: 19 }}>Resumen Regional</h1>
+        <p style={{ margin: '0 0 14px', fontSize: 13, opacity: 0.9 }}>
           Gestión centralizada de recursos, personal y alertas críticas para la región.
         </p>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -63,12 +66,12 @@ export function PanelPage() {
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ marginBottom: 16 }}>
           <p className="field-error">{error}</p>
         </div>
       )}
 
-      <div className="card-grid" style={{ marginBottom: 24 }}>
+      <div className="card-grid" style={{ marginBottom: 20 }}>
         <div className="kpi-card">
           <div className="kpi-label">Cuarteles</div>
           <div className="kpi-value">{loading ? '—' : summary?.stationsCount ?? 0}</div>
@@ -101,7 +104,7 @@ export function PanelPage() {
           Ver todos
         </Link>
       </div>
-      <div className="card" style={{ marginBottom: 24, padding: 0 }}>
+      <div className="card" style={{ marginBottom: 20, padding: 0 }}>
         {loading && <div className="empty-state">Cargando cuarteles…</div>}
         {!loading && stations.length === 0 && (
           <div className="empty-state">Todavía no hay cuarteles cargados en Supabase.</div>

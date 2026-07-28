@@ -48,6 +48,16 @@
   color-scheme: light;
 }
 
+/* SIGER4 no tiene selector de tema propio: es un sistema institucional con
+   una identidad visual fija (clara/rosada, según el design system SIGER4
+   Core), no una app con modo oscuro opcional. Antes este bloque seguía
+   @media (prefers-color-scheme: dark) y oscurecía todo el sistema apenas el
+   SO/navegador del usuario tenía dark mode activado (default común en
+   Windows/mobile), lo que rompía la fidelidad visual sin que nadie lo haya
+   pedido. Se deja solo el override manual data-theme="dark" por si en el
+   futuro se agrega un toggle explícito.
+   TODO(fase futura): si se agrega un toggle de tema real, retomar esta
+   paleta oscura como punto de partida. */
 :root[data-theme='dark'] {
   --color-bg-app: #120a09;
   --color-bg-card: #1c1210;
@@ -58,20 +68,6 @@
   --color-text-secondary: #c9bdb9;
   --color-text-muted: #8a7a76;
   color-scheme: dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --color-bg-app: #120a09;
-    --color-bg-card: #1c1210;
-    --color-bg-card-soft: #241512;
-    --color-border: #3a201d;
-
-    --color-text-primary: #f5f0ee;
-    --color-text-secondary: #c9bdb9;
-    --color-text-muted: #8a7a76;
-    color-scheme: dark;
-  }
 }
 
 * {
@@ -163,7 +159,7 @@ img {
   flex: 1;
   padding: 16px;
   padding-bottom: 24px;
-  max-width: 1200px;
+  max-width: 1440px;
   width: 100%;
   margin: 0 auto;
 }
@@ -267,8 +263,9 @@ img {
 }
 
 .sidebar-link.active {
-  background: var(--color-primary);
-  color: var(--color-text-on-primary);
+  background: var(--color-primary-lighter);
+  color: var(--color-primary-darker);
+  font-weight: 700;
 }
 
 .sidebar-footer {
@@ -294,34 +291,38 @@ img {
 
 .card {
   background: var(--color-bg-card-soft);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px 20px;
   box-shadow: var(--shadow-card);
 }
 
 .card-solid {
   background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px 20px;
   box-shadow: var(--shadow-card);
 }
 
 .card-grid {
   display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .kpi-card {
-  background: var(--color-bg-card-soft);
-  border-radius: var(--radius-lg);
-  padding: 18px;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
 }
 
 .kpi-value {
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
+  color: var(--color-secondary);
 }
 
 .kpi-label {

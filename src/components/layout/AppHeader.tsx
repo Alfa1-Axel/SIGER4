@@ -60,9 +60,6 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         >
           <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={18} />
         </button>
-        <button type="button" className="btn btn-icon btn-outlined" aria-label="Buscar">
-          <Icon name="search" size={18} />
-        </button>
         <button
           type="button"
           className="btn btn-icon btn-outlined"

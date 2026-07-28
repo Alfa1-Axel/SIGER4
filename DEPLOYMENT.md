@@ -321,6 +321,35 @@ En **Project Settings → Environment Variables**, agregar (en Production, Previ
    aviso de "Sin conexión" en el header.
 5. En DevTools → Application → Service Workers, confirmar que `sw.js` está activo.
 
+### 2.6 Checklist post-deploy (probar en la URL real de Vercel, no en localhost)
+
+Recorrido rápido para confirmar que el deploy quedó bien, antes de dar acceso a nadie más:
+
+- [ ] **Abrir la URL de Vercel** (`https://<proyecto>.vercel.app` o tu dominio propio) y confirmar
+      que carga el login sin errores en blanco.
+- [ ] **Login con tu usuario `informatica_r4`**: entrar con email/contraseña reales y confirmar que
+      redirige al Panel.
+- [ ] **Navegación en PC**: confirmar que se ve el sidebar lateral fijo, sin bottom nav.
+- [ ] **Navegación en mobile** (o DevTools → toggle device toolbar): confirmar que el sidebar
+      desaparece y aparece el botón hamburguesa; que abre el drawer, que se cierra al elegir una
+      opción, tocar afuera, o el botón "X".
+- [ ] **Carga de un cuartel**: crear un cuartel de prueba (o editar uno existente), subir logo/
+      portada, confirmar que el lightbox de imágenes abre al hacer click.
+- [ ] **Reportes PDF**: generar al menos un reporte (ej. "Reporte de Vehículos") y confirmar que se
+      descarga un PDF real, en horizontal, con logos institucionales y pie de página.
+      - [ ] Si el bloque de IA del PDF dice "IA no disponible por límite de cuota de Gemini...",
+            **eso es esperado si la cuota gratuita de Gemini está agotada** — no es un error del
+            sistema, ver la nota sobre el error 429 en la sección 1.7. El PDF se generó igual.
+- [ ] **Documentos**: subir un documento de prueba, confirmar que aparece en el listado y que se
+      puede abrir/descargar (usa una signed URL del bucket privado `documents`).
+- [ ] **Notificaciones**: confirmar que aparece al menos una notificación automática después de
+      alguna de las acciones anteriores (ej. "Nuevo documento") en `/notificaciones`.
+- [ ] **Auditoría**: entrar a `/auditoria` y confirmar que las acciones anteriores (alta de
+      cuartel, de documento, etc.) aparecen en la bitácora con texto humanizado (no JSON crudo).
+- [ ] **Consola del navegador sin errores críticos**: abrir DevTools → Console mientras se navega
+      por las pantallas anteriores. Warnings de PWA/Workbox son normales; errores rojos de red
+      (403/500) hacia Supabase no lo son.
+
 ## 3. Estado de los módulos y deuda técnica conocida
 
 Resumen de qué está construido y qué queda pendiente, para no asumir por el nombre de una tabla o
@@ -356,5 +385,14 @@ columna que un módulo ya tiene flujo real detrás:
 - Nunca subir el archivo `.env` con claves reales al repositorio (ya está en `.gitignore`).
 - La clave `anon` de Supabase es pública por diseño; la seguridad real la dan las políticas RLS,
   por eso es fundamental no desactivarlas ni usar la `service_role` key en el frontend.
+- **Vercel solo necesita 2 variables**: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Nunca
+  configures ahí `GEMINI_API_KEY` ni `SUPABASE_SERVICE_ROLE_KEY` — el prefijo `VITE_` hace que
+  Vite empaquete la variable en el bundle del navegador (público), así que cualquier variable sin
+  ese prefijo no llega al frontend igual, pero por claridad y para evitar errores futuros, esas dos
+  claves no deben existir en la configuración de Vercel bajo ningún nombre.
+- `GEMINI_API_KEY` vive **solo** como secreto de la Edge Function `analyze-report` en Supabase
+  (`supabase secrets set GEMINI_API_KEY=...`), nunca en Vercel ni en el repositorio.
+- La Edge Function `analyze-report` exige un usuario autenticado real (valida el JWT recibido
+  contra Supabase Auth) antes de llamar a Gemini — no es invocable de forma anónima.
 - Antes de producción, revisar con el Dpto. de Informática y Estadística que las políticas de
   `audit_logs`, `documents` y `profiles` cumplan los requisitos de privacidad institucional.

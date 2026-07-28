@@ -29,6 +29,20 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
       usan rutas absolutas, así que solo se puede confirmar del todo en el dominio final, no en
       `localhost`.
 
+### Antes de dar acceso a usuarios reales (no solo de prueba)
+
+- [ ] **Datos de prueba limpiados** si corriste el sistema en modo de pruebas: ver sección 1.6bis
+      y `supabase/cleanup_test_data.sql` (plantilla a revisar y customizar, no un script para
+      correr a ciegas).
+- [ ] **Sesión de pruebas funcionales conjunta** hecha al menos una vez sobre los flujos
+      principales (login, alta de cuartel, carga de asistencia/intervención/personal, generación
+      de un reporte PDF) — este proyecto la fue difiriendo módulo a módulo; antes de dar acceso a
+      personal real es el momento de hacerla.
+- [ ] **Roles y alcances reales asignados** a cada usuario invitado (no dejar cuentas con rol
+      `informatica_r4` de más, ni usuarios sin alcance asignado).
+- [ ] **Contraseña de base de datos y claves de Supabase/Gemini guardadas en un lugar seguro**
+      (no en el repositorio, no en chats).
+
 ## 1. Supabase
 
 ### 1.1 Crear el proyecto
@@ -179,11 +193,30 @@ recién agregado dentro de la misma transacción que lo creó, por eso todo lo q
    `user_scopes` con `scope_type = 'station'` y el `station_id` correspondiente.
 
 ### 1.6 Cargar datos iniciales reales
-- La migración ya inserta la fila de `regions` para "Regional 4" (code `R4`).
-- Cargar cuarteles reales desde **Table Editor → stations** o vía SQL Editor, usando el `region_id`
-  de la Regional 4.
-- Los cursos, vehículos, resúmenes de asistencia/intervenciones y notificaciones se cargan de la
-  misma forma hasta que existan formularios de alta en la app (próxima fase).
+- La migración ya inserta la fila de `regions` para "Regional 4" (code `R4`) y sus 3 subsedes base
+  (Las Varillas, Luque, Río Primero).
+- Cuarteles, vehículos, personal, cursos, asistencias, intervenciones, documentos y usuarios ya se
+  cargan desde la propia app (cada módulo tiene su formulario de alta) — no hace falta cargarlos a
+  mano por SQL Editor salvo que prefieras un alta masiva puntual.
+
+### 1.6bis Limpiar datos de prueba antes de pasar a producción
+
+Si cargaste datos de prueba mientras desarrollabas/probabas SIGER4 y ahora vas a empezar a usarlo
+con cuarteles y personal reales, `supabase/cleanup_test_data.sql` es una plantilla de limpieza —
+**no un script para correr a ciegas**. Instrucciones completas dentro del archivo; en resumen:
+
+1. Abrí el archivo y reemplazá `'admin@tudominio.com'` por tu email real en los lugares indicados.
+2. Corré primero la **Sección 0** (una serie de `select count(*)`) en el SQL Editor y confirmá que
+   los números de "a borrar" tienen sentido — no debería aparecer nada que quieras conservar.
+3. Si ya tenés cuarteles o usuarios reales que no son de prueba, agregalos a las exclusiones antes
+   de seguir.
+4. Recién ahí corré la **Sección 2** (el borrado), que ya viene envuelta en `begin;`/`commit;` para
+   poder hacer `rollback;` si los números finales no cuadran.
+
+El script conserva siempre: tu perfil/rol/alcance de administrador, la fila de `regions` con
+code `R4`, y las 3 subsedes (`LV`, `LQ`, `RP`) — nunca toca estructura, RLS, ni migraciones. No
+borra archivos de Storage (`station-media`, `avatars`, `documents`): esos se limpian a mano desde
+el dashboard, ver la Sección 4 del script para el detalle.
 
 ### 1.7 Análisis IA de reportes (Edge Function)
 
@@ -205,9 +238,14 @@ de IA simplemente muestra un mensaje de "no disponible" en vez de un análisis.
    ```
    supabase secrets set GEMINI_API_KEY=tu-clave-de-gemini
    ```
-5. Desplegar la función:
+5. Desplegar la función (correr esto de nuevo cada vez que cambie
+   `supabase/functions/analyze-report/index.ts`):
    ```
    supabase functions deploy analyze-report
+   ```
+   Si no instalaste el CLI globalmente, usá `npx` en su lugar:
+   ```
+   npx supabase functions deploy analyze-report
    ```
 6. Verificar en el dashboard de Supabase, **Edge Functions → analyze-report**, que quedó desplegada
    y que el secreto `GEMINI_API_KEY` figura en **Edge Functions → Secrets**.

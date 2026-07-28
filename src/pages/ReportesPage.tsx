@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { AiDisclaimer } from '../components/ui/AiDisclaimer'
 import { recordAuditEvent } from '../lib/api/audit'
 import { createNotification } from '../lib/api/notifications'
 import { fetchRegions } from '../lib/api/regions'
@@ -234,23 +233,6 @@ export function ReportesPage() {
             <h3 style={{ margin: '8px 0 0', fontSize: 14 }}>{report.label}</h3>
           </button>
         ))}
-      </div>
-
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <Icon name="magic" size={18} />
-          <h2 className="section-title">Asistente Institucional de Análisis</h2>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Este módulo utiliza inteligencia artificial para asistir en la interpretación de reportes
-          institucionales. Puede resumir datos, detectar tendencias, destacar puntos relevantes, señalar
-          posibles alertas y redactar conclusiones iniciales. El análisis se genera automáticamente al crear
-          un reporte, siempre que la función de IA esté configurada correctamente.
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
-          Si la función de IA no está disponible, el reporte se genera igualmente sin análisis automático.
-        </p>
-        <AiDisclaimer />
       </div>
     </AppShell>
   )

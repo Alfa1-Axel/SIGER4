@@ -609,15 +609,6 @@ img {
   background: var(--color-border);
 }
 
-.ai-disclaimer {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  font-style: italic;
-  border-top: 1px dashed var(--color-border);
-  padding-top: 8px;
-  margin-top: 12px;
-}
-
 .offline-banner {
   background: var(--color-secondary);
   color: #fff;

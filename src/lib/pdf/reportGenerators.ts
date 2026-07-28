@@ -1,7 +1,4 @@
 import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
-import { requestAiAnalysis } from '../api/aiAnalysis'
-import { getCachedAnalysis, setCachedAnalysis } from '../api/aiAnalysisCache'
-import { recordAuditEvent } from '../api/audit'
 import { truncateDecimals } from '../format'
 import {
   fetchAttendanceReportData,
@@ -32,70 +29,6 @@ export interface ReportRunContext {
 // Nunca redondea: 89.94 se muestra "89.9%", no "90%" ni "89%".
 function pct(value: number): string {
   return `${truncateDecimals(value, 1)}%`
-}
-
-const MAX_RANKING_ITEMS = 5
-
-// Resumen compacto para el payload que se manda a Gemini: en vez de una fila
-// por cada registro (que en una regional grande puede ser un JSON enorme y
-// consume cuota/tokens sin necesidad), se manda solo el ranking de los
-// valores mas altos y mas bajos — alcanza para que la IA comente extremos y
-// tendencias sin tener que leer la tabla completa (que igual ya esta en el
-// PDF, visible para el lector humano).
-function topBottomRanking(
-  items: { label: string; value: number }[],
-): { top: { label: string; value: number }[]; bottom: { label: string; value: number }[]; omitted: number } {
-  if (items.length <= MAX_RANKING_ITEMS * 2) {
-    return { top: items.slice().sort((a, b) => b.value - a.value), bottom: [], omitted: 0 }
-  }
-  const sorted = items.slice().sort((a, b) => b.value - a.value)
-  return {
-    top: sorted.slice(0, MAX_RANKING_ITEMS),
-    bottom: sorted.slice(-MAX_RANKING_ITEMS),
-    omitted: items.length - MAX_RANKING_ITEMS * 2,
-  }
-}
-
-const NO_DATA_FALLBACK = 'No hay datos suficientes en este reporte para generar un análisis con IA.'
-
-// Pide el análisis a la Edge Function (o usa el fallback si no está disponible)
-// y lo agrega al PDF, dejando registro en auditoría del intento.
-async function runAiAnalysis(
-  builder: ReportBuilder,
-  reportKey: ReportKey,
-  reportLabel: string,
-  ctx: ReportRunContext,
-  summary: Record<string, unknown>,
-  hasData: boolean,
-) {
-  if (!hasData) {
-    builder.addAiAnalysisSection(null, NO_DATA_FALLBACK)
-    return
-  }
-
-  const profileId = ctx.profileId ?? null
-  const cached = getCachedAnalysis(reportKey, ctx.filters, profileId)
-  const result =
-    cached ??
-    (await requestAiAnalysis({
-      reportKey,
-      reportLabel,
-      scopeLabel: ctx.scopeLabel,
-      periodLabel: ctx.periodLabel,
-      summary,
-    }))
-  if (!cached) setCachedAnalysis(reportKey, ctx.filters, profileId, result)
-
-  builder.addAiAnalysisSection(
-    result.available && result.analysis ? result.analysis : null,
-    result.reason ?? 'IA no disponible. El reporte se generará igualmente sin análisis automático.',
-  )
-
-  await recordAuditEvent({
-    action: 'analisis_ia_reporte',
-    tableName: 'reports',
-    reason: `${reportLabel} · ${ctx.scopeLabel} · ${ctx.periodLabel} · ${result.available ? (cached ? 'reutilizado de cache' : 'generado') : 'no disponible'}`,
-  }).catch(() => undefined)
 }
 
 export async function generateAttendanceReport(ctx: ReportRunContext) {
@@ -148,16 +81,6 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
     'Detalle',
     [55, 40, 45, 'auto', 'auto', 'auto'],
   )
-
-  const attendanceRanking = topBottomRanking(rows.map((r) => ({ label: r.station?.name ?? '—', value: r.attendance_rate })))
-  await runAiAnalysis(builder, 'asistencias', 'Reporte de Asistencias', ctx, {
-    registros: rows.length,
-    asistencia_promedio_pct: rows.length ? truncateDecimals(average, 1) : null,
-    cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
-    ranking_asistencia_mas_alta: attendanceRanking.top,
-    ranking_asistencia_mas_baja: attendanceRanking.bottom,
-    cuarteles_no_incluidos_en_ranking: attendanceRanking.omitted,
-  }, rows.length > 0)
 
   return builder.finalize()
 }
@@ -218,16 +141,6 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
     [50, 35, 40, 40, 25, 'auto', 'auto', 'auto', 'auto'],
   )
 
-  await runAiAnalysis(builder, 'intervenciones', 'Reporte de Intervenciones', ctx, {
-    total_intervenciones: total,
-    categorias: Array.from(byCategory.entries()).map(([categoria, cantidad]) => ({ categoria, cantidad })),
-    tipo_predominante: predominantCategory,
-    cuarteles_con_datos: new Set(rows.map((r) => r.station_id)).size,
-    total_personal_involucrado: rows.reduce((sum, r) => sum + r.personnel_count, 0),
-    total_moviles_involucrados: rows.reduce((sum, r) => sum + r.vehicles_count, 0),
-    total_horas_trabajo: totalWorkHours,
-  }, rows.length > 0)
-
   return builder.finalize()
 }
 
@@ -263,19 +176,6 @@ export async function generateCoursesReport(ctx: ReportRunContext) {
     'Detalle',
     [70, 45, 35, 30, 30, 'auto'],
   )
-
-  const coursesByCategory = new Map<string, number>()
-  for (const row of rows) coursesByCategory.set(row.category, (coursesByCategory.get(row.category) ?? 0) + 1)
-  const enrollmentRanking = topBottomRanking(rows.map((c) => ({ label: c.title, value: c.enrolled_count })))
-  await runAiAnalysis(builder, 'cursos', 'Reporte de Cursos y Escuela', ctx, {
-    cursos: rows.length,
-    en_curso: active,
-    finalizados: finished,
-    categorias: Array.from(coursesByCategory.entries()).map(([categoria, cantidad]) => ({ categoria, cantidad })),
-    ranking_inscriptos_mas_alto: enrollmentRanking.top,
-    ranking_inscriptos_mas_bajo: enrollmentRanking.bottom,
-    cursos_no_incluidos_en_ranking: enrollmentRanking.omitted,
-  }, rows.length > 0)
 
   return builder.finalize()
 }
@@ -321,13 +221,6 @@ export async function generateVehiclesReport(ctx: ReportRunContext) {
     'Detalle',
     [55, 40, 30, 40, 35, 'auto'],
   )
-
-  await runAiAnalysis(builder, 'vehiculos', 'Reporte de Vehículos', ctx, {
-    total_vehiculos: rows.length,
-    operativos: operational,
-    en_mantenimiento: maintenance,
-    fuera_de_servicio: outOfService,
-  }, rows.length > 0)
 
   return builder.finalize()
 }
@@ -386,14 +279,6 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
     data.vehicles.map((v) => [v.internal_code, v.vehicle_type, v.status, v.plate ?? '—']),
     'Vehículos',
   )
-
-  await runAiAnalysis(builder, 'cuartel_general', `Reporte General — ${data.station.name}`, ctx, {
-    cuartel: data.station.name,
-    estado: data.station.status,
-    asistencia_promedio_pct: data.attendance.length ? truncateDecimals(avgAttendance, 1) : null,
-    total_intervenciones: totalInterventions,
-    vehiculos: data.vehicles.length,
-  }, data.attendance.length > 0 || totalInterventions > 0 || data.vehicles.length > 0)
 
   return builder.finalize()
 }
@@ -457,14 +342,6 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
     'Cuarteles',
     [65, 50, 45, 'auto'],
   )
-
-  await runAiAnalysis(builder, 'regional_consolidado', 'Reporte Regional Consolidado', ctx, {
-    cuarteles: data.stations.length,
-    asistencia_promedio_pct: data.attendance.length ? truncateDecimals(avgAttendance, 1) : null,
-    total_intervenciones: totalInterventions,
-    cursos: data.courses.length,
-    vehiculos: data.vehicles.length,
-  }, data.stations.length > 0)
 
   return builder.finalize()
 }

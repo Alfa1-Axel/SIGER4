@@ -5,19 +5,19 @@
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
-- [ ] **Migraciones**: las 23 migraciones de `supabase/migrations/` corridas en orden (`0001` a
-      `0023`) en el SQL Editor del proyecto de Supabase real. Ver sección 1.2 para la lista exacta.
+- [ ] **Migraciones**: las 24 migraciones de `supabase/migrations/` corridas en orden (`0001` a
+      `0024`) en el SQL Editor del proyecto de Supabase real. Ver sección 1.2 para la lista exacta.
 - [ ] **RLS activo**: todas las tablas con el ícono de RLS en verde en **Table Editor** (sección 1.3).
-- [ ] **Variables de entorno del frontend**: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`
-      configuradas en Vercel (Production, Preview y Development) — nunca la `service_role`.
-- [ ] **Edge Function `analyze-report` desplegada** (opcional pero recomendado): sin esto, los
-      reportes PDF se generan igual, solo sin análisis de IA. Ver sección 1.7.
-      - [ ] Secreto `GEMINI_API_KEY` configurado.
-      - [ ] `supabase functions deploy analyze-report` corrido después de cualquier cambio en
-            `supabase/functions/analyze-report/index.ts`.
+- [ ] **Variables de entorno del frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y
+      `VITE_VAPID_PUBLIC_KEY` configuradas en Vercel (Production, Preview y Development) — nunca la
+      `service_role` ni la clave privada VAPID.
 - [ ] **Buckets de Storage**: `station-media` y `avatars` (públicos), `documents` (privado) —
       se crean solos al correr las migraciones 0017/0019, pero conviene confirmar en **Storage**
       que existen y tienen la visibilidad correcta.
+- [ ] **Notificaciones push desplegadas** (opcional pero recomendado): claves VAPID generadas,
+      `VAPID_PRIVATE_KEY`/`VAPID_PUBLIC_KEY` como secretos de la Edge Function `send-push`,
+      `VITE_VAPID_PUBLIC_KEY` en el frontend, función desplegada. Ver sección 1.8. Sin esto, el
+      sistema sigue funcionando igual con las notificaciones internas (`/notificaciones`).
 - [ ] **Al menos un usuario `informatica_r4` creado** (sección 1.5), para poder administrar el
       sistema apenas esté desplegado.
 - [ ] **Build/lint/audit locales sin errores nuevos**: `npm run build`, `npm run lint`,
@@ -40,7 +40,7 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
       personal real es el momento de hacerla.
 - [ ] **Roles y alcances reales asignados** a cada usuario invitado (no dejar cuentas con rol
       `informatica_r4` de más, ni usuarios sin alcance asignado).
-- [ ] **Contraseña de base de datos y claves de Supabase/Gemini guardadas en un lugar seguro**
+- [ ] **Contraseña de base de datos y claves de Supabase guardadas en un lugar seguro**
       (no en el repositorio, no en chats).
 
 ## 1. Supabase
@@ -80,6 +80,7 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
    - `supabase/migrations/0021_personnel_module.sql`
    - `supabase/migrations/0022_intervention_summaries_operational_fields.sql`
    - `supabase/migrations/0023_automatic_notifications.sql`
+   - `supabase/migrations/0024_push_subscriptions.sql`
 3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
@@ -89,8 +90,16 @@ numérico. Si es un proyecto Supabase nuevo, `0001_schema.sql` y `0002_rls_helpe
 la versión final del esquema (subsedes, roles simplificados, alcance de subsede, campos de
 vehículos/cursos, contexto territorial de auditoría, notificaciones, perfil institucional, módulo
 de documentos, personal/dotación por cuartel, campos operativos de intervenciones, notificaciones
-automáticas), pero igual conviene correr las 23 migraciones en orden para mantener el historial
-consistente.
+automáticas, suscripciones push), pero igual conviene correr las 24 migraciones en orden para
+mantener el historial consistente.
+
+**Nota sobre 0024:** agrega la tabla `push_subscriptions` (suscripciones Web Push por perfil/
+dispositivo, ver sección 1.8), su auditoría, y agrega `notifications` a la publicación
+`supabase_realtime` (necesario para que el frontend detecte en vivo las notificaciones que crean los
+triggers automáticos de 0023 y dispare el push correspondiente). Si tu proyecto ya tenía
+`notifications` agregada a esa publicación por otro motivo, el `alter publication ... add table`
+va a fallar con "already member of publication" — en ese caso simplemente saltear esa línea y
+correr el resto de la migración.
 
 **Nota sobre 0023:** agrega notificaciones automáticas (además de las manuales existentes) para:
 curso nuevo, documento nuevo, cambio de estado de cuartel/vehículo/personal, y carga de un resumen
@@ -218,78 +227,87 @@ code `R4`, y las 3 subsedes (`LV`, `LQ`, `RP`) — nunca toca estructura, RLS, n
 borra archivos de Storage (`station-media`, `avatars`, `documents`): esos se limpian a mano desde
 el dashboard, ver la Sección 4 del script para el detalle.
 
-### 1.7 Análisis IA de reportes (Edge Function)
+### 1.7 Análisis con IA (fase futura, no activa)
 
-El módulo de Reportes (`/reportes`) genera PDFs reales y, al final de cada uno, intenta agregar un
-análisis institucional breve generado con IA (Gemini) a partir de los datos agregados del reporte.
-Esto requiere desplegar la Edge Function `analyze-report` incluida en `supabase/functions/`. Si no
-la desplegás, o no configurás la clave, **los reportes igual se generan sin romperse** — el bloque
-de IA simplemente muestra un mensaje de "no disponible" en vez de un análisis.
+El módulo de Reportes (`/reportes`) genera los PDFs de forma 100% local (KPIs, tablas, gráficos y
+resumen ejecutivo), sin ninguna llamada a servicios de IA. La integración con Gemini que existía
+antes se desactivó por falta de cuota/presupuesto (la API devolvía error 429 de forma recurrente) y
+el frontend ya no la invoca ni depende de ella.
 
-1. Instalar el CLI de Supabase si no lo tenés: `npm install -g supabase` (o usar `npx supabase`).
-2. Autenticarte y vincular el proyecto (una sola vez):
-   ```
-   supabase login
-   supabase link --project-ref TU-PROJECT-REF
-   ```
-   (El `project-ref` es el ID que aparece en la URL del proyecto en el dashboard de Supabase.)
-3. Conseguir una API key gratuita de Gemini en https://aistudio.google.com/app/apikey.
-4. Configurar la clave como secreto de la función (nunca va en `.env` del frontend):
-   ```
-   supabase secrets set GEMINI_API_KEY=tu-clave-de-gemini
-   ```
-5. Desplegar la función (correr esto de nuevo cada vez que cambie
-   `supabase/functions/analyze-report/index.ts`):
-   ```
-   supabase functions deploy analyze-report
-   ```
-   Si no instalaste el CLI globalmente, usá `npx` en su lugar:
-   ```
-   npx supabase functions deploy analyze-report
-   ```
-6. Verificar en el dashboard de Supabase, **Edge Functions → analyze-report**, que quedó desplegada
-   y que el secreto `GEMINI_API_KEY` figura en **Edge Functions → Secrets**.
+La Edge Function `supabase/functions/analyze-report/index.ts` sigue en el repositorio pero
+**no se usa ni hace falta desplegarla**. Queda como base para una posible fase futura si en algún
+momento se dispone de presupuesto para una cuota de IA estable.
 
-No hace falta ninguna variable nueva en `.env`/Vercel para esto — la función se invoca desde el
-frontend con `supabase.functions.invoke('analyze-report', ...)`, usando las mismas
-`VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` que ya tenés configuradas, y la función valida que
-quien la llama sea un usuario autenticado real antes de consultar a Gemini.
+### 1.8 Notificaciones push (Web Push API)
 
-Cada intento de análisis (exitoso o no disponible) queda registrado en `audit_logs` con la acción
-`analisis_ia_reporte`.
+Además de las notificaciones internas (`/notificaciones`, siempre activas), SIGER4 puede enviar
+notificaciones push reales del sistema operativo/navegador. Es opcional: si no se configura, el
+sistema sigue funcionando exactamente igual, solo sin push.
 
-**Modelo de Gemini usado:** `gemini-2.0-flash` (nivel gratuito, vigente). El modelo anterior,
-`gemini-1.5-flash`, fue dado de baja por Google y devolvía error 404 en cada llamada — si el
-análisis dejó de funcionar de un momento a otro sin cambios de tu parte, esa es la causa más común.
-Si Google vuelve a cambiar los modelos disponibles, no hace falta re-desplegar la función: alcanza
-con `supabase secrets set GEMINI_MODEL=nombre-del-modelo-vigente` (la función lee el nombre del
-modelo desde ese secreto en cada llamada).
+**Arquitectura:** el frontend dispara el push inmediatamente después de que se crea una fila nueva
+en `notifications` — ya sea porque el propio frontend la creó (formulario manual de
+`/notificaciones/nueva`, confirmación de "reporte generado") o porque la creó un trigger automático
+de Postgres (curso nuevo, documento nuevo, cambio de estado, carga de asistencia/intervención — ver
+migración 0023). Para detectar estas últimas sin que el frontend tenga que estar en la pantalla que
+las originó, `src/components/NotificationPushBridge.tsx` mantiene una suscripción Realtime a
+inserts en `notifications` durante toda la sesión (montada una sola vez en `App.tsx`), respetando
+el mismo alcance que ya define RLS para esa tabla. No se usa un trigger de Postgres llamando a la
+Edge Function directamente (pg_net): la lógica de decisión y reintento queda del lado del cliente,
+que ya sabe mostrar la notificación en pantalla.
 
-**Diagnóstico si el análisis sigue sin funcionar:** abrí la consola del navegador (F12) en
-`/reportes` al generar un reporte. Si el análisis falla, el frontend loguea un
-`[SIGER4] Análisis IA no disponible` con un `code` (`auth`, `config`, `payload`, `quota`,
-`gemini_request`, `gemini_response`), una `categoria` en texto plano explicando qué significa ese
-código, el `modelo` usado, y un `detail` con el mensaje técnico exacto — nunca incluye la API key.
-`config` casi siempre es API key inválida/sin permisos o nombre de modelo incorrecto; `auth` es un
-problema de sesión del usuario, no de la IA en sí.
+**Piezas:**
+- `supabase/migrations/0024_push_subscriptions.sql`: tabla `push_subscriptions` (endpoint, claves
+  del navegador, perfil dueño), RLS (cada usuario solo ve/crea/borra sus propias suscripciones), y
+  agrega `notifications` a la publicación `supabase_realtime`.
+- `src/sw.ts`: service worker custom (ver nota de `injectManifest` más abajo) con los listeners
+  `push` (muestra la notificación del sistema) y `notificationclick` (enfoca/abre la app en la URL
+  indicada por el payload).
+- `src/hooks/usePushNotifications.ts`: pide permiso, suscribe el navegador (`pushManager.subscribe`)
+  y guarda la suscripción en Supabase. Si el navegador no soporta push, o el usuario no acepta el
+  permiso, el hook expone ese estado sin romper nada más.
+- `src/pages/AjustesPage.tsx` ("Mi Perfil"): botón para activar/desactivar notificaciones push.
+- `supabase/functions/send-push/index.ts`: Edge Function que recibe `{title, body, url, tag,
+  profileId|regionId|subsedeId|stationId}`, resuelve las suscripciones del alcance indicado, y
+  envía el push real con la librería `web-push` usando las claves VAPID. Limpia automáticamente las
+  suscripciones que el navegador ya invalidó (404/410).
+- `src/components/NotificationPushBridge.tsx`: dispara `send-push` para cada notificación nueva, y
+  reproduce un sonido corto (Web Audio API) si la app está abierta — nunca es la única alerta, el
+  push del sistema operativo funciona igual si la app está cerrada.
 
-**Error 429 (`code: "quota"`) — límite de cuota/rate limit de Gemini:** significa que se agotó la
-cuota gratuita de la API key configurada (o se superó el rate limit de requests por minuto), **no**
-que algo esté roto en SIGER4. El PDF se sigue generando normalmente, solo sin el análisis de IA —
-se muestra "IA no disponible por límite de cuota de Gemini. El reporte se generó correctamente sin
-análisis automático." Esto **no se soluciona re-desplegando la función ni cambiando código**.
-Opciones:
-- Esperar a que se renueve la cuota (el nivel gratuito de Gemini se resetea periódicamente).
-- Revisar los límites vigentes en https://ai.dev/rate-limit.
-- Cambiar a otra API key/proyecto de Google AI Studio con cuota disponible
-  (`supabase secrets set GEMINI_API_KEY=nueva-clave`, sin re-desplegar).
-- Activar facturación (billing) en el proyecto de Google Cloud si corresponde, para subir de nivel
-  de cuota.
-- Reducir la cantidad de llamadas: SIGER4 ya cachea en el navegador (localStorage) los análisis
-  exitosos por reporte + filtros + usuario + día, así que generar el mismo reporte varias veces el
-  mismo día no vuelve a consultar a Gemini. Los payloads enviados también están recortados a
-  resúmenes agregados (KPIs, rankings top/bottom, totales) en vez de mandar la tabla completa,
-  para no gastar cuota de más en reportes con muchos registros.
+**Nota sobre injectManifest:** el service worker pasó de `generateSW` (autogenerado por
+`vite-plugin-pwa`, sin forma de agregar listeners propios) a `strategies: 'injectManifest'`, con el
+código fuente en `src/sw.ts`. Esto es necesario para poder escuchar `push`/`notificationclick`; el
+precache y el runtime caching (Supabase/imágenes) que antes vivían en la config de `vite.config.ts`
+ahora viven como código explícito dentro de `sw.ts`, con el mismo comportamiento de antes.
+
+**Generar las claves VAPID** (una sola vez, se reutilizan siempre):
+```
+npx web-push generate-vapid-keys
+```
+Esto imprime un par de claves pública/privada. Guardalas: la privada no se puede recuperar después.
+
+**Configurar:**
+1. Clave pública, en el frontend (`.env`/Vercel), variable `VITE_VAPID_PUBLIC_KEY` — es pública por
+   diseño, viaja al navegador en `pushManager.subscribe()`.
+2. Claves como secretos de la Edge Function (nunca en el frontend ni en el repositorio):
+   ```
+   supabase secrets set VAPID_PUBLIC_KEY=tu-clave-publica
+   supabase secrets set VAPID_PRIVATE_KEY=tu-clave-privada
+   supabase secrets set VAPID_SUBJECT=mailto:informatica@r4bomberos.org.ar
+   ```
+   (`VAPID_SUBJECT` es un contacto de referencia exigido por el estándar Web Push, no una clave
+   secreta — se puede omitir, hay un valor por defecto en el código.)
+3. Desplegar la función:
+   ```
+   supabase functions deploy send-push
+   ```
+
+**Seguridad:** la clave privada VAPID vive únicamente como secreto de `send-push`. El payload push
+nunca incluye datos sensibles (solo título, cuerpo genérico y una URL de destino). `send-push`
+exige un usuario autenticado real (igual que `analyze-report`) y usa la `service_role` key
+internamente solo para resolver qué perfiles están dentro del alcance recibido — nunca la expone al
+cliente. Las políticas RLS de `push_subscriptions` y `notifications` no cambian: cada usuario sigue
+viendo y recibiendo solo lo que ya podía ver antes.
 
 ## 2. Vercel
 
@@ -307,6 +325,7 @@ Opciones:
 En **Project Settings → Environment Variables**, agregar (en Production, Preview y Development):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
+- `VITE_VAPID_PUBLIC_KEY` (opcional — solo si activaste notificaciones push, ver sección 1.8)
 
 ### 2.4 Deploy
 1. Hacer clic en "Deploy". Vercel construye el proyecto y publica una URL `https://<proyecto>.vercel.app`.
@@ -336,14 +355,17 @@ Recorrido rápido para confirmar que el deploy quedó bien, antes de dar acceso 
 - [ ] **Carga de un cuartel**: crear un cuartel de prueba (o editar uno existente), subir logo/
       portada, confirmar que el lightbox de imágenes abre al hacer click.
 - [ ] **Reportes PDF**: generar al menos un reporte (ej. "Reporte de Vehículos") y confirmar que se
-      descarga un PDF real, en horizontal, con logos institucionales y pie de página.
-      - [ ] Si el bloque de IA del PDF dice "IA no disponible por límite de cuota de Gemini...",
-            **eso es esperado si la cuota gratuita de Gemini está agotada** — no es un error del
-            sistema, ver la nota sobre el error 429 en la sección 1.7. El PDF se generó igual.
+      descarga un PDF real, en horizontal, con logos institucionales, KPIs, tablas, gráficos,
+      resumen ejecutivo local y pie de página.
 - [ ] **Documentos**: subir un documento de prueba, confirmar que aparece en el listado y que se
       puede abrir/descargar (usa una signed URL del bucket privado `documents`).
 - [ ] **Notificaciones**: confirmar que aparece al menos una notificación automática después de
       alguna de las acciones anteriores (ej. "Nuevo documento") en `/notificaciones`.
+- [ ] **Notificaciones push** (si configuraste las claves VAPID, sección 1.8): entrar a
+      "Mi Perfil" (`/ajustes`), activar las notificaciones push, aceptar el permiso del navegador,
+      y confirmar que se guardó una fila en `push_subscriptions`. Generar una notificación (manual
+      o automática) y confirmar que llega el push del sistema aunque la pestaña esté en segundo
+      plano o cerrada.
 - [ ] **Auditoría**: entrar a `/auditoria` y confirmar que las acciones anteriores (alta de
       cuartel, de documento, etc.) aparecen en la bitácora con texto humanizado (no JSON crudo).
 - [ ] **Consola del navegador sin errores críticos**: abrir DevTools → Console mientras se navega
@@ -374,11 +396,14 @@ columna que un módulo ya tiene flujo real detrás:
   confirmación de reporte generado. Pendiente como mejora futura: una opción de "notificar a
   todos" sin alcance específico (hoy no soportada por RLS — un registro sin alcance solo lo ve
   `informatica_r4`).
+- **Notificaciones push**: ✅ completo pero opcional (migración 0024, Edge Function `send-push`,
+  ver sección 1.8). Sin configurar las claves VAPID, el sistema sigue funcionando igual con las
+  notificaciones internas.
 - **Auditoría**: ✅ completo (`/auditoria`, filtros, detalle humanizado campo por campo en vez de
   JSON crudo, permisos por alcance).
-- **Reportes PDF + análisis con IA**: ✅ completo (6 tipos de reporte, PDFs reales en horizontal,
-  gráficos, análisis con Gemini con cache local y manejo claro de errores de cuota — ver sección
-  1.7). Sigue dependiendo de la disponibilidad de cuota gratuita de Gemini.
+- **Reportes PDF**: ✅ completo (6 tipos de reporte, PDFs reales en horizontal, logos, KPIs, tablas,
+  gráficos y resumen ejecutivo generado localmente, sin dependencias externas). El análisis con IA
+  no está activo — ver sección 1.7.
 
 ## 4. Notas de seguridad
 
@@ -386,13 +411,9 @@ columna que un módulo ya tiene flujo real detrás:
 - La clave `anon` de Supabase es pública por diseño; la seguridad real la dan las políticas RLS,
   por eso es fundamental no desactivarlas ni usar la `service_role` key en el frontend.
 - **Vercel solo necesita 2 variables**: `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. Nunca
-  configures ahí `GEMINI_API_KEY` ni `SUPABASE_SERVICE_ROLE_KEY` — el prefijo `VITE_` hace que
-  Vite empaquete la variable en el bundle del navegador (público), así que cualquier variable sin
-  ese prefijo no llega al frontend igual, pero por claridad y para evitar errores futuros, esas dos
-  claves no deben existir en la configuración de Vercel bajo ningún nombre.
-- `GEMINI_API_KEY` vive **solo** como secreto de la Edge Function `analyze-report` en Supabase
-  (`supabase secrets set GEMINI_API_KEY=...`), nunca en Vercel ni en el repositorio.
-- La Edge Function `analyze-report` exige un usuario autenticado real (valida el JWT recibido
-  contra Supabase Auth) antes de llamar a Gemini — no es invocable de forma anónima.
+  configures ahí `SUPABASE_SERVICE_ROLE_KEY` — el prefijo `VITE_` hace que Vite empaquete la
+  variable en el bundle del navegador (público), así que cualquier variable sin ese prefijo no
+  llega al frontend igual, pero por claridad y para evitar errores futuros, esa clave no debe
+  existir en la configuración de Vercel bajo ningún nombre.
 - Antes de producción, revisar con el Dpto. de Informática y Estadística que las políticas de
   `audit_logs`, `documents` y `profiles` cumplan los requisitos de privacidad institucional.

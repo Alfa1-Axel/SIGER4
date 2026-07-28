@@ -56,6 +56,11 @@ begin
     when 'attendance_summaries', 'intervention_summaries' then
       v_station_id := rec.station_id;
       select region_id, subsede_id into v_region_id, v_subsede_id from stations where id = rec.station_id;
+    when 'push_subscriptions' then
+      select region_id, station_id into v_region_id, v_station_id from profiles where id = rec.profile_id;
+      if v_station_id is not null then
+        select subsede_id into v_subsede_id from stations where id = v_station_id;
+      end if;
     else
       -- Tablas sin relacion territorial directa conocida (ej. otras futuras):
       -- se deja null en las 3 columnas en vez de asumir una forma incorrecta.

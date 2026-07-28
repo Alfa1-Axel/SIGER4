@@ -24,6 +24,12 @@ export default [
         URL: 'readonly',
         KeyboardEvent: 'readonly',
         localStorage: 'readonly',
+        AudioContext: 'readonly',
+        BufferSource: 'readonly',
+        atob: 'readonly',
+        Notification: 'readonly',
+        NotificationPermission: 'readonly',
+        PushSubscription: 'readonly',
       },
     },
     plugins: {
@@ -35,6 +41,27 @@ export default [
       ...tsPlugin.configs.recommended.rules,
       ...reactHooks.configs.recommended.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['src/sw.ts'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+      globals: {
+        self: 'readonly',
+        ServiceWorkerGlobalScope: 'readonly',
+        WindowClient: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },

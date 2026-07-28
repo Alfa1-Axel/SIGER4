@@ -4,6 +4,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ImagePicker } from '../components/ui/ImagePicker'
 import { useAuth } from '../hooks/useAuth'
+import { usePushNotifications } from '../hooks/usePushNotifications'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
@@ -11,6 +12,7 @@ import { supabase } from '../lib/supabaseClient'
 
 export function AjustesPage() {
   const { profile, user, roles, signOut, refreshProfile } = useAuth()
+  const push = usePushNotifications(profile?.id)
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [phone, setPhone] = useState(profile?.phone ?? '')
@@ -181,6 +183,47 @@ export function AjustesPage() {
           {changingPassword ? 'Cambiando…' : 'Cambiar contraseña'}
         </button>
       </form>
+
+      <div className="section-header">
+        <h2 className="section-title">Notificaciones push</h2>
+      </div>
+      <div className="card-solid" style={{ marginBottom: 20 }}>
+        {push.status === 'unsupported' && (
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Tu navegador no soporta notificaciones push. Las notificaciones internas siguen funcionando
+            normalmente desde /notificaciones.
+          </p>
+        )}
+        {push.status === 'unconfigured' && (
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Las notificaciones push todavía no están configuradas en este sistema.
+          </p>
+        )}
+        {push.status === 'ready' && (
+          <>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+              Recibí avisos del sistema aunque no tengas SIGER4 abierto: cursos nuevos, documentos,
+              cambios de estado y notificaciones importantes.
+            </p>
+            {push.subscribed ? (
+              <button type="button" className="btn btn-outlined btn-block" disabled={push.loading} onClick={() => push.disable()}>
+                {push.loading ? 'Desactivando…' : 'Desactivar notificaciones push'}
+              </button>
+            ) : (
+              <button type="button" className="btn btn-primary btn-block" disabled={push.loading} onClick={() => push.enable()}>
+                {push.loading ? 'Activando…' : 'Activar notificaciones push'}
+              </button>
+            )}
+            {push.error && <p className="field-error">{push.error}</p>}
+            {push.permission === 'denied' && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: 8 }}>
+                Bloqueaste los permisos de notificaciones para este sitio. Para activarlas, habilitalas desde la
+                configuración del navegador.
+              </p>
+            )}
+          </>
+        )}
+      </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 className="section-title" style={{ marginBottom: 10 }}>

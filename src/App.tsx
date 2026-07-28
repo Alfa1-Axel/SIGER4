@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
+import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminRoute } from './components/layout/AdminRoute'
 import { LoginPage } from './pages/LoginPage'
@@ -28,6 +29,7 @@ import { PersonalFormPage } from './pages/PersonalFormPage'
 export default function App() {
   return (
     <AuthProvider>
+      <NotificationPushBridge />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/registro" element={<RegistroPage />} />

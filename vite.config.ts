@@ -7,6 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff2}'],
+      },
       includeAssets: ['icons/siger4-icon.svg', 'logos/logo-escuela.png', 'logos/logo-informatica.png'],
       manifest: {
         id: '/',
@@ -31,30 +37,6 @@ export default defineConfig({
             sizes: '1254x1254',
             type: 'image/png',
             purpose: 'maskable',
-          },
-        ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff2}'],
-        navigateFallback: '/index.html',
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.hostname.endsWith('supabase.co'),
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'siger4-supabase-cache',
-              networkTimeoutSeconds: 8,
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            urlPattern: ({ request }) => request.destination === 'image',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'siger4-image-cache',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
           },
         ],
       },

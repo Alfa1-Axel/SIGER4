@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { Footer } from '../components/layout/Footer'
 
 export function LoginPage() {
   const { session, loading, signIn } = useAuth()
+  const location = useLocation()
+  const redirectMessage = (location.state as { message?: string } | null)?.message ?? null
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -62,6 +64,7 @@ export function LoginPage() {
             />
           </div>
 
+          {redirectMessage && !error && <p className="field-error">{redirectMessage}</p>}
           {error && <p className="field-error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>

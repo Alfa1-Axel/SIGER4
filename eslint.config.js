@@ -5,7 +5,7 @@ import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 
 export default [
-  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'supabase/functions/**'] },
+  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'supabase/functions/**', 'public/**'] },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
@@ -30,6 +30,7 @@ export default [
         Notification: 'readonly',
         NotificationPermission: 'readonly',
         PushSubscription: 'readonly',
+        crypto: 'readonly',
       },
     },
     plugins: {

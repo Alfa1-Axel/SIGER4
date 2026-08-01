@@ -5,7 +5,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import { addRole, addScope, inviteProfile } from '../lib/api/users'
+import { addRole, addScope, createUserAccount } from '../lib/api/users'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 import type { Region, ScopeType, Station, Subsede } from '../types/database'
@@ -38,7 +38,13 @@ export function UsuarioFormPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null)
+
+  function generatePassword(): string {
+    const bytes = new Uint8Array(12)
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16)
+  }
 
   useEffect(() => {
     let active = true
@@ -82,14 +88,17 @@ export function UsuarioFormPage() {
       return
     }
 
+    const password = generatePassword()
+
     setSubmitting(true)
     try {
-      const profile = await inviteProfile({
+      const profile = await createUserAccount({
         full_name: fullName,
         email,
         rank: rank || null,
         region_id: regionId || null,
         station_id: stationId || null,
+        password,
       })
 
       await Promise.all(selectedRoles.map((role) => addRole(profile.id, role)))
@@ -101,33 +110,33 @@ export function UsuarioFormPage() {
         station_id: scopeType === 'station' ? scopeStationId || null : null,
       })
 
-      const link = `${window.location.origin}/registro?email=${encodeURIComponent(email)}`
-      setInviteLink(link)
+      setCreatedPassword(password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos invitar al usuario.')
+      setError(err instanceof Error ? err.message : 'No pudimos crear el usuario.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  if (inviteLink) {
+  if (createdPassword) {
     return (
       <AppShell title="Nuevo Usuario">
-        <h1 className="page-title">Usuario invitado</h1>
+        <h1 className="page-title">Usuario creado</h1>
         <p className="page-subtitle">
-          El perfil de <strong>{fullName}</strong> ya está creado. Compartile este enlace para que
-          active su cuenta eligiendo su propia contraseña:
+          La cuenta de <strong>{fullName}</strong> ({email}) ya está activa. Compartile esta
+          contraseña temporal por un canal seguro (no queda guardada en ningún lado del sistema) y
+          pedile que la cambie apenas ingrese:
         </p>
         <div className="card-solid" style={{ marginBottom: 20, wordBreak: 'break-all' }}>
-          <code>{inviteLink}</code>
+          <code>{createdPassword}</code>
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => navigator.clipboard.writeText(inviteLink)}
+            onClick={() => navigator.clipboard.writeText(createdPassword)}
           >
-            Copiar enlace
+            Copiar contraseña
           </button>
           <button type="button" className="btn btn-outlined" onClick={() => navigate('/usuarios')}>
             Volver al listado
@@ -141,7 +150,8 @@ export function UsuarioFormPage() {
     <AppShell title="Nuevo Usuario">
       <h1 className="page-title">Nuevo Usuario</h1>
       <p className="page-subtitle">
-        Cargá los datos institucionales. La persona activa su cuenta eligiendo su propia contraseña.
+        Cargá los datos institucionales. Se genera una contraseña temporal para que la persona
+        ingrese por primera vez.
       </p>
 
       <form onSubmit={handleSubmit} className="card-solid">
@@ -262,7 +272,7 @@ export function UsuarioFormPage() {
         {error && <p className="field-error">{error}</p>}
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Invitando…' : 'Invitar usuario'}
+          {submitting ? 'Creando…' : 'Crear usuario'}
         </button>
       </form>
     </AppShell>

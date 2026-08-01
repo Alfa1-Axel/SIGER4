@@ -61,6 +61,7 @@ export function NotificationPushBridge() {
             regionId: notification.region_id,
             subsedeId: notification.subsede_id,
             stationId: notification.station_id,
+            notificationId: notification.id,
           })
         },
       )

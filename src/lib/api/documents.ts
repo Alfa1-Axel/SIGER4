@@ -10,6 +10,16 @@ export async function fetchDocuments(): Promise<DocumentRecord[]> {
   return (data ?? []) as DocumentRecord[]
 }
 
+// Borra documentos que quedaron con storage_path='pending' (carga nunca
+// completada) hace mas de 24hs. Solo informatica_r4 puede ejecutarlo (RPC
+// SECURITY DEFINER, ver migración 0033_storage_hardening.sql). Devuelve
+// cuántos se borraron.
+export async function cleanupPendingDocuments(): Promise<number> {
+  const { data, error } = await supabase.rpc('cleanup_pending_documents')
+  if (error) throw error
+  return (data ?? 0) as number
+}
+
 export async function fetchDocumentById(id: string): Promise<DocumentRecord | null> {
   const { data, error } = await supabase.from('documents').select('*').eq('id', id).single()
   if (error) return null

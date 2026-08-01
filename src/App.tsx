@@ -4,7 +4,6 @@ import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminRoute } from './components/layout/AdminRoute'
 import { LoginPage } from './pages/LoginPage'
-import { RegistroPage } from './pages/RegistroPage'
 import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
 import { CuartelDetallePage } from './pages/CuartelDetallePage'
@@ -32,7 +31,6 @@ export default function App() {
       <NotificationPushBridge />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/registro" element={<RegistroPage />} />
         <Route path="/panel" element={<ProtectedRoute><PanelPage /></ProtectedRoute>} />
         <Route path="/cuarteles" element={<ProtectedRoute><CuartelesPage /></ProtectedRoute>} />
         <Route path="/cuarteles/nuevo" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />

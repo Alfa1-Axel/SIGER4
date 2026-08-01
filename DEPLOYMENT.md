@@ -379,9 +379,10 @@ columna que un módulo ya tiene flujo real detrás:
 
 - **Cuarteles, subsedes, regiones**: ✅ completo (alta/edición, logo/portada con recorte y
   lightbox para ampliar, filtros, permisos por rol).
-- **Usuarios, roles y alcances (scopes)**: ✅ completo (invitación por link, roles múltiples,
-  alcances region/subsede/cuartel/escuela/sistema, protección de superadmin `informatica_r4`
-  reflejada tanto en RLS como en la UI de `/usuarios/:id`).
+- **Usuarios, roles y alcances (scopes)**: ✅ completo (alta directa por Informática R4 vía Edge
+  Function `admin-create-user` — ver sección 5.3 —, roles múltiples, alcances
+  region/subsede/cuartel/escuela/sistema, protección de superadmin `informatica_r4` reflejada tanto
+  en RLS como en la UI de `/usuarios/:id`).
 - **Vehículos, Personal/Dotación, Asistencias, Intervenciones**: ✅ completo (alta/edición desde
   el detalle de cuartel, con permisos visuales por rol además de RLS). Intervenciones incluye
   franja horaria, personal/móviles involucrados y horas de trabajo (migración 0022) para poder
@@ -417,3 +418,115 @@ columna que un módulo ya tiene flujo real detrás:
   existir en la configuración de Vercel bajo ningún nombre.
 - Antes de producción, revisar con el Dpto. de Informática y Estadística que las políticas de
   `audit_logs`, `documents` y `profiles` cumplan los requisitos de privacidad institucional.
+
+## 5. Endurecimiento de seguridad (2026-07) — migraciones 0025 a 0033
+
+Tanda de hardening post-lanzamiento: corrige riesgos de seguridad/producción sin agregar módulos
+nuevos. Ver el resumen de riesgos corregidos/documentados en el mensaje de la sesión que la generó;
+esta sección deja el checklist operativo para aplicarla.
+
+### 5.1 Migraciones nuevas a correr (en orden, después de 0024)
+
+- `0025_push_authorization_and_dedup.sql` — autorización server-side de `send-push`, tabla
+  `push_send_log`, rate limit.
+- `0026_enforce_is_active.sql` — `is_active=false` bloquea acceso real (antes solo visual).
+- `0027_rls_territorial_write_scope.sql` — escritura de roles regionales acotada a su propia
+  región.
+- `0028_profile_self_edit_lockdown_and_email.sql` — auto-edición de perfil restringida a
+  `full_name/phone/position/avatar_url`; email normalizado + único.
+- `0029_retire_self_signup_invite_flow.sql` — retira el auto-registro (`link_invited_profile`).
+  **Requiere desplegar la Edge Function `admin-create-user` (ver 5.2) antes o inmediatamente
+  después** — sin ella no hay forma de dar de alta usuarios nuevos.
+- `0030_audit_logs_controlled_insert.sql` — reemplaza el insert libre en `audit_logs` por la RPC
+  `record_manual_audit_event`.
+- `0031_security_definer_execute_grants.sql` — cierra EXECUTE público en funciones
+  `SECURITY DEFINER`.
+- `0032_data_consistency_constraints.sql` — constraints territoriales y de negocio. **Antes de
+  correrla en un proyecto con datos reales**, revisar si `documents`/`notifications`/`user_scopes`
+  tienen filas con alcance ambiguo o vacío (la migración intenta resolverlas automáticamente, pero
+  puede fallar visiblemente en `documents_single_scope` si hay documentos históricos sin ningún
+  alcance ni `uploaded_by_profile_id`; en ese caso, resolver esas filas a mano antes de reintentar).
+- `0033_storage_hardening.sql` — límites de tamaño/MIME en los buckets, RPC
+  `cleanup_pending_documents`.
+
+### 5.2 Edge Functions a (re)desplegar
+
+```
+supabase functions deploy send-push
+supabase functions deploy admin-create-user
+```
+
+`admin-create-user` es una función nueva: no necesita secretos adicionales a los que ya usa
+`send-push` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, ya configurados como
+secretos del proyecto). No requiere ninguna variable nueva en Vercel.
+
+### 5.3 Cambio de flujo: alta de usuarios
+
+El auto-registro (`/registro`) fue retirado por seguridad (riesgo de account takeover: un atacante
+podía registrarse con el email de un futuro invitado antes que la persona real). Ahora todo alta de
+usuario se hace desde `/usuarios/nuevo` (solo informatica_r4/integrante_informatica), que genera una
+contraseña temporal y crea la cuenta ya activa. **Comunicar este cambio de flujo al Dpto. de
+Informática antes del deploy** si ya venían usando enlaces de invitación con usuarios reales:
+cualquier perfil con `auth_user_id` null que quede de ese flujo anterior requiere resolución manual
+(ver comentario en `0029_retire_self_signup_invite_flow.sql`).
+
+### 5.4 Checklist de configuración viva (no se puede confirmar solo desde el repo)
+
+**Supabase → Authentication → Providers → Email:**
+- [ ] "Confirm email" — revisar si conviene activarlo (con el flujo de alta por admin ya no es
+      estrictamente necesario para evitar el account-takeover que motivó 0029, pero sigue siendo
+      buena práctica general).
+- [ ] Política de contraseña (longitud mínima, complejidad) acorde a la institución.
+- [ ] Rate limits de Auth (intentos de login, recuperación de contraseña) — valores por defecto de
+      Supabase suelen ser razonables, pero confirmar que no quedaron deshabilitados.
+- [ ] CAPTCHA en login/signup si el proyecto lo soporta y el volumen de usuarios lo justifica.
+- [ ] MFA — evaluar si corresponde exigirlo para roles administrativos (`informatica_r4`).
+
+**Supabase → Database:**
+- [ ] Backups automáticos activos (Point-in-Time Recovery si el plan lo incluye).
+- [ ] Confirmar que las 9 migraciones nuevas (0025-0033) corrieron sin error, en orden.
+- [ ] `select * from pg_policies where schemaname='public';` — confirmar que las policies
+      reemplazadas (`stations_write_admin_regional`, `attendance_write_*`,
+      `interventions_write_*`, `vehicles_write_*`, `personnel_write_*`, `documents_write_*`,
+      `document_versions_write_*`, `profiles_update_self`, `audit_logs_insert_authenticated` ya no
+      debería existir) quedaron con la definición nueva.
+
+**Supabase → Storage:**
+- [ ] Confirmar `file_size_limit`/`allowed_mime_types` aplicados en `station-media`, `avatars`,
+      `documents` (los aplica 0033, pero verificar en el dashboard tras correrla).
+- [ ] Confirmar que `documents` sigue como bucket privado (`public = false`).
+
+**Supabase → Edge Functions → Logs:**
+- [ ] Revisar logs de `send-push` tras el primer despliegue: confirmar que las respuestas 403
+      (alcance no autorizado) y `duplicate:true` (deduplicación) aparecen como se espera y no hay
+      errores inesperados de la RPC `can_send_push_scope`/`push_send_rate_check`.
+
+**Vercel:**
+- [ ] Confirmar que el header `Content-Security-Policy` de `vercel.json` no rompe ninguna pantalla
+      real (abrir la app en producción y revisar la consola del navegador por errores de CSP —
+      especialmente si se agrega algún dominio externo nuevo en el futuro, hay que sumarlo a
+      `connect-src`/`img-src`/`font-src`).
+- [ ] Deploy previews: confirmar que no quedan expuestos con datos de producción reales si se usan
+      para pruebas (las previews comparten el mismo proyecto Supabase salvo que se configure uno
+      de staging aparte).
+- [ ] Protección de producción (Vercel "Deployment Protection") si corresponde restringir quién
+      puede ver deploys no productivos.
+
+### 5.5 Pendiente para Fase 2 (documentado, no implementado en esta tanda)
+
+- **Self-host de Google Fonts**: `src/styles.css` sigue cargando Inter/JetBrains Mono desde
+  `fonts.googleapis.com` (`@import`). La CSP nueva lo permite explícitamente
+  (`style-src`/`font-src` incluyen los dominios de Google Fonts), pero para offline-first real y
+  para no depender de un tercero, conviene descargar los `.woff2` y sumarlos a `/public/fonts`.
+  No se hizo en esta tanda porque requiere descargar archivos binarios de fuente.
+- **Optimistic locking (`updated_at`/version) en formularios de edición**: no se implementó (ver
+  decisión tomada durante esta tanda). Las tablas con mayor riesgo de "pisada" por edición
+  concurrente son `profiles` (roles/scope), `documents` (alcance) y `stations`. Implementación
+  sugerida: cada formulario de edición guarda el `updated_at` que tenía la fila al abrir el form: al
+  guardar, el `update()` incluye `.eq('updated_at', valorOriginal)` — si la fila ya cambió, el
+  update afecta 0 filas y el frontend puede detectarlo y mostrar "este registro fue modificado por
+  otro usuario, recargá para ver los cambios".
+- **Perfiles huérfanos del flujo de auto-registro retirado**: si el proyecto ya tenía perfiles con
+  `auth_user_id is null` (invitaciones pendientes del flujo viejo), no se resuelven automáticamente
+  — requieren decisión manual (crear la cuenta con `admin-create-user` y fusionar, o borrar el
+  perfil si ya no corresponde).

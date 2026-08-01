@@ -200,13 +200,12 @@ export function UsuarioDetallePage() {
 
       {!profile.auth_user_id && (
         <div className="card" style={{ marginBottom: 20 }}>
-          <span className="badge badge-warning">Pendiente de activación</span>
+          <span className="badge badge-warning">Sin cuenta vinculada</span>
           <p style={{ fontSize: 13, marginTop: 8 }}>
-            Compartile este enlace para que complete su registro:
+            Este perfil quedó de un flujo de invitación retirado por seguridad y no tiene una cuenta
+            de acceso vinculada. Creá un usuario nuevo con estos mismos datos desde "Nuevo usuario"
+            y luego eliminá este perfil, o contactá al Dpto. de Informática si no estás seguro.
           </p>
-          <div className="card-solid" style={{ wordBreak: 'break-all', marginTop: 8 }}>
-            <code>{`${window.location.origin}/registro?email=${encodeURIComponent(profile.email)}`}</code>
-          </div>
         </div>
       )}
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { fetchDocuments } from '../lib/api/documents'
+import { fetchDocuments, cleanupPendingDocuments } from '../lib/api/documents'
 import { getDocumentSignedUrl } from '../lib/api/storage'
 import type { DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -14,6 +14,23 @@ export function DocumentosPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [cleaningUp, setCleaningUp] = useState(false)
+
+  const pendingCount = documents.filter((doc) => doc.storage_path === 'pending').length
+
+  async function handleCleanupPending() {
+    setCleaningUp(true)
+    setError(null)
+    try {
+      const removed = await cleanupPendingDocuments()
+      setDocuments(await fetchDocuments())
+      if (removed === 0) setError('No había documentos pendientes hace más de 24hs para limpiar.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos limpiar los documentos pendientes.')
+    } finally {
+      setCleaningUp(false)
+    }
+  }
 
   useEffect(() => {
     let active = true
@@ -43,6 +60,17 @@ export function DocumentosPage() {
     <AppShell title="Documentos">
       <h1 className="page-title">Documentos</h1>
       <p className="page-subtitle">Documentación institucional: circulares, actas, manuales y más.</p>
+
+      {isAdmin && pendingCount > 0 && (
+        <div className="card" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13 }}>
+            Hay {pendingCount} documento{pendingCount === 1 ? '' : 's'} sin archivo subido (carga interrumpida).
+          </span>
+          <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} disabled={cleaningUp} onClick={handleCleanupPending}>
+            {cleaningUp ? 'Limpiando…' : 'Limpiar pendientes de +24hs'}
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="card" style={{ marginBottom: 20 }}>

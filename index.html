@@ -8,16 +8,7 @@
     <meta name="theme-color" content="#D32F2F" />
     <meta name="description" content="SIGER4 - Sistema Integral de Gestion de la Regional 4 de Bomberos Voluntarios" />
     <title>SIGER4</title>
-    <script>
-      // Aplica el tema guardado antes del primer paint para evitar el
-      // parpadeo claro->oscuro al recargar. Nunca sigue prefers-color-scheme:
-      // el tema es siempre una elección manual del usuario (ver useTheme.ts).
-      try {
-        if (localStorage.getItem('siger4-theme') === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark')
-        }
-      } catch {}
-    </script>
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

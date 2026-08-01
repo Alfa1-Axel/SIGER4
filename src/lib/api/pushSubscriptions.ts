@@ -36,6 +36,11 @@ export interface PushTriggerInput {
   regionId?: string | null
   subsedeId?: string | null
   stationId?: string | null
+  // Id de la fila en "notifications" que origina este push. Obligatorio en la
+  // practica: send-push lo usa para deduplicar server-side (si varias
+  // pestañas/navegadores disparan el mismo push por la misma notificacion,
+  // solo el primer pedido efectivamente envia).
+  notificationId: string
 }
 
 // Dispara el envío del push real via la Edge Function send-push. Se llama

@@ -4,32 +4,25 @@ export interface AuditEntryInput {
   action: string
   tableName: string
   recordId?: string | null
-  oldValue?: Record<string, unknown> | null
   newValue?: Record<string, unknown> | null
   reason?: string | null
 }
 
 // La mayoría de los cambios se auditan automáticamente vía triggers de PostgreSQL
 // (ver supabase/migrations). Este helper es para eventos que no pasan por una
-// tabla con trigger propio, como login/logout o generación de reportes.
+// tabla con trigger propio (hoy: "reporte generado"). Usa la RPC
+// record_manual_audit_event en vez de insertar directo en audit_logs: esa RPC
+// fuerza el actor real (current_profile_id(), no lo que mande el cliente) y
+// restringe table_name/action a un allowlist fijo, para que nadie pueda
+// falsificar bitácora de otras tablas o de otro usuario (ver migración
+// 0030_audit_logs_controlled_insert.sql).
 export async function recordAuditEvent(input: AuditEntryInput): Promise<void> {
-  const { data: authData } = await supabase.auth.getUser()
-  const authUserId = authData.user?.id
-  if (!authUserId) return
-
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('auth_user_id', authUserId)
-    .single()
-
-  await supabase.from('audit_logs').insert({
-    actor_profile_id: profile?.id ?? null,
-    action: input.action,
-    table_name: input.tableName,
-    record_id: input.recordId ?? null,
-    old_value: input.oldValue ?? null,
-    new_value: input.newValue ?? null,
-    reason: input.reason ?? null,
+  const { error } = await supabase.rpc('record_manual_audit_event', {
+    p_action: input.action,
+    p_table_name: input.tableName,
+    p_record_id: input.recordId ?? null,
+    p_new_value: input.newValue ?? null,
+    p_reason: input.reason ?? null,
   })
+  if (error) throw error
 }

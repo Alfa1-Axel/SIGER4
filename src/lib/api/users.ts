@@ -42,16 +42,23 @@ export interface ProfileInput {
   station_id?: string | null
 }
 
-// Crea el perfil con auth_user_id nulo: queda "pendiente" hasta que la persona
-// complete su propio registro en /registro con el mismo email.
-export async function inviteProfile(input: ProfileInput): Promise<Profile> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .insert({ ...input, auth_user_id: null })
-    .select('*')
-    .single()
+// Crea la cuenta de Auth y el perfil ya vinculado en un solo paso (Edge
+// Function admin-create-user, requiere service_role). Reemplaza al flujo de
+// auto-registro retirado por riesgo de account takeover (ver migración
+// 0029_retire_self_signup_invite_flow.sql): ya no existen perfiles "pendientes"
+// con auth_user_id null.
+export interface CreateUserAccountInput extends ProfileInput {
+  password: string
+}
+
+export async function createUserAccount(input: CreateUserAccountInput): Promise<Profile> {
+  const { data, error } = await supabase.functions.invoke<{ profile?: Profile; error?: string }>(
+    'admin-create-user',
+    { body: input },
+  )
   if (error) throw error
-  return data as Profile
+  if (!data?.profile) throw new Error(data?.error ?? 'No se pudo crear el usuario.')
+  return data.profile
 }
 
 export async function updateProfile(id: string, input: Partial<ProfileInput>): Promise<Profile> {

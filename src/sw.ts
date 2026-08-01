@@ -9,9 +9,8 @@
 
 import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
-import { NetworkFirst, CacheFirst } from 'workbox-strategies'
+import { CacheFirst, NetworkOnly } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
-import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 declare const self: ServiceWorkerGlobalScope
 
@@ -19,20 +18,44 @@ precacheAndRoute(self.__WB_MANIFEST)
 
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
 
+// Estrategia de cache (revision 2026-07, ver auditoria de seguridad). Workbox
+// evalua las rutas registradas EN ORDEN y usa la primera que matchea, por eso
+// el orden de estos dos registerRoute() importa:
+//
+// 1) Imagenes de los buckets PUBLICOS de Storage (station-media/avatars, sin
+//    JWT, pensados para mostrarse sin autenticacion) SI pueden cachearse: no
+//    dependen de sesion ni contienen datos privados, y cachearlas es lo que
+//    permite ver logos/fotos institucionales sin conexion.
+// 2) CUALQUIER OTRA respuesta de *.supabase.co (REST /rest/v1, /auth/v1,
+//    /storage/v1/object/sign de "documents" -privado-, /functions/v1,
+//    Realtime) nunca se cachea: puede contener datos privados o dependientes
+//    de la sesion/rol actual. NetworkOnly dejaria que el navegador cachee por
+//    default si no se declarara explicito, asi que se declara a proposito
+//    para dejar constancia de la decision. Si el usuario esta offline, esas
+//    llamadas simplemente fallan (la app ya maneja error de red en cada
+//    pantalla) en vez de servir datos viejos o de otro perfil/sesion.
+
 registerRoute(
-  ({ url }) => url.hostname.endsWith('supabase.co'),
-  new NetworkFirst({
-    cacheName: 'siger4-supabase-cache',
-    networkTimeoutSeconds: 8,
-    plugins: [
-      new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 }),
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-    ],
+  ({ request, url }) =>
+    request.destination === 'image' &&
+    url.hostname.endsWith('supabase.co') &&
+    (url.pathname.includes('/storage/v1/object/public/station-media/') ||
+      url.pathname.includes('/storage/v1/object/public/avatars/')),
+  new CacheFirst({
+    cacheName: 'siger4-image-cache',
+    plugins: [new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 })],
   }),
 )
 
 registerRoute(
-  ({ request }) => request.destination === 'image',
+  ({ url }) => url.hostname.endsWith('supabase.co'),
+  new NetworkOnly(),
+)
+
+// Imagenes que no vienen de Supabase (assets propios de /public, ej. logos
+// estaticos) siguen cacheables sin restriccion.
+registerRoute(
+  ({ request, url }) => request.destination === 'image' && !url.hostname.endsWith('supabase.co'),
   new CacheFirst({
     cacheName: 'siger4-image-cache',
     plugins: [new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 })],

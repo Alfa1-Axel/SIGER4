@@ -464,11 +464,26 @@ secretos del proyecto). No requiere ninguna variable nueva en Vercel.
 
 El auto-registro (`/registro`) fue retirado por seguridad (riesgo de account takeover: un atacante
 podía registrarse con el email de un futuro invitado antes que la persona real). Ahora todo alta de
-usuario se hace desde `/usuarios/nuevo` (solo informatica_r4/integrante_informatica), que genera una
-contraseña temporal y crea la cuenta ya activa. **Comunicar este cambio de flujo al Dpto. de
-Informática antes del deploy** si ya venían usando enlaces de invitación con usuarios reales:
-cualquier perfil con `auth_user_id` null que quede de ese flujo anterior requiere resolución manual
-(ver comentario en `0029_retire_self_signup_invite_flow.sql`).
+usuario se hace desde `/usuarios/nuevo`, que genera una contraseña temporal y crea la cuenta ya
+activa. **Comunicar este cambio de flujo al Dpto. de Informática antes del deploy** si ya venían
+usando enlaces de invitación con usuarios reales: cualquier perfil con `auth_user_id` null que quede
+de ese flujo anterior requiere resolución manual (ver comentario en
+`0029_retire_self_signup_invite_flow.sql`).
+
+**Matriz de permisos (revisión 2026-08)** — quién puede crear usuarios y con qué roles/alcance.
+Validado server-side en la Edge Function `admin-create-user` (única fuente de verdad real); la UI
+(`UsuarioFormPage`, `UserCreatorRoute`, `navigation.ts`) solo oculta opciones que el backend igual
+rechazaría:
+
+| Creador | Roles asignables | Alcance |
+|---|---|---|
+| `informatica_r4` / `integrante_informatica` | Cualquiera | Cualquiera |
+| `director_escuela` | Cualquiera excepto `informatica_r4`/`integrante_informatica` | Cualquiera |
+| `jefe_cuerpo_activo` | `presidente_cuartel`, `usuario_carga_cuartel`, `secretario_comision`, `administrativo`, `invitado` (nunca `jefe_cuerpo_activo` ni roles regionales/escuela/informática) | Solo su propio cuartel |
+
+`/usuarios` (listado) y `/usuarios/:id` (edición completa de un usuario existente, incluye cambiar
+roles/scope de cualquiera) siguen exclusivos de `informatica_r4`/`integrante_informatica` — crear un
+usuario acotado es una capacidad distinta de administrar cualquier usuario del sistema.
 
 ### 5.4 Checklist de configuración viva (no se puede confirmar solo desde el repo)
 

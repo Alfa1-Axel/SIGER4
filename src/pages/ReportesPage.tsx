@@ -103,11 +103,15 @@ export function ReportesPage() {
       const fileName = `siger4-${slugify(reportDef.label)}-${new Date().toISOString().slice(0, 10)}.pdf`
       doc.save(fileName)
 
+      // No debe bloquear ni hacer fallar la generación del reporte: el PDF ya
+      // se guardó (doc.save arriba). Si la auditoría falla (ej. problema de
+      // red transitorio), el usuario no debe ver "no pudimos generar el
+      // reporte" cuando en realidad sí se generó.
       await recordAuditEvent({
         action: 'reporte_generado',
         tableName: 'reports',
         reason: `${reportDef.label} · ${scopeLabelFor()} · ${periodLabelFor()}`,
-      })
+      }).catch((err) => console.warn('[SIGER4] No se pudo registrar la auditoría del reporte:', err))
 
       if (profile?.id) {
         await createNotification({

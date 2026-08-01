@@ -42,13 +42,22 @@ export interface ProfileInput {
   station_id?: string | null
 }
 
-// Crea la cuenta de Auth y el perfil ya vinculado en un solo paso (Edge
-// Function admin-create-user, requiere service_role). Reemplaza al flujo de
-// auto-registro retirado por riesgo de account takeover (ver migración
-// 0029_retire_self_signup_invite_flow.sql): ya no existen perfiles "pendientes"
-// con auth_user_id null.
+// Crea la cuenta de Auth, el perfil y sus roles/alcance en un solo paso
+// server-side (Edge Function admin-create-user, requiere service_role).
+// Reemplaza al flujo de auto-registro retirado por riesgo de account
+// takeover (ver migración 0029_retire_self_signup_invite_flow.sql): ya no
+// existen perfiles "pendientes" con auth_user_id null.
+//
+// Roles y scope viajan en el mismo pedido (no como addRole()/addScope()
+// separados después): esas dos tablas solo aceptan escritura de
+// is_informatica_r4() por RLS, así que director_escuela/jefe_cuerpo_activo
+// nunca podrían asignarlos por su cuenta. La función valida server-side la
+// matriz de permisos completa (quién puede crear con qué rol/alcance) — ver
+// comentario en supabase/functions/admin-create-user/index.ts.
 export interface CreateUserAccountInput extends ProfileInput {
   password: string
+  roles: RoleKey[]
+  scope: ScopeInput
 }
 
 export async function createUserAccount(input: CreateUserAccountInput): Promise<Profile> {

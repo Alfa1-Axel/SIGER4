@@ -3,6 +3,7 @@ import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminRoute } from './components/layout/AdminRoute'
+import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { LoginPage } from './pages/LoginPage'
 import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
@@ -48,7 +49,7 @@ export default function App() {
         <Route path="/reportes" element={<ProtectedRoute><ReportesPage /></ProtectedRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<AdminRoute><UsuariosPage /></AdminRoute>} />
-        <Route path="/usuarios/nuevo" element={<AdminRoute><UsuarioFormPage /></AdminRoute>} />
+        <Route path="/usuarios/nuevo" element={<UserCreatorRoute><UsuarioFormPage /></UserCreatorRoute>} />
         <Route path="/usuarios/:id" element={<AdminRoute><UsuarioDetallePage /></AdminRoute>} />
         <Route path="/notificaciones" element={<ProtectedRoute><NotificacionesPage /></ProtectedRoute>} />
         <Route path="/notificaciones/nueva" element={<ProtectedRoute><NotificacionFormPage /></ProtectedRoute>} />

@@ -24,9 +24,11 @@ interface SidebarProps {
 // cierre, o el backdrop (manejado por AppShell).
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { profile, signOut, isAdmin, roles } = useAuth()
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => (!item.adminOnly || isAdmin) && !item.hideForRoles?.some((r) => roles.includes(r)),
-  )
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (item.hideForRoles?.some((r) => roles.includes(r))) return false
+    if (item.showForRoles) return isAdmin || item.showForRoles.some((r) => roles.includes(r))
+    return !item.adminOnly || isAdmin
+  })
 
   return (
     <aside className={`app-sidebar${open ? ' open' : ''}`}>

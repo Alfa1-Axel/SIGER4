@@ -27,7 +27,7 @@ export function CarpetaFormPage() {
   const navigate = useNavigate()
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
   const isRegionalRole = hasRole('secretario_regional', 'director_escuela')
-  const isStationRole = hasRole('usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision')
+  const isStationRole = hasRole('usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const canCreate = isAdmin || isRegionalRole || isStationRole
 
   const [regions, setRegions] = useState<Region[]>([])

@@ -34,7 +34,7 @@ export function DocumentoFormPage() {
   const [searchParams] = useSearchParams()
   const folderIdFromQuery = searchParams.get('folderId')
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
-  const canCreate = isAdmin || hasRole('secretario_regional', 'presidente_cuartel', 'usuario_carga_cuartel', 'secretario_comision')
+  const canCreate = isAdmin || hasRole('secretario_regional', 'presidente_cuartel', 'usuario_carga_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])

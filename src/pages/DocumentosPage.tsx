@@ -13,7 +13,7 @@ import { useAuth } from '../hooks/useAuth'
 // directo) se agrupan en la carpeta pseudo "General".
 export function DocumentosPage() {
   const { isAdmin, hasRole } = useAuth()
-  const canManageFolders = isAdmin || hasRole('secretario_regional', 'director_escuela', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision')
+  const canManageFolders = isAdmin || hasRole('secretario_regional', 'director_escuela', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
 
   const [folders, setFolders] = useState<DocumentFolder[]>([])
   const [documents, setDocuments] = useState<DocumentRecord[]>([])

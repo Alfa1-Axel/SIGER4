@@ -17,7 +17,7 @@ export function CarpetaDetallePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { isAdmin, hasRole } = useAuth()
-  const canManageFolders = isAdmin || hasRole('secretario_regional', 'director_escuela', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision')
+  const canManageFolders = isAdmin || hasRole('secretario_regional', 'director_escuela', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const isGeneral = id === 'general'
 
   const [folder, setFolder] = useState<DocumentFolder | null>(null)

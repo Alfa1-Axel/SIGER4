@@ -94,11 +94,14 @@ const INFORMATICA_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica'
 
 // Roles que un jefe_cuerpo_activo puede asignar (confirmado explícitamente:
 // nunca su propio rol, nunca nada regional/escuela/informática).
+// 'administrativo' se retiró como rol asignable (ver
+// 0043_remove_administrativo_role_ui.sql) — se mantiene en RoleKey/ALL_ROLES
+// porque el valor sigue existiendo en el enum de Postgres, pero ya no se
+// ofrece para asignar a nadie nuevo.
 const JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES: RoleKey[] = [
   'presidente_cuartel',
   'usuario_carga_cuartel',
   'secretario_comision',
-  'administrativo',
   'invitado',
 ]
 
@@ -255,6 +258,11 @@ Deno.serve(async (req: Request) => {
       rank: body.rank ?? null,
       region_id: body.region_id ?? null,
       station_id: body.station_id ?? null,
+      // La contraseña la definió (o generó) quien crea el usuario, no la
+      // persona dueña de la cuenta — se fuerza que la cambie antes de poder
+      // usar el resto de la app (ver migración 0034_must_change_password.sql
+      // y ForcePasswordChangeGate en el frontend).
+      must_change_password: true,
     })
     .select('*')
     .single()

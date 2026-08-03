@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading, deactivated } = useAuth()
+  const { session, loading, deactivated, profile } = useAuth()
 
   if (loading) {
     return (
@@ -25,6 +25,13 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!session) {
     return <Navigate to="/login" replace />
+  }
+
+  // Contraseña temporal definida por un admin al crear la cuenta: bloquea
+  // cualquier otra pantalla hasta que el usuario elija la suya propia (ver
+  // CambiarPasswordPage y migración 0034_must_change_password.sql).
+  if (profile?.must_change_password) {
+    return <Navigate to="/cambiar-password" replace />
   }
 
   return <>{children}</>

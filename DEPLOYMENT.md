@@ -772,4 +772,88 @@ visibles en "General".
       `integrante_informatica`, confirmar que NO podés.
 - [ ] Crear una carpeta de documentos y cargar un archivo dentro.
 - [ ] Confirmar que los documentos existentes previos a esta tanda siguen viendo en "General".
-  `0043_remove_administrativo_role_ui.sql`) y decidir a qué rol migrarlos.
+
+## 8. Verificación y ajuste fino de permisos (2026-08) — migración 0047
+
+Pasada de verificación posterior a la sección 7: se confirmó que el fix crítico y `admin-update-user`
+funcionan correctamente, y se corrigieron 2 brechas concretas de permisos contra la matriz
+institucional real. No se agregaron módulos nuevos ni se hizo refactor grande.
+
+### 8.1 Qué se verificó (sin cambios, ya funcionaba correctamente)
+
+- **Alta de usuarios**: cadena completa Auth → profile → user_roles → user_scopes con contraseña
+  temporal y `must_change_password=true` confirmada correcta en el código; el fix de `0046` está
+  aplicado.
+- **`admin-update-user` para informatica_r4/integrante_informatica**: cubre email, contraseña,
+  activar/desactivar (ban real en Auth), roles, scope, cuartel/región, flag de cambio de contraseña.
+  Protección de superadmin correcta (solo `informatica_r4` toca a otro `informatica_r4` o le asigna
+  el rol). No expone secretos (nunca devuelve la contraseña ni el service_role).
+- **`invitado`**: confirmado de solo lectura — no aparece en ninguna policy de escritura en todo el
+  historial de migraciones.
+- **`presidente_cuartel` / `secretario_comision` / `usuario_carga_cuartel`**: confirmados
+  correctamente acotados a `my_station_ids()` en todas las tablas operativas, nunca con alcance
+  regional.
+- **Rol "Administrativo"**: confirmado que no aparece en `ROLE_DEFINITIONS` (no seleccionable en
+  ningún formulario), aunque el valor se mantiene aceptado a nivel de tipos/validación server-side
+  para no romper perfiles que ya lo tengan asignado.
+- **Auditoría**: confirmado que no hay ningún insert directo a `audit_logs` desde el frontend, que
+  `document_folders` tiene su trigger de auditoría automático, que los cambios de Auth
+  (email/contraseña/ban) quedan registrados vía `record_manual_audit_event` (`0044`), y que
+  `jefe_cuerpo_activo` ya podía ver la auditoría de su propio cuartel (`audit_logs_select_station`
+  no distingue por rol, solo por `station_id`).
+
+### 8.2 Bugs concretos corregidos (migración `0047_jefe_cuerpo_activo_documents_folders.sql`)
+
+`jefe_cuerpo_activo` faltaba en las policies de escritura de `documents`, `document_versions` y
+`document_folders` (solo incluían `usuario_carga_cuartel`/`presidente_cuartel`/
+`secretario_comision`), a pesar de que todas las demás tablas de cuartel (`stations`, `vehicles`,
+`personnel`, `attendance_summaries`, `intervention_summaries`) ya lo incluían correctamente desde
+`0027`. Corregido agregando `has_role('jefe_cuerpo_activo')` a esas 3 policies, más los
+`hasRole(...)` correspondientes en `DocumentosPage`, `DocumentoFormPage`, `CarpetaDetallePage` y
+`CarpetaFormPage`.
+
+También se amplió `admin-update-user` para que `jefe_cuerpo_activo` pueda resetear contraseñas y
+activar/desactivar usuarios **de su propio cuartel únicamente**: valida que `target.station_id ===
+actor.station_id`, rechaza cualquier objetivo con rol informática/regional/escuela sin importar el
+cuartel, y nunca permite tocar roles/scope/cuartel/región (eso sigue exclusivo de
+`informatica_r4`/`integrante_informatica`). **La UI (`/usuarios/:id`) todavía no expone esto a
+`jefe_cuerpo_activo`** — la ruta sigue detrás de `AdminRoute`, y la página usa `updateProfile`/
+`addRole`/`addScope` directos (RLS `informatica_r4`-only) para nombre/roles/scope, así que exponerla
+tal cual rompería esas secciones. Dejarlo andando de punta a punta requiere una pantalla dedicada
+(ocultar roles/scope, usar `admin-update-user` en el resto) — **queda documentado como pendiente de
+UI para una tanda futura**, el backend ya está listo y probado.
+
+**Redeploy necesario**: `supabase functions deploy admin-update-user` (cambió su lógica de
+autorización para incluir a `jefe_cuerpo_activo`).
+
+### 8.3 Matriz real de permisos institucionales
+
+| Rol | Alcance | Puede | No puede |
+|---|---|---|---|
+| **`informatica_r4`** | Sistema completo | Todo: crear/editar/activar/desactivar/resetear contraseña de cualquier usuario (incluso otro `informatica_r4`), roles, scopes, cuarteles/subsedes/regiones, todos los módulos, documentos, carpetas, inventario, reportes, auditoría completa, configuración. | Nada — es la autoridad máxima. |
+| **`integrante_informatica`** | Sistema completo | Igual que `informatica_r4` **excepto** sobre otro `informatica_r4`: no puede editarlo ni asignarle ese rol. | Modificar a un `informatica_r4`, otorgar el rol `informatica_r4`. |
+| **`jefe_cuerpo_activo`** | Su propio cuartel | Crear/editar usuarios de su cuartel (roles limitados, sin informática — vía `admin-create-user`), resetear contraseña/activar-desactivar usuarios de su cuartel (vía `admin-update-user`, **backend listo, UI pendiente**), gestionar documentos/carpetas/vehículos/personal/asistencias/intervenciones de su cuartel, ver auditoría de su cuartel. | Crear/asignar roles de informática, modificar usuarios de otros cuarteles, tocar a un usuario informática/regional/escuela, otorgarse alcance regional/subsede/otro cuartel. |
+| **`director_escuela`** | Escuela Regional + ⚠️ ver nota | Autoridad máxima sobre cursos/capacitaciones/instructores/reportes de Escuela; crear usuarios con cualquier rol excepto informática. | Crear/asignar roles de informática. |
+| **`secretario_regional`** | Regional (comparte función con `director_escuela` hoy — ver nota) | Gestión administrativa regional. | Roles de informática. |
+| **`presidente_cuartel`** | Su propio cuartel | Ver/cargar datos de su cuartel (vehículos, personal, asistencia, intervenciones, documentos/carpetas). | Todo lo fuera de su cuartel, roles de informática, crear usuarios. |
+| **`secretario_comision`** | Su propio cuartel | Igual que `presidente_cuartel` para documentos/carpetas. | Igual que `presidente_cuartel`. |
+| **`usuario_carga_cuartel`** | Su propio cuartel | Cargar datos operativos de su cuartel. | Roles de informática, alcance fuera de su cuartel. |
+| **`invitado`** | Su cuartel (si tiene uno asignado) | Solo lectura. | Cualquier escritura — confirmado sin excepciones. |
+| **Nadie excepto `informatica_r4`** | — | — | Crear o modificar roles de informática (`informatica_r4`/`integrante_informatica`). |
+
+**⚠️ Nota importante sobre `director_escuela` (brecha conocida, no corregida en esta tanda)**: la
+función `is_regional_role()` en la base agrupa `secretario_regional` **y** `director_escuela` como
+la misma "autoridad regional", y esa función se usa en las policies de escritura de `stations`,
+`vehicles`, `personnel`, `attendance_summaries`, `intervention_summaries`, `documents`,
+`document_folders`, `push_send_log` y el historial de vehículos/personal — más de 15 tablas. Esto
+significa que **hoy `director_escuela` tiene, de hecho, escritura regional-wide sobre todos los
+cuarteles de su región**, no solo autoridad sobre Escuela Regional, contradiciendo la matriz
+institucional pedida ("no debe convertirse automáticamente en autoridad total sobre todos los
+cuarteles").
+
+Corregir esto requiere separar `is_regional_role()` en dos funciones (una para autoridad operativa
+regional real — solo `secretario_regional` — y dejar `is_escuela_role()`, que ya existe y ya es
+`director_escuela + instructor`, como la única autoridad de `director_escuela`), y luego actualizar
+cada una de esas ~15 policies para usar la función correcta. Es un cambio de superficie amplia
+(aunque mecánico), por eso se dejó **fuera de esta tanda** (se pidió explícitamente no hacer
+refactor grande) y queda documentado como la corrección prioritaria de la próxima tanda de permisos.

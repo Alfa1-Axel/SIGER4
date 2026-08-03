@@ -4,12 +4,31 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { Lightbox } from '../components/ui/Lightbox'
 import { ZoomableImage } from '../components/ui/ZoomableImage'
+import { ReasonPromptModal } from '../components/ui/ReasonPromptModal'
 import { fetchStationAuthorities, fetchStationById } from '../lib/api/stations'
-import { fetchVehiclesByStation } from '../lib/api/vehicles'
+import { fetchVehiclesByStation, changeVehicleStatus, fetchVehicleStatusHistory, DECOMMISSION_STATUSES } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
 import { fetchInterventionsByStation } from '../lib/api/interventions'
-import { fetchPersonnelByStation, updatePersonnel, deletePersonnel } from '../lib/api/personnel'
-import type { AttendanceSummary, InterventionSummary, Personnel, PersonnelStatus, Profile, Station, Vehicle } from '../types/database'
+import {
+  fetchPersonnelByStation,
+  updatePersonnel,
+  deletePersonnel,
+  changePersonnelStatus,
+  fetchPersonnelStatusHistory,
+  SEPARATION_STATUSES,
+} from '../lib/api/personnel'
+import type {
+  AttendanceSummary,
+  InterventionSummary,
+  Personnel,
+  PersonnelStatus,
+  PersonnelStatusHistory,
+  Profile,
+  Station,
+  Vehicle,
+  VehicleStatus,
+  VehicleStatusHistory,
+} from '../types/database'
 import type { RoleKey } from '../types/roles'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
@@ -18,7 +37,16 @@ const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
   operativo: 'Operativo',
   mantenimiento: 'Mantenimiento',
   fuera_de_servicio: 'Fuera de servicio',
+  vendido: 'Vendido',
+  transferido: 'Transferido',
+  baja: 'Baja',
 }
+
+const VEHICLE_DECOMMISSION_OPTIONS: { value: VehicleStatus; label: string }[] = [
+  { value: 'vendido', label: 'Marcar como vendido' },
+  { value: 'transferido', label: 'Marcar como transferido' },
+  { value: 'baja', label: 'Dar de baja' },
+]
 
 const PERSONNEL_STATUS_LABEL: Record<PersonnelStatus, string> = {
   activo: 'Activo',
@@ -26,6 +54,8 @@ const PERSONNEL_STATUS_LABEL: Record<PersonnelStatus, string> = {
   baja: 'Baja',
   reserva: 'Reserva',
   aspirante: 'Aspirante',
+  renuncia: 'Renuncia',
+  pase: 'Pase',
 }
 
 const PERSONNEL_STATUS_BADGE: Record<PersonnelStatus, string> = {
@@ -34,7 +64,21 @@ const PERSONNEL_STATUS_BADGE: Record<PersonnelStatus, string> = {
   baja: 'badge-danger',
   reserva: 'badge-info',
   aspirante: 'badge-info',
+  renuncia: 'badge-danger',
+  pase: 'badge-danger',
 }
+
+// Estados libres (sin motivo obligatorio), editables desde el selector
+// directo. renuncia/baja/pase/reserva van por el modal con motivo (ver
+// SEPARATION_STATUSES en lib/api/personnel.ts).
+const PERSONNEL_FREE_STATUS_OPTIONS: PersonnelStatus[] = ['activo', 'licencia', 'aspirante']
+
+const PERSONNEL_SEPARATION_OPTIONS: { value: PersonnelStatus; label: string }[] = [
+  { value: 'renuncia', label: 'Marcar renuncia' },
+  { value: 'baja', label: 'Dar de baja' },
+  { value: 'pase', label: 'Marcar pase' },
+  { value: 'reserva', label: 'Pasar a reserva' },
+]
 
 function calculateSeniority(joinDate: string | null): string | null {
   if (!joinDate) return null
@@ -64,10 +108,48 @@ export function CuartelDetallePage() {
   const [personnelRankFilter, setPersonnelRankFilter] = useState('')
   const [personnelDepartmentFilter, setPersonnelDepartmentFilter] = useState('')
 
+  const [decommissioningVehicle, setDecommissioningVehicle] = useState<{ vehicle: Vehicle; newStatus: VehicleStatus } | null>(null)
+  const [expandedVehicleHistoryId, setExpandedVehicleHistoryId] = useState<string | null>(null)
+  const [vehicleHistoryByVehicleId, setVehicleHistoryByVehicleId] = useState<Record<string, VehicleStatusHistory[]>>({})
+
+  const [separatingPersonnel, setSeparatingPersonnel] = useState<{ person: Personnel; newStatus: PersonnelStatus } | null>(null)
+  const [expandedPersonnelHistoryId, setExpandedPersonnelHistoryId] = useState<string | null>(null)
+  const [personnelHistoryByPersonnelId, setPersonnelHistoryByPersonnelId] = useState<Record<string, PersonnelStatusHistory[]>>({})
+
   async function reloadPersonnel(stationId: string) {
     const [personnelData, stationData] = await Promise.all([fetchPersonnelByStation(stationId), fetchStationById(stationId)])
     setPersonnel(personnelData)
     if (stationData) setStation(stationData)
+  }
+
+  async function reloadVehicles(stationId: string) {
+    const [vehiclesData, stationData] = await Promise.all([fetchVehiclesByStation(stationId), fetchStationById(stationId)])
+    setVehicles(vehiclesData)
+    if (stationData) setStation(stationData)
+  }
+
+  async function handleToggleVehicleHistory(vehicleId: string) {
+    if (expandedVehicleHistoryId === vehicleId) {
+      setExpandedVehicleHistoryId(null)
+      return
+    }
+    setExpandedVehicleHistoryId(vehicleId)
+    if (!vehicleHistoryByVehicleId[vehicleId]) {
+      const history = await fetchVehicleStatusHistory(vehicleId)
+      setVehicleHistoryByVehicleId((prev) => ({ ...prev, [vehicleId]: history }))
+    }
+  }
+
+  async function handleConfirmVehicleDecommission(reason: string) {
+    if (!decommissioningVehicle || !id) return
+    await changeVehicleStatus(decommissioningVehicle.vehicle.id, decommissioningVehicle.newStatus, reason)
+    setDecommissioningVehicle(null)
+    setVehicleHistoryByVehicleId((prev) => {
+      const next = { ...prev }
+      delete next[decommissioningVehicle.vehicle.id]
+      return next
+    })
+    await reloadVehicles(id)
   }
 
   useEffect(() => {
@@ -126,6 +208,30 @@ export function CuartelDetallePage() {
     if (!id) return
     if (!window.confirm('¿Eliminar este integrante de la dotación? Esta acción no se puede deshacer.')) return
     await deletePersonnel(personId)
+    await reloadPersonnel(id)
+  }
+
+  async function handleTogglePersonnelHistory(personId: string) {
+    if (expandedPersonnelHistoryId === personId) {
+      setExpandedPersonnelHistoryId(null)
+      return
+    }
+    setExpandedPersonnelHistoryId(personId)
+    if (!personnelHistoryByPersonnelId[personId]) {
+      const history = await fetchPersonnelStatusHistory(personId)
+      setPersonnelHistoryByPersonnelId((prev) => ({ ...prev, [personId]: history }))
+    }
+  }
+
+  async function handleConfirmPersonnelSeparation(reason: string) {
+    if (!separatingPersonnel || !id) return
+    await changePersonnelStatus(separatingPersonnel.person.id, separatingPersonnel.newStatus, reason)
+    setSeparatingPersonnel(null)
+    setPersonnelHistoryByPersonnelId((prev) => {
+      const next = { ...prev }
+      delete next[separatingPersonnel.person.id]
+      return next
+    })
     await reloadPersonnel(id)
   }
 
@@ -289,65 +395,113 @@ export function CuartelDetallePage() {
             )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {filteredPersonnel.map((person, i) => (
-                <div
-                  key={person.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '10px 0',
-                    borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>
-                      {person.last_name}, {person.first_name}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      {[person.rank, person.role_function, person.department].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
-                      {person.join_date && ` · Antigüedad: ${calculateSeniority(person.join_date)}`}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {canEdit ? (
-                      <select
-                        value={person.status}
-                        onChange={(e) => handlePersonnelStatusChange(person.id, e.target.value as PersonnelStatus)}
-                        style={{ fontSize: 12, padding: '2px 4px' }}
-                      >
-                        {Object.entries(PERSONNEL_STATUS_LABEL).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className={`badge ${PERSONNEL_STATUS_BADGE[person.status]}`}>{PERSONNEL_STATUS_LABEL[person.status]}</span>
-                    )}
-                    {canEdit && (
-                      <>
-                        <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 8px' }}>
-                          <Icon name="edit" size={14} />
-                        </Link>
+              {filteredPersonnel.map((person, i) => {
+                const history = personnelHistoryByPersonnelId[person.id]
+                return (
+                  <div key={person.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '10px 0', flexWrap: 'wrap' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          {person.last_name}, {person.first_name}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                          {[person.rank, person.role_function, person.department].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
+                          {person.join_date && ` · Antigüedad: ${calculateSeniority(person.join_date)}`}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {canEdit ? (
+                          <select
+                            value={person.status}
+                            onChange={(e) => {
+                              const value = e.target.value as PersonnelStatus
+                              if (SEPARATION_STATUSES.includes(value)) {
+                                setSeparatingPersonnel({ person, newStatus: value })
+                              } else {
+                                handlePersonnelStatusChange(person.id, value)
+                              }
+                            }}
+                            style={{ fontSize: 12, padding: '2px 4px' }}
+                          >
+                            {PERSONNEL_FREE_STATUS_OPTIONS.map((value) => (
+                              <option key={value} value={value}>
+                                {PERSONNEL_STATUS_LABEL[value]}
+                              </option>
+                            ))}
+                            {SEPARATION_STATUSES.includes(person.status) && (
+                              <option value={person.status}>{PERSONNEL_STATUS_LABEL[person.status]} (actual)</option>
+                            )}
+                            <optgroup label="Requiere motivo">
+                              {PERSONNEL_SEPARATION_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </select>
+                        ) : (
+                          <span className={`badge ${PERSONNEL_STATUS_BADGE[person.status]}`}>{PERSONNEL_STATUS_LABEL[person.status]}</span>
+                        )}
                         <button
                           type="button"
                           className="btn btn-outlined"
-                          style={{ padding: '4px 8px' }}
-                          onClick={() => handlePersonnelDelete(person.id)}
-                          aria-label="Eliminar"
+                          style={{ padding: '4px 8px', fontSize: 11 }}
+                          onClick={() => handleTogglePersonnelHistory(person.id)}
                         >
-                          <Icon name="trash" size={14} />
+                          {expandedPersonnelHistoryId === person.id ? 'Ocultar historial' : 'Ver historial'}
                         </button>
-                      </>
+                        {canEdit && (
+                          <>
+                            <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 8px' }}>
+                              <Icon name="edit" size={14} />
+                            </Link>
+                            <button
+                              type="button"
+                              className="btn btn-outlined"
+                              style={{ padding: '4px 8px' }}
+                              onClick={() => handlePersonnelDelete(person.id)}
+                              aria-label="Eliminar"
+                            >
+                              <Icon name="trash" size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {expandedPersonnelHistoryId === person.id && (
+                      <div style={{ padding: '0 0 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        {history === undefined && 'Cargando historial…'}
+                        {history?.length === 0 && 'Sin cambios de estado registrados.'}
+                        {history && history.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {history.map((entry) => (
+                              <div key={entry.id} style={{ borderLeft: '2px solid var(--color-border)', paddingLeft: 8 }}>
+                                <strong>{PERSONNEL_STATUS_LABEL[entry.previous_status]} → {PERSONNEL_STATUS_LABEL[entry.new_status]}</strong>
+                                {' · '}
+                                {new Date(entry.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                                <div>{entry.reason}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
+
+          {separatingPersonnel && (
+            <ReasonPromptModal
+              title={`${PERSONNEL_SEPARATION_OPTIONS.find((o) => o.value === separatingPersonnel.newStatus)?.label} — ${separatingPersonnel.person.last_name}, ${separatingPersonnel.person.first_name}`}
+              description="Este cambio queda registrado en el historial del integrante y deja de sumar en la dotación activa del cuartel."
+              confirmLabel="Confirmar"
+              onConfirm={handleConfirmPersonnelSeparation}
+              onClose={() => setSeparatingPersonnel(null)}
+            />
+          )}
 
           <div className="section-header">
             <h2 className="section-title">Vehículos</h2>
@@ -359,31 +513,81 @@ export function CuartelDetallePage() {
           </div>
           <div className="card" style={{ marginBottom: 20, padding: 0 }}>
             {vehicles.length === 0 && <div className="empty-state">No hay vehículos cargados para este cuartel.</div>}
-            {vehicles.map((vehicle, i) => (
-              <Link
-                key={vehicle.id}
-                to={canEdit ? `/vehiculos/${vehicle.id}/editar` : '#'}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  pointerEvents: canEdit ? 'auto' : 'none',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{vehicle.internal_code} · {vehicle.vehicle_type}</div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{vehicle.plate ?? 'Sin patente'}</div>
+            {vehicles.map((vehicle, i) => {
+              const isDecommissioned = DECOMMISSION_STATUSES.includes(vehicle.status)
+              const history = vehicleHistoryByVehicleId[vehicle.id]
+              return (
+                <div key={vehicle.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', gap: 8, flexWrap: 'wrap' }}>
+                    <Link
+                      to={canEdit ? `/vehiculos/${vehicle.id}/editar` : '#'}
+                      style={{ textDecoration: 'none', color: 'inherit', pointerEvents: canEdit ? 'auto' : 'none', flex: 1, minWidth: 160 }}
+                    >
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{vehicle.internal_code} · {vehicle.vehicle_type}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{vehicle.plate ?? 'Sin patente'}</div>
+                    </Link>
+                    <span className={`badge ${vehicle.status === 'operativo' ? 'badge-success' : isDecommissioned ? 'badge-danger' : 'badge-warning'}`}>
+                      {VEHICLE_STATUS_LABEL[vehicle.status]}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-outlined"
+                      style={{ padding: '4px 8px', fontSize: 11 }}
+                      onClick={() => handleToggleVehicleHistory(vehicle.id)}
+                    >
+                      {expandedVehicleHistoryId === vehicle.id ? 'Ocultar historial' : 'Ver historial'}
+                    </button>
+                    {canEdit && !isDecommissioned && (
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const value = e.target.value as VehicleStatus
+                          if (value) setDecommissioningVehicle({ vehicle, newStatus: value })
+                        }}
+                        style={{ fontSize: 12, padding: '2px 4px' }}
+                      >
+                        <option value="">Dar de baja / vender / transferir…</option>
+                        {VEHICLE_DECOMMISSION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+
+                  {expandedVehicleHistoryId === vehicle.id && (
+                    <div style={{ padding: '0 16px 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                      {history === undefined && 'Cargando historial…'}
+                      {history?.length === 0 && 'Sin cambios de estado registrados.'}
+                      {history && history.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {history.map((entry) => (
+                            <div key={entry.id} style={{ borderLeft: '2px solid var(--color-border)', paddingLeft: 8 }}>
+                              <strong>{VEHICLE_STATUS_LABEL[entry.previous_status]} → {VEHICLE_STATUS_LABEL[entry.new_status]}</strong>
+                              {' · '}
+                              {new Date(entry.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                              <div>{entry.reason}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className={`badge ${vehicle.status === 'operativo' ? 'badge-success' : 'badge-warning'}`}>
-                  {VEHICLE_STATUS_LABEL[vehicle.status]}
-                </span>
-              </Link>
-            ))}
+              )
+            })}
           </div>
+
+          {decommissioningVehicle && (
+            <ReasonPromptModal
+              title={`${VEHICLE_DECOMMISSION_OPTIONS.find((o) => o.value === decommissioningVehicle.newStatus)?.label} — ${decommissioningVehicle.vehicle.internal_code}`}
+              description="Este cambio queda registrado en el historial del vehículo y no cuenta más como flota activa del cuartel."
+              confirmLabel="Confirmar"
+              onConfirm={handleConfirmVehicleDecommission}
+              onClose={() => setDecommissioningVehicle(null)}
+            />
+          )}
 
           <div className="section-header">
             <h2 className="section-title">Asistencia</h2>

@@ -6,6 +6,11 @@ import { createVehicle, fetchVehicleById, updateVehicle } from '../lib/api/vehic
 import type { VehicleStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
+// Solo los 3 estados operativos son editables libremente desde este
+// formulario. Vendido/transferido/baja requieren un motivo obligatorio y se
+// hacen desde el detalle del cuartel (changeVehicleStatus) — un trigger en
+// la base bloquea llegar a esos 3 estados por UPDATE directo, así que ni
+// aunque se agregaran acá funcionarían.
 const STATUS_OPTIONS: { value: VehicleStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
   { value: 'mantenimiento', label: 'Mantenimiento' },
@@ -96,6 +101,15 @@ export function VehiculoFormPage() {
       <h1 className="page-title">{isEditing ? 'Editar Vehículo' : 'Nuevo Vehículo'}</h1>
       <p className="page-subtitle">Datos del móvil / vehículo del cuartel.</p>
 
+      {!loading && (status === 'vendido' || status === 'transferido' || status === 'baja') && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13 }}>
+            Este vehículo está dado de baja de la flota ({STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}).
+            Podés seguir editando sus datos, pero el estado solo se cambia desde el detalle del cuartel.
+          </p>
+        </div>
+      )}
+
       {loading ? (
         <div className="empty-state">Cargando datos del vehículo…</div>
       ) : (
@@ -149,22 +163,24 @@ export function VehiculoFormPage() {
             <input id="lastServiceAt" type="date" value={lastServiceAt} onChange={(e) => setLastServiceAt(e.target.value)} />
           </div>
 
-          <div className="field">
-            <label>Estado</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {STATUS_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setStatus(option.value)}
-                  className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
-                >
-                  {option.label}
-                </button>
-              ))}
+          {status !== 'vendido' && status !== 'transferido' && status !== 'baja' && (
+            <div className="field">
+              <label>Estado</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {STATUS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setStatus(option.value)}
+                    className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '6px 14px', fontSize: 13 }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {error && <p className="field-error">{error}</p>}
 

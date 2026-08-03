@@ -6,11 +6,13 @@ import { createPersonnel, fetchPersonnelById, updatePersonnel } from '../lib/api
 import type { PersonnelStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
+// Solo los estados "libres" son editables desde este formulario.
+// Renuncia/baja/pase/reserva requieren un motivo obligatorio y se hacen
+// desde el detalle del cuartel (changePersonnelStatus) — un trigger en la
+// base bloquea llegar a esos estados por UPDATE directo.
 const STATUS_OPTIONS: { value: PersonnelStatus; label: string }[] = [
   { value: 'activo', label: 'Activo' },
   { value: 'licencia', label: 'Licencia' },
-  { value: 'baja', label: 'Baja' },
-  { value: 'reserva', label: 'Reserva' },
   { value: 'aspirante', label: 'Aspirante' },
 ]
 
@@ -107,6 +109,15 @@ export function PersonalFormPage() {
       <h1 className="page-title">{isEditing ? 'Editar Personal' : 'Nuevo Integrante'}</h1>
       <p className="page-subtitle">Dotación real del cuartel: capacidad institucional, no un padrón completo de RRHH.</p>
 
+      {!loading && !['activo', 'licencia', 'aspirante'].includes(status) && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13 }}>
+            Este integrante está en estado "{status}". Podés seguir editando sus datos, pero el
+            estado solo se cambia desde el detalle del cuartel.
+          </p>
+        </div>
+      )}
+
       {loading ? (
         <div className="empty-state">Cargando datos del personal…</div>
       ) : (
@@ -165,22 +176,24 @@ export function PersonalFormPage() {
             <textarea id="observations" value={observations} onChange={(e) => setObservations(e.target.value)} rows={3} />
           </div>
 
-          <div className="field">
-            <label>Estado</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {STATUS_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setStatus(option.value)}
-                  className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
-                >
-                  {option.label}
-                </button>
-              ))}
+          {['activo', 'licencia', 'aspirante'].includes(status) && (
+            <div className="field">
+              <label>Estado</label>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {STATUS_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setStatus(option.value)}
+                    className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '6px 14px', fontSize: 13 }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {error && <p className="field-error">{error}</p>}
 

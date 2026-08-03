@@ -1,5 +1,9 @@
 import { supabase } from '../supabaseClient'
-import type { Personnel, PersonnelStatus } from '../../types/database'
+import type { Personnel, PersonnelStatus, PersonnelStatusHistory } from '../../types/database'
+
+// Estados que implican que la persona deja de contar como dotacion activa
+// real del cuartel; requieren motivo obligatorio via changePersonnelStatus.
+export const SEPARATION_STATUSES: PersonnelStatus[] = ['renuncia', 'baja', 'pase', 'reserva']
 
 export async function fetchPersonnelByStation(stationId: string): Promise<Personnel[]> {
   const { data, error } = await supabase
@@ -47,4 +51,29 @@ export async function updatePersonnel(id: string, input: Partial<PersonnelInput>
 export async function deletePersonnel(id: string): Promise<void> {
   const { error } = await supabase.from('personnel').delete().eq('id', id)
   if (error) throw error
+}
+
+// Unico camino soportado para pasar a renuncia/baja/pase/reserva: exige un
+// motivo (la base tambien lo exige). Usa la RPC change_personnel_status, que
+// ademas registra el historial y agrega el motivo a observations (ver
+// 0040_personnel_status_history.sql).
+export async function changePersonnelStatus(personnelId: string, newStatus: PersonnelStatus, reason: string): Promise<Personnel> {
+  if (!reason.trim()) throw new Error('El motivo es obligatorio.')
+  const { data, error } = await supabase.rpc('change_personnel_status', {
+    p_personnel_id: personnelId,
+    p_new_status: newStatus,
+    p_reason: reason.trim(),
+  })
+  if (error) throw error
+  return data as Personnel
+}
+
+export async function fetchPersonnelStatusHistory(personnelId: string): Promise<PersonnelStatusHistory[]> {
+  const { data, error } = await supabase
+    .from('personnel_status_history')
+    .select('*')
+    .eq('personnel_id', personnelId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as PersonnelStatusHistory[]
 }

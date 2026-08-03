@@ -118,6 +118,6 @@ export async function uploadDocumentFile(documentId: string, file: File): Promis
 
 export async function getDocumentSignedUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 60 * 10)
-  if (error) throw error
+  if (error) throw new Error('El archivo no está disponible o fue eliminado del almacenamiento.')
   return data.signedUrl
 }

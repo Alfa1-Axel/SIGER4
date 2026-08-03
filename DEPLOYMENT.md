@@ -948,3 +948,114 @@ automático en push a `main`, no requiere acción manual.
       confirmar que la pantalla muestra "No tenés permiso para ver este usuario."
 - [ ] Buscar en la consola del navegador errores 403/400 al repetir los pasos anteriores con cada rol
       — no deberían aparecer salvo en los casos de bloqueo esperado (marcados arriba).
+
+## 10. Pasada de QA funcional (2026-08) — migración 0049
+
+Auditoría de bugs concretos sobre todo el sistema (no solo permisos), sin agregar módulos nuevos.
+
+### 10.1 Bugs corregidos
+
+- **Mensajes de error de Edge Functions perdidos** (`src/lib/api/users.ts`): `createUserAccount`/
+  `updateUserAccount` relanzaban el `FunctionsHttpError` crudo del cliente de supabase-js, cuyo
+  `.message` es siempre el string genérico "Edge Function returned a non-2xx status code" —
+  **nunca** el `{error: "..."}` real que `admin-create-user`/`admin-update-user` arman con cuidado
+  (email duplicado, "solo podés editar tu propio cuartel", contraseña corta, etc.). El usuario veía
+  siempre el mensaje genérico en vez del motivo real del rechazo. Corregido con un helper que lee
+  `error.context.json()` (el `Response` crudo que expone `FunctionsHttpError`) y usa ese mensaje si
+  existe, con fallback al mensaje genérico solo si el body no es JSON parseable.
+- **Transición inversa de baja de flota/separación sin motivo ni historial** (migración `0049`):
+  `block_direct_vehicle_decommission()`/`block_direct_personnel_separation()` (0038/0040) solo
+  bloqueaban **entrar** a vendido/transferido/baja (o renuncia/baja/pase/reserva) por UPDATE directo
+  sin pasar por `change_vehicle_status()`/`change_personnel_status()`. La transición **inversa**
+  (reactivar un vehículo/integrante ya dado de baja) no estaba bloqueada: cualquier usuario con
+  permiso de escritura normal sobre esa tabla podía hacerlo con un UPDATE directo (ej. desde la
+  consola del navegador con su propia sesión), sin motivo obligatorio y sin fila en
+  `vehicle_status_history`/`personnel_status_history`. No hay ningún flujo de UI para reactivar hoy
+  (`CuartelDetallePage` oculta los controles de cambio de estado una vez dado de baja), así que esto
+  era puramente una brecha de seguridad sin caso de uso legítimo detrás — se bloqueó la transición
+  inversa también, con el mismo criterio que la de entrada.
+- **Borrado de carpeta sin manejo de error** (`CarpetaDetallePage.tsx`): `handleDeleteFolder` no
+  tenía try/catch (a diferencia de su hermano `handleSaveFolder`) — un fallo (ej. RLS lo rechaza, o
+  error de red) quedaba como una excepción no manejada en consola, sin mensaje visible para el
+  usuario. Corregido con el mismo patrón try/catch/`setError` que el resto de la página.
+- **Mensaje crudo de Storage al abrir un documento eliminado** (`src/lib/api/storage.ts`):
+  `getDocumentSignedUrl` relanzaba el error crudo (en inglés) de Supabase Storage cuando el archivo
+  ya no existe en el bucket pero la fila de `documents` sigue ahí. Corregido con un mensaje en
+  español ("El archivo no está disponible o fue eliminado del almacenamiento.").
+- **Ícono de notificaciones push genérico** (`src/sw.ts`): el service worker usaba
+  `/icons/siger4-192.png` (el ícono cuadrado rojo genérico de la PWA) como `icon`/`badge` de toda
+  notificación push del sistema operativo, en vez del logo real del Dpto. Informática y Estadística
+  R4. Se generaron `public/icons/push-informatica-192.png` y `push-informatica-512.png` (PNG
+  transparente, mismo archivo fuente que login/sidebar/header — `public/logos/logo-informatica.png`,
+  reescalado) y se actualizó `sw.ts` para usarlos (`icon` con el 512, `badge` con el 192 — Chrome/
+  Android enmascara automáticamente el `badge` a blanco/alpha para la barra de estado).
+
+### 10.2 Verificado sin bugs (no requiere acción)
+
+- **Roles/permisos vs backend post-0048**: ninguna página muestra una acción operativa que el
+  backend ya rechace para `director_escuela` (ni al revés, ninguna acción de `jefe_cuerpo_activo`
+  quedó oculta indebidamente). `isAdmin`/`ADMIN_ROLES` consistente en todo el frontend.
+  `instructor` tiene pantallas reales (Escuela/Cursos), no es un rol sin uso.
+- **Notificaciones/push**: dedup de envíos duplicados resuelto correctamente server-side
+  (`push_send_log` con índice único parcial); opt-out del recordatorio semanal funciona; notificación
+  de prueba correctamente auto-scopeada; manejo de errores silencioso/auto-reparable donde
+  corresponde (VAPID no configurado, suscripción expirada 404/410).
+- **Documentos/carpetas**: borrado de carpeta correctamente pone `documents.folder_id = null` (no
+  huérfanos); permisos de las 4 páginas del módulo coinciden exactamente con las policies RLS
+  post-0048; validación de tamaño/MIME de archivo client-side coincide con los límites server-side
+  de `0033_storage_hardening.sql`.
+- **Vehículos/Personal**: motivo obligatorio exigido tanto client-side como server-side (RPC) para
+  las transiciones de baja/separación (entrada); `vehicles_count`/`personnel_count` recalculan
+  siempre por conteo completo (no por incremento/decremento), sin drift posible; historial visible
+  en el detalle de cuartel; auditoría genérica (`audit_row_change`) confirmada disparando con el
+  actor real resuelto correctamente.
+- **Textos obsoletos**: sin restos de "Invitar usuario"/"/registro", "Próximamente", roles
+  "Administrativo" seleccionables, ni "presidente_regional". Un único label vestigial y
+  inofensivo (`analisis_ia_reporte` en `humanize.ts`, solo usado para traducir auditoría histórica si
+  existiera, no es un botón ni una promesa de feature) — no se tocó, no es user-facing.
+- **Links rotos**: ningún `Link`/`navigate` apunta a una ruta que no exista en `App.tsx`.
+
+### 10.3 Deuda técnica documentada (no corregida en esta tanda, no es un bug bloqueante)
+
+- **Mensajes de error crudos de Postgres/Supabase**: patrón sistemático en ~40 archivos
+  (`err instanceof Error ? err.message : 'mensaje amigable'`) donde cualquier error que SÍ sea una
+  instancia de `Error` (la gran mayoría de los que tira supabase-js sobre `.from(...)` directo)
+  muestra su `.message` crudo sin traducir — puede ser un texto técnico en inglés (violación de
+  constraint, "permission denied for table X") en vez de un mensaje en español. Corregir esto de
+  raíz requeriría un helper central de traducción de errores aplicado en ~80 sitios de
+  `src/lib/api/*.ts` — se dejó fuera de esta tanda por ser una refactorización de superficie amplia
+  (se pidió explícitamente no hacer refactor grande), pero queda documentado como el ítem prioritario
+  de la próxima pasada de limpieza de UX.
+- **Documento "pending" huérfano si falla la subida** (`DocumentoFormPage.tsx`): si el paso de subir
+  el archivo falla después de crear la fila de `documents` (`storage_path='pending'`), la fila queda
+  huérfana sin indicación específica al usuario más allá del error genérico. Existe una mitigación
+  parcial (`cleanup_pending_documents`, banner en `/documentos` para limpiar filas de más de 24hs),
+  pero es exclusiva de `informatica_r4`/`integrante_informatica` — un `secretario_regional` o rol de
+  cuartel que genera una fila huérfana no tiene forma de verla ni limpiarla por su cuenta.
+- **Reintento de edición de documento puede duplicar versión**: si falla la subida al reemplazar el
+  archivo de un documento existente, el reintento vuelve a archivar la versión anterior en
+  `document_versions` (puede quedar duplicada si se reintenta más de una vez). Riesgo bajo (solo
+  historial, no pérdida de datos).
+
+### 10.4 Migración nueva a correr
+
+- `0049_block_reverse_lifecycle_transition.sql` — bloquea la transición inversa de
+  vendido/transferido/baja (vehículos) y renuncia/baja/pase/reserva (personal) por UPDATE directo,
+  mismo criterio que ya aplicaba 0038/0040 para la transición de entrada.
+
+### 10.5 Edge Functions a redesplegar
+
+Ninguna — el fix de mensajes de error (10.1) es 100% frontend (lee el body que la función ya
+devolvía correctamente; el bug estaba en cómo el cliente lo descartaba, no en la función).
+
+### 10.6 Checklist de verificación después de correr 0049
+
+- [ ] Confirmar que dar de baja/vender/transferir un vehículo (o pasar personal a
+      renuncia/baja/pase/reserva) sigue funcionando igual que antes (con motivo obligatorio).
+- [ ] Como `informatica_r4`, intentar (SQL Editor) un `UPDATE vehicles SET status='operativo' WHERE
+      status='baja'` directo — debe rechazarse con el mensaje de "hay que usar el flujo
+      correspondiente".
+- [ ] Crear un usuario con un email que ya existe y confirmar que el mensaje mostrado es "Ya existe
+      un perfil con ese email." (no "Edge Function returned a non-2xx status code").
+- [ ] Activar notificaciones push (`/ajustes`) y generar una notificación — confirmar que el ícono
+      grande y el badge muestran el logo de Informática y Estadística R4, no el ícono rojo genérico.

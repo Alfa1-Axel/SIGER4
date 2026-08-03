@@ -1,6 +1,26 @@
+import { FunctionsHttpError } from '@supabase/functions-js'
 import { supabase } from '../supabaseClient'
 import type { Profile, UserRole, UserScope, ScopeType } from '../../types/database'
 import type { RoleKey } from '../../types/roles'
+
+// El cliente de supabase-js lanza FunctionsHttpError con un mensaje genérico
+// ("Edge Function returned a non-2xx status code") para CUALQUIER respuesta
+// no-2xx, sin importar el body — el {error: "..."} que admin-create-user/
+// admin-update-user arman con cuidado (email duplicado, fuera de tu cuartel,
+// contraseña corta, etc.) se pierde si no se lee error.context (el Response
+// crudo) a mano. Sin este helper, el usuario siempre ve el mensaje genérico
+// en vez del motivo real del rechazo.
+async function edgeFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const body = await error.context.json()
+      if (typeof body?.error === 'string' && body.error) return body.error
+    } catch {
+      // Body no era JSON parseable (ej. timeout de gateway) — usar el fallback.
+    }
+  }
+  return fallback
+}
 
 export async function fetchProfiles(): Promise<Profile[]> {
   const { data, error } = await supabase.from('profiles').select('*').order('full_name', { ascending: true })
@@ -67,7 +87,7 @@ export async function createUserAccount(input: CreateUserAccountInput): Promise<
     'admin-create-user',
     { body: input },
   )
-  if (error) throw error
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, 'No se pudo crear el usuario.'))
   if (!data?.profile) throw new Error(data?.error ?? 'No se pudo crear el usuario.')
   return data.profile
 }
@@ -106,7 +126,7 @@ export async function updateUserAccount(input: UpdateUserAccountInput): Promise<
     'admin-update-user',
     { body: input },
   )
-  if (error) throw error
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, 'No se pudo actualizar el usuario.'))
   if (!data?.profile) throw new Error(data?.error ?? 'No se pudo actualizar el usuario.')
   return data.profile
 }

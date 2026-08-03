@@ -83,8 +83,13 @@ export function CarpetaDetallePage() {
   async function handleDeleteFolder() {
     if (!id || isGeneral) return
     if (!window.confirm('¿Eliminar esta carpeta? Los documentos que contiene NO se borran, quedan como "Sin carpeta".')) return
-    await deleteDocumentFolder(id)
-    navigate('/documentos')
+    setError(null)
+    try {
+      await deleteDocumentFolder(id)
+      navigate('/documentos')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos eliminar la carpeta.')
+    }
   }
 
   if (loading) {

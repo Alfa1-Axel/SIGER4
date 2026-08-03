@@ -8,6 +8,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
+import { createNotification } from '../lib/api/notifications'
 import { supabase } from '../lib/supabaseClient'
 
 export function AjustesPage() {
@@ -27,6 +28,12 @@ export function AjustesPage() {
   const [changingPassword, setChangingPassword] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [passwordSaved, setPasswordSaved] = useState(false)
+
+  const [testingNotification, setTestingNotification] = useState(false)
+  const [testNotificationResult, setTestNotificationResult] = useState<'ok' | 'error' | null>(null)
+
+  const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
+  const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
 
   async function handleSaveProfile(event: FormEvent) {
     event.preventDefault()
@@ -53,6 +60,46 @@ export function AjustesPage() {
       setProfileError(err instanceof Error ? err.message : 'No pudimos guardar tus datos.')
     } finally {
       setSavingProfile(false)
+    }
+  }
+
+  async function handleToggleWeeklyReminder() {
+    if (!profile) return
+    setWeeklyReminderError(null)
+    setSavingWeeklyReminder(true)
+    try {
+      await updateProfile(profile.id, { weekly_reminder_enabled: !profile.weekly_reminder_enabled })
+      await refreshProfile()
+    } catch (err) {
+      setWeeklyReminderError(err instanceof Error ? err.message : 'No pudimos guardar el cambio.')
+    } finally {
+      setSavingWeeklyReminder(false)
+    }
+  }
+
+  async function handleTestNotification() {
+    if (!profile) return
+    setTestingNotification(true)
+    setTestNotificationResult(null)
+    try {
+      // Se inserta directo (no via recordAuditEvent): notifications ya tiene
+      // su propio trigger de auditoria automatico (audit_row_change, ver
+      // 0004_audit_triggers.sql), asi que esto ya queda registrado en
+      // audit_logs sin ensuciar nada extra. profile_id = uno mismo: nunca es
+      // un broadcast, y NotificationPushBridge dispara el push y el sonido
+      // automaticamente al detectar el insert por Realtime (si el usuario
+      // tiene push activado) — no hace falta llamar a triggerPush aca.
+      await createNotification({
+        type: 'prueba',
+        title: 'Notificación de prueba',
+        body: 'Si ves esto, las notificaciones internas funcionan correctamente.',
+        profile_id: profile.id,
+      })
+      setTestNotificationResult('ok')
+    } catch {
+      setTestNotificationResult('error')
+    } finally {
+      setTestingNotification(false)
     }
   }
 
@@ -223,6 +270,49 @@ export function AjustesPage() {
             )}
           </>
         )}
+
+        <button
+          type="button"
+          className="btn btn-outlined btn-block"
+          style={{ marginTop: 12 }}
+          disabled={testingNotification}
+          onClick={handleTestNotification}
+        >
+          {testingNotification ? 'Enviando…' : 'Probar notificación'}
+        </button>
+        {testNotificationResult === 'ok' && (
+          <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginTop: 8 }}>
+            Notificación de prueba enviada. Revisá /notificaciones{push.subscribed ? ' y el aviso push' : ''}.
+          </p>
+        )}
+        {testNotificationResult === 'error' && (
+          <p className="field-error" style={{ marginTop: 8 }}>
+            No pudimos enviar la notificación de prueba.
+          </p>
+        )}
+      </div>
+
+      <div className="section-header">
+        <h2 className="section-title">Recordatorio semanal</h2>
+      </div>
+      <div className="card-solid" style={{ marginBottom: 20 }}>
+        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+          Todos los lunes al mediodía, SIGER4 envía un recordatorio institucional para revisar
+          cargas pendientes, novedades y documentación. Podés desactivarlo si no lo querés recibir.
+        </p>
+        <button
+          type="button"
+          className={`btn btn-block ${profile?.weekly_reminder_enabled ? 'btn-outlined' : 'btn-primary'}`}
+          disabled={savingWeeklyReminder || !profile}
+          onClick={handleToggleWeeklyReminder}
+        >
+          {savingWeeklyReminder
+            ? 'Guardando…'
+            : profile?.weekly_reminder_enabled
+              ? 'Desactivar recordatorio semanal'
+              : 'Activar recordatorio semanal'}
+        </button>
+        {weeklyReminderError && <p className="field-error" style={{ marginTop: 8 }}>{weeklyReminderError}</p>}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>

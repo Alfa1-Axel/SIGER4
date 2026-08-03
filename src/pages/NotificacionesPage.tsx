@@ -15,6 +15,8 @@ const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   actividad_proxima: 'Actividad próxima',
   documento_actualizado: 'Documento actualizado',
   reporte_generado: 'Reporte generado',
+  prueba: 'Prueba',
+  recordatorio_semanal: 'Recordatorio semanal',
 }
 
 export function NotificacionesPage() {

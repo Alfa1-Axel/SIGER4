@@ -53,6 +53,8 @@ export interface Profile {
   region_id: string | null
   station_id: string | null
   is_active: boolean
+  must_change_password: boolean
+  weekly_reminder_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -97,6 +99,8 @@ export type NotificationType =
   | 'actividad_proxima'
   | 'documento_actualizado'
   | 'reporte_generado'
+  | 'prueba'
+  | 'recordatorio_semanal'
 
 export interface Notification {
   id: string
@@ -160,7 +164,7 @@ export interface Course {
   updated_at: string
 }
 
-export type VehicleStatus = 'operativo' | 'mantenimiento' | 'fuera_de_servicio'
+export type VehicleStatus = 'operativo' | 'mantenimiento' | 'fuera_de_servicio' | 'vendido' | 'transferido' | 'baja'
 
 export interface Vehicle {
   id: string
@@ -177,7 +181,18 @@ export interface Vehicle {
   updated_at: string
 }
 
-export type PersonnelStatus = 'activo' | 'licencia' | 'baja' | 'reserva' | 'aspirante'
+export interface VehicleStatusHistory {
+  id: string
+  vehicle_id: string
+  previous_status: VehicleStatus
+  new_status: VehicleStatus
+  reason: string
+  changed_by_profile_id: string | null
+  station_id: string | null
+  created_at: string
+}
+
+export type PersonnelStatus = 'activo' | 'licencia' | 'baja' | 'reserva' | 'aspirante' | 'renuncia' | 'pase'
 
 export interface Personnel {
   id: string
@@ -195,6 +210,17 @@ export interface Personnel {
   observations: string | null
   created_at: string
   updated_at: string
+}
+
+export interface PersonnelStatusHistory {
+  id: string
+  personnel_id: string
+  previous_status: PersonnelStatus
+  new_status: PersonnelStatus
+  reason: string
+  changed_by_profile_id: string | null
+  station_id: string | null
+  created_at: string
 }
 
 export interface DocumentRecord {
@@ -218,5 +244,60 @@ export interface DocumentVersion {
   storage_path: string
   uploaded_by_profile_id: string | null
   note: string | null
+  created_at: string
+}
+
+export type InventoryCategory = 'herramienta_manual' | 'mecanica' | 'equipo' | 'elementos_practica' | 'otros'
+export type InventoryStatus = 'disponible' | 'no_disponible' | 'mantenimiento' | 'baja'
+
+export interface InventoryItem {
+  id: string
+  name: string
+  category: InventoryCategory
+  category_other_label: string | null
+  description: string | null
+  status: InventoryStatus
+  region_id: string
+  subsede_id: string | null
+  station_id: string | null
+  responsible_profile_id: string | null
+  responsible_name: string | null
+  contact_info: string | null
+  observations: string | null
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface InventoryItemHistory {
+  id: string
+  inventory_item_id: string
+  previous_station_id: string | null
+  new_station_id: string | null
+  previous_responsible_name: string | null
+  new_responsible_name: string | null
+  previous_status: InventoryStatus | null
+  new_status: InventoryStatus | null
+  note: string | null
+  changed_by_profile_id: string | null
+  created_at: string
+}
+
+export interface Department {
+  id: string
+  name: string
+  description: string | null
+  coordinator_profile_id: string | null
+  contact_info: string | null
+  is_active: boolean
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DepartmentMember {
+  id: string
+  department_id: string
+  profile_id: string
   created_at: string
 }

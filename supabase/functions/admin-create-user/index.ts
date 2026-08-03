@@ -128,6 +128,17 @@ function jsonResponse(body: Record<string, unknown>, status = 200): Response {
   })
 }
 
+// Loguea el detalle real del error en los logs de la función (Supabase
+// Dashboard → Edge Functions → admin-create-user → Logs) y devuelve un
+// mensaje claro al frontend, SIN exponer nunca detalles internos sensibles
+// (nombres de columnas/constraints de Postgres pueden filtrar estructura
+// interna; se resumen server-side, el log completo queda solo en Supabase).
+function logAndRespond(step: string, err: unknown, fallbackMessage: string, status = 500): Response {
+  const detail = err instanceof Error ? err.message : JSON.stringify(err)
+  console.error(`[admin-create-user] Falló en "${step}": ${detail}`)
+  return jsonResponse({ error: fallbackMessage, step }, status)
+}
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
@@ -136,166 +147,179 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS_HEADERS })
   if (req.method !== 'POST') return jsonResponse({ error: 'Método no permitido.' }, 405)
 
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
-    return jsonResponse({ error: 'Función no configurada: faltan variables de Supabase.' }, 500)
-  }
-
-  const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return jsonResponse({ error: 'No autenticado.' }, 401)
-
-  const supabaseAsUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-  })
-  const { data: userData, error: userError } = await supabaseAsUser.auth.getUser()
-  if (userError || !userData?.user) return jsonResponse({ error: 'No autenticado.' }, 401)
-
-  const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-
-  // Resuelve el perfil y los roles reales del que invoca (bajo service_role,
-  // pero filtrando por auth_user_id real — nunca confía en nada que mande el
-  // frontend sobre quién es el actor).
-  const { data: actorProfile, error: actorProfileError } = await supabaseAdmin
-    .from('profiles')
-    .select('id, station_id, is_active')
-    .eq('auth_user_id', userData.user.id)
-    .maybeSingle()
-  if (actorProfileError) return jsonResponse({ error: actorProfileError.message }, 500)
-  if (!actorProfile || !actorProfile.is_active) return jsonResponse({ error: 'No tenés permiso para crear usuarios.' }, 403)
-
-  const { data: actorRoleRows, error: actorRolesError } = await supabaseAdmin
-    .from('user_roles')
-    .select('role')
-    .eq('profile_id', actorProfile.id)
-  if (actorRolesError) return jsonResponse({ error: actorRolesError.message }, 500)
-  const actorRoles = new Set((actorRoleRows ?? []).map((r: { role: RoleKey }) => r.role))
-
-  const isInformatica = actorRoles.has('informatica_r4') || actorRoles.has('integrante_informatica')
-  const isDirectorEscuela = actorRoles.has('director_escuela')
-  const isJefeCuerpoActivo = actorRoles.has('jefe_cuerpo_activo')
-
-  if (!isInformatica && !isDirectorEscuela && !isJefeCuerpoActivo) {
-    return jsonResponse({ error: 'No tenés permiso para crear usuarios.' }, 403)
-  }
-
-  let body: CreateUserBody
+  // Envuelve TODO el cuerpo en try/catch: sin esto, un throw inesperado (no
+  // un {error} de Supabase, sino una excepción JS real — ej. acceder a una
+  // propiedad de undefined) se escapa como un 500 crudo de la plataforma sin
+  // ningún detalle ni en el log ni en la respuesta. Con esto, cualquier
+  // fallo no anticipado también queda logueado y responde un mensaje claro.
   try {
-    body = await req.json()
-  } catch {
-    return jsonResponse({ error: 'Solicitud inválida.' }, 400)
-  }
-
-  if (!body.email || !body.full_name || !body.password) {
-    return jsonResponse({ error: 'Faltan datos obligatorios (email, nombre, contraseña).' }, 400)
-  }
-  if (body.password.length < 8) {
-    return jsonResponse({ error: 'La contraseña temporal debe tener al menos 8 caracteres.' }, 400)
-  }
-  const requestedRoles = body.roles ?? []
-  if (requestedRoles.length === 0) {
-    return jsonResponse({ error: 'Seleccioná al menos un rol para el usuario.' }, 400)
-  }
-  if (requestedRoles.some((r) => !ALL_ROLES.includes(r))) {
-    return jsonResponse({ error: 'Rol inválido.' }, 400)
-  }
-  if (!body.scope?.scope_type) {
-    return jsonResponse({ error: 'Falta el alcance del usuario.' }, 400)
-  }
-
-  // Validacion de la matriz de permisos, server-side (la unica que importa —
-  // la UI solo oculta opciones por comodidad, esto es lo que realmente
-  // protege el sistema).
-  if (!isInformatica) {
-    if (requestedRoles.some((r) => INFORMATICA_ROLES.includes(r))) {
-      return jsonResponse({ error: 'No tenés permiso para asignar roles de Informática.' }, 403)
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[admin-create-user] Faltan variables de entorno: SUPABASE_URL/SUPABASE_ANON_KEY/SUPABASE_SERVICE_ROLE_KEY.')
+      return jsonResponse({ error: 'Función no configurada: faltan variables de Supabase.' }, 500)
     }
-  }
 
-  if (!isInformatica && !isDirectorEscuela && isJefeCuerpoActivo) {
-    if (requestedRoles.some((r) => !JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES.includes(r))) {
-      return jsonResponse({ error: 'Como Jefe de Cuerpo Activo solo podés asignar roles de cuartel (no jefe_cuerpo_activo, ni roles regionales/escuela/informática).' }, 403)
-    }
-    if (!actorProfile.station_id) {
-      return jsonResponse({ error: 'Tu perfil no tiene un cuartel asignado; no podés crear usuarios.' }, 403)
-    }
-    if (body.station_id !== actorProfile.station_id) {
-      return jsonResponse({ error: 'Solo podés crear usuarios para tu propio cuartel.' }, 403)
-    }
-    if (body.scope.scope_type !== 'station' || body.scope.station_id !== actorProfile.station_id) {
-      return jsonResponse({ error: 'El alcance del usuario debe ser tu propio cuartel.' }, 403)
-    }
-  }
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return jsonResponse({ error: 'No autenticado.' }, 401)
 
-  const email = normalizeEmail(body.email)
-
-  const { data: existingProfile } = await supabaseAdmin
-    .from('profiles')
-    .select('id')
-    .eq('email', email)
-    .maybeSingle()
-  if (existingProfile) {
-    return jsonResponse({ error: 'Ya existe un perfil con ese email.' }, 409)
-  }
-
-  const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password: body.password,
-    email_confirm: true,
-  })
-  if (createError || !created?.user) {
-    const alreadyExists = (createError?.message ?? '').toLowerCase().includes('already registered')
-    return jsonResponse(
-      { error: alreadyExists ? 'Ese email ya tiene una cuenta de Auth (sin perfil vinculado). Contactá soporte.' : (createError?.message ?? 'No se pudo crear el usuario.') },
-      alreadyExists ? 409 : 500,
-    )
-  }
-
-  const { data: profile, error: profileError } = await supabaseAdmin
-    .from('profiles')
-    .insert({
-      auth_user_id: created.user.id,
-      full_name: body.full_name,
-      email,
-      rank: body.rank ?? null,
-      region_id: body.region_id ?? null,
-      station_id: body.station_id ?? null,
-      // La contraseña la definió (o generó) quien crea el usuario, no la
-      // persona dueña de la cuenta — se fuerza que la cambie antes de poder
-      // usar el resto de la app (ver migración 0034_must_change_password.sql
-      // y ForcePasswordChangeGate en el frontend).
-      must_change_password: true,
+    const supabaseAsUser = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
     })
-    .select('*')
-    .single()
+    const { data: userData, error: userError } = await supabaseAsUser.auth.getUser()
+    if (userError || !userData?.user) return logAndRespond('auth.getUser', userError, 'No autenticado.', 401)
 
-  if (profileError) {
-    // El perfil no se pudo crear (ej. constraint violado): revierte el alta
-    // en Auth para no dejar una cuenta huerfana sin perfil.
-    await supabaseAdmin.auth.admin.deleteUser(created.user.id)
-    return jsonResponse({ error: profileError.message }, 500)
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    // Resuelve el perfil y los roles reales del que invoca (bajo service_role,
+    // pero filtrando por auth_user_id real — nunca confía en nada que mande el
+    // frontend sobre quién es el actor).
+    const { data: actorProfile, error: actorProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, station_id, is_active')
+      .eq('auth_user_id', userData.user.id)
+      .maybeSingle()
+    if (actorProfileError) return logAndRespond('resolver perfil del actor', actorProfileError, 'No pudimos verificar tu perfil. Reintentá en unos segundos.')
+    if (!actorProfile || !actorProfile.is_active) return jsonResponse({ error: 'No tenés permiso para crear usuarios.' }, 403)
+
+    const { data: actorRoleRows, error: actorRolesError } = await supabaseAdmin
+      .from('user_roles')
+      .select('role')
+      .eq('profile_id', actorProfile.id)
+    if (actorRolesError) return logAndRespond('resolver roles del actor', actorRolesError, 'No pudimos verificar tus permisos. Reintentá en unos segundos.')
+    const actorRoles = new Set((actorRoleRows ?? []).map((r: { role: RoleKey }) => r.role))
+
+    const isInformatica = actorRoles.has('informatica_r4') || actorRoles.has('integrante_informatica')
+    const isDirectorEscuela = actorRoles.has('director_escuela')
+    const isJefeCuerpoActivo = actorRoles.has('jefe_cuerpo_activo')
+
+    if (!isInformatica && !isDirectorEscuela && !isJefeCuerpoActivo) {
+      return jsonResponse({ error: 'No tenés permiso para crear usuarios.' }, 403)
+    }
+
+    let body: CreateUserBody
+    try {
+      body = await req.json()
+    } catch (err) {
+      return logAndRespond('parsear body', err, 'Solicitud inválida.', 400)
+    }
+
+    if (!body.email || !body.full_name || !body.password) {
+      return jsonResponse({ error: 'Faltan datos obligatorios (email, nombre, contraseña).' }, 400)
+    }
+    if (body.password.length < 8) {
+      return jsonResponse({ error: 'La contraseña temporal debe tener al menos 8 caracteres.' }, 400)
+    }
+    const requestedRoles = body.roles ?? []
+    if (requestedRoles.length === 0) {
+      return jsonResponse({ error: 'Seleccioná al menos un rol para el usuario.' }, 400)
+    }
+    if (requestedRoles.some((r) => !ALL_ROLES.includes(r))) {
+      return jsonResponse({ error: 'Rol inválido.' }, 400)
+    }
+    if (!body.scope?.scope_type) {
+      return jsonResponse({ error: 'Falta el alcance del usuario.' }, 400)
+    }
+
+    // Validacion de la matriz de permisos, server-side (la unica que importa —
+    // la UI solo oculta opciones por comodidad, esto es lo que realmente
+    // protege el sistema).
+    if (!isInformatica) {
+      if (requestedRoles.some((r) => INFORMATICA_ROLES.includes(r))) {
+        return jsonResponse({ error: 'No tenés permiso para asignar roles de Informática.' }, 403)
+      }
+    }
+
+    if (!isInformatica && !isDirectorEscuela && isJefeCuerpoActivo) {
+      if (requestedRoles.some((r) => !JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES.includes(r))) {
+        return jsonResponse({ error: 'Como Jefe de Cuerpo Activo solo podés asignar roles de cuartel (no jefe_cuerpo_activo, ni roles regionales/escuela/informática).' }, 403)
+      }
+      if (!actorProfile.station_id) {
+        return jsonResponse({ error: 'Tu perfil no tiene un cuartel asignado; no podés crear usuarios.' }, 403)
+      }
+      if (body.station_id !== actorProfile.station_id) {
+        return jsonResponse({ error: 'Solo podés crear usuarios para tu propio cuartel.' }, 403)
+      }
+      if (body.scope.scope_type !== 'station' || body.scope.station_id !== actorProfile.station_id) {
+        return jsonResponse({ error: 'El alcance del usuario debe ser tu propio cuartel.' }, 403)
+      }
+    }
+
+    const email = normalizeEmail(body.email)
+
+    const { data: existingProfile, error: existingProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
+    if (existingProfileError) return logAndRespond('verificar email existente', existingProfileError, 'No pudimos verificar el email. Reintentá en unos segundos.')
+    if (existingProfile) {
+      return jsonResponse({ error: 'Ya existe un perfil con ese email.' }, 409)
+    }
+
+    const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: body.password,
+      email_confirm: true,
+    })
+    if (createError || !created?.user) {
+      const alreadyExists = (createError?.message ?? '').toLowerCase().includes('already registered')
+      return logAndRespond(
+        'auth.admin.createUser',
+        createError ?? new Error('createUser no devolvió usuario'),
+        alreadyExists ? 'Ese email ya tiene una cuenta de Auth (sin perfil vinculado). Contactá soporte.' : 'No se pudo crear la cuenta de acceso. Verificá el email y la contraseña.',
+        alreadyExists ? 409 : 500,
+      )
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .insert({
+        auth_user_id: created.user.id,
+        full_name: body.full_name,
+        email,
+        rank: body.rank ?? null,
+        region_id: body.region_id ?? null,
+        station_id: body.station_id ?? null,
+        // La contraseña la definió (o generó) quien crea el usuario, no la
+        // persona dueña de la cuenta — se fuerza que la cambie antes de poder
+        // usar el resto de la app (ver migración 0034_must_change_password.sql
+        // y CambiarPasswordPage en el frontend).
+        must_change_password: true,
+      })
+      .select('*')
+      .single()
+
+    if (profileError) {
+      // El perfil no se pudo crear (ej. constraint violado): revierte el alta
+      // en Auth para no dejar una cuenta huerfana sin perfil.
+      await supabaseAdmin.auth.admin.deleteUser(created.user.id)
+      return logAndRespond('insertar profile', profileError, 'No se pudo crear el perfil del usuario (los datos institucionales). No se creó ninguna cuenta.')
+    }
+
+    const { error: rolesError } = await supabaseAdmin
+      .from('user_roles')
+      .insert(requestedRoles.map((role) => ({ profile_id: profile.id, role })))
+    if (rolesError) {
+      await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
+      await supabaseAdmin.auth.admin.deleteUser(created.user.id)
+      return logAndRespond('insertar user_roles', rolesError, 'No se pudieron asignar los roles. No se creó ninguna cuenta.')
+    }
+
+    const { error: scopeError } = await supabaseAdmin.from('user_scopes').insert({
+      profile_id: profile.id,
+      scope_type: body.scope.scope_type,
+      region_id: body.scope.region_id ?? null,
+      subsede_id: body.scope.subsede_id ?? null,
+      station_id: body.scope.station_id ?? null,
+    })
+    if (scopeError) {
+      await supabaseAdmin.from('user_roles').delete().eq('profile_id', profile.id)
+      await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
+      await supabaseAdmin.auth.admin.deleteUser(created.user.id)
+      return logAndRespond('insertar user_scopes', scopeError, 'No se pudo asignar el alcance. No se creó ninguna cuenta.')
+    }
+
+    return jsonResponse({ profile })
+  } catch (err) {
+    return logAndRespond('excepción no controlada', err, 'Ocurrió un error inesperado creando el usuario.')
   }
-
-  const { error: rolesError } = await supabaseAdmin
-    .from('user_roles')
-    .insert(requestedRoles.map((role) => ({ profile_id: profile.id, role })))
-  if (rolesError) {
-    await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
-    await supabaseAdmin.auth.admin.deleteUser(created.user.id)
-    return jsonResponse({ error: rolesError.message }, 500)
-  }
-
-  const { error: scopeError } = await supabaseAdmin.from('user_scopes').insert({
-    profile_id: profile.id,
-    scope_type: body.scope.scope_type,
-    region_id: body.scope.region_id ?? null,
-    subsede_id: body.scope.subsede_id ?? null,
-    station_id: body.scope.station_id ?? null,
-  })
-  if (scopeError) {
-    await supabaseAdmin.from('user_roles').delete().eq('profile_id', profile.id)
-    await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
-    await supabaseAdmin.auth.admin.deleteUser(created.user.id)
-    return jsonResponse({ error: scopeError.message }, 500)
-  }
-
-  return jsonResponse({ profile })
 })

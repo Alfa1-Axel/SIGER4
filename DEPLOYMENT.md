@@ -405,6 +405,12 @@ columna que un módulo ya tiene flujo real detrás:
 - **Reportes PDF**: ✅ completo (6 tipos de reporte, PDFs reales en horizontal, logos, KPIs, tablas,
   gráficos y resumen ejecutivo generado localmente, sin dependencias externas). El análisis con IA
   no está activo — ver sección 1.7.
+- **Inventario Regional**: ✅ completo para la fase actual (alta/edición por roles regionales,
+  visible para todo usuario autenticado, historial de ubicación/responsable/estado). Solicitudes de
+  préstamo/aprobación/devolución quedan para una fase futura — ver sección 6.5.
+- **Departamentos Regionales**: ✅ base completa (alta por Informática R4, edición por el
+  coordinador o Informática R4, miembros con su cuartel resuelto desde `profiles.station_id`,
+  activo/inactivo). Informes/estadísticas quedan para una fase futura — ver sección 6.5.
 
 ## 4. Notas de seguridad
 
@@ -545,3 +551,128 @@ usuario acotado es una capacidad distinta de administrar cualquier usuario del s
   `auth_user_id is null` (invitaciones pendientes del flujo viejo), no se resuelven automáticamente
   — requieren decisión manual (crear la cuenta con `admin-create-user` y fusionar, o borrar el
   perfil si ya no corresponde).
+
+## 6. Tanda funcional (2026-08) — migraciones 0034 a 0043
+
+### 6.1 Migraciones nuevas a correr (en orden, después de 0033)
+
+- `0034_must_change_password.sql` — `profiles.must_change_password`; fuerza cambio de contraseña
+  en el primer ingreso cuando la cuenta la creó un admin con contraseña propia.
+- `0035_notification_types_test_and_reminder.sql` — nuevos valores de `notification_type`:
+  `prueba`, `recordatorio_semanal`.
+- `0036_weekly_reminder_cron.sql` — **requiere pg_cron y pg_net habilitados antes de correrla**
+  (ver 6.3). `profiles.weekly_reminder_enabled`, función `send_weekly_reminder()`, job de pg_cron
+  `siger4-weekly-reminder`.
+- `0037_vehicle_status_new_values.sql` — nuevos valores de `vehicle_status`: `vendido`,
+  `transferido`, `baja`.
+- `0038_vehicle_lifecycle_history.sql` — historial de vehículos, RPC `change_vehicle_status`,
+  `vehicles_count` deja de contar vehículos dados de baja de flota.
+- `0039_personnel_status_new_values.sql` — nuevos valores de `personnel_status`: `renuncia`, `pase`.
+- `0040_personnel_status_history.sql` — historial de personal, RPC `change_personnel_status`.
+- `0041_inventory_module.sql` — módulo Inventario Regional completo (tablas, RLS, historial,
+  auditoría).
+- `0042_departments_module.sql` — módulo Departamentos Regionales base (tablas, RLS, auditoría).
+- `0043_remove_administrativo_role_ui.sql` — sin cambios de schema (documentación); el rol
+  `administrativo` se retiró de la UI/matriz de permisos pero sigue existiendo en el enum
+  `role_key` de Postgres (no se puede borrar un valor de enum sin recrear el tipo completo).
+
+**Importante sobre los pares de migraciones "_new_values" + funcionalidad**: Postgres no permite
+usar un valor de enum recién agregado (`ALTER TYPE ... ADD VALUE`) dentro de la misma transacción
+en la que se agregó. Por eso `0035`/`0037`/`0039` están separadas de las migraciones que
+efectivamente usan esos valores nuevos — correlas en el orden numérico exacto, cada una como su
+propia query en el SQL Editor (como ya indica la sección 1.2), nunca todas pegadas en un mismo
+bloque de ejecución.
+
+### 6.2 Edge Functions a (re)desplegar
+
+```
+supabase functions deploy admin-create-user
+supabase functions deploy send-push-system
+```
+
+`send-push-system` es una función nueva (recordatorio semanal, ver 6.3): requiere el secreto
+`CRON_SHARED_SECRET` (además de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`VAPID_PUBLIC_KEY`/
+`VAPID_PRIVATE_KEY`, ya configurados). Generarlo vos mismo (cualquier string largo y aleatorio) y
+configurarlo:
+
+```
+supabase secrets set CRON_SHARED_SECRET=<un-valor-aleatorio-largo>
+```
+
+`admin-create-user` no necesita secretos nuevos, pero cambió su lógica (ahora crea roles/scope en
+el mismo paso) — redesplegar igual.
+
+### 6.3 Configurar el recordatorio semanal (pg_cron + pg_net)
+
+Estos pasos son **obligatorios antes de correr `0036_weekly_reminder_cron.sql`** — si la migración
+corre sin esto, falla al crear el job de cron.
+
+**Paso 1 — Habilitar las extensiones (Supabase Dashboard → Database → Extensions):**
+1. Buscar `pg_cron` → Enable.
+2. Buscar `pg_net` → Enable.
+
+**Paso 2 — Configurar la URL del proyecto y el secreto compartido (SQL Editor, antes de 0036):**
+
+```sql
+alter database postgres set siger4.project_url = 'https://<tu-proyecto>.supabase.co';
+alter database postgres set siger4.cron_shared_secret = '<el-mismo-valor-que-CRON_SHARED_SECRET>';
+```
+
+Reemplazar `<tu-proyecto>` por el subdominio real de tu proyecto Supabase (Project Settings → API →
+Project URL), y `<el-mismo-valor-que-CRON_SHARED_SECRET>` por el mismo string que configuraste como
+secreto de `send-push-system` en el paso 6.2. **Deben ser exactamente el mismo valor** — si no
+coinciden, `send-push-system` responde 401 y el recordatorio se crea como notificación interna pero
+nunca llega como push.
+
+**Paso 3 — Correr `0036_weekly_reminder_cron.sql`** (después de los pasos 1 y 2).
+
+**Paso 4 — Verificar que quedó funcionando:**
+
+```sql
+-- Confirmar que el job existe y está activo:
+select * from cron.job where jobname = 'siger4-weekly-reminder';
+
+-- Ver el historial de ejecuciones (después del primer lunes 12:00 ART / 15:00 UTC):
+select * from cron.job_run_details
+where jobid = (select jobid from cron.job where jobname = 'siger4-weekly-reminder')
+order by start_time desc limit 5;
+
+-- Probar manualmente sin esperar al lunes (dispara para todos los usuarios
+-- activos con el recordatorio habilitado — usar con cuidado en producción,
+-- genera una notificación real para cada uno):
+select send_weekly_reminder();
+```
+
+Si `send_weekly_reminder()` no encuentra `siger4.project_url`/`siger4.cron_shared_secret`
+configurados, inserta las notificaciones igual pero loguea un `WARNING` (visible en Database → Logs)
+y no intenta el push — revisar ese warning si el push nunca llega pero la notificación interna sí
+aparece en `/notificaciones`.
+
+**Horario**: el job corre `0 15 * * 1` (lunes 15:00 UTC). Argentina es UTC-3 todo el año desde 2009
+(sin horario de verano), así que esto es siempre lunes 12:00 hora Argentina — no hace falta ajustar
+el cron dos veces al año.
+
+### 6.4 Cambios de flujo para comunicar a los usuarios
+
+- **Alta de usuarios**: ahora el admin/coordinador define (o genera) la contraseña temporal, con
+  confirmación. El nuevo usuario ve una pantalla de cambio de contraseña obligatorio en su primer
+  ingreso — no puede usar el resto de la app hasta cambiarla.
+- **Vehículos y personal**: pasar a un estado de "baja de flota" (vehículos: vendido/transferido/
+  baja; personal: renuncia/baja/pase/reserva) ahora exige un motivo obligatorio y se hace desde un
+  botón/selector específico en el detalle del cuartel, no desde el formulario de edición normal.
+- **Rol "Administrativo"**: ya no aparece como opción al crear o editar roles de un usuario. Si
+  algún perfil real ya lo tenía asignado, sigue funcionando igual (no se le quitó el rol), pero no
+  se puede volver a asignar a nadie más desde la UI.
+
+### 6.5 Pendiente para Fase 2 (documentado, no implementado en esta tanda)
+
+- **Solicitudes de préstamo del Inventario Regional**: el módulo solo registra qué existe, dónde
+  está y quién es responsable. Solicitud, aprobación y devolución quedan para una fase futura,
+  según lo pedido explícitamente.
+- **Informes y estadísticas de Departamentos Regionales**: el módulo base (departamento,
+  coordinador, miembros, contacto, activo/inactivo) está completo; informes/estadísticas de
+  actividad por departamento quedan para una fase futura.
+- **Rol "Administrativo" en el enum de Postgres**: sigue existiendo (no se puede quitar sin recrear
+  el tipo `role_key` completo). Si en el futuro se decide migrarlo de verdad, primero hay que
+  identificar qué perfiles reales lo tienen asignado (query de referencia en
+  `0043_remove_administrativo_role_ui.sql`) y decidir a qué rol migrarlos.

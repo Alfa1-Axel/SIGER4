@@ -32,7 +32,6 @@ const JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES: RoleKey[] = [
   'presidente_cuartel',
   'usuario_carga_cuartel',
   'secretario_comision',
-  'administrativo',
   'invitado',
 ]
 
@@ -72,14 +71,19 @@ export function UsuarioFormPage() {
   const [scopeSubsedeId, setScopeSubsedeId] = useState('')
   const [scopeStationId, setScopeStationId] = useState(isJefeCuerpoActivo ? currentProfile?.station_id ?? '' : '')
 
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
 
-  function generatePassword(): string {
+  function handleGeneratePassword() {
     const bytes = new Uint8Array(12)
     crypto.getRandomValues(bytes)
-    return Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16)
+    const generated = Array.from(bytes, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 16)
+    setPassword(generated)
+    setConfirmPassword(generated)
   }
 
   useEffect(() => {
@@ -124,7 +128,14 @@ export function UsuarioFormPage() {
       return
     }
 
-    const password = generatePassword()
+    if (password.length < 8) {
+      setError('La contraseña temporal debe tener al menos 8 caracteres.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden.')
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -167,8 +178,9 @@ export function UsuarioFormPage() {
         <h1 className="page-title">Usuario creado</h1>
         <p className="page-subtitle">
           La cuenta de <strong>{fullName}</strong> ({email}) ya está activa. Compartile esta
-          contraseña temporal por un canal seguro (no queda guardada en ningún lado del sistema) y
-          pedile que la cambie apenas ingrese:
+          contraseña temporal por un canal seguro (no queda guardada en ningún lado del sistema). El
+          sistema le va a exigir cambiarla apenas ingrese, antes de poder usar cualquier otra
+          pantalla:
         </p>
         <div className="card-solid" style={{ marginBottom: 20, wordBreak: 'break-all' }}>
           <code>{createdPassword}</code>
@@ -220,6 +232,44 @@ export function UsuarioFormPage() {
           <label htmlFor="rank">Rango / Jerarquía (opcional)</label>
           <input id="rank" value={rank} onChange={(e) => setRank(e.target.value)} placeholder="Bombero, Oficial, etc." />
         </div>
+
+        <div className="field">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label htmlFor="password" style={{ marginBottom: 0 }}>
+              Contraseña temporal
+            </label>
+            <button type="button" className="link-muted" style={{ fontSize: 12 }} onClick={handleGeneratePassword}>
+              Generar automáticamente
+            </button>
+          </div>
+          <input
+            id="password"
+            type="text"
+            required
+            minLength={8}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mínimo 8 caracteres"
+            autoComplete="new-password"
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="confirmPassword">Confirmar contraseña</label>
+          <input
+            id="confirmPassword"
+            type="text"
+            required
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Repetí la contraseña"
+            autoComplete="new-password"
+          />
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+          El usuario deberá cambiar esta contraseña la primera vez que ingrese: no va a poder usar el
+          resto del sistema hasta hacerlo.
+        </p>
 
         {!isJefeCuerpoActivo && (
           <div className="field">

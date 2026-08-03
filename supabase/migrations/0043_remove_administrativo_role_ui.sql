@@ -1,0 +1,26 @@
+-- SIGER4 - Retirar 'administrativo' como rol seleccionable (solo UI/matriz)
+--
+-- Sin cambios de schema: Postgres no permite borrar un valor de un enum
+-- existente (role_key) sin recrear el tipo completo y todas las columnas/
+-- policies que lo usan — riesgo alto e innecesario para lo que se pidió.
+--
+-- Se retiro 'administrativo' de:
+--   - ROLE_DEFINITIONS (src/types/roles.ts) — ya no aparece en ningun
+--     formulario de alta/edicion de usuarios ni selector de roles.
+--   - JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES (frontend y Edge Function
+--     admin-create-user) — un jefe_cuerpo_activo ya no puede asignarlo.
+--
+-- El valor 'administrativo' sigue existiendo en el enum role_key de
+-- Postgres, y RoleKey (TypeScript) lo sigue incluyendo, por si algun perfil
+-- real ya tiene ese rol asignado hoy: esta migracion NO lo quita de nadie
+-- que ya lo tenga. Si en el futuro se decide migrar esos perfiles a otro rol
+-- o recrear el enum sin este valor, hacerlo en una migracion aparte,
+-- coordinada con el Dpto. de Informatica (requiere identificar primero a
+-- que perfiles reales afecta).
+--
+-- Query util para identificar perfiles con el rol 'administrativo' hoy (no
+-- se ejecuta automaticamente, es solo de referencia):
+--   select p.id, p.full_name, p.email from user_roles ur
+--   join profiles p on p.id = ur.profile_id
+--   where ur.role = 'administrativo';
+select 1;

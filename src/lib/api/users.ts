@@ -40,6 +40,8 @@ export interface ProfileInput {
   avatar_url?: string | null
   region_id?: string | null
   station_id?: string | null
+  must_change_password?: boolean
+  weekly_reminder_enabled?: boolean
 }
 
 // Crea la cuenta de Auth, el perfil y sus roles/alcance en un solo paso

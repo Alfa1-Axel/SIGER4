@@ -76,12 +76,13 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     description: 'Gestión administrativa de la comisión directiva del cuartel.',
     scope: 'cuartel',
   },
-  {
-    key: 'administrativo',
-    label: 'Administrativo',
-    description: 'Personal administrativo del cuartel o la regional.',
-    scope: 'cuartel',
-  },
+  // 'administrativo' se retiró de las opciones seleccionables (ver
+  // 0043_remove_administrativo_role_ui.sql): ya no aparece en ningún
+  // formulario ni matriz de permisos. El valor sigue existiendo en el enum
+  // role_key de Postgres (no se puede borrar sin recrear el tipo) por si
+  // algún perfil real todavía lo tiene asignado; RoleKey lo mantiene para que
+  // ese caso siga tipando correctamente, pero ROLE_DEFINITIONS ya no lo
+  // ofrece para asignar a nadie nuevo.
   {
     key: 'invitado',
     label: 'Invitado / Solo lectura',

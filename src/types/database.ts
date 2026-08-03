@@ -234,6 +234,21 @@ export interface DocumentRecord {
   description: string | null
   storage_path: string
   uploaded_by_profile_id: string | null
+  folder_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentFolder {
+  id: string
+  name: string
+  description: string | null
+  region_id: string | null
+  subsede_id: string | null
+  station_id: string | null
+  profile_id: string | null
+  is_active: boolean
+  created_by_profile_id: string | null
   created_at: string
   updated_at: string
 }

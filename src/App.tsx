@@ -24,6 +24,8 @@ import { NotificacionesPage } from './pages/NotificacionesPage'
 import { NotificacionFormPage } from './pages/NotificacionFormPage'
 import { DocumentosPage } from './pages/DocumentosPage'
 import { DocumentoFormPage } from './pages/DocumentoFormPage'
+import { CarpetaDetallePage } from './pages/CarpetaDetallePage'
+import { CarpetaFormPage } from './pages/CarpetaFormPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import { PersonalFormPage } from './pages/PersonalFormPage'
 import { InventarioPage } from './pages/InventarioPage'
@@ -63,6 +65,8 @@ export default function App() {
         <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
         <Route path="/documentos/nuevo" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/documentos/:id/editar" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
+        <Route path="/documentos/carpetas/nueva" element={<ProtectedRoute><CarpetaFormPage /></ProtectedRoute>} />
+        <Route path="/documentos/carpetas/:id" element={<ProtectedRoute><CarpetaDetallePage /></ProtectedRoute>} />
         <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />

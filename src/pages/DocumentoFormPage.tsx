@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
@@ -31,6 +31,8 @@ export function DocumentoFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const folderIdFromQuery = searchParams.get('folderId')
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
   const canCreate = isAdmin || hasRole('secretario_regional', 'presidente_cuartel', 'usuario_carga_cuartel', 'secretario_comision')
 
@@ -50,6 +52,7 @@ export function DocumentoFormPage() {
   const [profileId, setProfileId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
+  const [existingFolderId, setExistingFolderId] = useState<string | null>(null)
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
@@ -82,6 +85,7 @@ export function DocumentoFormPage() {
       setCategory(doc.category)
       setDescription(doc.description ?? '')
       setExistingStoragePath(doc.storage_path)
+      setExistingFolderId(doc.folder_id)
       setVersions(docVersions)
       if (doc.profile_id) {
         setScopeTarget('profile')
@@ -157,14 +161,18 @@ export function DocumentoFormPage() {
           const newPath = await uploadDocumentFile(id, file)
           await updateDocumentStoragePath(id, newPath)
         }
-        navigate('/documentos')
+        navigate(existingFolderId ? `/documentos/carpetas/${existingFolderId}` : '/documentos/carpetas/general')
       } else {
-        const created = await createDocument({ ...input, uploaded_by_profile_id: currentProfile?.id ?? null })
+        const created = await createDocument({
+          ...input,
+          folder_id: folderIdFromQuery || null,
+          uploaded_by_profile_id: currentProfile?.id ?? null,
+        })
         if (file) {
           const path = await uploadDocumentFile(created.id, file)
           await updateDocumentStoragePath(created.id, path)
         }
-        navigate('/documentos')
+        navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos guardar el documento.')

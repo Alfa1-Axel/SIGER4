@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { DocumentRecord, DocumentVersion } from '../../types/database'
+import type { DocumentRecord, DocumentVersion, DocumentFolder } from '../../types/database'
 
 export async function fetchDocuments(): Promise<DocumentRecord[]> {
   const { data, error } = await supabase
@@ -8,6 +8,54 @@ export async function fetchDocuments(): Promise<DocumentRecord[]> {
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as DocumentRecord[]
+}
+
+export async function fetchDocumentsByFolder(folderId: string | null): Promise<DocumentRecord[]> {
+  let query = supabase.from('documents').select('*').order('created_at', { ascending: false })
+  query = folderId ? query.eq('folder_id', folderId) : query.is('folder_id', null)
+  const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
+export async function fetchDocumentFolders(): Promise<DocumentFolder[]> {
+  const { data, error } = await supabase.from('document_folders').select('*').order('name', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as DocumentFolder[]
+}
+
+export async function fetchDocumentFolderById(id: string): Promise<DocumentFolder | null> {
+  const { data, error } = await supabase.from('document_folders').select('*').eq('id', id).single()
+  if (error) return null
+  return data as DocumentFolder
+}
+
+export interface DocumentFolderInput {
+  name: string
+  description?: string | null
+  region_id?: string | null
+  subsede_id?: string | null
+  station_id?: string | null
+  profile_id?: string | null
+  is_active?: boolean
+  created_by_profile_id?: string | null
+}
+
+export async function createDocumentFolder(input: DocumentFolderInput): Promise<DocumentFolder> {
+  const { data, error } = await supabase.from('document_folders').insert(input).select('*').single()
+  if (error) throw error
+  return data as DocumentFolder
+}
+
+export async function updateDocumentFolder(id: string, input: Partial<DocumentFolderInput>): Promise<DocumentFolder> {
+  const { data, error } = await supabase.from('document_folders').update(input).eq('id', id).select('*').single()
+  if (error) throw error
+  return data as DocumentFolder
+}
+
+export async function deleteDocumentFolder(id: string): Promise<void> {
+  const { error } = await supabase.from('document_folders').delete().eq('id', id)
+  if (error) throw error
 }
 
 // Borra documentos que quedaron con storage_path='pending' (carga nunca
@@ -35,6 +83,7 @@ export interface DocumentInput {
   station_id?: string | null
   profile_id?: string | null
   uploaded_by_profile_id?: string | null
+  folder_id?: string | null
 }
 
 // El registro se crea con un storage_path placeholder (la columna es NOT

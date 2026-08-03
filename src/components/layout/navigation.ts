@@ -20,6 +20,8 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/escuela', label: 'Escuela', icon: 'school' },
   { to: '/reportes', label: 'Reportes', icon: 'chart' },
   { to: '/documentos', label: 'Documentos', icon: 'file' },
+  { to: '/inventario', label: 'Inventario', icon: 'tag' },
+  { to: '/departamentos', label: 'Departamentos', icon: 'building' },
   { to: '/auditoria', label: 'Auditoría', icon: 'clipboardList', hideForRoles: ['invitado'] },
   { to: '/usuarios', label: 'Usuarios', icon: 'user', adminOnly: true },
   { to: '/usuarios/nuevo', label: 'Nuevo Usuario', icon: 'user', showForRoles: ['director_escuela', 'jefe_cuerpo_activo'] },

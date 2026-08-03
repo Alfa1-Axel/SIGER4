@@ -5,6 +5,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AdminRoute } from './components/layout/AdminRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { LoginPage } from './pages/LoginPage'
+import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
 import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
 import { CuartelDetallePage } from './pages/CuartelDetallePage'
@@ -25,6 +26,11 @@ import { DocumentosPage } from './pages/DocumentosPage'
 import { DocumentoFormPage } from './pages/DocumentoFormPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import { PersonalFormPage } from './pages/PersonalFormPage'
+import { InventarioPage } from './pages/InventarioPage'
+import { InventarioFormPage } from './pages/InventarioFormPage'
+import { DepartamentosPage } from './pages/DepartamentosPage'
+import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
+import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
 
 export default function App() {
   return (
@@ -32,6 +38,7 @@ export default function App() {
       <NotificationPushBridge />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
         <Route path="/panel" element={<ProtectedRoute><PanelPage /></ProtectedRoute>} />
         <Route path="/cuarteles" element={<ProtectedRoute><CuartelesPage /></ProtectedRoute>} />
         <Route path="/cuarteles/nuevo" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />
@@ -59,6 +66,12 @@ export default function App() {
         <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
+        <Route path="/inventario" element={<ProtectedRoute><InventarioPage /></ProtectedRoute>} />
+        <Route path="/inventario/nuevo" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
+        <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
+        <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
+        <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
+        <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

@@ -12,6 +12,7 @@ import {
   removeScope,
   setProfileActive,
   updateProfile,
+  updateUserAccount,
 } from '../lib/api/users'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
@@ -28,7 +29,7 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
 
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
-  const { profile: currentProfile, hasRole: currentHasRole } = useAuth()
+  const { profile: currentProfile, hasRole: currentHasRole, isAdmin } = useAuth()
   const isCurrentUserSuperAdmin = currentHasRole('informatica_r4')
 
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -42,6 +43,7 @@ export function UsuarioDetallePage() {
   const [rank, setRank] = useState('')
   const [regionId, setRegionId] = useState('')
   const [stationId, setStationId] = useState('')
+  const [email, setEmail] = useState('')
 
   const [newScopeType, setNewScopeType] = useState<ScopeType>('station')
   const [newScopeStationId, setNewScopeStationId] = useState('')
@@ -51,6 +53,13 @@ export function UsuarioDetallePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [newPassword, setNewPassword] = useState('')
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [passwordResetDone, setPasswordResetDone] = useState(false)
+  const [savingEmail, setSavingEmail] = useState(false)
+  const [emailSaved, setEmailSaved] = useState(false)
+  const [resettingMustChangePassword, setResettingMustChangePassword] = useState(false)
 
   async function reload() {
     if (!id) return
@@ -63,6 +72,7 @@ export function UsuarioDetallePage() {
     setRank(data.profile.rank ?? '')
     setRegionId(data.profile.region_id ?? '')
     setStationId(data.profile.station_id ?? '')
+    setEmail(data.profile.email)
   }
 
   useEffect(() => {
@@ -81,6 +91,7 @@ export function UsuarioDetallePage() {
           setRank(profileData.profile.rank ?? '')
           setRegionId(profileData.profile.region_id ?? '')
           setStationId(profileData.profile.station_id ?? '')
+          setEmail(profileData.profile.email)
         }
         setLoading(false)
       },
@@ -155,10 +166,70 @@ export function UsuarioDetallePage() {
     if (!id || !profile) return
     setError(null)
     try {
-      await setProfileActive(id, !profile.is_active)
+      if (isAdmin) {
+        // informatica_r4/integrante_informatica: además de is_active, banea/
+        // desbanea la cuenta de Auth de verdad (setProfileActive solo toca
+        // profiles.is_active, la sesión de Auth seguiría siendo válida).
+        await updateUserAccount({ profile_id: id, is_active: !profile.is_active })
+      } else {
+        await setProfileActive(id, !profile.is_active)
+      }
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos cambiar el estado del usuario.')
+    }
+  }
+
+  async function handleSaveEmail() {
+    if (!id) return
+    setError(null)
+    setEmailSaved(false)
+    setSavingEmail(true)
+    try {
+      await updateUserAccount({ profile_id: id, email })
+      await reload()
+      setEmailSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos cambiar el email.')
+    } finally {
+      setSavingEmail(false)
+    }
+  }
+
+  async function handleResetPassword() {
+    if (!id) return
+    setError(null)
+    setPasswordResetDone(false)
+    if (newPassword.length < 8) {
+      setError('La contraseña nueva debe tener al menos 8 caracteres.')
+      return
+    }
+    setResettingPassword(true)
+    try {
+      // must_change_password=true de nuevo: la contraseña la eligió el
+      // admin, no el usuario, mismo criterio que al crear la cuenta.
+      await updateUserAccount({ profile_id: id, new_password: newPassword, must_change_password: true })
+      setNewPassword('')
+      await reload()
+      setPasswordResetDone(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos cambiar la contraseña.')
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  async function handleResetMustChangePassword() {
+    if (!id || !profile) return
+    setError(null)
+    setResettingMustChangePassword(true)
+    try {
+      await updateUserAccount({ profile_id: id, must_change_password: !profile.must_change_password })
+      await reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos actualizar el estado de cambio de contraseña.')
+    } finally {
+      setResettingMustChangePassword(false)
     }
   }
 
@@ -258,6 +329,73 @@ export function UsuarioDetallePage() {
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
       </div>
+
+      {isAdmin && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Email</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            <div className="field">
+              <label htmlFor="email">Email institucional</label>
+              <input id="email" type="email" value={email} disabled={rolesScopesLocked} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            {emailSaved && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginBottom: 8 }}>Email actualizado.</p>}
+            <button type="button" className="btn btn-primary" disabled={savingEmail || rolesScopesLocked} onClick={handleSaveEmail}>
+              {savingEmail ? 'Guardando…' : 'Cambiar email'}
+            </button>
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Contraseña</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            <div className="field">
+              <label htmlFor="newPassword">Nueva contraseña temporal</label>
+              <input
+                id="newPassword"
+                type="text"
+                minLength={8}
+                disabled={rolesScopesLocked}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                autoComplete="new-password"
+              />
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
+              El usuario deberá cambiar esta contraseña la próxima vez que ingrese.
+            </p>
+            {passwordResetDone && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginBottom: 8 }}>Contraseña actualizada.</p>}
+            <button type="button" className="btn btn-primary" disabled={resettingPassword || rolesScopesLocked || !newPassword} onClick={handleResetPassword}>
+              {resettingPassword ? 'Guardando…' : 'Cambiar contraseña'}
+            </button>
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Cambio de contraseña obligatorio</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+              {profile.must_change_password
+                ? 'Este usuario todavía no cambió su contraseña temporal: no puede usar el resto del sistema hasta hacerlo.'
+                : 'Este usuario ya cambió su contraseña y no tiene ninguna restricción pendiente.'}
+            </p>
+            <button
+              type="button"
+              className={`btn ${profile.must_change_password ? 'btn-outlined' : 'btn-primary'}`}
+              disabled={resettingMustChangePassword || rolesScopesLocked}
+              onClick={handleResetMustChangePassword}
+            >
+              {resettingMustChangePassword
+                ? 'Guardando…'
+                : profile.must_change_password
+                  ? 'Quitar la obligación de cambiar contraseña'
+                  : 'Forzar cambio de contraseña en el próximo ingreso'}
+            </button>
+          </div>
+        </>
+      )}
 
       <div className="section-header">
         <h2 className="section-title">Roles</h2>

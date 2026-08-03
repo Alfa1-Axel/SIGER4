@@ -78,6 +78,39 @@ export async function updateProfile(id: string, input: Partial<ProfileInput>): P
   return data as Profile
 }
 
+// Para lo que RLS no puede hacer porque vive en Supabase Auth, no en
+// Postgres: cambiar el email de la cuenta (sincronizado con profiles.email),
+// cambiar la contraseña de otro usuario, o banear/desbanear la cuenta. Usa
+// la Edge Function admin-update-user (service_role), que valida server-side
+// que quien llama es informatica_r4/integrante_informatica y respeta la
+// protección de superadmin (solo informatica_r4 puede tocar a otro
+// informatica_r4 o asignarle ese rol). También acepta, en el mismo pedido,
+// reemplazo completo de roles/scope — no hace falta usar addRole()/addScope()
+// por separado si ya estás llamando a esta función por otro motivo.
+export interface UpdateUserAccountInput {
+  profile_id: string
+  full_name?: string
+  email?: string
+  rank?: string | null
+  region_id?: string | null
+  station_id?: string | null
+  is_active?: boolean
+  must_change_password?: boolean
+  new_password?: string
+  roles?: RoleKey[]
+  scope?: ScopeInput
+}
+
+export async function updateUserAccount(input: UpdateUserAccountInput): Promise<Profile> {
+  const { data, error } = await supabase.functions.invoke<{ profile?: Profile; error?: string }>(
+    'admin-update-user',
+    { body: input },
+  )
+  if (error) throw error
+  if (!data?.profile) throw new Error(data?.error ?? 'No se pudo actualizar el usuario.')
+  return data.profile
+}
+
 export async function setProfileActive(id: string, isActive: boolean): Promise<void> {
   const { error } = await supabase.from('profiles').update({ is_active: isActive }).eq('id', id)
   if (error) throw error

@@ -19,10 +19,18 @@
 //
 // Matriz de permisos (autorización real, no solo de UI):
 //   - informatica_r4 / integrante_informatica: pueden editar cualquier
-//     usuario... EXCEPTO que si el usuario objetivo ya es informatica_r4,
-//     solo otro informatica_r4 puede tocarlo (mismo criterio que
-//     protect_super_admin_roles_scopes en la base). Otorgar el rol
-//     informatica_r4 por primera vez también requiere ser informatica_r4.
+//     usuario (nombre, email, contraseña, activar/desactivar, roles, scope,
+//     cuartel/región, flag de cambio de contraseña)... EXCEPTO que si el
+//     usuario objetivo ya es informatica_r4, solo otro informatica_r4 puede
+//     tocarlo (mismo criterio que protect_super_admin_roles_scopes en la
+//     base). Otorgar el rol informatica_r4 por primera vez también requiere
+//     ser informatica_r4.
+//   - jefe_cuerpo_activo: autoridad operativa máxima de SU cuartel. Puede
+//     editar nombre/email/contraseña/activar-desactivar/flag de cambio de
+//     contraseña de usuarios de su MISMO station_id únicamente, y nunca de
+//     alguien con rol informática/regional/escuela (sin importar el
+//     cuartel). NUNCA puede tocar roles, scope, cuartel o región de nadie —
+//     eso sigue exclusivo de informatica_r4/integrante_informatica.
 //   - Cualquier otro rol: sin permiso, 403.
 //
 // Auditoría: cada cambio queda registrado en audit_logs vía
@@ -139,7 +147,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: actorProfile, error: actorProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, is_active')
+      .select('id, is_active, station_id')
       .eq('auth_user_id', userData.user.id)
       .maybeSingle()
     if (actorProfileError) return logAndRespond('resolver perfil del actor', actorProfileError, 'No pudimos verificar tu perfil. Reintentá en unos segundos.')
@@ -154,8 +162,14 @@ Deno.serve(async (req: Request) => {
 
     const actorIsSuperAdmin = actorRoles.has('informatica_r4')
     const actorIsInformatica = actorIsSuperAdmin || actorRoles.has('integrante_informatica')
+    // jefe_cuerpo_activo: autoridad operativa máxima de SU cuartel. Puede
+    // editar datos básicos/contraseña/estado de usuarios de su propio
+    // cuartel, pero NUNCA roles/scope/cuartel/región, y nunca a un usuario
+    // con rol informática/regional/escuela (validado más abajo, después de
+    // resolver targetProfile/targetRoleRows).
+    const actorIsJefeCuerpoActivo = !actorIsInformatica && actorRoles.has('jefe_cuerpo_activo')
 
-    if (!actorIsInformatica) {
+    if (!actorIsInformatica && !actorIsJefeCuerpoActivo) {
       return jsonResponse({ error: 'No tenés permiso para editar usuarios.' }, 403)
     }
 
@@ -172,7 +186,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: targetProfile, error: targetProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, auth_user_id, email')
+      .select('id, auth_user_id, email, station_id')
       .eq('id', body.profile_id)
       .maybeSingle()
     if (targetProfileError) return logAndRespond('resolver perfil objetivo', targetProfileError, 'No pudimos cargar el usuario a editar.')
@@ -187,11 +201,30 @@ Deno.serve(async (req: Request) => {
       .select('role')
       .eq('profile_id', targetProfile.id)
     if (targetRolesError) return logAndRespond('resolver roles del objetivo', targetRolesError, 'No pudimos verificar los roles del usuario a editar.')
-    const targetIsSuperAdmin = (targetRoleRows ?? []).some((r: { role: RoleKey }) => r.role === 'informatica_r4')
+    const targetRoleSet = new Set((targetRoleRows ?? []).map((r: { role: RoleKey }) => r.role))
+    const targetIsSuperAdmin = targetRoleSet.has('informatica_r4')
     const grantingSuperAdmin = body.roles?.includes('informatica_r4') ?? false
 
     if ((targetIsSuperAdmin || grantingSuperAdmin) && !actorIsSuperAdmin) {
       return jsonResponse({ error: 'Solo un usuario Informática R4 puede modificar a otro Informática R4, o asignar ese rol.' }, 403)
+    }
+
+    // jefe_cuerpo_activo: alcance estrictamente acotado a su propio cuartel
+    // y a datos no sensibles. Nunca puede tocar roles/scope/cuartel/región
+    // del objetivo (eso sigue exclusivo de informatica_r4/
+    // integrante_informatica), y nunca a alguien con rol de informática,
+    // regional o escuela — sin importar el cuartel.
+    if (actorIsJefeCuerpoActivo) {
+      const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional']
+      if (!actorProfile.station_id || targetProfile.station_id !== actorProfile.station_id) {
+        return jsonResponse({ error: 'Solo podés editar usuarios de tu propio cuartel.' }, 403)
+      }
+      if ([...targetRoleSet].some((r) => PRIVILEGED_TARGET_ROLES.includes(r))) {
+        return jsonResponse({ error: 'No tenés permiso para editar a este usuario.' }, 403)
+      }
+      if (body.roles || body.scope || body.region_id !== undefined || body.station_id !== undefined) {
+        return jsonResponse({ error: 'Como Jefe de Cuerpo Activo no podés cambiar roles, alcance, cuartel o región. Pedile a Informática R4 que lo haga.' }, 403)
+      }
     }
 
     if (body.roles && body.roles.some((r) => !ALL_ROLES.includes(r))) {
@@ -308,7 +341,7 @@ Deno.serve(async (req: Request) => {
         p_table_name: 'auth_users',
         p_record_id: targetProfile.id,
         p_new_value: { auth_changes: authChanges },
-        p_reason: `Cambios de Auth (${authChanges.join(', ')}) aplicados por ${actorIsSuperAdmin ? 'informatica_r4' : 'integrante_informatica'}.`,
+        p_reason: `Cambios de Auth (${authChanges.join(', ')}) aplicados por ${actorIsSuperAdmin ? 'informatica_r4' : actorIsInformatica ? 'integrante_informatica' : 'jefe_cuerpo_activo'}.`,
       })
     }
 

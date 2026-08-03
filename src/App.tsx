@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
-import { AdminRoute } from './components/layout/AdminRoute'
+import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { LoginPage } from './pages/LoginPage'
 import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
@@ -57,9 +57,9 @@ export default function App() {
         <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/reportes" element={<ProtectedRoute><ReportesPage /></ProtectedRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
-        <Route path="/usuarios" element={<AdminRoute><UsuariosPage /></AdminRoute>} />
+        <Route path="/usuarios" element={<UserManagerRoute><UsuariosPage /></UserManagerRoute>} />
         <Route path="/usuarios/nuevo" element={<UserCreatorRoute><UsuarioFormPage /></UserCreatorRoute>} />
-        <Route path="/usuarios/:id" element={<AdminRoute><UsuarioDetallePage /></AdminRoute>} />
+        <Route path="/usuarios/:id" element={<UserManagerRoute><UsuarioDetallePage /></UserManagerRoute>} />
         <Route path="/notificaciones" element={<ProtectedRoute><NotificacionesPage /></ProtectedRoute>} />
         <Route path="/notificaciones/nueva" element={<ProtectedRoute><NotificacionFormPage /></ProtectedRoute>} />
         <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />

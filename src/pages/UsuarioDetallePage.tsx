@@ -27,10 +27,21 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
   escuela: 'Escuela',
 }
 
+// Roles que jefe_cuerpo_activo nunca puede ver/editar en este formulario, ni
+// siquiera de su propio cuartel (mismo PRIVILEGED_TARGET_ROLES que valida
+// server-side supabase/functions/admin-update-user/index.ts).
+const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional']
+
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { profile: currentProfile, hasRole: currentHasRole, isAdmin } = useAuth()
   const isCurrentUserSuperAdmin = currentHasRole('informatica_r4')
+  // jefe_cuerpo_activo entra a esta pantalla (ver UserManagerRoute) pero con
+  // autoridad muy acotada: solo usuarios de su propio cuartel, sin roles
+  // privilegiados, y sin tocar roles/alcance/cuartel/región (esos campos ni
+  // se muestran). admin-update-user es la fuente real de esta autorización;
+  // esto solo evita mostrar una UI que el backend va a rechazar igual.
+  const isJefeCuerpoActivo = !isAdmin && currentHasRole('jefe_cuerpo_activo')
 
   const [profile, setProfile] = useState<Profile | null>(null)
   const [roles, setRoles] = useState<UserRole[]>([])
@@ -106,12 +117,21 @@ export function UsuarioDetallePage() {
     setSaving(true)
     setError(null)
     try {
-      await updateProfile(id, {
-        full_name: fullName,
-        rank: rank || null,
-        region_id: regionId || null,
-        station_id: stationId || null,
-      })
+      if (isJefeCuerpoActivo) {
+        // profiles_update_self/profiles_write_admin (RLS) no le dan a
+        // jefe_cuerpo_activo escritura directa sobre el perfil de OTRO
+        // usuario: tiene que pasar por admin-update-user, que sí lo autoriza
+        // para nombre/rango dentro de su propio cuartel (nunca región/cuartel,
+        // por eso esos dos campos ni se mandan acá).
+        await updateUserAccount({ profile_id: id, full_name: fullName, rank: rank || null })
+      } else {
+        await updateProfile(id, {
+          full_name: fullName,
+          rank: rank || null,
+          region_id: regionId || null,
+          station_id: stationId || null,
+        })
+      }
       await reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos guardar los cambios.')
@@ -166,10 +186,11 @@ export function UsuarioDetallePage() {
     if (!id || !profile) return
     setError(null)
     try {
-      if (isAdmin) {
-        // informatica_r4/integrante_informatica: además de is_active, banea/
-        // desbanea la cuenta de Auth de verdad (setProfileActive solo toca
-        // profiles.is_active, la sesión de Auth seguiría siendo válida).
+      if (canManageAccount) {
+        // informatica_r4/integrante_informatica/jefe_cuerpo_activo: además de
+        // is_active, banea/desbanea la cuenta de Auth de verdad
+        // (setProfileActive solo toca profiles.is_active, la sesión de Auth
+        // seguiría siendo válida).
         await updateUserAccount({ profile_id: id, is_active: !profile.is_active })
       } else {
         await setProfileActive(id, !profile.is_active)
@@ -249,6 +270,21 @@ export function UsuarioDetallePage() {
     )
   }
 
+  // jefe_cuerpo_activo: bloqueo de UI espejo del que ya aplica
+  // admin-update-user server-side — usuarios de otro cuartel, o con un rol
+  // privilegiado (informática/regional/escuela), ni siquiera se muestran.
+  if (isJefeCuerpoActivo) {
+    const targetHasPrivilegedRole = roles.some((r) => PRIVILEGED_TARGET_ROLES.includes(r.role))
+    const targetIsOwnStation = !!currentProfile?.station_id && profile.station_id === currentProfile.station_id
+    if (!targetIsOwnStation || targetHasPrivilegedRole) {
+      return (
+        <AppShell title="Usuario">
+          <div className="empty-state">No tenés permiso para ver este usuario.</div>
+        </AppShell>
+      )
+    }
+  }
+
   // Refleja en la UI las mismas protecciones que ya aplica la base de datos
   // (migración 0018): nadie salvo otro informatica_r4 puede tocar los
   // roles/alcances de un informatica_r4 existente, y nadie puede cambiar su
@@ -259,6 +295,11 @@ export function UsuarioDetallePage() {
   const rolesScopesLocked = targetIsSuperAdmin && !isCurrentUserSuperAdmin
   const isEditingSelf = currentProfile?.id === profile.id
   const scopeFieldsLocked = isEditingSelf && !isCurrentUserSuperAdmin
+  // jefe_cuerpo_activo nunca ve roles/alcances/región/cuartel del formulario
+  // (backend los rechaza directo — ver admin-update-user), y su bloque de
+  // "cuenta" (email/contraseña/forzar cambio) usa la misma llamada
+  // updateUserAccount que isAdmin pero limitada a datos no sensibles.
+  const canManageAccount = isAdmin || isJefeCuerpoActivo
 
   return (
     <AppShell title="Usuario">
@@ -298,32 +339,36 @@ export function UsuarioDetallePage() {
           <label htmlFor="rank">Rango / Jerarquía</label>
           <input id="rank" value={rank} onChange={(e) => setRank(e.target.value)} />
         </div>
-        <div className="field">
-          <label htmlFor="region">Región</label>
-          <select id="region" value={regionId} disabled={scopeFieldsLocked} onChange={(e) => setRegionId(e.target.value)}>
-            <option value="">Sin asignar</option>
-            {regions.map((region) => (
-              <option key={region.id} value={region.id}>
-                {region.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="station">Cuartel</label>
-          <select id="station" value={stationId} disabled={scopeFieldsLocked} onChange={(e) => setStationId(e.target.value)}>
-            <option value="">Sin asignar</option>
-            {stations.map((station) => (
-              <option key={station.id} value={station.id}>
-                {station.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        {scopeFieldsLocked && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
-            No podés cambiar tu propio cuartel o región. Pedile a un administrador que lo haga.
-          </p>
+        {!isJefeCuerpoActivo && (
+          <>
+            <div className="field">
+              <label htmlFor="region">Región</label>
+              <select id="region" value={regionId} disabled={scopeFieldsLocked} onChange={(e) => setRegionId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="station">Cuartel</label>
+              <select id="station" value={stationId} disabled={scopeFieldsLocked} onChange={(e) => setStationId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {stations.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {scopeFieldsLocked && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
+                No podés cambiar tu propio cuartel o región. Pedile a un administrador que lo haga.
+              </p>
+            )}
+          </>
         )}
         <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSaveBasics}>
           {saving ? 'Guardando…' : 'Guardar cambios'}
@@ -345,7 +390,11 @@ export function UsuarioDetallePage() {
               {savingEmail ? 'Guardando…' : 'Cambiar email'}
             </button>
           </div>
+        </>
+      )}
 
+      {canManageAccount && (
+        <>
           <div className="section-header">
             <h2 className="section-title">Contraseña</h2>
           </div>
@@ -397,128 +446,132 @@ export function UsuarioDetallePage() {
         </>
       )}
 
-      <div className="section-header">
-        <h2 className="section-title">Roles</h2>
-      </div>
-      <div className="card-solid" style={{ marginBottom: 20 }}>
-        {rolesScopesLocked && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
-            Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus roles.
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {ROLE_DEFINITIONS.map((role) => {
-            const active = roles.some((r) => r.role === role.key)
-            return (
-              <button
-                key={role.key}
-                type="button"
-                disabled={rolesScopesLocked}
-                onClick={() => handleToggleRole(role.key)}
-                className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '6px 12px', fontSize: 12 }}
-                title={role.description}
+      {isAdmin && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Roles</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            {rolesScopesLocked && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+                Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus roles.
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {ROLE_DEFINITIONS.map((role) => {
+                const active = roles.some((r) => r.role === role.key)
+                return (
+                  <button
+                    key={role.key}
+                    type="button"
+                    disabled={rolesScopesLocked}
+                    onClick={() => handleToggleRole(role.key)}
+                    className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    title={role.description}
+                  >
+                    {role.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Alcances (scopes)</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            {rolesScopesLocked && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
+                Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus alcances.
+              </p>
+            )}
+            {scopes.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Sin alcances adicionales.</p>}
+            {scopes.map((scope) => (
+              <div
+                key={scope.id}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}
               >
-                {role.label}
+                <span style={{ fontSize: 13 }}>
+                  {SCOPE_LABEL[scope.scope_type]}
+                  {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? scope.station_id}`}
+                  {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
+                  {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? scope.region_id}`}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-outlined"
+                  style={{ padding: '4px 10px', fontSize: 12 }}
+                  disabled={rolesScopesLocked}
+                  onClick={() => handleRemoveScope(scope.id)}
+                >
+                  Quitar
+                </button>
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label htmlFor="scopeType">Tipo</label>
+                <select
+                  id="scopeType"
+                  value={newScopeType}
+                  disabled={rolesScopesLocked}
+                  onChange={(e) => setNewScopeType(e.target.value as ScopeType)}
+                >
+                  <option value="system">Informática (Sistema)</option>
+                  <option value="region">Regional</option>
+                  <option value="subsede">Subsede</option>
+                  <option value="station">Cuartel</option>
+                  <option value="escuela">Escuela</option>
+                </select>
+              </div>
+              {newScopeType === 'subsede' && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label htmlFor="scopeSubsede">Subsede</label>
+                  <select id="scopeSubsede" value={newScopeSubsedeId} onChange={(e) => setNewScopeSubsedeId(e.target.value)}>
+                    <option value="">Seleccionar</option>
+                    {subsedes.map((subsede) => (
+                      <option key={subsede.id} value={subsede.id}>
+                        {subsede.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {newScopeType === 'station' && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label htmlFor="scopeStation">Cuartel</label>
+                  <select id="scopeStation" value={newScopeStationId} onChange={(e) => setNewScopeStationId(e.target.value)}>
+                    <option value="">Seleccionar</option>
+                    {stations.map((station) => (
+                      <option key={station.id} value={station.id}>
+                        {station.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {newScopeType === 'region' && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label htmlFor="scopeRegion">Región</label>
+                  <select id="scopeRegion" value={newScopeRegionId} onChange={(e) => setNewScopeRegionId(e.target.value)}>
+                    <option value="">Seleccionar</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button type="button" className="btn btn-primary" disabled={rolesScopesLocked} onClick={handleAddScope}>
+                Agregar alcance
               </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="section-header">
-        <h2 className="section-title">Alcances (scopes)</h2>
-      </div>
-      <div className="card-solid" style={{ marginBottom: 20 }}>
-        {rolesScopesLocked && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 10 }}>
-            Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus alcances.
-          </p>
-        )}
-        {scopes.length === 0 && <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Sin alcances adicionales.</p>}
-        {scopes.map((scope) => (
-          <div
-            key={scope.id}
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}
-          >
-            <span style={{ fontSize: 13 }}>
-              {SCOPE_LABEL[scope.scope_type]}
-              {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? scope.station_id}`}
-              {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
-              {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? scope.region_id}`}
-            </span>
-            <button
-              type="button"
-              className="btn btn-outlined"
-              style={{ padding: '4px 10px', fontSize: 12 }}
-              disabled={rolesScopesLocked}
-              onClick={() => handleRemoveScope(scope.id)}
-            >
-              Quitar
-            </button>
+            </div>
           </div>
-        ))}
-
-        <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label htmlFor="scopeType">Tipo</label>
-            <select
-              id="scopeType"
-              value={newScopeType}
-              disabled={rolesScopesLocked}
-              onChange={(e) => setNewScopeType(e.target.value as ScopeType)}
-            >
-              <option value="system">Informática (Sistema)</option>
-              <option value="region">Regional</option>
-              <option value="subsede">Subsede</option>
-              <option value="station">Cuartel</option>
-              <option value="escuela">Escuela</option>
-            </select>
-          </div>
-          {newScopeType === 'subsede' && (
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label htmlFor="scopeSubsede">Subsede</label>
-              <select id="scopeSubsede" value={newScopeSubsedeId} onChange={(e) => setNewScopeSubsedeId(e.target.value)}>
-                <option value="">Seleccionar</option>
-                {subsedes.map((subsede) => (
-                  <option key={subsede.id} value={subsede.id}>
-                    {subsede.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {newScopeType === 'station' && (
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label htmlFor="scopeStation">Cuartel</label>
-              <select id="scopeStation" value={newScopeStationId} onChange={(e) => setNewScopeStationId(e.target.value)}>
-                <option value="">Seleccionar</option>
-                {stations.map((station) => (
-                  <option key={station.id} value={station.id}>
-                    {station.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          {newScopeType === 'region' && (
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label htmlFor="scopeRegion">Región</label>
-              <select id="scopeRegion" value={newScopeRegionId} onChange={(e) => setNewScopeRegionId(e.target.value)}>
-                <option value="">Seleccionar</option>
-                {regions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <button type="button" className="btn btn-primary" disabled={rolesScopesLocked} onClick={handleAddScope}>
-            Agregar alcance
-          </button>
-        </div>
-      </div>
+        </>
+      )}
 
       <button type="button" className={`btn ${profile.is_active ? 'btn-outlined' : 'btn-primary'} btn-block`} onClick={handleToggleActive}>
         {profile.is_active ? 'Desactivar usuario' : 'Reactivar usuario'}

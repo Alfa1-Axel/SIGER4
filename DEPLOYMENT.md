@@ -816,12 +816,8 @@ También se amplió `admin-update-user` para que `jefe_cuerpo_activo` pueda rese
 activar/desactivar usuarios **de su propio cuartel únicamente**: valida que `target.station_id ===
 actor.station_id`, rechaza cualquier objetivo con rol informática/regional/escuela sin importar el
 cuartel, y nunca permite tocar roles/scope/cuartel/región (eso sigue exclusivo de
-`informatica_r4`/`integrante_informatica`). **La UI (`/usuarios/:id`) todavía no expone esto a
-`jefe_cuerpo_activo`** — la ruta sigue detrás de `AdminRoute`, y la página usa `updateProfile`/
-`addRole`/`addScope` directos (RLS `informatica_r4`-only) para nombre/roles/scope, así que exponerla
-tal cual rompería esas secciones. Dejarlo andando de punta a punta requiere una pantalla dedicada
-(ocultar roles/scope, usar `admin-update-user` en el resto) — **queda documentado como pendiente de
-UI para una tanda futura**, el backend ya está listo y probado.
+`informatica_r4`/`integrante_informatica`). **La UI ya expone esto** desde la sección 9
+(`UserManagerRoute` + `/usuarios`/`/usuarios/:id` adaptados) — ver el detalle completo ahí.
 
 **Redeploy necesario**: `supabase functions deploy admin-update-user` (cambió su lógica de
 autorización para incluir a `jefe_cuerpo_activo`).
@@ -832,28 +828,123 @@ autorización para incluir a `jefe_cuerpo_activo`).
 |---|---|---|---|
 | **`informatica_r4`** | Sistema completo | Todo: crear/editar/activar/desactivar/resetear contraseña de cualquier usuario (incluso otro `informatica_r4`), roles, scopes, cuarteles/subsedes/regiones, todos los módulos, documentos, carpetas, inventario, reportes, auditoría completa, configuración. | Nada — es la autoridad máxima. |
 | **`integrante_informatica`** | Sistema completo | Igual que `informatica_r4` **excepto** sobre otro `informatica_r4`: no puede editarlo ni asignarle ese rol. | Modificar a un `informatica_r4`, otorgar el rol `informatica_r4`. |
-| **`jefe_cuerpo_activo`** | Su propio cuartel | Crear/editar usuarios de su cuartel (roles limitados, sin informática — vía `admin-create-user`), resetear contraseña/activar-desactivar usuarios de su cuartel (vía `admin-update-user`, **backend listo, UI pendiente**), gestionar documentos/carpetas/vehículos/personal/asistencias/intervenciones de su cuartel, ver auditoría de su cuartel. | Crear/asignar roles de informática, modificar usuarios de otros cuarteles, tocar a un usuario informática/regional/escuela, otorgarse alcance regional/subsede/otro cuartel. |
-| **`director_escuela`** | Escuela Regional + ⚠️ ver nota | Autoridad máxima sobre cursos/capacitaciones/instructores/reportes de Escuela; crear usuarios con cualquier rol excepto informática. | Crear/asignar roles de informática. |
-| **`secretario_regional`** | Regional (comparte función con `director_escuela` hoy — ver nota) | Gestión administrativa regional. | Roles de informática. |
+| **`jefe_cuerpo_activo`** | Su propio cuartel | Crear/editar usuarios de su cuartel (roles limitados, sin informática — vía `admin-create-user`), resetear contraseña/activar-desactivar/editar nombre-rango de usuarios de su cuartel (vía `admin-update-user`, **UI dedicada en `/usuarios`, ver sección 9**), gestionar documentos/carpetas/vehículos/personal/asistencias/intervenciones de su cuartel, ver auditoría de su cuartel. | Crear/asignar roles de informática, modificar usuarios de otros cuarteles o con rol informática/regional/escuela, tocar roles/scope/cuartel/región de nadie, otorgarse alcance regional/subsede/otro cuartel. |
+| **`director_escuela`** | Escuela Regional (cursos/capacitaciones/instructores) + lectura regional para reportes — ver sección 9 | Autoridad máxima sobre cursos/capacitaciones/instructores/reportes de Escuela; ver (no editar) cuarteles/personal/asistencia/intervenciones/auditoría de su región; crear usuarios con cualquier rol excepto informática; cargar/editar Inventario Regional (decisión de producto explícita). | Crear/asignar roles de informática; **desde `0048`: editar/crear cuarteles, vehículos, personal, asistencias, intervenciones, documentos/carpetas** (esa escritura es ahora exclusiva de `secretario_regional`/roles de cuartel). |
+| **`secretario_regional`** | Regional (autoridad operativa real, ya no compartida con `director_escuela` desde `0048`) | Gestión administrativa regional: escritura sobre cuarteles, vehículos, personal, asistencias, intervenciones, documentos/carpetas de su región. | Roles de informática. |
 | **`presidente_cuartel`** | Su propio cuartel | Ver/cargar datos de su cuartel (vehículos, personal, asistencia, intervenciones, documentos/carpetas). | Todo lo fuera de su cuartel, roles de informática, crear usuarios. |
 | **`secretario_comision`** | Su propio cuartel | Igual que `presidente_cuartel` para documentos/carpetas. | Igual que `presidente_cuartel`. |
 | **`usuario_carga_cuartel`** | Su propio cuartel | Cargar datos operativos de su cuartel. | Roles de informática, alcance fuera de su cuartel. |
 | **`invitado`** | Su cuartel (si tiene uno asignado) | Solo lectura. | Cualquier escritura — confirmado sin excepciones. |
 | **Nadie excepto `informatica_r4`** | — | — | Crear o modificar roles de informática (`informatica_r4`/`integrante_informatica`). |
 
-**⚠️ Nota importante sobre `director_escuela` (brecha conocida, no corregida en esta tanda)**: la
-función `is_regional_role()` en la base agrupa `secretario_regional` **y** `director_escuela` como
-la misma "autoridad regional", y esa función se usa en las policies de escritura de `stations`,
-`vehicles`, `personnel`, `attendance_summaries`, `intervention_summaries`, `documents`,
-`document_folders`, `push_send_log` y el historial de vehículos/personal — más de 15 tablas. Esto
-significa que **hoy `director_escuela` tiene, de hecho, escritura regional-wide sobre todos los
-cuarteles de su región**, no solo autoridad sobre Escuela Regional, contradiciendo la matriz
-institucional pedida ("no debe convertirse automáticamente en autoridad total sobre todos los
-cuarteles").
+**✅ Nota sobre `director_escuela` — corregido en la sección 9 (migración `0048`)**: la brecha
+descrita en el párrafo original de esta nota (`director_escuela` compartiendo `is_regional_role()`
+con `secretario_regional`, y por lo tanto teniendo escritura regional-wide sobre cuarteles) quedó
+resuelta. Ver sección 9 para el detalle completo de la separación de autoridad y la pantalla nueva
+de gestión de usuarios de `jefe_cuerpo_activo`.
 
-Corregir esto requiere separar `is_regional_role()` en dos funciones (una para autoridad operativa
-regional real — solo `secretario_regional` — y dejar `is_escuela_role()`, que ya existe y ya es
-`director_escuela + instructor`, como la única autoridad de `director_escuela`), y luego actualizar
-cada una de esas ~15 policies para usar la función correcta. Es un cambio de superficie amplia
-(aunque mecánico), por eso se dejó **fuera de esta tanda** (se pidió explícitamente no hacer
-refactor grande) y queda documentado como la corrección prioritaria de la próxima tanda de permisos.
+## 9. Separación de autoridad director_escuela / secretario_regional + pantalla de usuarios para jefe_cuerpo_activo (2026-08) — migración 0048
+
+### 9.1 Qué se corrigió
+
+**Separación de `is_regional_role()`**: la función pasó a devolver `true` solo para
+`secretario_regional` (antes incluía también `director_escuela`). `is_escuela_role()` (ya existente,
+`director_escuela + instructor`) queda como la **única** autoridad operativa de `director_escuela`
+en todo el sistema. Como `is_regional_role()` es una función `SECURITY DEFINER` referenciada por
+nombre desde todas las policies de RLS (no inline), redefinirla en `0048` corrige automáticamente el
+comportamiento de **todas** las policies que la usan, sin tener que editar cada migración histórica:
+
+- `stations` (escritura), `vehicles`, `personnel`, `attendance_summaries`, `intervention_summaries`,
+  `documents`/`document_versions`/`document_folders`, `vehicle_status_history`,
+  `personnel_status_history`, storage (`station-media`, `documents`), `can_send_push_scope()`:
+  `director_escuela` **deja de tener escritura** — solo `secretario_regional` (e `informatica_r4`,
+  y los roles de cuartel dentro de su propio cuartel, sin cambios).
+- `stations` (lectura), `profiles_select_regional`, `audit_logs_select_regional`,
+  `attendance_select_scope`, `interventions_select_scope`: se amplían explícitamente a
+  `is_regional_role() OR is_escuela_role()`, porque `director_escuela` **sí** necesita seguir viendo
+  (no escribiendo) cuarteles/perfiles/asistencia/intervenciones/auditoría de su región para armar
+  reportes de Escuela y elegir cuarteles participantes de cursos.
+- `notifications_write_admin_regional_escuela` y `can_send_push_scope()` (alcance masivo) **no
+  cambian de comportamiento para `director_escuela`**: ya incluían `OR is_escuela_role()` desde
+  antes, así que conserva la posibilidad de enviar notificaciones/push de Escuela.
+- `courses`/`course_stations` (Escuela Regional): sin cambios — ya usaban solo `is_escuela_role()`,
+  nunca `is_regional_role()`.
+- **`inventory_items_write_regional` no se tocó**: usa `has_role('director_escuela') or
+  has_role('secretario_regional')` explícito (no la función), y esa combinación fue una decisión de
+  producto confirmada explícitamente en la tanda del módulo de Inventario (0041) — `director_escuela`
+  sigue pudiendo cargar/editar inventario regional.
+
+**Bug de seguridad corregido de paso** (detectado en la misma auditoría, mismo archivo `0048`):
+`documents_storage_delete_admin_regional_station` (política de Storage del bucket `documents`)
+tenía `is_regional_role()` como una condición `OR` **fuera** del `exists()` que resuelve el objeto a
+un documento real — cualquier rol regional podía borrar **cualquier objeto del bucket**, sin que el
+path llegara siquiera a resolver a una fila de `documents`. Corregido moviendo la condición dentro
+del `exists()`, scopeada por región igual que el resto de las policies de escritura territorial.
+También se scopearon por región (antes "pelados", sin filtro) `station_media_write/update/delete_
+admin_regional_station` y `documents_storage_write_admin_regional_station`.
+
+**Pantalla dedicada para `jefe_cuerpo_activo`**: `/usuarios` y `/usuarios/:id` dejaron de estar
+exclusivamente detrás de `AdminRoute` (eliminado, ver más abajo) y ahora usan el nuevo
+`UserManagerRoute`, que también deja pasar a `jefe_cuerpo_activo`. Dentro de esas pantallas:
+- `UsuariosPage`: el listado se filtra client-side a `profile.station_id === (su propio station_id)`
+  cuando el actor es `jefe_cuerpo_activo` (no admin).
+- `UsuarioDetallePage`: bloquea el acceso (UI) a un perfil de otro cuartel o con rol
+  informática/regional/escuela (mismo `PRIVILEGED_TARGET_ROLES` que valida `admin-update-user`
+  server-side); oculta por completo las secciones "Email", "Roles" y "Alcances (scopes)", y dentro
+  de "Datos básicos" oculta los selects de Región/Cuartel — solo quedan nombre/rango editables (vía
+  `admin-update-user`, no `updateProfile` directo: RLS no le da a `jefe_cuerpo_activo` escritura
+  sobre el perfil de otro usuario, así que el guardado de "Datos básicos" para este rol pasa por la
+  Edge Function). Las secciones "Contraseña", "Cambio de contraseña obligatorio" y el botón
+  "Desactivar/Reactivar usuario" quedan visibles y funcionales (usan `admin-update-user`, que ya
+  valida `station_id` y roles del objetivo server-side).
+- Esto es **conveniencia de UI, no el límite de seguridad real** — `admin-update-user` sigue siendo
+  la única fuente de verdad de autorización, exactamente como ya estaba documentado en la sección 8.2.
+- `AdminRoute.tsx` se eliminó (quedó sin usos tras este cambio); `navigation.ts` ajustado para que
+  `jefe_cuerpo_activo` vea el ítem "Usuarios" (listado filtrado) y `director_escuela` conserve el
+  acceso directo a "Nuevo Usuario" (ya no ve el listado completo).
+
+**Descripciones de roles actualizadas** (`src/types/roles.ts`, `ROLE_DEFINITIONS`): el texto de
+`director_escuela` ya no dice "máxima autoridad institucional de la Regional 4", refleja el alcance
+real (Escuela Regional + lectura regional para reportes, sin escritura sobre cuarteles).
+
+### 9.2 Migración nueva a correr
+
+- `0048_director_escuela_scope_separation.sql` — redefine `is_regional_role()`; reescribe
+  `stations_select_scope`, `profiles_select_regional`, `audit_logs_select_regional`,
+  `attendance_select_scope`, `interventions_select_scope` (agregan `OR is_escuela_role()`);
+  reescribe las 3 policies de storage de `station-media` y las 2 de storage de `documents` (scope
+  regional real + fix del bug de borrado). No agrega columnas ni requiere backfill.
+
+### 9.3 Edge Functions a redesplegar
+
+Ninguna. `admin-update-user` no cambió en esta tanda (ya soportaba `jefe_cuerpo_activo` desde
+`0047`/sección 8) — solo se conectó la UI que ya le faltaba. Todo el cambio de esta tanda vive en
+SQL (RLS) y en el frontend.
+
+### 9.4 Vercel
+
+Sí, redeploy — hay cambios de frontend (`UserManagerRoute` nuevo, `UsuarioDetallePage`,
+`UsuariosPage`, `navigation.ts`, `CuartelDetallePage`, `CuartelFormPage`, `DocumentosPage`,
+`CarpetaDetallePage`, `CarpetaFormPage`, `roles.ts`). Si el repo está conectado a Vercel con deploy
+automático en push a `main`, no requiere acción manual.
+
+### 9.5 Checklist de verificación después de correr 0048
+
+- [ ] Como `director_escuela`: confirmar que YA NO puede editar/crear cuarteles, vehículos,
+      personal, asistencia, intervenciones, documentos/carpetas (los botones de edición no deberían
+      aparecer, y si se fuerza la petición directo a la API, RLS debe rechazarla con 403/42501).
+- [ ] Como `director_escuela`: confirmar que SÍ puede seguir creando/editando cursos y cuarteles
+      participantes en `/escuela`, y que sigue viendo el listado de cuarteles/personal de su región
+      en modo solo lectura (para elegir participantes y armar reportes).
+- [ ] Como `director_escuela`: confirmar que sigue pudiendo crear usuarios desde `/usuarios/nuevo`
+      (cualquier rol excepto informática) y enviar notificaciones/push.
+- [ ] Como `secretario_regional`: confirmar que conserva exactamente el mismo acceso de escritura
+      regional que tenía antes (sin cambios para este rol).
+- [ ] Como `jefe_cuerpo_activo`: entrar a `/usuarios`, confirmar que el listado muestra solo usuarios
+      de su propio cuartel; entrar a uno de esos usuarios y confirmar que puede editar nombre/rango,
+      resetear contraseña, y activar/desactivar, pero NO ve secciones de Email/Roles/Alcances.
+- [ ] Como `jefe_cuerpo_activo`: intentar (vía URL directa) entrar a `/usuarios/:id` de un usuario de
+      otro cuartel, o de un usuario con rol `secretario_regional`/`director_escuela`/informática —
+      confirmar que la pantalla muestra "No tenés permiso para ver este usuario."
+- [ ] Buscar en la consola del navegador errores 403/400 al repetir los pasos anteriores con cada rol
+      — no deberían aparecer salvo en los casos de bloqueo esperado (marcados arriba).

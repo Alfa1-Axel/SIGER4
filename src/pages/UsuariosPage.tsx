@@ -4,8 +4,17 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchProfiles } from '../lib/api/users'
 import type { Profile } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
+// jefe_cuerpo_activo entra a esta misma pantalla (ver UserManagerRoute), pero
+// solo puede ver/gestionar usuarios de su propio cuartel: el listado se
+// filtra client-side a profile.station_id === su station_id. Esto es
+// conveniencia de UI, no el límite de seguridad real — admin-update-user
+// (Edge Function) valida station_id server-side en cada edición.
 export function UsuariosPage() {
+  const { isAdmin, hasRole, profile: currentProfile } = useAuth()
+  const isJefeCuerpoActivo = !isAdmin && hasRole('jefe_cuerpo_activo')
+
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -22,16 +31,23 @@ export function UsuariosPage() {
     }
   }, [])
 
+  const stationScoped = useMemo(() => {
+    if (!isJefeCuerpoActivo) return profiles
+    return profiles.filter((p) => p.station_id === currentProfile?.station_id)
+  }, [profiles, isJefeCuerpoActivo, currentProfile?.station_id])
+
   const filtered = useMemo(() => {
-    if (!query) return profiles
+    if (!query) return stationScoped
     const q = query.toLowerCase()
-    return profiles.filter((p) => p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
-  }, [profiles, query])
+    return stationScoped.filter((p) => p.full_name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q))
+  }, [stationScoped, query])
 
   return (
     <AppShell title="Usuarios">
       <h1 className="page-title">Gestión de Usuarios</h1>
-      <p className="page-subtitle">Cuentas del sistema, roles y alcances asignados.</p>
+      <p className="page-subtitle">
+        {isJefeCuerpoActivo ? 'Usuarios de tu cuartel.' : 'Cuentas del sistema, roles y alcances asignados.'}
+      </p>
 
       <div className="search-input" style={{ marginBottom: 20 }}>
         <Icon name="search" size={16} />

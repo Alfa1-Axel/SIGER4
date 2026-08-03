@@ -94,8 +94,14 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: body ?? '',
-      icon: '/icons/siger4-192.png',
-      badge: '/icons/siger4-192.png',
+      // Logo real del Dpto. Informática y Estadística R4 (no el ícono
+      // genérico de la PWA) — ver public/logos/README.md, mismo archivo
+      // fuente que login/sidebar/header, reescalado a los tamaños que pide
+      // la Notifications API. "icon" es el ícono grande de la notificación;
+      // "badge" es el ícono chico monocromo de la barra de estado en
+      // Android (Chrome lo enmascara automáticamente a blanco/alpha).
+      icon: '/icons/push-informatica-512.png',
+      badge: '/icons/push-informatica-192.png',
       tag: tag,
       data: { url: url ?? '/notificaciones' },
     }),

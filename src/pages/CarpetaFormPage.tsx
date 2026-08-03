@@ -26,7 +26,7 @@ const FOLDER_SCOPE_OPTIONS: { value: FolderScopeTarget; label: string }[] = [
 export function CarpetaFormPage() {
   const navigate = useNavigate()
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
-  const isRegionalRole = hasRole('secretario_regional', 'director_escuela')
+  const isRegionalRole = hasRole('secretario_regional')
   const isStationRole = hasRole('usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const canCreate = isAdmin || isRegionalRole || isStationRole
 

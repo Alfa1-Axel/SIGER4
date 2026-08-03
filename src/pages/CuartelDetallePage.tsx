@@ -94,7 +94,7 @@ function calculateSeniority(joinDate: string | null): string | null {
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole } = useAuth()
-  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'director_escuela', 'secretario_regional')
+  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])

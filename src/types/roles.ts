@@ -37,7 +37,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
     key: 'director_escuela',
     label: 'Director de Escuela Regional',
-    description: 'Máxima autoridad institucional de la Regional 4 y responsable de la Escuela Regional, cursos y capacitaciones.',
+    description: 'Máxima autoridad de la Escuela Regional: cursos, capacitaciones e instructores. Puede ver información regional para reportes de Escuela, pero no tiene escritura sobre cuarteles, vehículos, personal ni documentos (eso es de secretario_regional o roles de cuartel).',
     scope: 'escuela',
   },
   {

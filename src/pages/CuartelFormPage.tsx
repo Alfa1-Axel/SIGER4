@@ -20,12 +20,13 @@ export function CuartelFormPage() {
   const isEditing = Boolean(id)
   const navigate = useNavigate()
   const { isAdmin, hasRole } = useAuth()
-  // Alta: solo informatica_r4/integrante_informatica o roles regionales (igual
-  // que la politica de insert de RLS). Edicion: tambien roles de cuartel,
-  // igual que el "canEdit" del detalle de cuartel.
+  // Alta: solo informatica_r4/integrante_informatica o secretario_regional
+  // (igual que la politica de insert de RLS: director_escuela ya no comparte
+  // is_regional_role(), ver 0048). Edicion: tambien roles de cuartel, igual
+  // que el "canEdit" del detalle de cuartel.
   const canAccess = isEditing
-    ? isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'director_escuela', 'secretario_regional')
-    : isAdmin || hasRole('director_escuela', 'secretario_regional')
+    ? isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
+    : isAdmin || hasRole('secretario_regional')
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])

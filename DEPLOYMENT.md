@@ -676,3 +676,100 @@ el cron dos veces al año.
   el tipo `role_key` completo). Si en el futuro se decide migrarlo de verdad, primero hay que
   identificar qué perfiles reales lo tienen asignado (query de referencia en
   `0043_remove_administrativo_role_ui.sql`) y decidir a qué rol migrarlos.
+
+## 7. Corrección crítica + superadmin real + carpetas (2026-08) — migraciones 0044 a 0046
+
+### 7.1 Causa exacta del error "Edge Function returned a non-2xx status code" al crear usuario
+
+`protect_super_admin_roles_scopes()` (trigger compartido entre `user_roles` y `user_scopes`, desde
+`0018`) tenía esta condición:
+
+```sql
+if tg_table_name = 'user_roles' and tg_op <> 'DELETE' and new.role = 'informatica_r4' then
+```
+
+Esa línea es **una sola expresión SQL**. PL/pgSQL no evalúa `and` de a un operando con corto-circuito
+antes de resolver columnas: analiza la expresión completa una vez, resolviendo **todas** las
+referencias a columnas (incluida `new.role`) antes de evaluar ningún operador booleano. Cuando el
+trigger disparaba para `user_scopes` (tabla sin columna `role`), esa resolución fallaba con
+`record "new" has no field "role"` — rompiendo **cualquier** insert en `user_scopes`, incluido el de
+`admin-create-user` al dar de alta un usuario (que inserta `profiles` → `user_roles` → `user_scopes`
+en secuencia). El insert en `user_scopes` fallaba con 500, y la Edge Function lo devolvía como
+"non-2xx status code" al frontend.
+
+**Corregido en `0046_fix_protect_super_admin_scopes_bug.sql`**: la condición que usa `new.role` se
+movió a un `if` anidado dentro de `if tg_table_name = 'user_roles' then` — PL/pgSQL compila cada
+expresión de forma perezosa, solo cuando la ejecución realmente llega a esa sentencia, así que la
+expresión con `new.role` nunca se prepara cuando el trigger corre sobre `user_scopes`. La protección
+en sí (nadie salvo `informatica_r4` puede tocar roles/scopes de otro `informatica_r4`) queda
+exactamente igual.
+
+**Corrí esta migración y probá crear un usuario completo (Auth + profile + rol + scope) antes de
+seguir usando el sistema.**
+
+### 7.2 Migraciones nuevas a correr (en orden, después de 0043)
+
+- `0044_admin_update_user_audit.sql` — amplía el allowlist de `record_manual_audit_event()` para
+  permitir auditar cambios de Auth (email/contraseña/ban) que `admin-update-user` aplica y que no
+  dejan rastro en ninguna tabla de Postgres.
+- `0045_document_folders.sql` — módulo de carpetas para documentos (`document_folders`,
+  `documents.folder_id`, RLS, auditoría).
+- `0046_fix_protect_super_admin_scopes_bug.sql` — **la corrección crítica de 7.1. Prioridad alta.**
+
+### 7.3 Edge Functions nuevas o modificadas
+
+```
+supabase functions deploy admin-create-user
+supabase functions deploy admin-update-user
+```
+
+- `admin-create-user`: sin cambios de lógica, pero ahora loguea el detalle real de cualquier error
+  (Supabase Dashboard → Edge Functions → admin-create-user → Logs) y envuelve todo el handler en
+  try/catch, para que un error no anticipado nunca se pierda como un 500 sin información. **Redeploy
+  recomendado** aunque el bug real estaba en la base, no en esta función.
+- `admin-update-user` (nueva): le da a `informatica_r4`/`integrante_informatica` control real sobre
+  cualquier usuario — cambiar email, resetear contraseña, activar/desactivar (con ban real en Auth,
+  no solo `profiles.is_active`), resetear el flag de cambio de contraseña obligatorio, y reemplazo
+  completo de roles/scope en el mismo pedido. Respeta la protección de superadmin: solo
+  `informatica_r4` puede tocar a otro `informatica_r4` o asignarle ese rol.
+
+### 7.4 Aclaración sobre "superadmin real"
+
+La mayoría del control de `informatica_r4` sobre otros usuarios **ya funcionaba** antes de esta
+tanda, vía RLS directo (`profiles_write_admin`, `guard_profile_self_edit_columns` exime a
+`is_super_admin()`, `protect_super_admin_roles_scopes` ya permitía a un `informatica_r4` modificar a
+otro): nombre, rango, cuartel/región, roles, scope, activar/desactivar `profiles.is_active`. Lo que
+genuinamente faltaba (y ahora cubre `admin-update-user`) es lo que vive en Supabase Auth y no en
+Postgres: cambiar el email de la cuenta, cambiar la contraseña de otro usuario, y banear la cuenta
+de verdad (antes, desactivar solo tocaba `profiles.is_active`, pero la sesión de Auth seguía siendo
+válida).
+
+### 7.5 Carpetas de documentos
+
+Nuevo módulo de carpetas (`document_folders`) con el mismo criterio de permisos que ya usaba la
+carga de documentos: `informatica_r4` cualquier alcance; roles regionales
+(`secretario_regional`/`director_escuela`) dentro de su región; roles de cuartel autorizados
+(`usuario_carga_cuartel`/`presidente_cuartel`/`secretario_comision`) solo su propio cuartel. Todo
+usuario autenticado puede ver las carpetas y su contenido (mismo criterio de lectura que ya tenían
+los documentos).
+
+`/documentos` ahora muestra una grilla de carpetas (incluida la carpeta virtual "General" para
+documentos sin `folder_id` — los documentos existentes antes de este módulo siguen viendo ahí, no se
+migran a ninguna carpeta automáticamente). El botón "+" ofrece "Crear carpeta" o "Cargar archivo".
+
+**No implementado a propósito** (confirmado que quede documentado, no en esta tanda): papelera de 30
+días o borrado definitivo diferido. Borrar una carpeta hoy es inmediato pero **no borra sus
+documentos** — `documents.folder_id` pasa a `null` (`on delete set null`), los documentos quedan
+visibles en "General".
+
+### 7.6 Checklist de verificación después de correr 0044-0046
+
+- [ ] Crear un usuario nuevo desde `/usuarios/nuevo` (cualquier rol) y confirmar que se crea sin
+      error — esto confirma que 7.1 quedó resuelto.
+- [ ] Como `informatica_r4`, entrar a `/usuarios/:id` de otro usuario y probar: cambiar email,
+      resetear contraseña, activar/desactivar, forzar cambio de contraseña.
+- [ ] Como `informatica_r4`, confirmar que SÍ podés editar a otro `informatica_r4`; como
+      `integrante_informatica`, confirmar que NO podés.
+- [ ] Crear una carpeta de documentos y cargar un archivo dentro.
+- [ ] Confirmar que los documentos existentes previos a esta tanda siguen viendo en "General".
+  `0043_remove_administrativo_role_ui.sql`) y decidir a qué rol migrarlos.

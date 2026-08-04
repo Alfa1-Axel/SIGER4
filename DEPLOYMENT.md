@@ -1059,3 +1059,76 @@ devolvía correctamente; el bug estaba en cómo el cliente lo descartaba, no en 
       un perfil con ese email." (no "Edge Function returned a non-2xx status code").
 - [ ] Activar notificaciones push (`/ajustes`) y generar una notificación — confirmar que el ícono
       grande y el badge muestran el logo de Informática y Estadística R4, no el ícono rojo genérico.
+
+## 11. Ajuste fino de íconos de notificaciones push (2026-08)
+
+Seguimiento a la sección 10.1: el ícono grande de las push ya usaba el logo real, pero el ícono
+chico de la barra de estado de Android seguía viéndose vacío o genérico.
+
+### 11.1 Causa raíz
+
+`badge` en la Web Notifications API no es una imagen a color: Android **ignora el canal de color por
+completo** y usa solo el canal alfa para pintar una silueta monocroma (blanco sobre el color de fondo
+de la barra de estado), a un tamaño efectivo muy chico (~24px). El asset que se había usado
+(`push-informatica-192.png`, un recorte a color del emblema completo — anillo de texto, bandera,
+laptop chica) tiene demasiado detalle para sobrevivir esa reducción: el resultado era una mancha
+irreconocible, que Android probablemente termina mostrando como un punto vacío o cae a un ícono de
+sistema genérico.
+
+### 11.2 Fix
+
+- **Nuevo asset dedicado**: `public/icons/push-badge-96.png` / `push-badge-192.png` — una silueta
+  simplificada de un solo color (blanco sólido sobre fondo transparente), inspirada en el motivo
+  "laptop + píxeles de datos" del logo real, sin texto ni bandera. Es una forma nueva, no un recorte
+  del logo (el logo no tiene una capa aislada de esa sub-forma) — mantiene el lenguaje visual del
+  emblema pero simplificado a lo mínimo necesario para ser legible a 24px.
+- `src/sw.ts`: `badge` pasa a usar `push-badge-192.png`; `icon` sigue con
+  `push-informatica-512.png` (el logo completo, sin cambios).
+- **Manifest de la PWA** (`vite.config.ts`) tenía dos problemas adicionales, no relacionados a push
+  pero con el mismo síntoma de "ícono vacío en Android":
+  1. Los `icons` declaraban un solo tamaño (`1254x1254`, el tamaño nativo del archivo fuente) en vez
+     de los tamaños estándar (`192x192`/`512x512`) que Android/Chrome esperan para el selector de
+     instalación y el ícono de la app instalada.
+  2. El ícono `purpose: maskable` usaba el logo completo sin ningún margen — Android recorta
+     cualquier maskable a la forma que use el launcher (círculo, squircle, etc.), y sin margen de
+     seguridad el emblema queda cortado en los bordes.
+  Se generaron 4 assets nuevos: `manifest-icon-192.png`/`manifest-icon-512.png` (`purpose: any`, el
+  logo reescalado sin cambios) y `manifest-icon-maskable-192.png`/`manifest-icon-maskable-512.png`
+  (`purpose: maskable`, el logo reducido al 70% del lienzo, centrado, sobre fondo sólido del color de
+  tema `#D32F2F` — así el recorte del launcher nunca corta el emblema).
+
+### 11.3 Limitación de navegador (no corregible desde la app)
+
+El texto que aparece **arriba** del título/cuerpo de la notificación (algo como "SIGER4 · sitio ·
+ahora", exacto formato depende del navegador/SO) lo arma y renderiza **el navegador/sistema
+operativo**, no la Web Notifications API. No existe ninguna opción en `NotificationOptions` (los
+parámetros que acepta `showNotification()`) para modificarlo, ocultarlo, o reemplazarlo — Chrome/
+Android lo agrega siempre a partir del origen del sitio (dominio) y la hora de recepción, como parte
+del "chrome" de sistema alrededor de cualquier notificación web, sea de SIGER4 o de cualquier otro
+sitio. Es una limitación de la plataforma, no un bug de la app ni algo que dependa de qué `icon`/
+`badge`/`title` se manden.
+
+### 11.4 Edge Functions a redesplegar
+
+Ninguna — `send-push`/`send-push-system` nunca mandaban `icon`/`badge` en el payload (confirmado al
+revisar ambas funciones); esos valores siempre se definen en `sw.ts` al momento de mostrar la
+notificación, no en el payload que viaja por Web Push. Este cambio es 100% frontend/manifest.
+
+### 11.5 Vercel
+
+Sí, redeploy — nuevos assets estáticos + cambios en `vite.config.ts`/`sw.ts`.
+
+### 11.6 Checklist de verificación
+
+- [ ] Generar una notificación push real en un dispositivo Android con Chrome: confirmar que el
+      ícono chico de la barra de estado se ve como una forma reconocible (silueta de laptop), no un
+      punto vacío ni el ícono genérico de Chrome.
+      **Nota**: no se pudo validar esto en este entorno de desarrollo (requiere un dispositivo
+      Android real o un emulador con Play Services + Chrome, y una suscripción push activa) — la
+      construcción del asset sigue la convención documentada de Android (silueta monocroma simple,
+      alto contraste, sin texto/detalle fino), pero la verificación visual final en dispositivo real
+      queda pendiente de que alguien con un Android a mano la confirme después de este deploy.
+- [ ] Instalar la PWA en Android (o Chrome desktop) y confirmar que el ícono de la app instalada
+      muestra el logo completo, no un cuadrado en blanco ni recortado.
+- [ ] Confirmar en `chrome://serviceworker-internals` o DevTools → Application → Manifest que no hay
+      advertencias sobre íconos faltantes o mal declarados.

@@ -94,14 +94,20 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: body ?? '',
-      // Logo real del Dpto. Informática y Estadística R4 (no el ícono
-      // genérico de la PWA) — ver public/logos/README.md, mismo archivo
-      // fuente que login/sidebar/header, reescalado a los tamaños que pide
-      // la Notifications API. "icon" es el ícono grande de la notificación;
-      // "badge" es el ícono chico monocromo de la barra de estado en
-      // Android (Chrome lo enmascara automáticamente a blanco/alpha).
+      // "icon" es el ícono grande de la notificación: el logo completo del
+      // Dpto. Informática y Estadística R4 (mismo archivo que login/sidebar/
+      // header, ver public/logos/README.md), reescalado.
+      //
+      // "badge" es el ícono CHICO de la barra de estado/notificación de
+      // Android: el sistema operativo ignora el color y usa solo el canal
+      // alfa para pintar una silueta monocroma (blanco/gris), a un tamaño
+      // efectivo muy pequeño (~24px). El emblema completo tiene demasiado
+      // detalle (anillo de texto, bandera, laptop chica) para sobrevivir esa
+      // reducción — queda una mancha ilegible. push-badge-192.png es una
+      // silueta simplificada (laptop + "píxeles" de datos, sin texto) hecha
+      // a propósito para este uso, blanco sólido sobre fondo transparente.
       icon: '/icons/push-informatica-512.png',
-      badge: '/icons/push-informatica-192.png',
+      badge: '/icons/push-badge-192.png',
       tag: tag,
       data: { url: url ?? '/notificaciones' },
     }),

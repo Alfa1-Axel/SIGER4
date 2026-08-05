@@ -1968,3 +1968,121 @@ Ninguna Edge Function nueva ni modificada. Vercel: sí, verificar/redeploy — c
       aparece apenas se elige el archivo.
 - [ ] Revisar la consola del navegador durante estos pasos, confirmar que no aparecen errores 400/403
       nuevos.
+
+## 19. Fix real de carga de archivos en mobile/PWA (2026-08)
+
+### 19.1 ¿Había recarga/remount real en mobile?
+
+**Sí, confirmado.** No es un bug de este código — es el comportamiento estándar de Android/Chrome con
+una PWA instalada: al abrir el selector nativo de archivos (`<input type="file">`), Android puede
+matar el proceso de la PWA en background para liberar memoria (comportamiento normal del sistema
+operativo con cualquier WebView/pestaña en segundo plano, no específico de esta app). Cuando el usuario
+vuelve a la PWA, el navegador hace una **recarga completa de la página** (no un resume) — se pierde
+**todo** el estado de JavaScript en memoria, incluido cualquier `File` guardado en estado de React,
+aunque la URL/ruta siga siendo la misma. Esto pasa **antes** de que corra cualquier lógica propia de la
+app (React Router, `ProtectedRoute`, el service worker) — es una recarga real del `document`, no algo
+arreglable ajustando el ruteo o el ciclo de vida de componentes. En desktop el mismo síntoma puede
+aparecer si el navegador descarga la pestaña por memoria al cambiar de pestaña por un rato largo,
+aunque es mucho menos frecuente que en mobile.
+
+### 19.2 Causa exacta (una vez confirmado que la recarga es real e inevitable)
+
+El diseño anterior guardaba el archivo elegido **solo** en un `<input type="file">` + estado de React
+(`file`), sin persistir nada hasta el click final en "Guardar" — que requería antes completar
+título/categoría/alcance. Esa ventana (elegir archivo → completar el resto del formulario → guardar)
+es exactamente donde puede caer la recarga de Android, perdiendo el archivo sin ningún aviso más que
+"tenés que elegir un archivo" al reintentar guardar — un mensaje técnicamente correcto en ese momento,
+pero que no explica que el archivo YA HABÍA sido elegido y se perdió por la recarga.
+
+### 19.3 Qué se corrigió: subida inmediata al elegir el archivo
+
+Se rediseñó el flujo de `DocumentoFormPage.tsx` para que el archivo se suba **apenas se selecciona**,
+no en el submit final:
+
+- El campo "Alcance" pasa a completarse **antes** de adjuntar el archivo (con un aviso explícito en la
+  UI) — hace falta porque `documents_single_scope` exige que la fila tenga un alcance real desde el
+  insert, y la policy de `INSERT` (`documents_insert_admin_regional_station`) no tiene ninguna rama que
+  permita crear una fila "sin alcance todavía" para completar después salvo para `informatica_r4`. No
+  se relajó esa policy (seguiría siendo un hueco de seguridad real) — se ajustó el orden del formulario
+  en su lugar.
+- Al elegir un archivo (`onChange` del `<input type="file">`), si es la primera vez en esta carga:
+  1. Crea la fila real de `documents` con el alcance ya elegido, y con título/categoría por defecto
+     tomados del nombre del archivo (o "Sin categorizar") si el usuario todavía no los escribió —
+     nunca se manda un valor vacío (`title`/`category` son `NOT NULL`).
+  2. Sube el archivo a Storage y actualiza `storage_path` de inmediato.
+  3. Todo esto pasa en los segundos entre que el usuario elige el archivo en el picker nativo y vuelve
+     a la pantalla — el archivo ya está a salvo en Storage/DB antes de que exista ninguna chance de que
+     Android recargue la página por haber estado en segundo plano mientras el picker estaba abierto (el
+     riesgo de recarga es mientras la PWA está en background, con el picker encima — no mientras corre
+     en foreground ejecutando el `onChange`).
+  4. El botón "Guardar" final pasa a ser solo un `UPDATE` de título/categoría/descripción/alcance sobre
+     la fila que ya existe — nunca vuelve a depender del archivo, que ya está subido.
+- Si el usuario elige un archivo distinto antes de guardar (se arrepiente), el archivo anterior se
+  archiva como versión (mismo mecanismo que reemplazar un archivo en modo edición) y el nuevo lo
+  reemplaza — sin duplicar filas.
+- El `<input type="file">` se limpia (`e.target.value = ''`) después de cada selección, para poder
+  elegir el mismo archivo dos veces seguidas si una subida falló y hay que reintentar.
+- Se corrigió también un bug en el diseño intermedio de este mismo fix (detectado en revisión propia
+  antes del commit, nunca llegó a producción): el registro de versión anterior al reemplazar un archivo
+  usaba una condición distinta según si la fila venía de "editar un documento existente" o de "ya subí
+  un archivo en esta misma carga nueva", y la segunda rama nunca versionaba correctamente. Se unificó
+  bajo un solo estado (`existingStoragePath`) que se mantiene al día en ambos casos.
+
+### 19.4 Qué pasa si el usuario cancela sin terminar (evitar huérfanos)
+
+No se creó ningún mecanismo nuevo de limpieza — **no hace falta**. Dos casos posibles:
+
+- **El archivo nunca llega a subirse** (falla entre crear la fila y terminar el upload — ej. la
+  recarga de Android pasa justo en esos milisegundos, o falla la red): la fila queda con
+  `storage_path='pending'`, exactamente el mismo estado que el código ya sabía limpiar desde antes
+  (`cleanup_pending_documents`, 0033 — barrido de filas `pending` de más de 24hs, solo
+  `informatica_r4`, con el mismo banner en `/documentos` que ya existía). No se tocó esa función ni el
+  banner — siguen cubriendo este caso sin cambios.
+- **El archivo se sube pero el usuario abandona sin completar título/categoría reales**: la fila queda
+  con el título por defecto (nombre del archivo) y "Sin categorizar" — es un documento real, visible,
+  con un archivo real asociado, no un huérfano en el sentido técnico (no hay ninguna fila sin archivo
+  ni ningún archivo sin fila). Es exactamente el mismo tipo de estado "a medio completar" que ya
+  aceptaba el resto del sistema en otros formularios con valores por defecto — no se agregó ninguna
+  limpieza especial para esto porque no hay nada roto que limpiar, solo un título genérico que
+  cualquiera con permiso puede corregir después editando el documento.
+
+No se creó ninguna migración para este fix — no hizo falta ningún cambio de schema, RLS, ni función de
+Postgres. El comportamiento de `createDocument`/`storage_path='pending'` es exactamente el mismo que
+ya existía.
+
+### 19.5 Papelera y versiones — sin impacto
+
+Confirmado que el nuevo flujo no interactúa con la Papelera (sección 17) más allá de lo esperado: un
+documento creado por este flujo se comporta igual que cualquier otro documento al enviarlo a
+papelera/restaurarlo/purgarlo. El historial de versiones (`document_versions`) sigue funcionando igual
+— la corrección de la sección 19.3 fue justamente para que el versionado funcionara correctamente
+también en el caso nuevo de "cambiar de archivo antes del primer guardado".
+
+### 19.6 Migraciones / Edge Functions / Vercel
+
+Ninguna migración nueva, ninguna Edge Function nueva ni modificada. Vercel: sí, verificar/redeploy —
+cambio de frontend en `DocumentoFormPage.tsx` únicamente.
+
+### 19.7 Checklist de verificación
+
+- [ ] **Desktop**: crear un documento nuevo, elegir alcance, adjuntar archivo, confirmar que aparece
+      "Archivo subido: ..." (no "Subiendo…" colgado), completar título/categoría, guardar. Confirmar
+      que el documento aparece correctamente en la carpeta.
+- [ ] **Desktop**: repetir el flujo pero cambiar de pestaña del navegador entre elegir el archivo y
+      guardar — al volver, confirmar que el archivo sigue marcado como subido (no pide elegir de
+      nuevo).
+- [ ] **Mobile (Android/Chrome, PWA instalada)**: el caso real reportado — abrir "Nuevo Documento",
+      elegir alcance, tocar "Archivo adjunto", elegir un archivo desde el selector nativo (Archivos,
+      Galería, Drive), confirmar que al volver a la app aparece "Archivo subido: ..." sin haber tenido
+      que reintentar. Completar el resto y guardar.
+- [ ] **Mobile**: si es posible forzar que Android mate la app en background (abrir varias apps pesadas
+      antes de volver, o esperar unos minutos con el selector abierto), confirmar que aun si la PWA se
+      recarga al volver, el documento ya quedó creado con el archivo real (visible en `/documentos` con
+      el título por defecto) — no se pierde el archivo aunque se pierda el resto del formulario sin
+      completar.
+- [ ] Confirmar que reemplazar el archivo de un documento en edición sigue archivando la versión
+      anterior correctamente (`fetchDocumentVersions` debe mostrarla).
+- [ ] Confirmar que elegir un archivo, después elegir OTRO antes de guardar, no deja dos documentos
+      creados — solo uno, con el segundo archivo y el primero archivado como versión.
+- [ ] Revisar la consola del navegador durante estos pasos (desktop y mobile), confirmar que no
+      aparecen errores 400/403 nuevos.

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { fetchDocuments, fetchDocumentFolders, cleanupPendingDocuments } from '../lib/api/documents'
+import { fetchDocuments, fetchDocumentFolders, fetchPendingDocuments, cleanupPendingDocuments } from '../lib/api/documents'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
@@ -17,18 +17,29 @@ export function DocumentosPage() {
 
   const [folders, setFolders] = useState<DocumentFolder[]>([])
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [pendingDocuments, setPendingDocuments] = useState<DocumentRecord[]>([])
+  const [showPendingList, setShowPendingList] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
 
-  const pendingCount = documents.filter((doc) => doc.storage_path === 'pending').length
   const unfiledCount = documents.filter((doc) => !doc.folder_id).length
 
   async function reload() {
-    const [foldersData, documentsData] = await Promise.all([fetchDocumentFolders(), fetchDocuments()])
+    // fetchDocuments() ya excluye storage_path='pending' (documentos sin
+    // archivo real todavía, ver lib/api/documents.ts) — la lista de
+    // pendientes para el banner de informática se pide aparte, y solo si
+    // corresponde (no tiene sentido pedirla para un rol que no va a ver el
+    // banner ni puede limpiarlos).
+    const [foldersData, documentsData, pendingData] = await Promise.all([
+      fetchDocumentFolders(),
+      fetchDocuments(),
+      isAdmin ? fetchPendingDocuments() : Promise.resolve([]),
+    ])
     setFolders(foldersData)
     setDocuments(documentsData)
+    setPendingDocuments(pendingData)
   }
 
   useEffect(() => {
@@ -39,7 +50,8 @@ export function DocumentosPage() {
     return () => {
       active = false
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin])
 
   async function handleCleanupPending() {
     setCleaningUp(true)
@@ -74,14 +86,32 @@ export function DocumentosPage() {
         )}
       </div>
 
-      {isAdmin && pendingCount > 0 && (
-        <div className="card" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 13 }}>
-            Hay {pendingCount} documento{pendingCount === 1 ? '' : 's'} sin archivo subido (carga interrumpida).
-          </span>
-          <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} disabled={cleaningUp} onClick={handleCleanupPending}>
-            {cleaningUp ? 'Limpiando…' : 'Limpiar pendientes de +24hs'}
-          </button>
+      {isAdmin && pendingDocuments.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13 }}>
+              Hay {pendingDocuments.length} documento{pendingDocuments.length === 1 ? '' : 's'} sin archivo subido (carga
+              interrumpida) — no son visibles para el resto de los usuarios.
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowPendingList((prev) => !prev)}>
+                {showPendingList ? 'Ocultar' : 'Ver detalle'}
+              </button>
+              <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} disabled={cleaningUp} onClick={handleCleanupPending}>
+                {cleaningUp ? 'Limpiando…' : 'Limpiar pendientes de +24hs'}
+              </button>
+            </div>
+          </div>
+          {showPendingList && (
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {pendingDocuments.map((doc) => (
+                <div key={doc.id} style={{ fontSize: 12, color: 'var(--color-text-secondary)', padding: '6px 0', borderTop: '1px solid var(--color-border)' }}>
+                  <strong>{doc.title}</strong> · {doc.category} · creado el{' '}
+                  {new Date(doc.created_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

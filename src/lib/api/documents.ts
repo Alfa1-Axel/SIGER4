@@ -23,20 +23,45 @@ async function edgeFunctionErrorMessage(error: unknown, fallback: string): Promi
 // distingue por deleted_at), pero mostrarlos en /documentos sería confuso:
 // "eliminado" tiene que desaparecer de la vista normal y solo verse en
 // /documentos/papelera (ver fetchTrashedDocuments).
+//
+// TAMBIÉN excluyen storage_path='pending': por una restricción real de RLS
+// (documents_storage_write_admin_regional_station exige que el path de
+// Storage resuelva a una fila de "documents" ya existente), la fila se crea
+// ANTES de que el archivo termine de subirse — así que puede existir un
+// instante, o quedar así para siempre si la subida falla a mitad de camino.
+// Un documento en ese estado no tiene archivo real todavía: no debe
+// aparecer como un documento válido en ningún listado normal (ver rediseño
+// de carga en 2 pasos en DocumentoFormPage.tsx). Solo informática lo ve,
+// vía fetchPendingDocuments más abajo, para poder limpiarlo.
 export async function fetchDocuments(): Promise<DocumentRecord[]> {
   const { data, error } = await supabase
     .from('documents')
     .select('*')
     .is('deleted_at', null)
+    .neq('storage_path', 'pending')
     .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as DocumentRecord[]
 }
 
 export async function fetchDocumentsByFolder(folderId: string | null): Promise<DocumentRecord[]> {
-  let query = supabase.from('documents').select('*').is('deleted_at', null).order('created_at', { ascending: false })
+  let query = supabase.from('documents').select('*').is('deleted_at', null).neq('storage_path', 'pending').order('created_at', { ascending: false })
   query = folderId ? query.eq('folder_id', folderId) : query.is('folder_id', null)
   const { data, error } = await query
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
+// Documentos "fantasma" (fila creada, archivo nunca terminó de subirse) —
+// visibles solo para informática, que es quien puede correr
+// cleanup_pending_documents() para barrerlos. No se usa en ningún listado
+// de usuario normal.
+export async function fetchPendingDocuments(): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('storage_path', 'pending')
+    .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as DocumentRecord[]
 }

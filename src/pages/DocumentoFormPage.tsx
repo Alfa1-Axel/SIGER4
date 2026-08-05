@@ -27,14 +27,66 @@ const DOC_SCOPE_OPTIONS: { value: DocScopeTarget; label: string }[] = [
   { value: 'profile', label: 'Usuario específico' },
 ]
 
-// Quita la extensión de un nombre de archivo para usarlo como título por
-// defecto ("Circular_12.pdf" -> "Circular_12") — nunca se manda vacío a
-// createDocument (title es NOT NULL), aunque el usuario todavía no haya
-// escrito nada cuando el archivo ya se subió (ver handleFileChange).
-function titleFromFileName(fileName: string): string {
-  const withoutExt = fileName.replace(/\.[a-zA-Z0-9]{1,10}$/, '')
-  return withoutExt || fileName
+// Borrador de metadatos del Paso 1 (nueva carga, no edición) — se guarda en
+// sessionStorage en cada cambio, NUNCA se guarda el File ahí (solo texto).
+// Sirve para sobrevivir la recarga real que Android puede hacer de la PWA
+// mientras el selector nativo de archivos está abierto (ver DEPLOYMENT.md):
+// como ahora el archivo se elige recién en el Paso 2, después de confirmar
+// los metadatos del Paso 1, hace falta poder recuperar esos metadatos si la
+// página se recarga a mitad del Paso 2 — sin este borrador, el usuario
+// volvería a un formulario vacío después de haber completado todo el Paso 1.
+// Se limpia apenas el documento se guarda con éxito, o si el usuario cancela
+// el Paso 2 y vuelve a editar el Paso 1 desde cero.
+interface DocumentDraft {
+  title: string
+  category: string
+  description: string
+  scopeTarget: DocScopeTarget
+  regionId: string
+  subsedeId: string
+  stationId: string
+  profileId: string
+  folderId: string | null
+  // Si el Paso 2 ya alcanzó a crear la fila en "documents" (necesario antes
+  // de poder subir el archivo, ver createDocument) antes de que la página se
+  // recargara, se guarda su id acá para reanudar sobre la MISMA fila en vez
+  // de crear una segunda — evita duplicados si Android recarga justo después
+  // de crear la fila pero antes de terminar de subir el archivo.
+  pendingDocumentId: string | null
 }
+
+function draftStorageKey(folderIdFromQuery: string | null): string {
+  return `siger4:document-draft:${folderIdFromQuery ?? 'general'}`
+}
+
+function loadDraft(folderIdFromQuery: string | null): DocumentDraft | null {
+  try {
+    const raw = sessionStorage.getItem(draftStorageKey(folderIdFromQuery))
+    if (!raw) return null
+    return JSON.parse(raw) as DocumentDraft
+  } catch {
+    return null
+  }
+}
+
+function saveDraft(folderIdFromQuery: string | null, draft: DocumentDraft): void {
+  try {
+    sessionStorage.setItem(draftStorageKey(folderIdFromQuery), JSON.stringify(draft))
+  } catch {
+    // sessionStorage puede fallar (modo privado, cuota agotada) — el
+    // borrador es una mejora de recuperación, no un requisito para cargar.
+  }
+}
+
+function clearDraft(folderIdFromQuery: string | null): void {
+  try {
+    sessionStorage.removeItem(draftStorageKey(folderIdFromQuery))
+  } catch {
+    // Idem saveDraft.
+  }
+}
+
+type FormStep = 'metadata' | 'file'
 
 export function DocumentoFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -60,27 +112,26 @@ export function DocumentoFormPage() {
   const [stationId, setStationId] = useState('')
   const [profileId, setProfileId] = useState('')
 
-  // documentId: apenas se termina de crear+subir el archivo (ver
-  // handleFileChange), esta pantalla deja de estar en modo "nuevo puro" y
-  // pasa a editar esta fila real hasta que se hace click en Guardar — el
-  // archivo ya quedó a salvo en Storage/DB desde el momento en que se
-  // seleccionó, sin depender de que el resto del formulario se complete ni
-  // de que la pestaña/app siga viva. Esto es lo que evita perder el archivo
-  // si Android mata el proceso de la PWA al volver del selector nativo de
-  // archivos (ver DEPLOYMENT.md, sección de este fix): antes, el archivo
-  // vivía solo en un <input type="file"> + estado de React hasta el submit
-  // final, y ambos se pierden si el navegador recarga la página.
-  const [documentId, setDocumentId] = useState<string | null>(null)
+  // En modo creación, el formulario tiene dos pasos reales: 'metadata'
+  // (título/tipo/alcance/descripción, todo obligatorio salvo descripción) y
+  // 'file' (elegir y subir el archivo). Nunca se crea una fila en
+  // "documents" durante el Paso 1 — recién se crea al entrar al Paso 2, justo
+  // antes de intentar subir el archivo (ver handleFileChange). En modo
+  // edición no hay pasos: el documento ya existe completo, solo se edita.
+  const [step, setStep] = useState<FormStep>('metadata')
+
+  // pendingDocumentId: la fila que el Paso 2 crea para poder subir el
+  // archivo (las policies de Storage exigen un document_id real para
+  // validar el path, ver createDocument en lib/api/documents.ts). Se llama
+  // "pending" a propósito — mientras uploadStatus no sea 'done', esta fila
+  // NO es un documento válido: fetchDocuments/fetchDocumentsByFolder la
+  // excluyen de todos los listados normales (storage_path='pending'), así
+  // que nunca aparece como un documento incompleto para otros usuarios.
+  const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [fileSize, setFileSize] = useState<number | null>(null)
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
   const [existingFolderId, setExistingFolderId] = useState<string | null>(null)
-  // uploadStatus separa explícitamente "hay una fila creada pero el archivo
-  // real todavía no se subió con éxito" (failed) de "ya está subido" (done) —
-  // documentId por sí solo no alcanza para esa distinción (queda seteado
-  // apenas se crea la fila, antes de saber si el upload del archivo
-  // funcionó), y handleSubmit lo usa para bloquear el guardado si el archivo
-  // no quedó realmente subido (ver más abajo).
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'failed'>('idle')
 
   const [loading, setLoading] = useState(isEditing)
@@ -105,6 +156,33 @@ export function DocumentoFormPage() {
     }
   }, [canCreate])
 
+  // Al entrar en modo creación (no edición), intenta recuperar un borrador
+  // de una carga anterior interrumpida por una recarga (ver loadDraft). Si
+  // hay un pendingDocumentId guardado, salta directo al Paso 2 con esa fila
+  // ya conocida — el usuario solo tiene que volver a elegir el archivo
+  // (nunca se guardó el File, solo sus metadatos), sin perder lo que ya
+  // había escrito en el Paso 1 ni crear una segunda fila duplicada.
+  useEffect(() => {
+    if (isEditing) return
+    const draft = loadDraft(folderIdFromQuery)
+    if (!draft) return
+    setTitle(draft.title)
+    setCategory(draft.category)
+    setDescription(draft.description)
+    setScopeTarget(draft.scopeTarget)
+    setRegionId(draft.regionId)
+    setSubsedeId(draft.subsedeId)
+    setStationId(draft.stationId)
+    setProfileId(draft.profileId)
+    if (draft.pendingDocumentId) {
+      setPendingDocumentId(draft.pendingDocumentId)
+      setStep('file')
+      setUploadStatus('failed')
+      setError('Se recuperaron los datos de una carga anterior interrumpida. Volvé a elegir el archivo para continuar.')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditing])
+
   useEffect(() => {
     if (!id) return
     let active = true
@@ -117,10 +195,10 @@ export function DocumentoFormPage() {
       setExistingFolderId(doc.folder_id)
       setVersions(docVersions)
       // Un documento existente puede llegar en storage_path='pending' si una
-      // carga anterior (en este flujo, o en el anterior a este fix) se
-      // interrumpió sin que el archivo terminara de subirse — bloquear
-      // Guardar hasta que se adjunte un archivo real, igual que en modo
-      // creación (ver handleSubmit).
+      // carga anterior se interrumpió sin que el archivo terminara de
+      // subirse (no debería ser visible en listados normales, pero se puede
+      // llegar acá por URL directa, ej. desde el panel de pendientes de
+      // informática) — bloquear Guardar hasta que se adjunte un archivo real.
       setUploadStatus(doc.storage_path === 'pending' ? 'failed' : 'done')
       if (doc.profile_id) {
         setScopeTarget('profile')
@@ -150,10 +228,6 @@ export function DocumentoFormPage() {
     )
   }
 
-  // Alcance actual del formulario en el momento de crear la fila — hace
-  // falta que ya sea válido cuando se elige el archivo (no se puede crear un
-  // documento sin alcance, documents_single_scope lo exige), por eso el
-  // input de archivo usa esto en vez de esperar al submit final.
   function currentScopeInput() {
     return {
       region_id: scopeTarget === 'region' ? regionId : null,
@@ -170,63 +244,118 @@ export function DocumentoFormPage() {
     return Boolean(profileId)
   }
 
-  // Se dispara apenas el usuario elige un archivo (no en el submit del
-  // formulario): crea la fila real (si todavía no existe una para esta
-  // carga) y sube el archivo de inmediato, para que quede a salvo en
-  // Storage/DB sin depender de que el resto del formulario se complete. En
-  // mobile, esto es lo que evita perder el archivo si Android recarga la
-  // PWA al volver del selector nativo (el <input type="file"> dispara este
-  // handler ANTES de que exista ninguna chance de que la página se
-  // recargue). Si ya existe un documento de esta carga (el usuario cambió de
-  // archivo antes de guardar), el archivo anterior se archiva como versión,
-  // igual que reemplazar un archivo en modo edición.
+  function metadataIsValid(): string | null {
+    if (!title.trim()) return 'Ingresá un título para el documento.'
+    if (!category.trim()) return 'Ingresá el tipo de documento.'
+    if (!scopeIsReady()) return 'Completá el alcance (región, subsede, cuartel o usuario) del documento.'
+    return null
+  }
+
+  // Paso 1 -> Paso 2: los metadatos ya están completos y validados acá, no
+  // recién al guardar al final — así el Paso 2 solo se ocupa del archivo.
+  // Guarda el borrador apenas se confirma el paso, para que sobreviva una
+  // recarga mientras el usuario está en el selector de archivos del Paso 2.
+  function handleContinueToFile(event: FormEvent) {
+    event.preventDefault()
+    const validationError = metadataIsValid()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setError(null)
+    // Si ya existe una fila pending de un intento anterior en esta misma
+    // carga (el usuario volvió al Paso 1 para corregir algo después de que
+    // el Paso 2 ya la había creado), se preserva su id en el borrador — así
+    // una recarga en este punto sigue apuntando a la fila correcta en vez de
+    // "olvidarla" y terminar creando una segunda cuando el Paso 2 vuelva a
+    // correr.
+    saveDraft(folderIdFromQuery, {
+      title,
+      category,
+      description,
+      scopeTarget,
+      regionId,
+      subsedeId,
+      stationId,
+      profileId,
+      folderId: folderIdFromQuery,
+      pendingDocumentId,
+    })
+    setStep('file')
+  }
+
+  function handleBackToMetadata() {
+    setError(null)
+    setStep('metadata')
+  }
+
+  // Se dispara apenas el usuario elige un archivo en el Paso 2. Los
+  // metadatos del Paso 1 ya están validados y confirmados en este punto:
+  // crea la fila real en "documents" (si todavía no existe una para esta
+  // carga — puede ya existir si esto es un reintento después de un fallo, o
+  // si se recuperó un borrador con pendingDocumentId) y sube el archivo de
+  // inmediato. La fila queda con storage_path='pending' hasta que el upload
+  // confirma — invisible en listados normales mientras tanto (ver
+  // fetchDocuments/fetchDocumentsByFolder), así que nunca es un documento
+  // "a medias" visible para nadie.
   async function handleFileChange(selected: File | null) {
     setError(null)
     if (!selected) return
-
-    if (!isEditing && !documentId && !scopeIsReady()) {
-      setError('Elegí un alcance (región, subsede, cuartel o usuario) antes de adjuntar el archivo.')
-      return
-    }
 
     setUploadStatus('uploading')
     setFileName(selected.name)
     setFileSize(selected.size)
     try {
-      const targetId = isEditing ? id! : documentId
+      const targetId = isEditing ? id! : pendingDocumentId
       let createdId: string | null = null
       if (!targetId) {
-        // Primera vez que se elige un archivo en una carga nueva: crea la
-        // fila real con el título/categoría que haya hasta el momento (o un
-        // valor por defecto a partir del nombre del archivo, nunca vacío).
-        // Se hace ANTES de subir el archivo porque las policies de Storage
-        // necesitan un document_id real para validar el path (ver
-        // createDocument en lib/api/documents.ts) — la fila queda con
-        // storage_path='pending' hasta que el upload de abajo confirme.
         const created = await createDocument({
-          title: title.trim() || titleFromFileName(selected.name),
-          category: category.trim() || 'Sin categorizar',
+          title: title.trim(),
+          category: category.trim(),
           description: description || null,
           ...currentScopeInput(),
           folder_id: folderIdFromQuery || null,
           uploaded_by_profile_id: currentProfile?.id ?? null,
         })
         createdId = created.id
-        setDocumentId(created.id)
-      } else if (existingStoragePath && existingStoragePath !== 'pending') {
-        // Ya existe una fila con archivo real (edición existente, o ya se
-        // subió un archivo antes en esta misma carga): el archivo anterior
-        // pasa a historial de versiones antes de reemplazarlo.
-        await addDocumentVersion(targetId, existingStoragePath, currentProfile?.id ?? null)
+        setPendingDocumentId(created.id)
+        // Guarda el id de la fila recién creada en el borrador, para que si
+        // la página se recarga entre este punto y que termine el upload de
+        // abajo, la próxima carga de la pantalla reanude sobre esta misma
+        // fila en vez de crear una segunda (ver el useEffect de recuperación
+        // de borrador más arriba).
+        if (!isEditing) {
+          saveDraft(folderIdFromQuery, {
+            title,
+            category,
+            description,
+            scopeTarget,
+            regionId,
+            subsedeId,
+            stationId,
+            profileId,
+            folderId: folderIdFromQuery,
+            pendingDocumentId: created.id,
+          })
+        }
+      } else {
+        // Ya existe una fila (reintento después de un fallo, o el usuario
+        // volvió al Paso 1 a corregir algo y volvió a esta misma fila
+        // pending). Se re-sincronizan los metadatos por si cambiaron desde
+        // que se creó — sin esto, quedarían con los valores del primer
+        // intento hasta el guardado final. Si además ya tenía un archivo
+        // real (no este caso en el flujo normal de creación, pero sí en
+        // edición), ese archivo anterior pasa a historial de versiones antes
+        // de reemplazarlo.
+        if (!isEditing) {
+          await updateDocument(targetId, { title: title.trim(), category: category.trim(), description: description || null, ...currentScopeInput() })
+        }
+        if (existingStoragePath && existingStoragePath !== 'pending') {
+          await addDocumentVersion(targetId, existingStoragePath, currentProfile?.id ?? null)
+        }
       }
 
       const finalId = targetId ?? createdId!
-      // Si esto falla (red, MIME rechazado server-side, tamaño excedido), la
-      // fila en "documents" ya existe pero storage_path queda en 'pending' —
-      // uploadStatus pasa a 'failed' en el catch de abajo, lo que bloquea
-      // Guardar (ver handleSubmit) hasta que se reintente. Nunca queda un
-      // archivo "subido" fantasma: o la fila tiene el path real, o el botón
-      // de guardar sigue deshabilitado.
       const path = await uploadDocumentFile(finalId, selected)
       await updateDocumentStoragePath(finalId, path)
       setExistingStoragePath(path)
@@ -241,67 +370,31 @@ export function DocumentoFormPage() {
     event.preventDefault()
     setError(null)
 
-    // Validación propia en vez de confiar en "required" del navegador (el
-    // form tiene noValidate): si el navegador bloqueara el submit de forma
-    // nativa por un campo requerido vacío, handleSubmit nunca llegaría a
-    // correr y un mensaje de error de un intento anterior quedaría pegado en
-    // pantalla sin actualizarse, dando la impresión de que el sistema no
-    // reacciona a lo que el usuario ya corrigió.
-    if (!title.trim()) {
-      setError('Ingresá un título para el documento.')
-      return
-    }
-    if (!category.trim()) {
-      setError('Ingresá el tipo de documento.')
-      return
-    }
-    if (scopeTarget === 'region' && !regionId) {
-      setError('Seleccioná la región destino.')
-      return
-    }
-    if (scopeTarget === 'subsede' && !subsedeId) {
-      setError('Seleccioná la subsede destino.')
-      return
-    }
-    if (scopeTarget === 'station' && !stationId) {
-      setError('Seleccioná el cuartel destino.')
-      return
-    }
-    if (scopeTarget === 'profile' && !profileId) {
-      setError('Seleccioná el usuario destino.')
-      return
-    }
-    if (!isEditing && !documentId) {
-      setError('Adjuntá un archivo.')
-      return
-    }
-    // Bloquea el guardado si el archivo no quedó realmente subido: la fila
-    // puede existir (documentId seteado) con storage_path='pending' si el
-    // upload falló después de crearla (ver handleFileChange), o si un
-    // documento en edición nunca tuvo archivo. Nunca se debe poder guardar
-    // metadatos "como si" el archivo estuviera ahí cuando no lo está.
     if (uploadStatus === 'uploading') {
       setError('Esperá a que termine de subirse el archivo antes de guardar.')
       return
     }
-    if (uploadStatus === 'failed' || uploadStatus === 'idle') {
-      setError('El archivo todavía no se subió correctamente. Elegilo de nuevo antes de guardar.')
+    if (uploadStatus !== 'done') {
+      setError(isEditing ? 'Adjuntá un archivo antes de guardar.' : 'Seleccioná un archivo antes de guardar.')
       return
     }
 
     setSubmitting(true)
     try {
-      const input = { title, category, description: description || null, ...currentScopeInput() }
+      const input = { title: title.trim(), category: category.trim(), description: description || null, ...currentScopeInput() }
 
       if (isEditing && id) {
         await updateDocument(id, input)
         navigate(existingFolderId ? `/documentos/carpetas/${existingFolderId}` : '/documentos/carpetas/general')
-      } else if (documentId) {
-        // El archivo ya se subió en handleFileChange — acá solo se
-        // actualizan los datos finales (título/categoría/descripción/
-        // alcance real, que puede haber cambiado respecto al que tenía el
-        // documento cuando se creó apenas se eligió el archivo).
-        await updateDocument(documentId, input)
+      } else if (pendingDocumentId) {
+        // El archivo ya se subió en handleFileChange y la fila ya se creó
+        // con los metadatos correctos del Paso 1 — esto solo confirma/
+        // actualiza por si algo cambió. Con el archivo ya subido
+        // (uploadStatus === 'done'), storage_path ya no es 'pending', así
+        // que el documento pasa a ser visible en los listados normales
+        // recién en este punto.
+        await updateDocument(pendingDocumentId, input)
+        clearDraft(folderIdFromQuery)
         navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general')
       }
     } catch (err) {
@@ -311,15 +404,23 @@ export function DocumentoFormPage() {
     }
   }
 
+  const showingMetadataStep = !isEditing && step === 'metadata'
+  const showingFileStep = isEditing || step === 'file'
+
   return (
     <AppShell title={isEditing ? 'Editar Documento' : 'Nuevo Documento'}>
       <h1 className="page-title">{isEditing ? 'Editar Documento' : 'Nuevo Documento'}</h1>
-      <p className="page-subtitle">Cargá documentación institucional para el alcance que corresponda.</p>
+      {!isEditing && (
+        <p className="page-subtitle">
+          Paso {step === 'metadata' ? '1' : '2'} de 2 — {step === 'metadata' ? 'Datos del documento' : 'Archivo'}
+        </p>
+      )}
+      {isEditing && <p className="page-subtitle">Cargá documentación institucional para el alcance que corresponda.</p>}
 
       {loading ? (
         <div className="empty-state">Cargando datos del documento…</div>
-      ) : (
-        <form onSubmit={handleSubmit} className="card-solid" noValidate>
+      ) : showingMetadataStep ? (
+        <form onSubmit={handleContinueToFile} className="card-solid" noValidate>
           <div className="field">
             <label htmlFor="title">Título</label>
             <input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Circular N°12" />
@@ -335,82 +436,103 @@ export function DocumentoFormPage() {
             <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
 
-          {!isEditing && (
-            <div className="field">
-              <label>Alcance</label>
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 8 }}>
-                Elegí el alcance antes de adjuntar el archivo — el archivo se sube apenas lo elegís, con
-                este alcance.
-              </p>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                {DOC_SCOPE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    disabled={Boolean(documentId)}
-                    onClick={() => setScopeTarget(option.value)}
-                    className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: 12 }}
-                  >
-                    {option.label}
-                  </button>
+          <div className="field">
+            <label>Alcance</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+              {DOC_SCOPE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setScopeTarget(option.value)}
+                  className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ padding: '6px 12px', fontSize: 12 }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {scopeTarget === 'region' && (
+              <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+                <option value="">Seleccionar región</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
                 ))}
+              </select>
+            )}
+
+            {scopeTarget === 'subsede' && (
+              <select value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
+                <option value="">Seleccionar subsede</option>
+                {subsedes.map((subsede) => (
+                  <option key={subsede.id} value={subsede.id}>
+                    {subsede.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {scopeTarget === 'station' && (
+              <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                <option value="">Seleccionar cuartel</option>
+                {stations.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {scopeTarget === 'profile' && (
+              <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+                <option value="">Seleccionar usuario</option>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.full_name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {error && <p className="field-error">{error}</p>}
+
+          <button type="submit" className="btn btn-primary btn-block">
+            Continuar: elegir archivo
+          </button>
+        </form>
+      ) : showingFileStep ? (
+        <form onSubmit={handleSubmit} className="card-solid" noValidate>
+          {!isEditing && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 16,
+                paddingBottom: 12,
+                borderBottom: '1px solid var(--color-border)',
+              }}
+            >
+              <div style={{ fontSize: 13 }}>
+                <strong>{title}</strong>
+                <span style={{ color: 'var(--color-text-muted)' }}> · {category}</span>
               </div>
-
-              {scopeTarget === 'region' && (
-                <select value={regionId} disabled={Boolean(documentId)} onChange={(e) => setRegionId(e.target.value)}>
-                  <option value="">Seleccionar región</option>
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.id}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {scopeTarget === 'subsede' && (
-                <select value={subsedeId} disabled={Boolean(documentId)} onChange={(e) => setSubsedeId(e.target.value)}>
-                  <option value="">Seleccionar subsede</option>
-                  {subsedes.map((subsede) => (
-                    <option key={subsede.id} value={subsede.id}>
-                      {subsede.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {scopeTarget === 'station' && (
-                <select value={stationId} disabled={Boolean(documentId)} onChange={(e) => setStationId(e.target.value)}>
-                  <option value="">Seleccionar cuartel</option>
-                  {stations.map((station) => (
-                    <option key={station.id} value={station.id}>
-                      {station.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {scopeTarget === 'profile' && (
-                <select value={profileId} disabled={Boolean(documentId)} onChange={(e) => setProfileId(e.target.value)}>
-                  <option value="">Seleccionar usuario</option>
-                  {profiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.full_name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {documentId && (
-                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6 }}>
-                  El alcance queda fijo una vez subido el archivo. Si te equivocaste, guardá igual y
-                  después editá el documento para corregirlo.
-                </p>
-              )}
+              <button type="button" className="btn btn-outlined" style={{ padding: '6px 10px', fontSize: 12 }} onClick={handleBackToMetadata}>
+                Editar datos
+              </button>
             </div>
           )}
 
           <div className="field">
             <label htmlFor="file">{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo adjunto'}</label>
+            {!isEditing && uploadStatus === 'idle' && (
+              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 8 }}>
+                Seleccioná un archivo — se sube apenas lo elegís.
+              </p>
+            )}
             <input
               id="file"
               type="file"
@@ -440,7 +562,8 @@ export function DocumentoFormPage() {
             )}
             {uploadStatus === 'failed' && (
               <p className="field-error" style={{ marginTop: 4 }}>
-                No se pudo subir el archivo{fileName ? ` "${fileName}"` : ''}: {error ?? 'error desconocido'}. Elegilo de nuevo para reintentar.
+                No se pudo subir el archivo{fileName ? ` "${fileName}"` : ''}
+                {error ? `: ${error}` : ''}. Elegilo de nuevo para reintentar.
               </p>
             )}
             {uploadStatus === 'done' && !fileName && isEditing && existingStoragePath && existingStoragePath !== 'pending' && (
@@ -456,11 +579,11 @@ export function DocumentoFormPage() {
           <button
             type="submit"
             className="btn btn-primary btn-block"
-            disabled={submitting || uploadStatus === 'uploading' || uploadStatus === 'failed' || uploadStatus === 'idle'}
+            disabled={submitting || uploadStatus !== 'done'}
           >
             {submitting ? 'Guardando…' : 'Guardar'}
           </button>
-          {(uploadStatus === 'failed' || uploadStatus === 'idle') && (
+          {uploadStatus !== 'done' && (
             <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, textAlign: 'center' }}>
               El botón se habilita cuando el archivo termine de subirse correctamente.
             </p>
@@ -479,7 +602,7 @@ export function DocumentoFormPage() {
             </div>
           )}
         </form>
-      )}
+      ) : null}
     </AppShell>
   )
 }

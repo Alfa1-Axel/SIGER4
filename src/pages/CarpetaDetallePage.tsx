@@ -176,38 +176,36 @@ export function CarpetaDetallePage() {
 
       {documents.length === 0 && <div className="empty-state">No hay documentos en esta carpeta todavía.</div>}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {documents.map((doc) => (
-          <div key={doc.id} className="card-solid" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span className="badge badge-info">{doc.category}</span>
-              <h3 style={{ margin: '8px 0 4px', fontSize: 15 }}>{doc.title}</h3>
-              {doc.description && (
-                <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{doc.description}</p>
-              )}
-              <p style={{ margin: 0, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                {new Date(doc.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
-              </p>
+          <div key={doc.id} className="card-solid list-item">
+            <div className="list-item-body">
+              <h3 className="list-item-title">{doc.title}</h3>
+              {doc.description && <p className="list-item-subtitle">{doc.description}</p>}
+              <div className="list-item-meta">
+                <span className="badge badge-info">{doc.category}</span>
+                <span>{new Date(doc.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}</span>
+                {doc.storage_path === 'pending' && <span className="badge badge-warning">Subiendo…</span>}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <div className="list-item-actions">
               <button
                 type="button"
                 className="btn btn-outlined"
-                style={{ padding: '6px 12px', fontSize: 12 }}
                 disabled={doc.storage_path === 'pending' || openingId === doc.id}
                 onClick={() => handleOpen(doc)}
               >
-                {openingId === doc.id ? 'Abriendo…' : 'Ver / Descargar'}
+                <Icon name="file" size={13} />
+                <span className="btn-label-full">{openingId === doc.id ? 'Abriendo…' : 'Ver'}</span>
               </button>
               {canManageFolders && (
                 <>
-                  <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }}>
+                  <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined btn-icon-sm" aria-label="Editar">
                     <Icon name="edit" size={14} />
                   </Link>
                   <button
                     type="button"
-                    className="btn btn-outlined"
-                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    className="btn btn-outlined btn-icon-sm"
                     disabled={trashingId === doc.id}
                     onClick={() => handleTrash(doc)}
                     aria-label="Eliminar"

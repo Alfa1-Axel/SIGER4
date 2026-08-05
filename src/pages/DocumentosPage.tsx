@@ -94,16 +94,14 @@ export function DocumentosPage() {
       {loading && <div className="empty-state">Cargando carpetas…</div>}
 
       {!loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Link
-            to="/documentos/carpetas/general"
-            className="card-solid"
-            style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}
-          >
-            <Icon name="file" size={22} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h3 style={{ margin: 0, fontSize: 15 }}>General</h3>
-              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>Documentos sin carpeta asignada</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Link to="/documentos/carpetas/general" className="card-solid list-item">
+            <span className="list-item-icon">
+              <Icon name="file" size={18} />
+            </span>
+            <div className="list-item-body">
+              <h3 className="list-item-title">General</h3>
+              <p className="list-item-subtitle">Documentos sin carpeta asignada</p>
             </div>
             <span className="badge badge-info">{unfiledCount}</span>
           </Link>
@@ -111,18 +109,13 @@ export function DocumentosPage() {
           {folders
             .filter((folder) => folder.is_active)
             .map((folder) => (
-              <Link
-                key={folder.id}
-                to={`/documentos/carpetas/${folder.id}`}
-                className="card-solid"
-                style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }}
-              >
-                <Icon name="file" size={22} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ margin: 0, fontSize: 15 }}>{folder.name}</h3>
-                  {folder.description && (
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>{folder.description}</p>
-                  )}
+              <Link key={folder.id} to={`/documentos/carpetas/${folder.id}`} className="card-solid list-item">
+                <span className="list-item-icon">
+                  <Icon name="file" size={18} />
+                </span>
+                <div className="list-item-body">
+                  <h3 className="list-item-title">{folder.name}</h3>
+                  {folder.description && <p className="list-item-subtitle">{folder.description}</p>}
                 </div>
                 <span className="badge badge-info">{documentCountFor(folder.id)}</span>
               </Link>

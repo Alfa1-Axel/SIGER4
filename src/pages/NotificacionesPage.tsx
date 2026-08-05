@@ -64,49 +64,32 @@ export function NotificacionesPage() {
         <div className="empty-state">No tenés notificaciones por el momento.</div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {notifications.map((n) => (
-          <div key={n.id} className="card-solid" style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-            {!n.is_read && (
-              <span
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: '50%',
-                  background: 'var(--color-primary)',
-                  marginTop: 6,
-                  flexShrink: 0,
-                }}
-              />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <span className="badge badge-info">{NOTIFICATION_TYPE_LABEL[n.type]}</span>
+          <div key={n.id} className="card-solid list-item">
+            {!n.is_read && <span className="list-item-dot" />}
+            <div className="list-item-body">
               <h3
+                className="list-item-title"
                 style={{
-                  margin: '8px 0 4px',
-                  fontSize: 15,
                   fontWeight: n.is_read ? 500 : 700,
                   color: n.is_read ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
                 }}
               >
                 {n.title}
               </h3>
-              {n.body && (
-                <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{n.body}</p>
-              )}
-              <p style={{ margin: 0, fontSize: 11, color: 'var(--color-text-muted)' }}>
-                {new Date(n.created_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
-              </p>
+              {n.body && <p className="list-item-subtitle">{n.body}</p>}
+              <div className="list-item-meta">
+                <span className="badge badge-info">{NOTIFICATION_TYPE_LABEL[n.type]}</span>
+                <span>{new Date(n.created_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+              </div>
             </div>
             {!n.is_read && (
-              <button
-                type="button"
-                className="btn btn-outlined"
-                style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}
-                onClick={() => handleMarkRead(n.id)}
-              >
-                Marcar como leída
-              </button>
+              <div className="list-item-actions">
+                <button type="button" className="btn btn-outlined" onClick={() => handleMarkRead(n.id)}>
+                  Marcar leída
+                </button>
+              </div>
             )}
           </div>
         ))}

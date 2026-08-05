@@ -334,6 +334,18 @@ img {
   box-shadow: var(--shadow-card);
 }
 
+@media (max-width: 599px) {
+  /* Cards de listado (Documentos/Carpetas/Notificaciones) mas compactas en
+     mobile: menos padding, radio mas chico, para que quepa mas informacion
+     legible por pantalla sin la sensacion "cargada" de tarjetas enormes
+     apiladas. Formularios (que tambien usan .card-solid) igual se ven bien
+     con este padding reducido — no hace falta una clase separada. */
+  .card-solid {
+    padding: 12px 14px;
+    border-radius: var(--radius-md);
+  }
+}
+
 .card-grid {
   display: grid;
   gap: 14px;
@@ -518,6 +530,119 @@ img {
 .badge-info {
   background: var(--color-badge-info-bg);
   color: var(--color-badge-info-text);
+}
+
+/* ---------- List items (Documentos, Carpetas, Notificaciones) ----------
+   Patron compartido de fila compacta para listados de tarjetas: en
+   desktop es una fila (icono/indicador + texto + acciones a la derecha),
+   en mobile (<600px) las acciones bajan a una segunda fila de ancho
+   completo en vez de angostar el texto o desbordar. Titulo y descripcion
+   siempre truncan por CSS (line-clamp), nunca dependen de que el
+   contenido "adivine" cuanto lugar tiene. Reemplaza los layouts inline
+   ad-hoc que tenia cada pantalla (una fuente de verdad para el patron). */
+
+.list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  text-decoration: none;
+  color: inherit;
+}
+
+.list-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card-soft);
+  color: var(--color-primary);
+}
+
+.list-item-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  margin-top: 7px;
+}
+
+.list-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-item-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.list-item-subtitle {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.list-item-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.list-item-actions .btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.list-item-actions .btn-icon-sm {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+
+@media (max-width: 599px) {
+  .list-item {
+    flex-wrap: wrap;
+  }
+  .list-item-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--color-border);
+  }
+  .list-item-actions .btn span.btn-label-full {
+    display: none;
+  }
 }
 
 /* ---------- Progress ---------- */

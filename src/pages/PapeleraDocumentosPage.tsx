@@ -172,46 +172,39 @@ export function PapeleraDocumentosPage() {
             const remaining = daysRemaining(doc.purge_after)
             const deletedBy = doc.deleted_by_profile_id ? profileById.get(doc.deleted_by_profile_id)?.full_name : null
             return (
-              <div key={doc.id} className="card-solid">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: 200 }}>
+              <div key={doc.id} className="card-solid list-item">
+                <div className="list-item-body">
+                  <h3 className="list-item-title">{doc.title}</h3>
+                  <p className="list-item-subtitle">
+                    Carpeta: {doc.folder_id ? folderById.get(doc.folder_id)?.name ?? 'Desconocida' : 'General'} · Alcance: {scopeLabel(doc)}
+                  </p>
+                  <p className="list-item-subtitle">
+                    Eliminado por {deletedBy ?? 'usuario desconocido'} el{' '}
+                    {doc.deleted_at ? new Date(doc.deleted_at).toLocaleDateString('es-AR', { dateStyle: 'medium' }) : '—'}
+                    {doc.delete_reason && ` · Motivo: ${doc.delete_reason}`}
+                  </p>
+                  <div className="list-item-meta">
                     <span className="badge badge-info">{doc.category}</span>
-                    <h3 style={{ margin: '8px 0 4px', fontSize: 15 }}>{doc.title}</h3>
-                    <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      Carpeta: {doc.folder_id ? folderById.get(doc.folder_id)?.name ?? 'Desconocida' : 'General'} · Alcance: {scopeLabel(doc)}
-                    </p>
-                    <p style={{ margin: '0 0 4px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      Eliminado por {deletedBy ?? 'usuario desconocido'} el{' '}
-                      {doc.deleted_at ? new Date(doc.deleted_at).toLocaleDateString('es-AR', { dateStyle: 'medium' }) : '—'}
-                      {doc.delete_reason && ` · Motivo: ${doc.delete_reason}`}
-                    </p>
                     <span className={`badge ${remaining <= 5 ? 'badge-danger' : 'badge-warning'}`}>
                       {remaining === 0 ? 'Vencido, listo para purgar' : `${remaining} día${remaining === 1 ? '' : 's'} antes de purgarse`}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                </div>
+                <div className="list-item-actions">
+                  <button type="button" className="btn btn-outlined" disabled={busyId === doc.id} onClick={() => handleRestore(doc)}>
+                    Restaurar
+                  </button>
+                  {canPurge && (
                     <button
                       type="button"
                       className="btn btn-outlined"
-                      style={{ padding: '6px 12px', fontSize: 12 }}
                       disabled={busyId === doc.id}
-                      onClick={() => handleRestore(doc)}
+                      onClick={() => handlePurgeOne(doc)}
                     >
-                      Restaurar
+                      <Icon name="trash" size={14} />
+                      <span className="btn-label-full">Borrar ya</span>
                     </button>
-                    {canPurge && (
-                      <button
-                        type="button"
-                        className="btn btn-outlined"
-                        style={{ padding: '6px 12px', fontSize: 12 }}
-                        disabled={busyId === doc.id}
-                        onClick={() => handlePurgeOne(doc)}
-                      >
-                        <Icon name="trash" size={14} />
-                        Borrar ya
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             )

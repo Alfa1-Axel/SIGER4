@@ -2086,3 +2086,154 @@ cambio de frontend en `DocumentoFormPage.tsx` únicamente.
       creados — solo uno, con el segundo archivo y el primero archivado como versión.
 - [ ] Revisar la consola del navegador durante estos pasos (desktop y mobile), confirmar que no
       aparecen errores 400/403 nuevos.
+
+## 20. UI mobile compacta + MIME de mobile + diagnóstico real de push (2026-08)
+
+Freno de funciones nuevas para atacar tres bugs reales de producción/PWA mobile: tarjetas
+ilegibles en mobile, carga de documentos que seguía sin funcionar en algunos casos, y push que
+dejó de llegar. Se investigó de punta a punta (código real, no solo repetir el diagnóstico
+anterior) antes de tocar nada.
+
+### 20.1 UI mobile: causa y rediseño
+
+**Causa:** Documentos, Carpetas/detalle de carpeta, Notificaciones y Papelera usaban layouts
+`flex` armados a mano con estilos inline en cada pantalla — sin truncado de texto, sin que la fila
+de botones supiera achicarse o bajar de línea en pantallas angostas. En mobile esto se traducía en
+títulos partidos letra por letra, botones estirados a lo ancho, y tarjetas con `padding` de
+escritorio ocupando media pantalla — exactamente lo que se ve en la captura de "General" con el
+documento "Manual de Uso del Sistema SIGER4".
+
+**Qué se hizo:** se creó un patrón compartido nuevo en `src/styles.css` (`.list-item`,
+`.list-item-icon`, `.list-item-body`, `.list-item-title`/`.list-item-subtitle` con
+`-webkit-line-clamp` a 2 líneas + ellipsis, `.list-item-meta`, `.list-item-actions`) y se aplicó en
+[DocumentosPage.tsx](src/pages/DocumentosPage.tsx), [CarpetaDetallePage.tsx](src/pages/CarpetaDetallePage.tsx),
+[NotificacionesPage.tsx](src/pages/NotificacionesPage.tsx) y [PapeleraDocumentosPage.tsx](src/pages/PapeleraDocumentosPage.tsx)
+(mismo patrón, ver enunciado "cualquier card similar"). En mobile (`<600px`) las acciones pasan a
+una segunda fila con separador en vez de angostar el texto. `.card-solid` también reduce su
+padding en mobile (18px → 12px) para que las tarjetas se sientan compactas sin cambiar su uso en
+formularios. Modo oscuro no se tocó (usa las mismas variables `--color-*` de siempre, ninguna
+regla nueva es específica de tema).
+
+**Limitación de esta verificación:** se confirmó por build limpio (`tsc` + `vite build`) y por
+lectura de las reglas CSS aplicadas (line-clamp, flex-wrap, min-width:0 para que el truncado
+funcione dentro de flex). No se pudo tomar una captura real de la app corriendo porque requiere
+sesión autenticada contra Supabase — pido que se revise visualmente en el celular real antes de
+darlo por cerrado.
+
+### 20.2 Documentos: causa real confirmada (no repetición del diagnóstico anterior)
+
+El fix anterior (subida inmediata al elegir archivo) es correcto y sigue vigente, pero no alcanzaba
+para cerrar el problema. Revisando de punta a punta encontré una causa concreta adicional:
+
+**El bucket de Storage "documents" solo aceptaba, server-side, pdf/doc/docx/xls/xlsx/png/jpeg**
+(`allowed_mime_types` en `storage.buckets`, ver 0033_storage_hardening.sql). Una foto elegida desde
+la galería de un celular llega habitualmente como `image/heic`/`image/heif` (formato por defecto
+de cámara en iPhone) o `image/webp` (capturas de pantalla en Android moderno, algunas apps de
+galería) — ninguno estaba permitido. Supabase Storage rechaza esos uploads en el servidor antes de
+guardar nada. El error SÍ se propagaba hasta la pantalla (no era un fallo silencioso a nivel de
+red), pero el mensaje crudo de Storage no comunicaba con claridad "elegiste un tipo de archivo no
+soportado, probá con otro" — se confundía fácilmente con "no funciona".
+
+**Qué se corrigió:**
+- **Migración 0055** amplía `allowed_mime_types` del bucket `documents` para sumar
+  `image/webp`, `image/heic`, `image/heif` (mismo criterio explícito de whitelist, no se abre a
+  tipos genéricos).
+- [storage.ts](src/lib/api/storage.ts): el whitelist client-side ahora coincide exactamente con el
+  server-side. Se agregó además inferencia de MIME por extensión de archivo para el caso (real en
+  Android) donde ciertos selectores de archivo devuelven `file.type` vacío — antes eso bloqueaba la
+  subida client-side aunque el archivo fuera perfectamente válido y Storage lo hubiera aceptado. El
+  mensaje de error de tipo no permitido ahora nombra los formatos aceptados explícitamente.
+- [DocumentoFormPage.tsx](src/pages/DocumentoFormPage.tsx): se reemplazó el booleano
+  `uploadingFile` por un estado explícito de 4 valores (`idle`/`uploading`/`done`/`failed`) con los
+  tres mensajes pedidos ("Subiendo archivo…", "✓ Archivo subido correctamente: …", "No se pudo
+  subir el archivo: motivo — elegilo de nuevo para reintentar"). Se corrigió además un gap real: si
+  la creación de la fila en `documents` tenía éxito pero la subida del archivo fallaba después
+  (red, MIME rechazado, tamaño excedido), el formulario anterior igual dejaba habilitado
+  "Guardar" — permitiendo guardar metadatos sobre un documento que técnicamente seguía en
+  `storage_path='pending'`, sin archivo real. Ahora el botón "Guardar" queda deshabilitado mientras
+  `uploadStatus` no sea `'done'`, con una nota visible de por qué. Un documento en edición que ya
+  estaba en `'pending'` (carga anterior interrumpida) arranca igual bloqueado hasta adjuntar un
+  archivo real. La recuperación de un pending fallido es "elegir el archivo de nuevo": la fila ya
+  existe y se reintenta sobre la misma (no crea una segunda), y si se abandona,
+  `cleanup_pending_documents()` (0033, sin cambios) lo sigue barriendo a las 24hs igual que antes.
+
+**Lo que NO se pudo verificar:** no pude probar el flujo en un celular real (sin acceso a un
+dispositivo). El mensaje "no se carga" original podía deberse a más de una causa a la vez (recarga
+de la PWA + MIME rechazado, por ejemplo, si el usuario elegía justo una foto HEIC después de volver
+del selector). Pido explícitamente: probar en un Android/iPhone real eligiendo una foto de la
+galería (no solo un PDF) y reportar el mensaje exacto si algo sigue sin funcionar — con este cambio
+cualquier fallo real ahora debería mostrar un mensaje de motivo específico en vez de un genérico.
+
+### 20.3 Push: no se encontró una causa server-side rota — diagnóstico reforzado en su lugar
+
+Se revisó de punta a punta: registro del service worker (`index.html` generado sí incluye
+`registerSW.js`, confirmado en el build), `sw.ts` (listener de `push`/`notificationclick` sin
+cambios problemáticos), manifest/iconos (los cambios recientes de icono/badge solo tocaron
+imágenes y el propio `sw.ts`, no la lógica de suscripción), tabla `push_subscriptions` y sus RLS,
+`send-push` y `send-push-system` (autorización server-side, deduplicación atómica por
+`notification_id`, limpieza automática de suscripciones que devuelven 404/410 del servicio push).
+**No encontré ningún bug confirmado en ese circuito backend** — el diseño ya limpia
+suscripciones inválidas solo, y el error de cada intento queda registrado en `push_send_log`.
+
+Como no se puede confirmar ni descartar el problema real solo leyendo código (el mecanismo
+depende del navegador/OS del celular en el momento), se reforzó el diagnóstico visible en vez de
+"arreglar a ciegas":
+
+- [usePushNotifications.ts](src/hooks/usePushNotifications.ts): antes, `subscribed` salía
+  únicamente de `pushManager.getSubscription()` — eso solo confirma que el navegador recuerda
+  haberse suscripto alguna vez, no que esa suscripción siga siendo válida ni que
+  `push_subscriptions` todavía tenga la fila (`send-push` la borra sola si el endpoint devuelve
+  404/410). Ahora se confirma explícitamente contra la base
+  (`hasActiveSubscriptionRow`) y se expone un estado (`diagnostic`) con 5 valores reales: `active`,
+  `denied`, `not_subscribed`, `stale` (suscripción local sin fila en la base — el caso más probable
+  de "antes llegaban, ahora no"), `no_worker`.
+- [AjustesPage.tsx](src/pages/AjustesPage.tsx): muestra ese estado como badge, y agrega un botón
+  explícito **"Reactivar notificaciones push"** (cuando el estado es `stale`) o **"Re-suscribir
+  este dispositivo"** (siempre disponible si ya está activo, por si el usuario sospecha que dejó de
+  funcionar sin que el estado lo detecte) — `reactivate()` siempre desuscribe lo que haya local y
+  pide una suscripción/endpoint nuevo, sin reutilizar uno potencialmente inválido.
+- El botón **"Probar notificación"** ahora, además de crear la notificación interna, invoca
+  `send-push` directamente (`triggerPushDiagnostic`) y muestra el resultado real: cuántos
+  dispositivos recibieron el push, si fue deduplicado (otra pestaña ya lo había enviado — no es un
+  error), o el motivo exacto si falló. Antes esa prueba solo confirmaba la notificación interna —
+  exactamente el caso que se pidió detectar ("crea notificación interna pero no push real") ahora
+  se distingue explícitamente en pantalla.
+
+**Qué tenés que hacer vos:** entrar a Ajustes en el celular donde antes llegaban las push y mirar
+el badge de estado. Si dice "Suscripción inválida — necesita reactivarse", tocar "Reactivar
+notificaciones push" resuelve el caso más probable (endpoint vencido o PWA reinstalada). Si dice
+"Push activo" y aun así no llegan, usar "Probar notificación" y pasarme el mensaje exacto que
+aparece debajo del botón — con eso puedo confirmar si el problema está en el envío (backend) o en
+la entrega (navegador/OS del celular, fuera del control de la aplicación).
+
+### 20.4 Migraciones / Edge Functions / Vercel
+
+- **Migración nueva:** `0055_documents_mime_mobile.sql` — correr con el flujo normal de
+  migraciones (`supabase db push` o el mecanismo que uses para aplicar migraciones nuevas al
+  proyecto).
+- **Edge Functions:** ninguna modificada. No hace falta redesplegar `send-push`,
+  `send-push-system` ni `purge-documents`.
+- **Vercel:** sí, redeploy del frontend (cambios en varios `.tsx`/`.ts`/`styles.css`, sin cambios
+  de variables de entorno).
+- **PWA/celular:** no hace falta reinstalar la PWA para este cambio. Si el diagnóstico de push
+  muestra "Suscripción inválida", usar el botón nuevo de reactivación alcanza — no requiere
+  desinstalar/reinstalar la app.
+
+### 20.5 Checklist de verificación
+
+- [ ] **UI mobile**: abrir Documentos → carpeta General en un celular real, confirmar que las
+      tarjetas se ven compactas, el título nunca ocupa más de 2 líneas, y los botones no ocupan
+      todo el ancho. Repetir en Notificaciones y en la Papelera de documentos. Repetir en modo
+      oscuro.
+- [ ] **Documentos — foto real de galería**: desde un Android o iPhone, crear un documento nuevo y
+      adjuntar una foto elegida de la galería (no un PDF) — confirmar que sube y muestra "✓
+      Archivo subido correctamente". Si falla, confirmar que el mensaje de error ahora explica el
+      motivo (tipo no permitido / tamaño excedido / red) en vez de quedar genérico.
+- [ ] **Documentos — recuperación de un pending fallido**: forzar un error (ej. apagar el wifi a
+      mitad de subida), confirmar que "Guardar" queda deshabilitado con la nota explicando por qué,
+      y que elegir el archivo de nuevo lo recupera sin crear un documento duplicado.
+- [ ] **Push — diagnóstico**: entrar a Ajustes, confirmar que el badge de estado coincide con la
+      realidad (probar desactivando el permiso del navegador y viendo que pasa a "Permiso
+      denegado"). Probar "Reactivar notificaciones push" si aparece. Probar "Probar notificación" y
+      confirmar que el mensaje de resultado del push (no solo el de la notificación interna)
+      aparece y es coherente.

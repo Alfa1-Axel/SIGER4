@@ -2237,3 +2237,139 @@ la entrega (navegador/OS del celular, fuera del control de la aplicación).
       denegado"). Probar "Reactivar notificaciones push" si aparece. Probar "Probar notificación" y
       confirmar que el mensaje de resultado del push (no solo el de la notificación interna)
       aparece y es coherente.
+
+## 21. Rediseño de carga de documentos en 2 pasos + causa real de Word/PDF (2026-08)
+
+El fix anterior (subida inmediata al elegir archivo, sección 19) resolvía la pérdida del `File` por
+recarga de Android, pero tenía un problema de diseño real: el documento quedaba creado y visible en
+listados normales apenas se elegía el archivo, con título/tipo por defecto muchas veces
+incompletos. Y Word/PDF seguían fallando en algunos celulares aunque el whitelist de MIME ya
+incluyera esos formatos (sección 20). Este cambio corrige ambos problemas de fondo, sin agregar
+ningún módulo nuevo ni columna de estado — no hizo falta migración de schema.
+
+### 21.1 Causa real de que Word/PDF no subieran (no era el whitelist)
+
+`application/pdf` y los MIME de Word/Excel estuvieron en el whitelist del bucket desde la migración
+0033 original — nunca fue la causa de que esos formatos específicos fallaran. La causa real tiene
+dos partes, ambas confirmadas leyendo el código de `@supabase/storage-js` (no solo inferidas):
+
+1. **Selectores de archivo de Android frecuentemente reportan un MIME genérico, no vacío.**
+   Google Files, adjuntos compartidos desde WhatsApp/Drive/Gmail y otros gestores de almacenamiento
+   suelen devolver `file.type = "application/octet-stream"` para archivos Word/PDF perfectamente
+   válidos — no vacío (que sí estaba cubierto por el fallback anterior), sino un valor genérico
+   presente. La validación anterior solo activaba el fallback por extensión cuando `file.type` era
+   la cadena vacía, así que estos archivos se rechazaban client-side con "tipo no permitido:
+   application/octet-stream", leyéndose como "Word/PDF no funciona".
+2. **El Content-Type real que llega a Storage no es el que valida esta app, sino el que trae el
+   `File` del navegador.** `supabase-js` arma un `FormData` y pasa el `File` directo; el navegador
+   arma el `Content-Type` de esa parte multipart a partir de `file.type` — el `contentType` que se
+   le pase explícito a `.upload()` solo se usa en la rama que NO es `Blob`/`File`. Aunque la
+   validación client-side ya infería correctamente el tipo por extensión, ese tipo inferido nunca
+   llegaba a Storage: el servidor seguía viendo `application/octet-stream` y rechazándolo con el
+   `allowed_mime_types` real, sin importar que el whitelist ya incluyera Word/PDF.
+
+**Qué se corrigió** ([storage.ts](src/lib/api/storage.ts)):
+- `inferMimeType` ahora trata como "no confiable" tanto el tipo vacío como una lista de genéricos
+  conocidos (`application/octet-stream`, `application/binary`, `application/unknown`) — en esos
+  casos la extensión del archivo manda.
+- `assertFileAllowed` devuelve el MIME resuelto, y los tres uploads (`uploadDocumentFile`,
+  `uploadAvatar`, `uploadStationMedia`) ahora pasan ese valor explícito como `contentType` en las
+  opciones de `.upload()` — así lo que Storage valida server-side es exactamente lo mismo que esta
+  app ya aprobó, nunca el genérico original del navegador.
+
+### 21.2 Rediseño: carga en 2 pasos, sin documentos incompletos
+
+[DocumentoFormPage.tsx](src/pages/DocumentoFormPage.tsx) para carga nueva (no edición) ahora tiene
+dos pasos reales, separados en la UI ("Paso 1 de 2 — Datos del documento" / "Paso 2 de 2 —
+Archivo"):
+
+- **Paso 1 — Datos del documento**: título, tipo y alcance obligatorios (descripción opcional). No
+  se crea ninguna fila en `documents` todavía. Al confirmar ("Continuar: elegir archivo"), los
+  metadatos se guardan como borrador en `sessionStorage` (nunca el `File`, solo texto) y se pasa al
+  Paso 2.
+- **Paso 2 — Archivo**: recién acá, al elegir el archivo, se crea la fila real en `documents` (con
+  los metadatos ya validados del Paso 1) y se sube el archivo de inmediato — mismo mecanismo de
+  "subida apenas se elige" de la sección 19, pero ahora con metadatos completos desde el primer
+  instante en vez de valores por defecto genéricos.
+
+**Por qué la fila se sigue creando antes de que termine el upload (no se pudo evitar del todo):**
+la policy de Storage `documents_storage_write_admin_regional_station` exige que el path del archivo
+resuelva a una fila ya existente en `documents` — es una restricción real de RLS, no una elección de
+diseño, así que no hay forma de subir el archivo antes de que la fila exista. Lo que sí se corrigió
+es que esa fila transitoria nunca sea visible como documento válido:
+
+- `fetchDocuments()`/`fetchDocumentsByFolder()` ahora excluyen explícitamente
+  `storage_path = 'pending'` — ver [documents.ts](src/lib/api/documents.ts). Un documento con
+  archivo todavía no confirmado no aparece en ningún listado normal, sin importar cuánto tarde el
+  usuario en completar el resto.
+- Nueva `fetchPendingDocuments()`, usada solo por el banner de informática en
+  [DocumentosPage.tsx](src/pages/DocumentosPage.tsx) — ahora con un botón "Ver detalle" que lista
+  título/tipo/fecha de cada documento pendiente antes de limpiarlo (antes solo mostraba un número).
+  La limpieza sigue siendo la misma función ya existente (`cleanup_pending_documents()`, RPC de
+  0033, solo informática, solo filas de +24hs) — no se creó ningún mecanismo nuevo de borrado ni se
+  le dio al cliente permiso para hacer `DELETE` directo (`documents_delete_informatica` sigue
+  exigiendo `deleted_at is not null`, o sea vía Papelera — coherente con no crear una vía paralela
+  de borrado).
+- El botón "Guardar" final (que recién en ese momento confirma/actualiza los metadatos por si
+  cambiaron) solo se habilita cuando `uploadStatus === 'done'` — igual que en el fix anterior, pero
+  ahora también aplica en el flujo de creación nueva de punta a punta.
+
+**Recuperación ante recarga de Android en cualquier punto del Paso 2:** el borrador de
+`sessionStorage` guarda también el id de la fila `pending` apenas se crea (antes de que termine el
+upload). Si la página se recarga en ese punto, al volver a `/documentos/nuevo` se recupera el
+borrador, se salta directo al Paso 2 con la fila ya conocida (no crea una segunda), y se le pide al
+usuario que vuelva a elegir el archivo — con un aviso explícito de que se recuperó una carga
+interrumpida. Si el usuario vuelve al Paso 1 a corregir algo después de que la fila ya existía, esa
+corrección se sincroniza contra la fila existente en el próximo intento de subida (no queda con los
+metadatos del primer intento).
+
+### 21.3 Mensajes de estado (tal como se pidió)
+
+- Antes de elegir alcance/archivo: mensajes de validación propios del Paso 1 ("Ingresá un título
+  para el documento.", "Completá el alcance...").
+- Al elegir archivo: "Subiendo archivo…" (con spinner).
+- Al terminar bien: "✓ Archivo subido correctamente: <nombre> (<tamaño>)".
+- Si falla: "No se pudo subir el archivo "<nombre>": <motivo real de Storage>. Elegilo de nuevo para
+  reintentar." — el motivo ya no es genérico gracias al fix de MIME/contentType de 21.1.
+
+### 21.4 Papelera y versiones — sin impacto
+
+Sin cambios en `trashDocument`/`restoreDocument`/`purgeDocuments` ni en `fetchTrashedDocuments`
+(sigue sin filtrar por `storage_path` a propósito: un documento no puede llegar a la Papelera sin
+haber tenido primero un archivo real, porque la acción de "enviar a papelera" solo está disponible
+sobre documentos ya visibles/completos). El historial de versiones sigue igual —
+`addDocumentVersion` se sigue llamando en el mismo punto del flujo, ahora también re-sincronizando
+metadatos si corresponde (ver 21.2).
+
+### 21.5 Migraciones / Edge Functions / Vercel
+
+- **Migración nueva:** ninguna. Se evaluó agregar una columna `status` (`draft`/`active`) pero no
+  hacía falta: la exclusión por `storage_path = 'pending'` ya distingue completo de incompleto sin
+  tocar el schema.
+- **Edge Functions:** ninguna modificada.
+- **Vercel:** redeploy del frontend.
+- **Supabase:** nada que correr — si la migración 0055 (whitelist MIME mobile, sección 20) todavía
+  no se aplicó, aplicarla igual sigue siendo necesaria para HEIC/WebP, pero no es la causa de que
+  Word/PDF fallaran (ver 21.1).
+
+### 21.6 Checklist de verificación
+
+- [ ] **Flujo nuevo completo**: `/documentos/nuevo` → completar título/tipo/alcance → "Continuar:
+      elegir archivo" → elegir un PDF o .docx real desde el almacenamiento del celular (no desde la
+      cámara) → confirmar "✓ Archivo subido correctamente" → "Guardar" → el documento aparece en el
+      listado con el título y tipo reales, no genéricos.
+- [ ] **Word/PDF específicamente desde Android**: elegir un .docx o .pdf desde un gestor de
+      archivos de Android (no Chrome desktop) — confirmar que sube sin el error de tipo MIME.
+- [ ] **Documento incompleto no debe aparecer**: en el Paso 2, después de elegir alcance pero ANTES
+      de terminar de subir el archivo (o si se cancela/cierra la app en ese punto), confirmar que
+      el documento NO aparece en `/documentos/carpetas/general` ni en ningún listado para otros
+      usuarios.
+- [ ] **Recuperación de recarga en Paso 2**: completar Paso 1, pasar a Paso 2, forzar una recarga
+      manual del navegador (F5) antes de elegir el archivo — confirmar que al volver a
+      `/documentos/nuevo` aparece el aviso de carga recuperada y los datos del Paso 1 siguen
+      completos (no hace falta reescribirlos).
+- [ ] **Panel de pendientes de informática**: con un usuario `informatica_r4`, en `/documentos`
+      confirmar que el banner de pendientes muestra "Ver detalle" con título/tipo/fecha de cada
+      documento pendiente, y que "Limpiar pendientes de +24hs" sigue funcionando.
+- [ ] Confirmar que Papelera y versiones siguen funcionando igual que antes (sin cambios
+      esperados).

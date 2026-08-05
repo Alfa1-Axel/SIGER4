@@ -1232,10 +1232,11 @@ alcance definido:
 - **Calendario real**: hoy no existe una vista de calendario (cursos, capacitaciones, vencimientos)
   más allá de las fechas sueltas que ya muestra cada módulo. Sería una vista nueva que cruza datos de
   `courses`, y potencialmente otros vencimientos institucionales.
-- **Historial institucional del cuartel**: una línea de tiempo unificada por cuartel (cambios de
-  estado, altas/bajas de vehículos y personal, documentos cargados) — hoy esa información existe pero
-  está repartida entre `audit_logs`, `vehicle_status_history`, `personnel_status_history` y
-  `documents`, sin una vista que las una por cuartel.
+- ~~**Historial institucional del cuartel**~~ — implementado en la sección 14 (ciclo 2026-08,
+  migración 0050). Nota: lo implementado es una cronología legible cargada a mano (hitos, autoridades,
+  reconocimientos), no una unificación automática de `audit_logs`/`vehicle_status_history`/
+  `personnel_status_history`/`documents` — esa unificación automática, si se pide en el futuro, sigue
+  siendo trabajo pendiente aparte.
 - **Semáforo de carga**: indicador visual de qué cuarteles están al día con la carga de datos
   operativos (asistencia, intervenciones) y cuáles no — no existe ningún mecanismo hoy que compare
   "última carga" contra una expectativa de frecuencia.
@@ -1251,3 +1252,122 @@ Deuda técnica ya documentada (secciones 10.3) que tampoco se tocó en este cicl
 traducción de mensajes de error de Postgres/Supabase (~80 sitios en `src/lib/api/*.ts`), fila de
 documento "pending" huérfana si falla la subida (mitigación parcial ya existe, solo accesible a
 informática), y riesgo bajo de versión de documento duplicada en reintento de edición.
+
+## 14. Historial Institucional del Cuartel (2026-08) — migración 0050
+
+Primer módulo nuevo del ciclo funcional siguiente al cierre de permisos/PWA/QA (secciones 8-13).
+
+### 14.1 Qué es y qué NO es
+
+**Historial Institucional** es una cronología legible, cargada manualmente, de hechos relevantes de
+la historia de un cuartel: cambios de autoridades, incorporación/baja importante de móviles, reformas
+edilicias, hechos destacados, capacitaciones relevantes, aniversarios, reconocimientos, decisiones
+institucionales. Cada evento tiene título, fecha, categoría, descripción opcional y un flag de
+"destacado".
+
+**No reemplaza ni se alimenta de `audit_logs`** (la bitácora técnica del sistema, ver sección 3 y
+`/auditoria`). Son dos sistemas independientes con propósitos distintos:
+
+| | `audit_logs` (Auditoría técnica) | `station_history_events` (Historial Institucional) |
+|---|---|---|
+| Quién lo carga | Nadie — se genera solo, automáticamente | Un humano, a mano, cuando decide que algo es relevante |
+| Qué registra | CADA insert/update/delete de las tablas auditadas, columna por columna | Un puñado de hechos realmente importantes por año |
+| Para qué sirve | Trazabilidad técnica, soporte, "quién tocó esta fila y qué cambió" | Leerse como la historia del cuartel, en lenguaje institucional |
+| Volumen esperado | Alto (cientos/miles de filas) | Bajo (decenas de eventos en la vida del cuartel) |
+
+`station_history_events` SÍ tiene su propio trigger de auditoría técnica genérica (igual que
+cualquier otra tabla del sistema): un alta/edición/borrado de un evento histórico también queda
+registrado en `audit_logs` (quién tocó la tabla y cuándo) — eso es auditoría de la tabla en sí, no el
+contenido de la cronología.
+
+### 14.2 Esquema
+
+Tabla `station_history_events`: `id`, `station_id` (FK a `stations`, `on delete cascade`), `title`,
+`description` (opcional), `event_date`, `category` (enum `station_history_category`), `is_highlighted`
+(boolean), `attachments` (jsonb, preparado para una fase futura de adjuntos — foto del hecho, acta
+escaneada — sin UI ni bucket de Storage propio todavía, queda `null`), `created_by_profile_id`,
+`created_at`, `updated_at`.
+
+Categorías (`station_history_category`): `institucional`, `operativo`, `personal`, `vehiculos`,
+`infraestructura`, `capacitacion`, `documentacion`, `autoridad`, `otro`.
+
+**Borrado**: es un DELETE real (mismo criterio que `documents`/`personnel` en el resto del sistema),
+no soft-delete. No se agregó una columna `is_deleted` porque ninguna otra tabla del schema usa ese
+patrón — mantenerlo consistente evitó una excepción de diseño para un solo módulo. El alta/baja igual
+queda en `audit_logs` vía el trigger genérico, así que un borrado no es completamente irrecuperable
+para `informatica_r4` (puede reconstruirse desde el `old_value` de la fila de auditoría si hiciera
+falta), aunque no hay una función de "restaurar" en la UI.
+
+### 14.3 Permisos (RLS)
+
+- **Lectura**: cualquier usuario autenticado, igual que el resto de los directorios institucionales
+  del sistema (`documents`, `courses`, `inventory_items`). `invitado` es un rol autenticado, así que
+  ya queda de solo lectura por construcción (nunca matchea la policy de escritura) — no hizo falta una
+  policy separada para ese caso.
+- **Escritura** (`station_history_events_write_admin_regional_station`): mismo patrón territorial que
+  `documents_write_admin_regional_station` (post-0048):
+  - `informatica_r4`/`integrante_informatica`: cualquier cuartel.
+  - `secretario_regional`: cuarteles dentro de su propia región.
+  - `usuario_carga_cuartel`, `presidente_cuartel`, `secretario_comision`, `jefe_cuerpo_activo`: solo
+    su propio cuartel.
+  - `director_escuela`: **sin escritura acá a propósito**. Post-0048, su autoridad operativa es
+    exclusivamente Escuela Regional (`is_escuela_role()`) — la matriz institucional de esta tanda no
+    pidió una excepción para este módulo, así que se mantuvo la misma regla que ya rige
+    stations/vehicles/personnel/documents.
+
+### 14.4 UI
+
+- **`CuartelDetallePage`**: nueva sección "Historial Institucional" (entre Intervenciones y Actividad
+  Reciente). Listado cronológico (más reciente primero), filtros por categoría y año, evento destacado
+  marcado con ícono + badge "Destacado", click para expandir/colapsar la descripción completa, botones
+  Editar/Eliminar si el rol tiene permiso (`canEditHistory`, distinto del `canEdit` general de la
+  página porque este módulo sí incluye `secretario_comision`, que no tiene escritura sobre
+  vehículos/personal/asistencia/intervenciones). Estado vacío: "Todavía no hay eventos históricos
+  cargados." Nota visible que aclara la diferencia con Auditoría, con link directo a `/auditoria`.
+- **`EventoHistoricoFormPage`** (`/cuarteles/:stationId/historial/nuevo`, `/historial/:id/editar`):
+  formulario de alta/edición — título, fecha, categoría, descripción, checkbox de destacado. Mismo
+  estilo visual que el resto de los formularios del sistema (`PersonalFormPage` como referencia).
+- **Auditoría** (`src/lib/audit/humanize.ts`): se agregó la traducción de tabla
+  (`station_history_events` → "Historial institucional") y de los campos nuevos (`event_date`,
+  `is_highlighted`, `attachments`, `created_by_profile_id`) para que `/auditoria` no muestre nombres
+  de columna crudos al mostrar altas/ediciones/borrados de esta tabla.
+
+### 14.5 Reportes
+
+No se generó un reporte PDF nuevo en esta tanda (se pidió explícitamente que no hiciera falta salvo
+que fuera simple, y no lo era dado el resto del alcance). El modelo de datos (`station_history_events`
+por `station_id`) queda listo para que una fase futura lo incluya en el reporte de cuartel existente
+(`ReportesPage`/`reportBuilder.ts`) sin cambios de schema.
+
+### 14.6 Migración nueva a correr
+
+- `0050_station_history_events.sql` — crea el enum `station_history_category`, la tabla
+  `station_history_events`, sus índices, el trigger de `updated_at`, las 2 policies de RLS
+  (lectura/escritura), y redefine `audit_row_change()` para que resuelva el contexto territorial de
+  esta tabla (mismo patrón que `vehicles`/`personnel`: vía su `station_id` propio). No requiere
+  backfill ni pasos manuales — tabla nueva, sin datos previos.
+
+### 14.7 Edge Functions / Vercel
+
+Ninguna Edge Function nueva ni modificada — el módulo completo usa RLS directo (`select`/`insert`/
+`update`/`delete` desde el cliente), igual que `personnel`/`documents`/`inventory_items`, sin pasar
+por ninguna función server-side. Vercel: sí, redeploy (rutas y páginas nuevas de frontend).
+
+### 14.8 Checklist de verificación después de correr 0050
+
+- [ ] Como `informatica_r4`: entrar al detalle de cualquier cuartel, cargar un evento histórico,
+      confirmar que aparece en el listado, editarlo, marcarlo como destacado, confirmar el badge
+      visual, eliminarlo.
+- [ ] Como `jefe_cuerpo_activo`/`presidente_cuartel`/`usuario_carga_cuartel`/`secretario_comision`:
+      confirmar que puede cargar/editar/eliminar eventos de su propio cuartel, y que NO puede hacerlo
+      en el detalle de otro cuartel (RLS debe rechazarlo si se fuerza la petición).
+- [ ] Como `secretario_regional`: confirmar que puede cargar eventos en cualquier cuartel de su
+      región, no fuera de ella.
+- [ ] Como `director_escuela`: confirmar que NO ve el botón "+ Agregar" en Historial Institucional de
+      ningún cuartel (coherente con que perdió escritura operativa sobre cuarteles en 0048).
+- [ ] Como `invitado`: confirmar que puede ver la sección (listado, filtros, expandir eventos) pero no
+      ve ningún botón de agregar/editar/eliminar.
+- [ ] Filtrar por categoría y por año, confirmar que el filtrado combinado funciona.
+- [ ] Entrar a `/auditoria` después de cargar/editar/borrar un evento, confirmar que aparece con
+      "Historial institucional" como tabla (no `station_history_events` crudo) y los campos con
+      nombres legibles.

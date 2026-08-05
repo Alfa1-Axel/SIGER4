@@ -28,6 +28,7 @@ import { CarpetaDetallePage } from './pages/CarpetaDetallePage'
 import { CarpetaFormPage } from './pages/CarpetaFormPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import { PersonalFormPage } from './pages/PersonalFormPage'
+import { EventoHistoricoFormPage } from './pages/EventoHistoricoFormPage'
 import { InventarioPage } from './pages/InventarioPage'
 import { InventarioFormPage } from './pages/InventarioFormPage'
 import { DepartamentosPage } from './pages/DepartamentosPage'
@@ -70,6 +71,8 @@ export default function App() {
         <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
+        <Route path="/cuarteles/:stationId/historial/nuevo" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
+        <Route path="/historial/:id/editar" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
         <Route path="/inventario" element={<ProtectedRoute><InventarioPage /></ProtectedRoute>} />
         <Route path="/inventario/nuevo" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
         <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />

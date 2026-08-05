@@ -18,6 +18,7 @@ export const TABLE_LABELS: Record<string, string> = {
   attendance_summaries: 'Asistencias',
   intervention_summaries: 'Intervenciones',
   reports: 'Reportes',
+  station_history_events: 'Historial institucional',
 }
 
 export function translateTable(tableName: string): string {
@@ -112,6 +113,10 @@ export const FIELD_LABELS: Record<string, string> = {
   storage_path: 'Archivo',
   note: 'Nota',
   reason: 'Motivo',
+  event_date: 'Fecha del evento',
+  is_highlighted: 'Destacado',
+  attachments: 'Adjuntos',
+  created_by_profile_id: 'Cargado por',
   created_at: 'Creado el',
   updated_at: 'Actualizado el',
 }

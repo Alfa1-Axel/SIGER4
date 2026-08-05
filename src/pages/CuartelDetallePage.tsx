@@ -17,6 +17,7 @@ import {
   fetchPersonnelStatusHistory,
   SEPARATION_STATUSES,
 } from '../lib/api/personnel'
+import { fetchStationHistoryEvents, deleteStationHistoryEvent } from '../lib/api/stationHistory'
 import type {
   AttendanceSummary,
   InterventionSummary,
@@ -25,6 +26,8 @@ import type {
   PersonnelStatusHistory,
   Profile,
   Station,
+  StationHistoryCategory,
+  StationHistoryEvent,
   Vehicle,
   VehicleStatus,
   VehicleStatusHistory,
@@ -80,6 +83,18 @@ const PERSONNEL_SEPARATION_OPTIONS: { value: PersonnelStatus; label: string }[] 
   { value: 'reserva', label: 'Pasar a reserva' },
 ]
 
+const HISTORY_CATEGORY_LABEL: Record<StationHistoryCategory, string> = {
+  institucional: 'Institucional',
+  operativo: 'Operativo',
+  personal: 'Personal',
+  vehiculos: 'Vehículos',
+  infraestructura: 'Infraestructura',
+  capacitacion: 'Capacitación',
+  documentacion: 'Documentación',
+  autoridad: 'Autoridad',
+  otro: 'Otro',
+}
+
 function calculateSeniority(joinDate: string | null): string | null {
   if (!joinDate) return null
   const start = new Date(joinDate)
@@ -95,14 +110,24 @@ export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole } = useAuth()
   const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
+  // Historial institucional: mismo criterio de escritura que documentos/
+  // carpetas (0050), que además incluye secretario_comision — distinto del
+  // canEdit general de esta página (vehículos/personal/asistencia/
+  // intervenciones no le dan escritura a ese rol).
+  const canEditHistory = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision', 'secretario_regional')
   const [station, setStation] = useState<Station | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
   const [interventions, setInterventions] = useState<InterventionSummary[]>([])
   const [authorities, setAuthorities] = useState<{ profile: Profile; role: RoleKey }[]>([])
   const [personnel, setPersonnel] = useState<Personnel[]>([])
+  const [historyEvents, setHistoryEvents] = useState<StationHistoryEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
+
+  const [historyCategoryFilter, setHistoryCategoryFilter] = useState('')
+  const [historyYearFilter, setHistoryYearFilter] = useState('')
+  const [expandedHistoryEventId, setExpandedHistoryEventId] = useState<string | null>(null)
 
   const [personnelStatusFilter, setPersonnelStatusFilter] = useState('')
   const [personnelRankFilter, setPersonnelRankFilter] = useState('')
@@ -152,6 +177,19 @@ export function CuartelDetallePage() {
     await reloadVehicles(id)
   }
 
+  async function reloadHistoryEvents(stationId: string) {
+    const data = await fetchStationHistoryEvents(stationId)
+    setHistoryEvents(data)
+  }
+
+  async function handleDeleteHistoryEvent(eventId: string) {
+    if (!id) return
+    if (!window.confirm('¿Eliminar este evento del historial institucional? Esta acción no se puede deshacer.')) return
+    await deleteStationHistoryEvent(eventId)
+    if (expandedHistoryEventId === eventId) setExpandedHistoryEventId(null)
+    await reloadHistoryEvents(id)
+  }
+
   useEffect(() => {
     if (!id) return
     let active = true
@@ -162,7 +200,8 @@ export function CuartelDetallePage() {
       fetchInterventionsByStation(id),
       fetchStationAuthorities(id),
       fetchPersonnelByStation(id),
-    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData]) => {
+      fetchStationHistoryEvents(id),
+    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData, historyData]) => {
       if (active) {
         setStation(stationData)
         setVehicles(vehiclesData)
@@ -170,6 +209,7 @@ export function CuartelDetallePage() {
         setInterventions(interventionsData)
         setAuthorities(authoritiesData)
         setPersonnel(personnelData)
+        setHistoryEvents(historyData)
         setLoading(false)
       }
     })
@@ -197,6 +237,20 @@ export function CuartelDetallePage() {
     [personnel, personnelStatusFilter, personnelRankFilter, personnelDepartmentFilter],
   )
   const activePersonnelCount = useMemo(() => personnel.filter((p) => p.status === 'activo').length, [personnel])
+
+  const historyYears = useMemo(
+    () => Array.from(new Set(historyEvents.map((e) => e.event_date.slice(0, 4)))).sort((a, b) => b.localeCompare(a)),
+    [historyEvents],
+  )
+  const filteredHistoryEvents = useMemo(
+    () =>
+      historyEvents.filter(
+        (e) =>
+          (!historyCategoryFilter || e.category === historyCategoryFilter) &&
+          (!historyYearFilter || e.event_date.startsWith(historyYearFilter)),
+      ),
+    [historyEvents, historyCategoryFilter, historyYearFilter],
+  )
 
   async function handlePersonnelStatusChange(personId: string, status: PersonnelStatus) {
     if (!id) return
@@ -669,6 +723,108 @@ export function CuartelDetallePage() {
                 <span className="badge badge-danger">{summary.total_count}</span>
               </Link>
             ))}
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Historial Institucional</h2>
+            {canEditHistory && (
+              <Link to={`/cuarteles/${station.id}/historial/nuevo`} className="link-muted">
+                + Agregar
+              </Link>
+            )}
+          </div>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: -4, marginBottom: 12 }}>
+              Hechos relevantes de la historia del cuartel (autoridades, hitos, reconocimientos,
+              decisiones institucionales). No es la bitácora técnica del sistema — esa vive en{' '}
+              <Link to="/auditoria" className="link-muted">
+                Auditoría
+              </Link>
+              .
+            </p>
+
+            {historyEvents.length === 0 && (
+              <div className="empty-state">Todavía no hay eventos históricos cargados.</div>
+            )}
+
+            {historyEvents.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+                <select value={historyCategoryFilter} onChange={(e) => setHistoryCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
+                  <option value="">Todas las categorías</option>
+                  {Object.entries(HISTORY_CATEGORY_LABEL).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                {historyYears.length > 0 && (
+                  <select value={historyYearFilter} onChange={(e) => setHistoryYearFilter(e.target.value)} style={{ fontSize: 12 }}>
+                    <option value="">Todos los años</option>
+                    {historyYears.map((year) => (
+                      <option key={year} value={year}>
+                        {year}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {historyEvents.length > 0 && filteredHistoryEvents.length === 0 && (
+              <div className="empty-state">No hay eventos que coincidan con estos filtros.</div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              {filteredHistoryEvents.map((event, i) => (
+                <div key={event.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--color-border)' }}>
+                  <div
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, padding: '10px 0', cursor: 'pointer' }}
+                    onClick={() => setExpandedHistoryEventId(expandedHistoryEventId === event.id ? null : event.id)}
+                  >
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        {event.is_highlighted && <Icon name="tag" size={13} />}
+                        <span style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                        {new Date(event.event_date).toLocaleDateString('es-AR', { dateStyle: 'medium' })} · {HISTORY_CATEGORY_LABEL[event.category]}
+                      </div>
+                    </div>
+                    {event.is_highlighted && <span className="badge badge-warning">Destacado</span>}
+                  </div>
+
+                  {expandedHistoryEventId === event.id && (
+                    <div style={{ padding: '0 0 12px' }}>
+                      {event.description && (
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', whiteSpace: 'pre-wrap', margin: '0 0 10px' }}>
+                          {event.description}
+                        </p>
+                      )}
+                      {canEditHistory && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Link to={`/historial/${event.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 12 }}>
+                            <Icon name="edit" size={13} />
+                            Editar
+                          </Link>
+                          <button
+                            type="button"
+                            className="btn btn-outlined"
+                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteHistoryEvent(event.id)
+                            }}
+                          >
+                            <Icon name="trash" size={13} />
+                            Eliminar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="section-header">

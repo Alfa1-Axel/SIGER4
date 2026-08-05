@@ -316,3 +316,28 @@ export interface DepartmentMember {
   profile_id: string
   created_at: string
 }
+
+export type StationHistoryCategory =
+  | 'institucional'
+  | 'operativo'
+  | 'personal'
+  | 'vehiculos'
+  | 'infraestructura'
+  | 'capacitacion'
+  | 'documentacion'
+  | 'autoridad'
+  | 'otro'
+
+export interface StationHistoryEvent {
+  id: string
+  station_id: string
+  title: string
+  description: string | null
+  event_date: string
+  category: StationHistoryCategory
+  is_highlighted: boolean
+  attachments: unknown | null
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}

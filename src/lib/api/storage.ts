@@ -30,12 +30,23 @@ const DOCUMENT_MIME_TYPES = new Set([
   'image/heif',
 ])
 
-// Algunos selectores de archivos de Android (ciertos proveedores de
-// contenido de apps de galería/escáner) devuelven file.type vacío en vez del
-// MIME real, aunque el archivo sea perfectamente válido. En ese caso, en vez
-// de rechazarlo de entrada, se infiere el tipo por extensión — Storage igual
-// vuelve a validar el MIME real server-side, así que esto solo evita un
-// bloqueo client-side innecesario para un archivo que después va a subir bien.
+// Selectores de archivo de Android (Google Files, adjuntos compartidos desde
+// WhatsApp/Drive/Gmail, algunos gestores de almacenamiento) frecuentemente
+// devuelven file.type VACÍO, o peor, "application/octet-stream" — un MIME
+// genérico real pero inútil, no vacío — para archivos Word/PDF perfectamente
+// válidos. Confiar ciegamente en file.type cuando no está vacío (como hacía
+// la versión anterior) rechazaba esos archivos client-side con un mensaje de
+// "tipo no permitido: application/octet-stream", que en la práctica es la
+// causa concreta de que Word/PDF "no subieran" desde el selector de archivos
+// de Android — el navegador ya traía un tipo, solo que era el genérico, así
+// que el fallback por extensión (que solo se activaba con tipo vacío) nunca
+// se disparaba. Ahora la extensión manda siempre que el tipo reportado sea
+// vacío o uno de los genéricos conocidos que ningún picker debería mandar
+// para estos formatos. Storage igual vuelve a validar el MIME real
+// server-side (0033/0055), así que esto nunca afloja la validación real,
+// solo evita bloquear client-side un archivo que después sube bien.
+const GENERIC_UNRELIABLE_MIME_TYPES = new Set(['application/octet-stream', 'application/binary', 'application/unknown', ''])
+
 const EXTENSION_TO_MIME: Record<string, string> = {
   pdf: 'application/pdf',
   doc: 'application/msword',
@@ -51,22 +62,33 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 }
 
 function inferMimeType(file: File): string {
-  if (file.type) return file.type
+  if (!GENERIC_UNRELIABLE_MIME_TYPES.has(file.type)) return file.type
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
-  return EXTENSION_TO_MIME[ext] ?? ''
+  return EXTENSION_TO_MIME[ext] ?? file.type
 }
 
-function assertFileAllowed(file: File, allowedTypes: Set<string>, maxBytes: number): void {
+// Devuelve el MIME resuelto (real o inferido por extensión) para que el
+// caller lo pase explícito como contentType del upload — importante porque
+// supabase-js NO usa este valor para decidir qué mandar al servidor cuando
+// el body es un File/Blob: arma un FormData y el navegador usa el file.type
+// ORIGINAL (el genérico/incorrecto) como Content-Type real de la parte
+// multipart. Si no se fuerza explícito, Storage server-side seguiría viendo
+// "application/octet-stream" y rechazando el archivo aunque esta validación
+// client-side ya lo haya aprobado por su extensión — exactamente la causa
+// real de que Word/PDF elegidos desde ciertos selectores de Android
+// fallaran igual después de ampliar el whitelist de tipos permitidos.
+function assertFileAllowed(file: File, allowedTypes: Set<string>, maxBytes: number): string {
   const mimeType = inferMimeType(file)
   if (!allowedTypes.has(mimeType)) {
     throw new Error(
-      `Tipo de archivo no permitido${file.name ? ` (${file.name})` : ''}: ${file.type || 'no se pudo determinar el tipo'}. ` +
+      `Tipo de archivo no permitido${file.name ? ` (${file.name})` : ''}: ${mimeType || 'no se pudo determinar el tipo'}. ` +
         'Formatos aceptados: PDF, Word, Excel, PNG, JPG, WEBP, HEIC.',
     )
   }
   if (file.size > maxBytes) {
     throw new Error(`El archivo supera el tamaño máximo permitido (${Math.round(maxBytes / 1024 / 1024)} MB).`)
   }
+  return mimeType
 }
 
 // Sanitiza el nombre original del archivo para usarlo como parte de un path
@@ -118,9 +140,9 @@ async function deletePublicFileByUrl(bucket: string, url: string | null | undefi
 }
 
 export async function uploadStationMedia(stationId: string, file: File): Promise<string> {
-  assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
+  const contentType = assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
   const path = buildSafePath(stationId, file)
-  const { error } = await supabase.storage.from('station-media').upload(path, file, { upsert: true })
+  const { error } = await supabase.storage.from('station-media').upload(path, file, { upsert: true, contentType })
   if (error) throw error
   const { data } = supabase.storage.from('station-media').getPublicUrl(path)
   return data.publicUrl
@@ -131,9 +153,9 @@ export async function deleteStationMedia(previousUrl: string | null | undefined)
 }
 
 export async function uploadAvatar(profileId: string, file: File): Promise<string> {
-  assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
+  const contentType = assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
   const path = buildSafePath(profileId, file)
-  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+  const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType })
   if (error) throw error
   const { data } = supabase.storage.from('avatars').getPublicUrl(path)
   return data.publicUrl
@@ -147,9 +169,9 @@ export async function deleteAvatar(previousUrl: string | null | undefined): Prom
 // (ya creado en la tabla) como carpeta, y se devuelve el storage_path (no una
 // URL publica) — para descargar/ver el archivo hay que pedir una signed URL.
 export async function uploadDocumentFile(documentId: string, file: File): Promise<string> {
-  assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
+  const contentType = assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
   const path = buildSafePath(documentId, file)
-  const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true })
+  const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true, contentType })
   if (error) throw error
   return path
 }

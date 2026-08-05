@@ -24,6 +24,7 @@ export default [
         URL: 'readonly',
         KeyboardEvent: 'readonly',
         localStorage: 'readonly',
+        sessionStorage: 'readonly',
         AudioContext: 'readonly',
         BufferSource: 'readonly',
         atob: 'readonly',

@@ -26,6 +26,7 @@ import { DocumentosPage } from './pages/DocumentosPage'
 import { DocumentoFormPage } from './pages/DocumentoFormPage'
 import { CarpetaDetallePage } from './pages/CarpetaDetallePage'
 import { CarpetaFormPage } from './pages/CarpetaFormPage'
+import { PapeleraDocumentosPage } from './pages/PapeleraDocumentosPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import { PersonalFormPage } from './pages/PersonalFormPage'
 import { EventoHistoricoFormPage } from './pages/EventoHistoricoFormPage'
@@ -70,6 +71,7 @@ export default function App() {
         <Route path="/documentos/nuevo" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/documentos/:id/editar" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
         <Route path="/documentos/carpetas/nueva" element={<ProtectedRoute><CarpetaFormPage /></ProtectedRoute>} />
+        <Route path="/documentos/papelera" element={<ProtectedRoute><PapeleraDocumentosPage /></ProtectedRoute>} />
         <Route path="/documentos/carpetas/:id" element={<ProtectedRoute><CarpetaDetallePage /></ProtectedRoute>} />
         <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />

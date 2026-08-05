@@ -61,8 +61,18 @@ export function DocumentosPage() {
 
   return (
     <AppShell title="Documentos">
-      <h1 className="page-title">Documentos</h1>
-      <p className="page-subtitle">Documentación institucional organizada por carpetas: circulares, actas, manuales y más.</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <h1 className="page-title">Documentos</h1>
+          <p className="page-subtitle">Documentación institucional organizada por carpetas: circulares, actas, manuales y más.</p>
+        </div>
+        {canManageFolders && (
+          <Link to="/documentos/papelera" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+            <Icon name="trash" size={14} />
+            Papelera
+          </Link>
+        )}
+      </div>
 
       {isAdmin && pendingCount > 0 && (
         <div className="card" style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>

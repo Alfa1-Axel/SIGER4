@@ -1669,3 +1669,152 @@ en `CuartelesPage`, `CuartelDetallePage` y `PanelPage`).
 - [ ] Como `secretario_regional`: confirmar que ve el semáforo de todos los cuarteles de su región.
 - [ ] Entrar a `/panel`, confirmar que la sección "Estado de Carga por Cuartel" muestra los 3 conteos
       (verde/amarillo/rojo) sumando el total de cuarteles visibles para el rol actual.
+
+## 17. Papelera de Documentos con retención de 30 días (2026-08) — migración 0053
+
+### 17.1 Qué es
+
+Eliminar un documento ya no lo borra de inmediato: pasa a la Papelera (soft delete) durante 30 días,
+período en el que puede restaurarse. Pasado ese plazo puede purgarse definitivamente (fila de
+`documents`, sus filas de `document_versions`, y los archivos reales en el bucket `documents` de
+Storage). Esto era deuda documentada explícitamente desde `0045_document_folders.sql` ("Fuera de
+alcance de esta migración... papelera de 30 días / borrado definitivo diferido").
+
+### 17.2 Modelo de datos
+
+6 columnas nuevas en `documents`: `deleted_at`, `deleted_by_profile_id`, `delete_reason` (opcional),
+`purge_after`, `restored_at`, `restored_by_profile_id`. `purge_after` **no lo manda el cliente**: un
+trigger (`set_document_purge_after`) lo calcula server-side como `deleted_at + 30 días` en el momento
+exacto en que `deleted_at` pasa de `null` a un valor, y lo limpia si el documento se restaura — evita
+que alguien pueda manipular la fecha de purga desde el cliente enviando un `purge_after` propio.
+
+No se creó una vista `documents_active`/`documents_trash` separada: los listados normales
+(`fetchDocuments`, `fetchDocumentsByFolder`) ahora filtran `deleted_at is null` explícitamente, y hay
+una función nueva (`fetchTrashedDocuments`) para la Papelera — se mantuvo consistente con el resto del
+módulo de Documentos, que ya filtra client-side en vez de usar vistas dedicadas.
+
+### 17.3 Reglas de retención
+
+- Enviar a la papelera es un `UPDATE` (`deleted_at` = ahora) — **no borra el archivo de Storage ni la
+  fila real todavía**.
+- Desaparece de `/documentos` y de las carpetas de inmediato (los listados filtran `deleted_at is
+  null`), y aparece en `/documentos/papelera`.
+- Durante 30 días puede restaurarse (`UPDATE`, `deleted_at` vuelve a `null`).
+- Pasados los 30 días (`purge_after <= now()`), el documento puede purgarse definitivamente — automático
+  vía el cron diario, o manualmente antes de que venza si `informatica_r4` lo pide explícitamente.
+- La purga real borra, en este orden, y solo avanza al siguiente paso si el anterior no falló: (1) los
+  archivos del bucket `documents` (el actual + todas las versiones en `document_versions`), (2) las
+  filas de `document_versions`, (3) la fila de `documents`. **Si falla el borrado de Storage, no se
+  borra nada de la base** — el documento queda en la papelera para reintentarse en la corrida
+  siguiente, en vez de quedar con la fila borrada y el archivo real todavía ocupando espacio (huérfano
+  sin ninguna referencia), o la fila apuntando a un archivo que ya no existe.
+
+### 17.4 Por qué la purga es una Edge Function, no una función de Postgres
+
+`delete from storage.objects` borra la fila de metadata, pero **no borra el blob físico** en el object
+store — esa operación solo la expone la Storage API de Supabase, alcanzable únicamente con la
+`service_role` key desde código server-side (o el cliente JS), nunca desde SQL/PL-pgSQL puro. Es el
+mismo motivo por el que enviar un push real requiere la Edge Function `send-push` en vez de un trigger
+de Postgres. Por eso la purga es una función nueva, `purge-documents`, no una RPC.
+
+### 17.5 Permisos
+
+- **Enviar a la papelera / restaurar**: mismo alcance que ya tenía la edición de un documento
+  (`documents_update_admin_regional_station`, heredado sin cambios de comportamiento de
+  `documents_write_admin_regional_station` de 0047/0048) — `informatica_r4`/`integrante_informatica`
+  cualquier alcance, `secretario_regional` dentro de su región, roles de cuartel autorizados
+  (`usuario_carga_cuartel`/`presidente_cuartel`/`secretario_comision`/`jefe_cuerpo_activo`) solo su
+  propio cuartel. Ambas acciones son un `UPDATE` de `deleted_at`, no una operación nueva — no hizo
+  falta una policy separada.
+- **Purga definitiva**: exclusiva de `informatica_r4`/`integrante_informatica`, y solo sobre documentos
+  que ya están en la papelera (`deleted_at is not null` — ni siquiera informática puede saltarse el
+  paso de papelera con un `DELETE` directo sobre un documento activo). Postgres no permite "restar"
+  permiso agregando una policy adicional (las policies permisivas de un mismo comando se combinan con
+  `OR`), así que la vieja policy `for all` (`documents_write_admin_regional_station`) se reemplazó por
+  3 policies puntuales sin cambio de alcance (`documents_insert_admin_regional_station`,
+  `documents_update_admin_regional_station`) más una policy de `DELETE` nueva y más restrictiva
+  (`documents_delete_informatica`). La Edge Function `purge-documents` usa `service_role` (bypasea RLS)
+  para el flujo real automático/manual; esta policy es la barrera si alguien intentara un `DELETE`
+  directo desde el cliente.
+- **`invitado`**: solo lectura, sin acceso a "Papelera" en la UI (la página exige el mismo `canManage`
+  que el resto de las acciones de escritura de Documentos) — nunca puede eliminar ni restaurar.
+
+### 17.6 UI
+
+- **`DocumentosPage`**: botón "Papelera" junto al título (visible solo para quien puede gestionar
+  documentos).
+- **`CarpetaDetallePage`**: el botón "Editar" de cada documento ahora tiene al lado un botón "Eliminar"
+  que envía el documento a la papelera (con confirmación explícita del tiempo de retención).
+- **`PapeleraDocumentosPage`** (`/documentos/papelera`): lista cada documento en papelera con carpeta,
+  alcance (región/subsede/cuartel/usuario, resuelto igual que en el resto de Documentos), quién lo
+  eliminó, cuándo, el motivo si se cargó uno, y un badge con los días restantes antes de la purga (rojo
+  si quedan 5 días o menos). Acciones: "Restaurar" (todo rol con permiso de gestión) y "Borrar ya"
+  (purga puntual, solo informática) por documento, más un botón "Purgar vencidos ahora" (solo
+  informática) que dispara la misma lógica que el cron diario, para no tener que esperar.
+
+### 17.7 Auditoría
+
+No se agregó ningún mecanismo de auditoría nuevo: `documents` ya tenía su trigger genérico
+(`trg_audit_documents`, desde 0004) disparando sobre INSERT/UPDATE/DELETE — enviar a la papelera
+(UPDATE), restaurar (UPDATE) y la purga definitiva (DELETE, ejecutado por la Edge Function con
+`service_role`, que sigue disparando el trigger igual que cualquier otro DELETE) quedan todos
+auditados automáticamente en `audit_logs`, sin trabajo adicional. Los errores de borrado de Storage
+durante la purga (que no corresponden a ningún cambio de fila) se registran en los logs de la Edge
+Function (Supabase Dashboard → Edge Functions → `purge-documents` → Logs), mismo criterio que ya usan
+`send-push`/`admin-create-user` para errores que no tienen una fila propia que auditar.
+
+### 17.8 Migración nueva y Edge Function nueva
+
+- `0053_documents_trash.sql` — agrega las 6 columnas a `documents`, 2 índices parciales, el trigger
+  `set_document_purge_after`, reemplaza `documents_write_admin_regional_station` por 3 policies
+  puntuales + la policy de DELETE restringida, y programa el job de pg_cron
+  `siger4-document-purge` (diario, 6:00 UTC = 3:00 AM hora Argentina).
+- `supabase/functions/purge-documents/index.ts` — Edge Function nueva. **Requiere deploy**:
+  `supabase functions deploy purge-documents`.
+
+**Requiere pg_cron habilitado** (Supabase Dashboard → Database → Extensions → `pg_cron` → Enable)
+antes de correr la migración — igual que el recordatorio semanal (sección 6.3), la migración falla en
+la última línea (`select cron.schedule(...)`) si no está habilitado. **No requiere `pg_net`** para la
+función en sí (`purge-documents` no lo usa), pero **sí lo necesita el disparador del cron**
+(`trigger_document_purge()` llama a la Edge Function vía `net.http_post`, mismo mecanismo que
+`send_weekly_reminder()` de 0036) — si el proyecto ya tiene `pg_net` habilitado por el recordatorio
+semanal, no hace falta nada nuevo ahí.
+
+**Configuración de secretos**: reutiliza exactamente `CRON_SHARED_SECRET` y
+`siger4.project_url`/`siger4.cron_shared_secret` — **los mismos que ya configuraste para el
+recordatorio semanal (sección 6.3)**, no hace falta un secreto nuevo. Si el proyecto nunca configuró el
+recordatorio semanal, seguir los pasos exactos de la sección 6.3 (habilitar pg_cron/pg_net,
+`supabase secrets set CRON_SHARED_SECRET=...`, `alter database postgres set
+siger4.project_url = '...'` / `siger4.cron_shared_secret = '...'`) antes de correr `0053`.
+
+Sin esta configuración, la purga automática diaria no hace nada (deja un `WARNING` en los logs de
+Postgres, visible en Database → Logs) — no rompe nada más del sistema, pero los documentos vencidos se
+acumulan en la papelera hasta que alguien lo configure o los purgue manualmente desde la UI.
+
+### 17.9 Vercel
+
+Sí, verificar/redeploy — hay página nueva (`PapeleraDocumentosPage`), ruta nueva, y cambios en
+`DocumentosPage`/`CarpetaDetallePage`.
+
+### 17.10 Checklist de verificación
+
+- [ ] Confirmar `select * from cron.job where jobname = 'siger4-document-purge';` devuelve una fila
+      activa.
+- [ ] Como rol con permiso de gestión de documentos: eliminar un documento desde una carpeta,
+      confirmar que desaparece de la carpeta y aparece en `/documentos/papelera` con el badge de "30
+      días antes de purgarse" (o cercano).
+- [ ] Restaurar ese documento desde la Papelera, confirmar que vuelve a aparecer en su carpeta
+      original y desaparece de la Papelera.
+- [ ] Como `informatica_r4`: usar "Borrar ya" sobre un documento de la papelera, confirmar que
+      desaparece de la Papelera y que el archivo ya no es accesible (intentar abrirlo por signed URL
+      debería fallar).
+- [ ] Confirmar en el bucket `documents` (Supabase Dashboard → Storage) que el archivo purgado
+      efectivamente ya no está — no solo la fila de la tabla.
+- [ ] Como un rol de cuartel (no informática) con permiso de gestión: confirmar que puede
+      eliminar/restaurar documentos de su propio cuartel, pero que el botón "Borrar ya" no aparece.
+- [ ] Como `invitado`: confirmar que no ve el botón "Papelera" ni puede eliminar documentos.
+- [ ] Entrar a `/auditoria` después de eliminar/restaurar/purgar un documento, confirmar que las 3
+      acciones quedan registradas (Creación/Modificación/Eliminación sobre "Documentos").
+- [ ] (Si se configuró el cron) Esperar a la corrida diaria o forzarla manualmente con `select
+      trigger_document_purge();` en el SQL Editor, confirmar que purga los documentos con
+      `purge_after` vencido sin tocar los que todavía están dentro del plazo.

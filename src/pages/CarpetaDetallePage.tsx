@@ -8,6 +8,7 @@ import {
   fetchDocumentFolderById,
   updateDocumentFolder,
   deleteDocumentFolder,
+  trashDocument,
 } from '../lib/api/documents'
 import { getDocumentSignedUrl } from '../lib/api/storage'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
@@ -16,7 +17,7 @@ import { useAuth } from '../hooks/useAuth'
 export function CarpetaDetallePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isAdmin, hasRole } = useAuth()
+  const { isAdmin, hasRole, profile } = useAuth()
   const canManageFolders = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const isGeneral = id === 'general'
 
@@ -25,6 +26,7 @@ export function CarpetaDetallePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [trashingId, setTrashingId] = useState<string | null>(null)
 
   const [editingFolder, setEditingFolder] = useState(false)
   const [name, setName] = useState('')
@@ -61,6 +63,20 @@ export function CarpetaDetallePage() {
       setError(err instanceof Error ? err.message : 'No pudimos abrir el documento.')
     } finally {
       setOpeningId(null)
+    }
+  }
+
+  async function handleTrash(doc: DocumentRecord) {
+    if (!window.confirm(`¿Enviar "${doc.title}" a la papelera? Va a poder restaurarse durante 30 días.`)) return
+    setError(null)
+    setTrashingId(doc.id)
+    try {
+      await trashDocument(doc.id, profile?.id ?? null)
+      setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No pudimos enviar el documento a la papelera.')
+    } finally {
+      setTrashingId(null)
     }
   }
 
@@ -184,9 +200,21 @@ export function CarpetaDetallePage() {
                 {openingId === doc.id ? 'Abriendo…' : 'Ver / Descargar'}
               </button>
               {canManageFolders && (
-                <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }}>
-                  <Icon name="edit" size={14} />
-                </Link>
+                <>
+                  <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }}>
+                    <Icon name="edit" size={14} />
+                  </Link>
+                  <button
+                    type="button"
+                    className="btn btn-outlined"
+                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    disabled={trashingId === doc.id}
+                    onClick={() => handleTrash(doc)}
+                    aria-label="Eliminar"
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
+                </>
               )}
             </div>
           </div>

@@ -235,6 +235,12 @@ export interface DocumentRecord {
   storage_path: string
   uploaded_by_profile_id: string | null
   folder_id: string | null
+  deleted_at: string | null
+  deleted_by_profile_id: string | null
+  delete_reason: string | null
+  purge_after: string | null
+  restored_at: string | null
+  restored_by_profile_id: string | null
   created_at: string
   updated_at: string
 }

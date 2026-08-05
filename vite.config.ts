@@ -14,7 +14,6 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff2}'],
       },
       includeAssets: [
-        'icons/siger4-icon.svg',
         'logos/logo-escuela.png',
         'logos/logo-informatica.png',
         'icons/manifest-icon-192.png',
@@ -79,7 +78,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          charts: ['recharts'],
           vendor: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
           pdf: ['jspdf', 'jspdf-autotable'],

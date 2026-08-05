@@ -1132,3 +1132,122 @@ Sí, redeploy — nuevos assets estáticos + cambios en `vite.config.ts`/`sw.ts`
       muestra el logo completo, no un cuadrado en blanco ni recortado.
 - [ ] Confirmar en `chrome://serviceworker-internals` o DevTools → Application → Manifest que no hay
       advertencias sobre íconos faltantes o mal declarados.
+
+## 12. Verificación final de PWA/push + limpieza de assets (2026-08)
+
+Pasada de verificación sobre lo hecho en la sección 11 (sin cambios de comportamiento nuevos, solo
+confirmación + limpieza de lo que quedó a medio camino).
+
+### 12.1 Verificado sin bugs
+
+- **Manifest** (`vite.config.ts`): los 4 íconos estándar (192/512 × any/maskable) están declarados
+  correctamente, se generan en `dist/manifest.webmanifest` con el `src` correcto, y los archivos
+  existen en `dist/icons/`. `name`/`short_name`/`description` completos.
+- **`sw.ts`**: `icon` usa el logo institucional completo (`push-informatica-512.png`), `badge` usa la
+  silueta simplificada (`push-badge-192.png`). Como no hay ninguna rama de código por tipo de
+  notificación — manual (`NotificacionFormPage`), automática (triggers de Postgres) y recordatorio
+  semanal (`send-push-system`) terminan **todas** en el mismo listener `self.addEventListener('push', ...)`
+  de `sw.ts` — el render visual es idéntico para las tres por construcción, no hace falta
+  sincronizar nada a mano.
+- **`send-push`/`send-push-system`**: confirmado que ninguna de las dos manda `icon`/`badge` en el
+  payload — no necesitan cambios ni redeploy.
+- **Ícono maskable sin recorte**: se simuló el recorte a círculo (el caso más agresivo entre las
+  formas de máscara que usan los launchers de Android — squircle/rounded-square recortan menos) sobre
+  `manifest-icon-maskable-512.png` y el emblema completo (incluido el anillo de texto exterior) queda
+  entero, con margen de sobra contra el borde del fondo rojo del tema.
+- **Sin restos de texto obsoleto**: repetido el barrido de "Invitar"/"/registro" (solo queda el texto
+  que explica correctamente que el flujo fue retirado, no un botón activo), "Próximamente" (cero
+  resultados), rol "Administrativo" seleccionable (cero resultados, sigue solo en el tipo por
+  compatibilidad de datos legacy), "presidente_regional" (cero resultados). El label vestigial
+  `analisis_ia_reporte` en `humanize.ts` sigue ahí sin usarse activamente (documentado desde la
+  sección 10, no es user-facing).
+
+### 12.2 Corregido en esta pasada
+
+- **Assets de íconos duplicados/muertos en `public/icons/`**: quedaron 4 archivos sin ninguna
+  referencia en el código después de los cambios de la sección 11 — `siger4-192.png`/`siger4-512.png`
+  (el ícono genérico viejo, reemplazado por `manifest-icon-*.png`), `siger4-icon.svg` (solo estaba en
+  `includeAssets`, sin ningún `<link>` ni manifest que lo usara) y `push-informatica-192.png` (`badge`
+  ya apunta a `push-badge-192.png`, no a este). También se sacó `push-badge-96.png`: se había generado
+  como variante de tamaño pero nunca se llegó a referenciar desde `sw.ts` (solo el de 192 quedó
+  cableado). `public/icons/` quedó con exactamente los 6 archivos que el código realmente usa.
+- **`vite.config.ts`**: `includeAssets` ya no lista `icons/siger4-icon.svg` (el archivo se borró) ni
+  `manualChunks.charts` (ver siguiente punto).
+- **Dependencia sin uso: `recharts`**: no había ningún `import` real en `src/` (una sola mención en
+  un comentario de `reportBuilder.ts`, explicando por qué los gráficos de los PDF se dibujan a mano en
+  canvas — jsPDF no soporta SVG/recharts directamente, así que el proyecto nunca terminó usando la
+  librería). El chunk `charts` que generaba el build estaba vacío (0.03 kB, solo un re-export de
+  vendor). Se sacó de `package.json` y de `manualChunks` en `vite.config.ts`; `npm install` bajó 37
+  paquetes (recharts + su propio árbol de dependencias transitivas).
+
+### 12.3 Limitación de plataforma (recordatorio, ya documentada en 11.3)
+
+El texto superior de la notificación ("SIGER4 · dominio · ahora") sigue siendo un elemento de chrome
+del navegador/SO sin ninguna opción de personalización en la Web Notifications API — no cambió nada
+en esta pasada, se repite acá solo para que quede junto al resto del checklist de verificación.
+
+### 12.4 Qué no se pudo validar en este entorno
+
+- **Chrome Android real/emulador**: sigue sin poder confirmarse en este entorno de desarrollo (sin
+  dispositivo ni emulador con Play Services). La construcción de los assets (badge monocromo simple,
+  maskable con safe-zone verificado por simulación) sigue la convención documentada de la plataforma,
+  pero la confirmación visual final en un dispositivo real queda pendiente — ver checklist abajo.
+- **DevTools → Application → Manifest en un despliegue real**: revisado que el manifest generado por
+  el build es válido y sin campos faltantes, pero no se pudo abrir la consola de un despliegue de
+  producción real desde este entorno (sin acceso al proyecto Vercel/Supabase en vivo del usuario).
+
+### 12.5 Migraciones nuevas / Supabase / Edge Functions
+
+Ninguna. Esta pasada fue 100% frontend (assets, manifest, `package.json`) — no se tocó ninguna
+migración, tabla, policy ni Edge Function.
+
+### 12.6 ¿Hace falta reinstalar la PWA?
+
+**Sí, recomendado** para quien ya tenía SIGER4 instalada desde antes de la sección 11/12: el ícono de
+launcher de una PWA ya instalada normalmente **no se actualiza solo** aunque el manifest cambie en el
+servidor — la mayoría de los navegadores (incluido Chrome/Android) cachean el ícono al momento de la
+instalación y solo lo refrescan en actualizaciones mayores o reinstalaciones. Los usuarios que instalaron
+la app antes de este cambio van a seguir viendo el ícono viejo en su pantalla de inicio hasta que
+desinstalen y vuelvan a instalar la PWA. El Service Worker en sí (código, caché, comportamiento de
+push) sí se actualiza solo vía `registerType: 'autoUpdate'`, sin reinstalar nada — esto aplica
+específicamente al ícono del launcher, no al funcionamiento de la app.
+
+### 12.7 Checklist de verificación
+
+- [ ] Confirmar `npm run build` sin warnings de assets faltantes (ya verificado en esta pasada).
+- [ ] Desinstalar y reinstalar la PWA en un dispositivo que ya la tuviera de antes, confirmar que el
+      ícono del launcher pasa a mostrar el logo institucional real.
+- [ ] En un dispositivo Android nuevo (sin instalación previa), instalar la PWA y confirmar
+      directamente que el ícono no sale recortado ni en blanco.
+- [ ] Generar una notificación push y confirmar visualmente en el dispositivo que el badge de la
+      barra de estado se ve como la silueta de laptop, no un punto vacío.
+
+## 13. Cierre de ciclo (2026-08) — backlog para el próximo ciclo funcional
+
+Este ciclo se concentró en corregir deuda de permisos, bugs de QA funcional encontrados en auditoría,
+y pulido de PWA/push — **no se agregó ningún módulo nuevo**, según lo pedido explícitamente en cada
+tanda. Lo que sigue es trabajo de producto nuevo, no bugs, y queda para una tanda futura con su propio
+alcance definido:
+
+- **Calendario real**: hoy no existe una vista de calendario (cursos, capacitaciones, vencimientos)
+  más allá de las fechas sueltas que ya muestra cada módulo. Sería una vista nueva que cruza datos de
+  `courses`, y potencialmente otros vencimientos institucionales.
+- **Historial institucional del cuartel**: una línea de tiempo unificada por cuartel (cambios de
+  estado, altas/bajas de vehículos y personal, documentos cargados) — hoy esa información existe pero
+  está repartida entre `audit_logs`, `vehicle_status_history`, `personnel_status_history` y
+  `documents`, sin una vista que las una por cuartel.
+- **Semáforo de carga**: indicador visual de qué cuarteles están al día con la carga de datos
+  operativos (asistencia, intervenciones) y cuáles no — no existe ningún mecanismo hoy que compare
+  "última carga" contra una expectativa de frecuencia.
+- **Mejora de documentos con papelera de 30 días**: ya documentado como pendiente desde la sección 7.5
+  — hoy borrar una carpeta es inmediato (los documentos quedan en "General", pero no hay soft-delete
+  real ni ventana de recuperación para documentos individuales).
+- **Solicitudes de préstamo del Inventario Regional**: el módulo de Inventario (sección 6.5) solo
+  registra qué existe y quién es responsable — falta el flujo de solicitud/aprobación/devolución.
+- **Estadísticas de Departamentos Regionales**: el módulo base (sección 6.5) tiene departamento,
+  coordinador, miembros — falta cualquier informe o métrica de actividad por departamento.
+
+Deuda técnica ya documentada (secciones 10.3) que tampoco se tocó en este ciclo: helper central de
+traducción de mensajes de error de Postgres/Supabase (~80 sitios en `src/lib/api/*.ts`), fila de
+documento "pending" huérfana si falla la subida (mitigación parcial ya existe, solo accesible a
+informática), y riesgo bajo de versión de documento duplicada en reintento de edición.

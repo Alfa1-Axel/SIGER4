@@ -14,6 +14,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/panel', label: 'Panel', icon: 'grid' },
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building' },
+  { to: '/calendario', label: 'Calendario', icon: 'calendar' },
   { to: '/escuela', label: 'Escuela', icon: 'school' },
   { to: '/reportes', label: 'Reportes', icon: 'chart' },
   { to: '/documentos', label: 'Documentos', icon: 'file' },

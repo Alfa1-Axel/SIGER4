@@ -19,6 +19,7 @@ export const TABLE_LABELS: Record<string, string> = {
   intervention_summaries: 'Intervenciones',
   reports: 'Reportes',
   station_history_events: 'Historial institucional',
+  calendar_events: 'Calendario',
 }
 
 export function translateTable(tableName: string): string {
@@ -117,6 +118,13 @@ export const FIELD_LABELS: Record<string, string> = {
   is_highlighted: 'Destacado',
   attachments: 'Adjuntos',
   created_by_profile_id: 'Cargado por',
+  event_type: 'Tipo de evento',
+  starts_at: 'Inicio',
+  ends_at: 'Fin',
+  all_day: 'Todo el día',
+  notify_on_create: 'Notificar al crear',
+  notify_before_minutes: 'Recordatorio previo (min)',
+  reminder_sent_at: 'Recordatorio enviado el',
   created_at: 'Creado el',
   updated_at: 'Actualizado el',
 }
@@ -141,6 +149,7 @@ const STATUS_LABELS: Record<string, string> = {
   baja: 'Baja',
   reserva: 'Reserva',
   aspirante: 'Aspirante',
+  programado: 'Programado',
 }
 
 const SCOPE_TYPE_LABELS: Record<string, string> = {

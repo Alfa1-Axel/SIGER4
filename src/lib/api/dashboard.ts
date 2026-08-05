@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { AuditLog, Notification } from '../../types/database'
+import type { AuditLog, CalendarEvent, Notification } from '../../types/database'
 
 export interface DashboardSummary {
   stationsCount: number
@@ -9,9 +9,16 @@ export interface DashboardSummary {
   vehiclesRegistered: number
   recentNotifications: Notification[]
   recentActivity: AuditLog[]
+  upcomingEvents: CalendarEvent[]
+  todayEvents: CalendarEvent[]
+  upcomingDeadlines: CalendarEvent[]
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString()
+
   const [
     stationsRes,
     attendanceRes,
@@ -20,6 +27,9 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     vehiclesRes,
     notificationsRes,
     activityRes,
+    upcomingEventsRes,
+    todayEventsRes,
+    upcomingDeadlinesRes,
   ] = await Promise.all([
     supabase.from('stations').select('id', { count: 'exact', head: true }),
     supabase.from('attendance_summaries').select('attendance_rate'),
@@ -38,6 +48,28 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(8),
+    supabase
+      .from('calendar_events')
+      .select('*')
+      .neq('status', 'cancelado')
+      .gte('starts_at', now.toISOString())
+      .order('starts_at', { ascending: true })
+      .limit(5),
+    supabase
+      .from('calendar_events')
+      .select('*')
+      .neq('status', 'cancelado')
+      .gte('starts_at', todayStart)
+      .lt('starts_at', todayEnd)
+      .order('starts_at', { ascending: true }),
+    supabase
+      .from('calendar_events')
+      .select('*')
+      .eq('event_type', 'vencimiento')
+      .neq('status', 'cancelado')
+      .gte('starts_at', now.toISOString())
+      .order('starts_at', { ascending: true })
+      .limit(5),
   ])
 
   const attendanceRates = (attendanceRes.data ?? []) as { attendance_rate: number }[]
@@ -56,5 +88,8 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     vehiclesRegistered: vehiclesRes.count ?? 0,
     recentNotifications: (notificationsRes.data ?? []) as Notification[],
     recentActivity: (activityRes.data ?? []) as AuditLog[],
+    upcomingEvents: (upcomingEventsRes.data ?? []) as CalendarEvent[],
+    todayEvents: (todayEventsRes.data ?? []) as CalendarEvent[],
+    upcomingDeadlines: (upcomingDeadlinesRes.data ?? []) as CalendarEvent[],
   }
 }

@@ -8,6 +8,7 @@ import type { DashboardSummary } from '../lib/api/dashboard'
 import type { Station } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
 import { formatPercent } from '../lib/format'
+import { EVENT_TYPE_LABEL } from './CalendarioPage'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -97,6 +98,102 @@ export function PanelPage() {
           <div className="kpi-value">{loading ? '—' : summary?.vehiclesRegistered ?? 0}</div>
         </div>
       </div>
+
+      <div className="section-header">
+        <h2 className="section-title">Próximos Eventos</h2>
+        <Link to="/calendario" className="link-muted">
+          Ver calendario
+        </Link>
+      </div>
+      <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+        {loading && <div className="empty-state">Cargando eventos…</div>}
+        {!loading && (summary?.upcomingEvents.length ?? 0) === 0 && (
+          <div className="empty-state">No hay eventos próximos cargados en el calendario.</div>
+        )}
+        {summary?.upcomingEvents.map((event, i) => (
+          <Link
+            key={event.id}
+            to={`/calendario/${event.id}`}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px',
+              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+              textDecoration: 'none',
+              color: 'inherit',
+              gap: 12,
+            }}
+          >
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                {new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                {!event.all_day && ` · ${new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}
+              </div>
+            </div>
+            <span className="badge badge-info">{EVENT_TYPE_LABEL[event.event_type]}</span>
+          </Link>
+        ))}
+      </div>
+
+      {!loading && (summary?.todayEvents.length ?? 0) > 0 && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Eventos de Hoy</h2>
+          </div>
+          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+            {summary?.todayEvents.map((event, i) => (
+              <Link
+                key={event.id}
+                to={`/calendario/${event.id}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                }}
+              >
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</span>
+                <span className="badge badge-warning">
+                  {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!loading && (summary?.upcomingDeadlines.length ?? 0) > 0 && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Vencimientos Próximos</h2>
+          </div>
+          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+            {summary?.upcomingDeadlines.map((event, i) => (
+              <Link
+                key={event.id}
+                to={`/calendario/${event.id}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                }}
+              >
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</span>
+                <span className="badge badge-danger">{new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}</span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="section-header">
         <h2 className="section-title">Estado de Cuarteles</h2>

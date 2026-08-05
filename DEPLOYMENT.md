@@ -1371,3 +1371,150 @@ por ninguna función server-side. Vercel: sí, redeploy (rutas y páginas nuevas
 - [ ] Entrar a `/auditoria` después de cargar/editar/borrar un evento, confirmar que aparece con
       "Historial institucional" como tabla (no `station_history_events` crudo) y los campos con
       nombres legibles.
+
+## 15. Calendario Institucional (2026-08) — migración 0051
+
+### 15.1 Qué es
+
+Módulo de calendario para toda la Regional: eventos regionales, de cuartel, de Escuela/capacitaciones,
+vencimientos, guardias, reuniones, mantenimientos programados. Cada evento tiene título, descripción,
+tipo, fecha/hora de inicio (y fin opcional), flag "todo el día", alcance territorial, estado
+(programado/cancelado/finalizado), y dos mecanismos de notificación opcionales (`notify_on_create` y
+`notify_before_minutes`, ver sección 15.5).
+
+### 15.2 Esquema
+
+Tabla `calendar_events`: `id`, `title`, `description`, `event_type` (enum `calendar_event_type`),
+`starts_at`, `ends_at` (opcional, debe ser ≥ `starts_at`), `all_day`, `region_id`/`subsede_id`/
+`station_id`, `status` (enum `calendar_event_status`), `notify_on_create`, `notify_before_minutes`
+(minutos, > 0 si está definido), `reminder_sent_at` (interno, marca si ya se disparó el recordatorio),
+`created_by_profile_id`, `created_at`, `updated_at`.
+
+Tipos (`calendar_event_type`): `regional`, `cuartel`, `escuela`, `capacitacion`, `vencimiento`,
+`guardia`, `reunion`, `mantenimiento`, `otro`. Estados (`calendar_event_status`): `programado`,
+`cancelado`, `finalizado`.
+
+**Alcance territorial — regla especial para Escuela**: igual que `documents`/`document_folders`, un
+evento tiene *exactamente* uno de `region_id`/`subsede_id`/`station_id` — **excepto** los eventos de
+tipo `escuela`/`capacitacion`, que no llevan ningún alcance territorial (los tres quedan `null`),
+porque la Escuela Regional ya es regional-wide por definición — mismo criterio que ya usa `courses`
+(`courses_write_admin_escuela` no filtra por región, solo por `is_escuela_role()`). Esto está reforzado
+por un constraint (`calendar_events_single_scope`), no solo por RLS.
+
+**Cancelación vs. borrado**: "Cancelar" (desde el detalle del evento) es un `UPDATE status='cancelado'`
+— el evento sigue existiendo y visible en el calendario, marcado como cancelado. "Eliminar" es un
+DELETE real. Ambas acciones quedan auditadas vía el trigger genérico.
+
+### 15.3 Permisos (RLS)
+
+- **Lectura**: cualquier usuario autenticado (incluido `invitado`, solo lectura por construcción),
+  mismo criterio que el resto de los directorios institucionales del sistema.
+- **Escritura** (`calendar_events_write_admin_regional_station_escuela`):
+  - `informatica_r4`/`integrante_informatica`: cualquier evento.
+  - `is_escuela_role()` (`director_escuela` + `instructor`): eventos `escuela`/`capacitacion`, sin
+    alcance territorial (igual que `courses`).
+  - `secretario_regional`: eventos regionales (cualquier tipo que no sea escuela/capacitación) dentro
+    de su propia región. `director_escuela` no comparte esta rama desde 0048 (`is_regional_role()` es
+    exclusivamente `secretario_regional`).
+  - `usuario_carga_cuartel`, `presidente_cuartel`, `secretario_comision`, `jefe_cuerpo_activo`: eventos
+    con `station_id` igual a su propio cuartel únicamente.
+
+### 15.4 UI
+
+- **`CalendarioPage`** (`/calendario`, nuevo ítem de navegación con ícono dedicado): dos vistas
+  intercambiables — **Mes** (grilla mensual liviana hecha a mano, sin librería de calendario externa,
+  con puntos indicadores de eventos por día y detalle del día seleccionado debajo) y **Listado**
+  (cronológico simple, mejor para mobile). Filtros por tipo, estado, y alcance ("Mi cuartel" /
+  "Escuela"). Botón "+" según permisos. Ambas vistas son responsive: la grilla mensual usa CSS grid de
+  7 columnas que se adapta al ancho disponible, y el listado es la vista recomendada en pantallas
+  chicas.
+- **`EventoCalendarioFormPage`** (`/calendario/nuevo`, `/calendario/:id/editar`): alta/edición, con el
+  mismo patrón de selector de alcance (region/subsede/cuartel) que `DocumentoFormPage`/
+  `CarpetaFormPage`, mostrando "Escuela Regional (sin alcance territorial)" cuando el tipo elegido es
+  escuela/capacitación. Incluye los dos checkboxes de notificación.
+- **`EventoCalendarioDetallePage`** (`/calendario/:id`): vista de detalle, con acciones
+  Editar/Cancelar/Eliminar según permiso.
+- **Auditoría**: se agregaron las traducciones de tabla (`calendar_events` → "Calendario") y de los
+  campos nuevos a `src/lib/audit/humanize.ts`.
+
+### 15.5 Notificaciones (integración con el sistema existente, sin duplicar push)
+
+**`notify_on_create`**: si está activo, un trigger (`notify_calendar_event_created`, mismo patrón que
+`notify_course_created`/`notify_document_created` de 0023) inserta una fila en `notifications` con el
+mismo alcance territorial del evento, tipo `actividad_proxima` (ya existía en el enum
+`notification_type`, no hizo falta agregar uno nuevo). **No se llama a ninguna Edge Function desde este
+trigger** — el frontend (`NotificationPushBridge`, ya montado globalmente desde antes) escucha
+*cualquier* insert en `notifications` vía Realtime y dispara el push correspondiente él solo, sin
+importar si la notificación la creó un formulario o un trigger de Postgres. Duplicar esa llamada desde
+el formulario de carga de eventos habría generado un push doble; no se hizo.
+
+**`notify_before_minutes`**: recordatorio previo al inicio del evento, en minutos. Implementado (no
+solo dejado preparado) con un job de **pg_cron** que corre cada 5 minutos:
+`send_calendar_event_reminders()` recorre los eventos `programado` con `notify_before_minutes`
+definido y `reminder_sent_at` todavía `null` cuya hora de inicio ya entró en la ventana de aviso
+(`starts_at <= now() + notify_before_minutes`), inserta la notificación correspondiente, y marca
+`reminder_sent_at` para no repetirla en la corrida siguiente del cron. **A diferencia del recordatorio
+semanal (0036), este job NO requiere `pg_net`**: el recordatorio entra por la misma tabla
+`notifications` + `NotificationPushBridge`, sin necesidad de que la función de Postgres llame
+directamente a una Edge Function por HTTP. Solo requiere **`pg_cron` habilitado** (no `pg_net`) — ver
+sección 15.6 para el paso exacto.
+
+Precisión del recordatorio: al correr cada 5 minutos, un recordatorio puede dispararse hasta ~5 minutos
+más tarde que el valor exacto configurado en `notify_before_minutes` — aceptable para el caso de uso
+(avisos institucionales, no alarmas de precisión al segundo).
+
+**Limitación conocida**: un evento de tipo `escuela`/`capacitacion` con `notify_on_create=true` genera
+una notificación sin alcance territorial (`region_id`/`subsede_id`/`station_id` los tres `null`) —
+igual que cualquier otra fila de `notifications` sin alcance, solo la ve `informatica_r4`
+(`notifications_select_own_or_scope` ya tenía esta limitación desde antes, no es nueva de este módulo).
+Si se necesita que los eventos de Escuela notifiquen a todos los usuarios (no solo informática), es un
+cambio de alcance a decidir en una tanda futura — no implementado acá porque no fue parte del pedido
+explícito de esta tanda.
+
+### 15.6 Migración nueva a correr
+
+- `0051_calendar_events.sql` — crea los enums `calendar_event_type`/`calendar_event_status`, la tabla
+  `calendar_events`, sus índices y constraints, el trigger de `updated_at`, las 2 policies de RLS,
+  redefine `audit_row_change()` para el contexto territorial de esta tabla, el trigger
+  `notify_calendar_event_created`, la función `send_calendar_event_reminders()`, y **programa el job de
+  pg_cron `siger4-calendar-reminders`**.
+
+  **Requiere pg_cron habilitado ANTES de correr esta migración** (Supabase Dashboard → Database →
+  Extensions → buscar `pg_cron` → Enable) — si no está habilitado, la migración falla en la última
+  línea (`select cron.schedule(...)`). **No requiere `pg_net`** (a diferencia de 0036): el recordatorio
+  nunca llama a una Edge Function directamente desde SQL.
+
+  Sin backfill — tabla nueva, sin datos previos.
+
+### 15.7 Edge Functions / Vercel
+
+Ninguna Edge Function nueva ni modificada. El módulo usa RLS directo para todo el CRUD, y el push de
+las notificaciones automáticas (creación + recordatorio previo) reutiliza `send-push` a través del
+`NotificationPushBridge` ya existente — no hay ninguna llamada nueva a `send-push`/`send-push-system`
+agregada en esta tanda. Vercel: sí, verificar/redeploy — hay rutas, páginas y un ítem de navegación
+nuevos.
+
+### 15.8 Checklist de verificación después de correr 0051
+
+- [ ] Confirmar que `select * from cron.job where jobname = 'siger4-calendar-reminders';` devuelve una
+      fila activa.
+- [ ] Como `informatica_r4`: crear un evento regional con `notify_on_create` activo, confirmar que
+      aparece una notificación (y push, si las claves VAPID están configuradas) inmediatamente.
+- [ ] Crear un evento con `notify_before_minutes = 5` y `starts_at` unos 6-8 minutos en el futuro,
+      esperar a la corrida del cron (cada 5 minutos) y confirmar que llega el recordatorio una sola vez
+      (`reminder_sent_at` debe quedar seteado, no debe duplicarse en la corrida siguiente).
+- [ ] Como `secretario_regional`: crear un evento regional dentro de su región, confirmar que NO puede
+      crearlo fuera de ella.
+- [ ] Como `jefe_cuerpo_activo`: crear un evento de tipo "cuartel" en su propio cuartel, confirmar que
+      no puede hacerlo en el detalle/formulario apuntando a otro cuartel.
+- [ ] Como `director_escuela`/`instructor`: crear un evento de tipo "Escuela" o "Capacitación",
+      confirmar que no se les pide alcance territorial y que el evento se guarda sin
+      region/subsede/cuartel.
+- [ ] Como `invitado`: confirmar que ve el calendario (mes y listado) pero no el botón "+".
+- [ ] Cancelar un evento y confirmar que sigue visible en el calendario marcado como "Cancelado" (no
+      desaparece). Eliminar otro evento y confirmar que sí desaparece.
+- [ ] Entrar a `/panel` y confirmar que aparecen las secciones "Próximos Eventos", "Eventos de Hoy" (si
+      hay alguno programado para hoy) y "Vencimientos Próximos" (si hay algún evento tipo
+      "vencimiento" futuro).
+- [ ] Entrar a `/auditoria` después de crear/cancelar/eliminar un evento, confirmar que aparece con
+      "Calendario" como tabla y campos legibles (no `calendar_events`/`starts_at` crudos).

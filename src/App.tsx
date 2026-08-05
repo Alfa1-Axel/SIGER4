@@ -29,6 +29,9 @@ import { CarpetaFormPage } from './pages/CarpetaFormPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
 import { PersonalFormPage } from './pages/PersonalFormPage'
 import { EventoHistoricoFormPage } from './pages/EventoHistoricoFormPage'
+import { CalendarioPage } from './pages/CalendarioPage'
+import { EventoCalendarioFormPage } from './pages/EventoCalendarioFormPage'
+import { EventoCalendarioDetallePage } from './pages/EventoCalendarioDetallePage'
 import { InventarioPage } from './pages/InventarioPage'
 import { InventarioFormPage } from './pages/InventarioFormPage'
 import { DepartamentosPage } from './pages/DepartamentosPage'
@@ -73,6 +76,10 @@ export default function App() {
         <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/historial/nuevo" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
         <Route path="/historial/:id/editar" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
+        <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
+        <Route path="/calendario/nuevo" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
+        <Route path="/calendario/:id/editar" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
+        <Route path="/calendario/:id" element={<ProtectedRoute><EventoCalendarioDetallePage /></ProtectedRoute>} />
         <Route path="/inventario" element={<ProtectedRoute><InventarioPage /></ProtectedRoute>} />
         <Route path="/inventario/nuevo" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
         <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />

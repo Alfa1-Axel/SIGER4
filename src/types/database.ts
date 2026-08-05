@@ -341,3 +341,36 @@ export interface StationHistoryEvent {
   created_at: string
   updated_at: string
 }
+
+export type CalendarEventType =
+  | 'regional'
+  | 'cuartel'
+  | 'escuela'
+  | 'capacitacion'
+  | 'vencimiento'
+  | 'guardia'
+  | 'reunion'
+  | 'mantenimiento'
+  | 'otro'
+
+export type CalendarEventStatus = 'programado' | 'cancelado' | 'finalizado'
+
+export interface CalendarEvent {
+  id: string
+  title: string
+  description: string | null
+  event_type: CalendarEventType
+  starts_at: string
+  ends_at: string | null
+  all_day: boolean
+  region_id: string | null
+  subsede_id: string | null
+  station_id: string | null
+  status: CalendarEventStatus
+  notify_on_create: boolean
+  notify_before_minutes: number | null
+  reminder_sent_at: string | null
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}

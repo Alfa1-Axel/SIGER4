@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { AuditLog, CalendarEvent, Notification } from '../../types/database'
+import type { AuditLog, CalendarEvent, ComplianceStatus, Notification } from '../../types/database'
 
 export interface DashboardSummary {
   stationsCount: number
@@ -12,6 +12,7 @@ export interface DashboardSummary {
   upcomingEvents: CalendarEvent[]
   todayEvents: CalendarEvent[]
   upcomingDeadlines: CalendarEvent[]
+  complianceCounts: Record<ComplianceStatus, number>
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
@@ -30,6 +31,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     upcomingEventsRes,
     todayEventsRes,
     upcomingDeadlinesRes,
+    complianceRes,
   ] = await Promise.all([
     supabase.from('stations').select('id', { count: 'exact', head: true }),
     supabase.from('attendance_summaries').select('attendance_rate'),
@@ -70,6 +72,7 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
       .gte('starts_at', now.toISOString())
       .order('starts_at', { ascending: true })
       .limit(5),
+    supabase.from('station_compliance').select('compliance_status'),
   ])
 
   const attendanceRates = (attendanceRes.data ?? []) as { attendance_rate: number }[]
@@ -79,6 +82,10 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
 
   const interventions = (interventionsRes.data ?? []) as { total_count: number }[]
   const interventionsThisPeriod = interventions.reduce((sum, row) => sum + row.total_count, 0)
+
+  const complianceRows = (complianceRes.data ?? []) as { compliance_status: ComplianceStatus }[]
+  const complianceCounts: Record<ComplianceStatus, number> = { verde: 0, amarillo: 0, rojo: 0 }
+  for (const row of complianceRows) complianceCounts[row.compliance_status] += 1
 
   return {
     stationsCount: stationsRes.count ?? 0,
@@ -91,5 +98,6 @@ export async function fetchDashboardSummary(): Promise<DashboardSummary> {
     upcomingEvents: (upcomingEventsRes.data ?? []) as CalendarEvent[],
     todayEvents: (todayEventsRes.data ?? []) as CalendarEvent[],
     upcomingDeadlines: (upcomingDeadlinesRes.data ?? []) as CalendarEvent[],
+    complianceCounts,
   }
 }

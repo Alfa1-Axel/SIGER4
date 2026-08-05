@@ -374,3 +374,24 @@ export interface CalendarEvent {
   created_at: string
   updated_at: string
 }
+
+export type ComplianceStatus = 'verde' | 'amarillo' | 'rojo'
+
+export interface StationCompliance {
+  station_id: string
+  station_name: string
+  region_id: string
+  subsede_id: string | null
+  has_contact_info: boolean
+  has_personnel: boolean
+  has_vehicles: boolean
+  attendance_recent: boolean
+  interventions_recent: boolean
+  has_documents: boolean
+  has_history_events: boolean
+  has_calendar_events: boolean
+  last_relevant_update_at: string
+  compliant_count: number
+  compliant_total: number
+  compliance_status: ComplianceStatus
+}

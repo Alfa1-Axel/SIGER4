@@ -18,6 +18,7 @@ import {
   SEPARATION_STATUSES,
 } from '../lib/api/personnel'
 import { fetchStationHistoryEvents, deleteStationHistoryEvent } from '../lib/api/stationHistory'
+import { fetchStationComplianceById, complianceReasons, COMPLIANCE_STATUS_BADGE, COMPLIANCE_STATUS_LABEL } from '../lib/api/compliance'
 import type {
   AttendanceSummary,
   InterventionSummary,
@@ -26,6 +27,7 @@ import type {
   PersonnelStatusHistory,
   Profile,
   Station,
+  StationCompliance,
   StationHistoryCategory,
   StationHistoryEvent,
   Vehicle,
@@ -122,6 +124,7 @@ export function CuartelDetallePage() {
   const [authorities, setAuthorities] = useState<{ profile: Profile; role: RoleKey }[]>([])
   const [personnel, setPersonnel] = useState<Personnel[]>([])
   const [historyEvents, setHistoryEvents] = useState<StationHistoryEvent[]>([])
+  const [compliance, setCompliance] = useState<StationCompliance | null>(null)
   const [loading, setLoading] = useState(true)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
 
@@ -201,7 +204,8 @@ export function CuartelDetallePage() {
       fetchStationAuthorities(id),
       fetchPersonnelByStation(id),
       fetchStationHistoryEvents(id),
-    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData, historyData]) => {
+      fetchStationComplianceById(id),
+    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData, historyData, complianceData]) => {
       if (active) {
         setStation(stationData)
         setVehicles(vehiclesData)
@@ -210,6 +214,7 @@ export function CuartelDetallePage() {
         setAuthorities(authoritiesData)
         setPersonnel(personnelData)
         setHistoryEvents(historyData)
+        setCompliance(complianceData)
         setLoading(false)
       }
     })
@@ -363,6 +368,29 @@ export function CuartelDetallePage() {
               <div className="kpi-label">Fundación</div>
             </div>
           </div>
+
+          {compliance && (
+            <div className="card-solid" style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h2 style={{ margin: 0, fontSize: 15 }}>Estado de Carga</h2>
+                <span className={`badge ${COMPLIANCE_STATUS_BADGE[compliance.compliance_status]}`}>
+                  {COMPLIANCE_STATUS_LABEL[compliance.compliance_status]}
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '0 0 10px' }}>
+                {compliance.compliant_count} de {compliance.compliant_total} criterios cumplidos · Última
+                actualización relevante:{' '}
+                {new Date(compliance.last_relevant_update_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {complianceReasons(compliance).map((reason) => (
+                  <span key={reason} className="badge badge-info" style={{ fontSize: 11 }}>
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="section-header">
             <h2 className="section-title">Autoridades y Contacto</h2>

@@ -1518,3 +1518,154 @@ nuevos.
       "vencimiento" futuro).
 - [ ] Entrar a `/auditoria` después de crear/cancelar/eliminar un evento, confirmar que aparece con
       "Calendario" como tabla y campos legibles (no `calendar_events`/`starts_at` crudos).
+
+## 16. Semáforo de Carga / Cumplimiento por Cuartel (2026-08) — migración 0052
+
+### 16.1 Qué es
+
+Indicador visual (verde/amarillo/rojo) de qué tan al día está la carga de datos de cada cuartel, para
+detectar de un vistazo quién tiene información completa, parcial o desactualizada. **No inventa ni
+estima nada**: cada criterio se deriva de filas/columnas que ya existen en el sistema. Si algo no está
+cargado, cuenta directamente como pendiente.
+
+### 16.2 Implementación: vista SQL, no cálculo en el frontend
+
+`station_compliance` es una **vista** de Postgres (no una tabla, no una función que traiga filas
+crudas para calcular en el cliente): todo el agregado (`EXISTS`, comparación de fechas, conteo) corre
+en la base, y devuelve una sola fila resumen por cuartel. Se agregaron 3 índices nuevos
+(`attendance_summaries`/`intervention_summaries` por `station_id, created_at desc`, y
+`documents` por `station_id`) para que las consultas `EXISTS` de la vista no hagan sequential scan a
+medida que esas tablas crecen.
+
+**RLS**: la vista se creó con `security_invoker = true` — esto es obligatorio, no cosmético. Postgres
+15+ NO pone `security_invoker` por default en las vistas (corren como el dueño de la vista si no se
+especifica); sin esto, la vista bypasearía el RLS de `stations`/`personnel`/`vehicles`/etc. y
+cualquier usuario autenticado vería el cumplimiento de cualquier cuartel, sin importar su alcance. Con
+`security_invoker=true`, la vista hereda el RLS real de las tablas que consulta con la identidad de
+quien la lee — mismo alcance que ya define `stations_select_scope`: `informatica_r4` ve todo,
+`secretario_regional`/`is_escuela_role()` ven su región, cualquier perfil con `my_station_ids()`/
+`my_subsede_ids()` ve su cuartel/subsede, `invitado` ve su propio cuartel. No hizo falta escribir una
+policy de RLS propia porque una vista no es una tabla con RLS independiente — hereda el de sus fuentes.
+
+### 16.3 Criterios del semáforo
+
+**Críticos** (si falta cualquiera de estos tres, el cuartel es **rojo**, sin importar el resto):
+- Datos institucionales básicos: `stations.phone` o `stations.email` cargados.
+- Personal activo cargado: `stations.personnel_count > 0` (ya mantenido por trigger desde el módulo de
+  Personal — solo cuenta integrantes en estado `activo`, no de baja/licencia).
+- Vehículos cargados: `stations.vehicles_count > 0` (ya mantenido por trigger).
+
+**No críticos** (si los críticos están OK pero falta alguno de estos, el cuartel es **amarillo**):
+- Asistencia reciente: al menos un `attendance_summaries` con `created_at` dentro de los últimos 45
+  días.
+- Intervenciones recientes: al menos un `intervention_summaries` con `created_at` dentro de los
+  últimos 45 días.
+- Al menos un documento institucional cargado específicamente para ese cuartel (`documents.station_id`
+  = ese cuartel — no cuenta documentos de alcance regional/subsede que no sean específicos del
+  cuartel).
+
+**Verde**: los 3 críticos y los 3 no críticos, los 6 cumplidos.
+
+**Informativos, no afectan el color**: `has_history_events` (¿tiene algún evento en el Historial
+Institucional, sección 14?) y `has_calendar_events` (¿tiene algún evento de Calendario no cancelado,
+sección 15?). Se muestran en la vista de datos pero deliberadamente no penalizan el semáforo — un
+cuartel puede legítimamente no tener hechos históricos relevantes para cargar todavía, o ningún evento
+de calendario programado, sin que eso signifique que está desactualizado.
+
+**Umbral de 45 días**: es un valor fijo en la definición SQL de la vista (`interval '45 days'`), no una
+tabla de configuración separada — se mantuvo simple para esta primera versión. Ajustarlo requiere una
+migración nueva que redefina la vista (`create or replace view`), documentada como el punto de ajuste
+si el criterio institucional cambia.
+
+**Porcentaje/fracción**: la vista expone `compliant_count` (0 a 6) y `compliant_total` (siempre 6) —
+la fracción exacta de criterios cumplidos, **sin redondear** en la base. El frontend decide cómo
+presentarlo (en `CuartelDetallePage` se muestra como "X de 6 criterios cumplidos", no como porcentaje
+redondeado).
+
+### 16.4 Permisos (RLS)
+
+No se agregó ninguna policy nueva — la vista hereda automáticamente el RLS ya existente de
+`stations`/`personnel`/`vehicles`/`attendance_summaries`/`intervention_summaries`/`documents`/
+`station_history_events`/`calendar_events` vía `security_invoker=true` (ver 16.2). Esto significa que
+el alcance del semáforo es exactamente el mismo alcance que ya tiene cada rol para ver cuarteles: no
+hace falta mantener una matriz de permisos separada para este módulo, y no puede desincronizarse de
+`stations_select_scope` porque no duplica su lógica, la reutiliza directamente.
+
+### 16.5 UI
+
+- **`CuartelesPage`** (listado): badge de estado (Al día / Parcial / Desactualizado) junto al badge de
+  estado operativo del cuartel, en cada tarjeta.
+- **`CuartelDetallePage`**: nueva tarjeta "Estado de Carga" (antes de "Autoridades y Contacto") con el
+  badge de color, "X de 6 criterios cumplidos", fecha de la última actualización relevante (la más
+  reciente entre asistencia/intervenciones/documentos/la propia fila del cuartel), y los motivos
+  concretos como chips ("Sin asistencia reciente", "Personal sin cargar", "Sin vehículos cargados",
+  "Falta contacto institucional", "Sin intervenciones recientes", "Sin documentos cargados", o "Datos
+  actualizados" si no falta nada — nunca se muestra una lista vacía sin explicación).
+- **`/panel` (Dashboard Regional)**: nueva sección "Estado de Carga por Cuartel" con el conteo total de
+  cuarteles en cada color (respetando el alcance de quien mira el panel, vía la misma vista).
+
+No se agregó una página/panel "Cumplimiento" dedicada aparte — se evaluó innecesaria para esta primera
+versión dado que el listado de Cuarteles y el Dashboard ya cubren "ver todo de un vistazo" y "ver el
+detalle de uno".
+
+### 16.6 Notificaciones (no implementado en esta tanda, a propósito)
+
+Explícitamente no se agregaron notificaciones automáticas del semáforo (ej. avisar a
+`jefe_cuerpo_activo` si su cuartel queda en rojo, resumen semanal a `secretario_regional`, recordatorio
+de carga pendiente) — se pidió no hacerlo salvo que fuera trivial, y integrarlo bien (evitar spam,
+elegir la cadencia correcta, decidir el umbral de "cuánto tiempo en rojo antes de avisar") no lo es.
+Queda documentado como trabajo de una tanda futura. La infraestructura para implementarlo ya existe
+(mismo patrón que `send_weekly_reminder()`/`notify_calendar_event_created()`): un job de pg_cron que
+lea `station_compliance`, o un trigger sobre las tablas fuente, insertando en `notifications` con el
+alcance del cuartel — no requeriría ninguna Edge Function nueva.
+
+### 16.7 Auditoría
+
+El cálculo del semáforo es 100% derivado (una vista, sin estado propio) — no se audita, porque no hay
+ninguna escritura que auditar. No se agregó ninguna configuración manual en esta tanda (los umbrales
+son fijos en la definición SQL, no editables desde la UI), así que tampoco aplica auditoría de
+configuración todavía. Si en el futuro se agrega una tabla de umbrales editable, esa sí debería
+auditarse igual que cualquier otra tabla del sistema (trigger genérico `audit_row_change`).
+
+### 16.8 Limitaciones conocidas
+
+- El umbral de 45 días es el mismo para todos los cuarteles y ambos criterios (asistencia e
+  intervenciones) — no se diferencia por tamaño de cuartel, frecuencia esperada real, ni se permite
+  configurarlo por región/subsede. Ajustable solo editando la vista en una migración futura.
+- Los eventos de Historial Institucional y Calendario se muestran pero no afectan el color — si en el
+  futuro se decide que sí deberían ser parte del cálculo (ej. "cuartel sin ningún evento de calendario
+  en el último año" como criterio de alerta), es un cambio de criterio a definir explícitamente, no
+  implementado acá.
+- Es una vista, no una tabla materializada: cada consulta recalcula todo en el momento. Para el volumen
+  actual del sistema (decenas de cuarteles, no miles) esto es más que suficiente sin necesidad de
+  cachear ni materializar — si el volumen creciera mucho en el futuro, sería el punto a revisar primero.
+
+### 16.9 Migración nueva a correr
+
+- `0052_station_compliance.sql` — crea la vista `station_compliance` y los 3 índices nuevos
+  (`attendance_summaries`, `intervention_summaries`, `documents`, todos `create index if not exists`).
+  No requiere backfill ni pasos manuales — es una vista derivada, no tiene datos propios que migrar.
+
+### 16.10 Edge Functions / Vercel
+
+Ninguna Edge Function nueva ni modificada — el módulo es 100% RLS/SQL directo desde el frontend
+(`select * from station_compliance`), sin ninguna llamada a una función server-side. Vercel: sí,
+verificar/redeploy — hay cambios de frontend (nuevo archivo `lib/api/compliance.ts`, secciones nuevas
+en `CuartelesPage`, `CuartelDetallePage` y `PanelPage`).
+
+### 16.11 Checklist de verificación
+
+- [ ] Confirmar que `select * from station_compliance limit 5;` en el SQL Editor devuelve filas con
+      `compliance_status` en `verde`/`amarillo`/`rojo` coherente con los datos reales de cada cuartel.
+- [ ] Como `informatica_r4`: entrar a `/cuarteles`, confirmar que cada tarjeta muestra el badge de
+      estado de carga junto al badge operativo.
+- [ ] Entrar al detalle de un cuartel sin personal/vehículos cargados, confirmar que aparece en rojo
+      con los motivos "Personal sin cargar"/"Sin vehículos cargados" listados.
+- [ ] Entrar al detalle de un cuartel con todo cargado pero sin asistencia/intervenciones de los
+      últimos 45 días, confirmar que aparece en amarillo (no rojo).
+- [ ] Como `jefe_cuerpo_activo`/`presidente_cuartel` (rol de cuartel): confirmar que en `/cuarteles`
+      solo ve el semáforo de su propio cuartel (por RLS heredado de `stations_select_scope`, no debería
+      ver el listado completo de otros cuarteles de todos modos).
+- [ ] Como `secretario_regional`: confirmar que ve el semáforo de todos los cuarteles de su región.
+- [ ] Entrar a `/panel`, confirmar que la sección "Estado de Carga por Cuartel" muestra los 3 conteos
+      (verde/amarillo/rojo) sumando el total de cuarteles visibles para el rol actual.

@@ -4,7 +4,8 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
-import type { Station, StationStatus, Subsede } from '../types/database'
+import { fetchStationCompliance, COMPLIANCE_STATUS_BADGE, COMPLIANCE_STATUS_LABEL } from '../lib/api/compliance'
+import type { Station, StationCompliance, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
 const STATUS_LABEL: Record<StationStatus, string> = {
@@ -21,6 +22,7 @@ export function CuartelesPage() {
   const { isAdmin } = useAuth()
   const [stations, setStations] = useState<Station[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
+  const [compliance, setCompliance] = useState<StationCompliance[]>([])
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<StationStatus | 'todos'>('todos')
   const [subsedeFilter, setSubsedeFilter] = useState<string | 'todas'>('todas')
@@ -29,11 +31,12 @@ export function CuartelesPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchStations(), fetchSubsedes()])
-      .then(([stationsData, subsedesData]) => {
+    Promise.all([fetchStations(), fetchSubsedes(), fetchStationCompliance()])
+      .then(([stationsData, subsedesData, complianceData]) => {
         if (!active) return
         setStations(stationsData)
         setSubsedes(subsedesData)
+        setCompliance(complianceData)
       })
       .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar cuarteles'))
       .finally(() => active && setLoading(false))
@@ -43,6 +46,7 @@ export function CuartelesPage() {
   }, [])
 
   const subsedeById = useMemo(() => new Map(subsedes.map((s) => [s.id, s])), [subsedes])
+  const complianceByStationId = useMemo(() => new Map(compliance.map((c) => [c.station_id, c])), [compliance])
 
   const filtered = useMemo(() => {
     return stations.filter((s) => {
@@ -118,7 +122,9 @@ export function CuartelesPage() {
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {filtered.map((station) => (
+        {filtered.map((station) => {
+          const stationCompliance = complianceByStationId.get(station.id)
+          return (
           <Link
             key={station.id}
             to={`/cuarteles/${station.id}`}
@@ -127,8 +133,15 @@ export function CuartelesPage() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <span className={`badge ${STATUS_BADGE[station.status]}`}>{STATUS_LABEL[station.status]}</span>
-                <h3 style={{ margin: '8px 0 2px', fontSize: 16 }}>{station.name}</h3>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span className={`badge ${STATUS_BADGE[station.status]}`}>{STATUS_LABEL[station.status]}</span>
+                  {stationCompliance && (
+                    <span className={`badge ${COMPLIANCE_STATUS_BADGE[stationCompliance.compliance_status]}`}>
+                      {COMPLIANCE_STATUS_LABEL[stationCompliance.compliance_status]}
+                    </span>
+                  )}
+                </div>
+                <h3 style={{ margin: '0 0 2px', fontSize: 16 }}>{station.name}</h3>
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {station.address ?? station.zone ?? 'Sin dirección registrada'}
                 </p>
@@ -165,7 +178,8 @@ export function CuartelesPage() {
               </div>
             </div>
           </Link>
-        ))}
+          )
+        })}
       </div>
 
       {isAdmin && (

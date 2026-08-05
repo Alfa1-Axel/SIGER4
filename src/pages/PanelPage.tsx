@@ -100,6 +100,38 @@ export function PanelPage() {
       </div>
 
       <div className="section-header">
+        <h2 className="section-title">Estado de Carga por Cuartel</h2>
+      </div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        {loading && <div className="empty-state">Cargando estado de carga…</div>}
+        {!loading && (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success, #16a34a)' }}>
+                {summary?.complianceCounts.verde ?? 0}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>AL DÍA</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning, #d97706)' }}>
+                {summary?.complianceCounts.amarillo ?? 0}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>PARCIAL</div>
+            </div>
+            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger, #dc2626)' }}>
+                {summary?.complianceCounts.rojo ?? 0}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>
+            </div>
+          </div>
+        )}
+        <Link to="/cuarteles" className="link-muted" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
+          Ver detalle por cuartel →
+        </Link>
+      </div>
+
+      <div className="section-header">
         <h2 className="section-title">Próximos Eventos</h2>
         <Link to="/calendario" className="link-muted">
           Ver calendario

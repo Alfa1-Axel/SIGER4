@@ -25,10 +25,16 @@ const FOLDER_SCOPE_OPTIONS: { value: FolderScopeTarget; label: string }[] = [
 // autorizados solo su propio cuartel.
 export function CarpetaFormPage() {
   const navigate = useNavigate()
-  const { profile: currentProfile, isAdmin, hasRole } = useAuth()
+  const { profile: currentProfile, scopes, isAdmin, hasRole } = useAuth()
   const isRegionalRole = hasRole('secretario_regional')
   const isStationRole = hasRole('usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const canCreate = isAdmin || isRegionalRole || isStationRole
+  // El cuartel del usuario puede venir de profiles.station_id (asignación
+  // directa) o de una fila en user_scopes con scope_type='station' (mismo
+  // criterio que my_station_ids() en la base, ver 0026) — usar solo
+  // profile.station_id deja a estos últimos con stationId vacío y sin forma
+  // de completarlo (el selector está oculto cuando stationLocked=true).
+  const myStationId = currentProfile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -40,7 +46,7 @@ export function CarpetaFormPage() {
   const [scopeTarget, setScopeTarget] = useState<FolderScopeTarget>(isStationRole && !isAdmin && !isRegionalRole ? 'station' : 'region')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
-  const [stationId, setStationId] = useState(isStationRole && !isAdmin && !isRegionalRole ? currentProfile?.station_id ?? '' : '')
+  const [stationId, setStationId] = useState(isStationRole && !isAdmin && !isRegionalRole ? myStationId : '')
   const [profileId, setProfileId] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
@@ -78,8 +84,12 @@ export function CarpetaFormPage() {
       setError('Seleccioná la subsede destino.')
       return
     }
-    if (scopeTarget === 'station' && !stationId) {
+    if (scopeTarget === 'station' && !stationLocked && !stationId) {
       setError('Seleccioná el cuartel destino.')
+      return
+    }
+    if (scopeTarget === 'station' && stationLocked && !myStationId) {
+      setError('No pudimos determinar tu cuartel asignado. Contactá a un administrador.')
       return
     }
     if (scopeTarget === 'profile' && !profileId) {
@@ -94,7 +104,7 @@ export function CarpetaFormPage() {
         description: description || null,
         region_id: scopeTarget === 'region' ? regionId : null,
         subsede_id: scopeTarget === 'subsede' ? subsedeId : null,
-        station_id: scopeTarget === 'station' ? (stationLocked ? currentProfile?.station_id ?? null : stationId) : null,
+        station_id: scopeTarget === 'station' ? (stationLocked ? myStationId || null : stationId) : null,
         profile_id: scopeTarget === 'profile' ? profileId : null,
         created_by_profile_id: currentProfile?.id ?? null,
       })

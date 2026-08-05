@@ -1818,3 +1818,153 @@ Sí, verificar/redeploy — hay página nueva (`PapeleraDocumentosPage`), ruta n
 - [ ] (Si se configuró el cron) Esperar a la corrida diaria o forzarla manualmente con `select
       trigger_document_purge();` en el SQL Editor, confirmar que purga los documentos con
       `purge_after` vencido sin tocar los que todavía están dentro del plazo.
+
+## 18. QA de visibilidad Calendario/Semáforo + bug de carga de archivos (2026-08) — migración 0054
+
+### 18.1 Causa exacta: visibilidad de Calendario para usuarios de cuartel
+
+**No era un problema de RLS.** `calendar_events_select_authenticated` (0051) ya usa
+`auth.role() = 'authenticated'` — cualquier usuario autenticado lee cualquier evento, sin importar
+alcance; la restricción de esta tabla siempre estuvo solo del lado de la escritura. Confirmado
+correcto, sin cambios.
+
+El bug real estaba en el **frontend**, y es el mismo patrón en 3 lugares: el cuartel de un usuario
+puede venir de `profiles.station_id` (asignación directa) **o** de una fila en `user_scopes` con
+`scope_type='station'` — la base ya distingue esto desde siempre (`my_station_ids()`, ver
+`0026_enforce_is_active.sql`, hace `UNION` de ambas fuentes). Pero:
+
+- **`EventoCalendarioFormPage.tsx`**: al crear un evento de tipo "cuartel" como usuario con rol de
+  cuartel, el formulario resolvía `station_id: profile?.station_id ?? null` — si ese usuario tenía su
+  cuartel asignado vía `user_scopes` (no `profiles.station_id` directo), el insert se mandaba con
+  `station_id: null`, lo que **violaba el constraint `calendar_events_single_scope`** (exige
+  exactamente un alcance) y el evento nunca se creaba. Un usuario así no podía cargar NINGÚN evento de
+  su cuartel — el "no veo bien el calendario" era en realidad "no puedo cargar nada en mi cuartel".
+- **`CalendarioPage.tsx`**: el filtro "Mi cuartel" comparaba `e.station_id === profile?.station_id` y
+  la opción del `<select>` solo aparecía si `profile?.station_id` era verdadero — para el mismo tipo de
+  usuario, la opción de filtro ni siquiera se mostraba, y si hubiera eventos de su cuartel cargados por
+  otra persona, nunca coincidían con el filtro.
+- **`CarpetaFormPage.tsx`** (módulo Documentos, no Calendario, pero mismo patrón exacto y mismo bug):
+  `stationId` se inicializaba desde `currentProfile?.station_id` únicamente: un usuario con cuartel
+  vía `user_scopes` quedaba con el selector de cuartel oculto (por estar "stationLocked") y sin forma
+  de completar el valor, bloqueado en el validador "Seleccioná el cuartel destino." sin ninguna forma
+  de resolverlo desde la UI.
+
+**Corregido** en los 3 archivos: ahora resuelven `myStationId = profile?.station_id ?? scopes.find(s
+=> s.scope_type === 'station')?.station_id ?? ''`, usando `scopes` (ya expuesto por `useAuth()`, no
+hacía falta ningún fetch nuevo). Se agregó también un mensaje de error explícito ("No pudimos
+determinar tu cuartel asignado. Contactá a un administrador.") para el caso límite de un usuario con
+rol de cuartel que no tiene ningún cuartel asignado por ninguna de las dos vías — antes ese caso
+producía un error de constraint de Postgres crudo y confuso.
+
+### 18.2 Causa exacta: Semáforo (station_compliance) para usuarios de cuartel
+
+**Investigado a fondo, sin encontrar ningún bug de código.** La vista `station_compliance` (0052) usa
+`security_invoker = true`, y se confirmó (investigación dedicada de la semántica de Postgres 15+, sin
+bugs abiertos conocidos para versiones parcheadas) que esta opción **sí propaga correctamente** el RLS
+del usuario que consulta a cada subquery/`EXISTS` dentro de la vista — no hay ninguna razón por la que
+un usuario de cuartel debería ver menos de lo que le permite `stations_select_scope` (que ya incluye
+`id in (select my_station_ids())`, correcto). El frontend (`CuartelesPage`, `CuartelDetallePage`,
+`PanelPage`) tampoco filtra nada por rol antes de mostrar el semáforo — muestra exactamente lo que
+RLS ya devolvió.
+
+**Riesgo real identificado (no confirmado como la causa, pero documentado y blindado
+preventivamente)**: existen bugs conocidos y documentados de las **herramientas** de Supabase (no de
+Postgres en sí) donde el Dashboard/CLI puede **dropear silenciosamente** la opción
+`security_invoker` de una vista si esta se edita/recrea desde el Table Editor del Dashboard, o via
+ciertos flujos de "declarative schema"/`db diff`/`db pull` (ver
+[supabase/supabase#35823](https://github.com/supabase/supabase/issues/35823),
+[supabase/cli#3973](https://github.com/supabase/cli/issues/3973),
+[supabase/cli#2264](https://github.com/supabase/cli/issues/2264)). Si eso pasara, la vista correría
+como su dueño (bypasea RLS) — en la práctica, **todos verían el cumplimiento de todos los cuarteles**,
+que es el síntoma contrario al reportado ("no veo bien"), pero de todos modos se blindó con una
+migración nueva que reafirma la opción explícitamente sin tocar la lógica de la vista (ver 18.4).
+
+**Verificación recomendada en producción** (no reemplaza probar con un usuario real, pero confirma que
+la opción sigue activa en la base):
+
+```sql
+select relname, reloptions from pg_class where relname = 'station_compliance';
+-- reloptions debe incluir "security_invoker=true"
+```
+
+Si al probar con un usuario de cuartel real el semáforo sigue viéndose mal después de correr `0054` y
+confirmar `security_invoker=true` con la consulta de arriba, el problema no es de RLS/vista — habría
+que revisar con datos reales de ese usuario específico (rol exacto, si su cuartel viene de
+`profiles.station_id` o `user_scopes`, y confirmar con `select * from station_compliance;` corrido
+directamente como ese usuario, no como `informatica_r4`).
+
+### 18.3 Causa exacta: bug de selección de archivo en Documentos
+
+`DocumentoFormPage.tsx` tenía el formulario con campos `required` nativos de HTML (`title`, `category`)
+pero **sin `noValidate` en el `<form>`**. Si un usuario dejaba el título o el tipo de documento vacíos
+y hacía click en "Guardar", el navegador bloqueaba el envío de forma **nativa y silenciosa** (con un
+pequeño tooltip fácil de no ver) — `handleSubmit` nunca llegaba a ejecutarse. El resultado visible era
+que el mensaje de error de un intento anterior (por ejemplo "Adjuntá un archivo.", si el primer intento
+fue sin archivo seleccionado) **quedaba pegado en pantalla sin actualizarse**, aunque el usuario ya
+hubiera seleccionado el archivo después — dando la impresión de que el sistema "no se daba cuenta" de
+la selección, cuando en realidad el submit ni siquiera se estaba disparando.
+
+**Corregido** en `DocumentoFormPage.tsx`:
+- Se agregó `noValidate` al `<form>`, y validación explícita de `title`/`category` al inicio de
+  `handleSubmit` (con mensajes propios, en español, consistentes con el resto del formulario) — ahora
+  **toda** la validación pasa siempre por React, nunca por el navegador, así que el mensaje de error
+  mostrado siempre refleja el estado real en el momento del último intento de envío.
+- El `onChange` del input de archivo ahora limpia el error inmediatamente al seleccionar un archivo
+  (`setError(null)`), para que un mensaje viejo no quede visible ni un instante más de lo necesario.
+- Se agregó una confirmación visual explícita ("Archivo seleccionado: nombre.pdf (123 KB)") debajo del
+  input, para que el usuario tenga una señal clara e inequívoca de que la selección se registró,
+  más allá de lo que el navegador ya muestra en el propio input.
+
+No se tocó la lógica de subida en sí (`uploadDocumentFile`, `createDocument`, etc.) — el bug era
+puramente de validación/UX en el formulario, no de la carga a Storage.
+
+### 18.4 Notificaciones de Semáforo
+
+Confirmado el estado documentado en la sección 16.6: **no implementadas**. Se revisó que ningún texto
+de la UI (`CuartelDetallePage`, `CuartelesPage`, `PanelPage`, `lib/api/compliance.ts`) sugiera que
+existen. No se implementó nada nuevo esta tanda — avisar al `jefe_cuerpo_activo` cuando su cuartel
+queda en rojo, con cadencia controlada y opt-out, requiere diseño real (cuándo se considera "recién
+cayó a rojo" vs. "sigue en rojo", ventana mínima entre avisos, tabla de opt-out) que no encaja en un
+fix rápido de esta tanda — sigue siendo trabajo de una tanda futura, documentado en la sección 16.6.
+
+### 18.5 Papelera de Documentos — verificación
+
+Revisado el flujo completo (`lib/api/documents.ts`, `PapeleraDocumentosPage.tsx`,
+`purge-documents/index.ts`) sin encontrar regresiones: `fetchDocuments`/`fetchDocumentsByFolder`
+filtran `deleted_at is null` correctamente (documentos en papelera no aparecen en listados normales),
+`fetchTrashedDocuments` filtra lo opuesto, `trashDocument`/`restoreDocument` usan el `UPDATE` con el
+mismo alcance de permisos que editar, `purgeDocuments` llama a la Edge Function que borra Storage
+antes que las filas, y el cron `siger4-document-purge` sigue documentado en la sección 17. Sin cambios
+en esta tanda — el módulo funciona como se documentó al implementarlo.
+
+### 18.6 Migración nueva
+
+- `0054_reassert_compliance_security_invoker.sql` — `ALTER VIEW station_compliance SET
+  (security_invoker = true)` puntual (no repite la definición completa de la vista, para no arriesgar
+  que diverja de 0052 si alguna se edita a mano sin la otra). Defensivo: no cambia comportamiento si
+  la opción nunca se perdió, pero blinda contra el riesgo documentado en 18.2 si alguna vez se editó la
+  vista desde el Dashboard en vez de por migración.
+
+### 18.7 Edge Functions / Vercel
+
+Ninguna Edge Function nueva ni modificada. Vercel: sí, verificar/redeploy — cambios de frontend en
+`EventoCalendarioFormPage.tsx`, `CalendarioPage.tsx`, `CarpetaFormPage.tsx`, `DocumentoFormPage.tsx`.
+
+### 18.8 Checklist de verificación
+
+- [ ] Correr `0054_reassert_compliance_security_invoker.sql` y confirmar con `select relname,
+      reloptions from pg_class where relname = 'station_compliance';` que `reloptions` incluye
+      `security_invoker=true`.
+- [ ] Como `jefe_cuerpo_activo`/`usuario_carga_cuartel` cuyo cuartel esté asignado vía `user_scopes`
+      (no `profiles.station_id`): crear un evento de tipo "Cuartel" desde `/calendario/nuevo`,
+      confirmar que se crea sin error y que el filtro "Mi cuartel" en `/calendario` lo muestra.
+- [ ] Mismo usuario: crear una carpeta de documentos desde `/documentos/carpetas/nueva` con alcance
+      "Cuartel", confirmar que se crea sin pedir seleccionar un cuartel que no tiene forma de elegir.
+- [ ] Mismo usuario: entrar a `/cuarteles` y a `/cuarteles/:id` de su propio cuartel, confirmar que ve
+      el badge/motivos del semáforo.
+- [ ] En `/documentos/nuevo`: dejar el título vacío, seleccionar un archivo, hacer click en Guardar,
+      confirmar que aparece un mensaje claro sobre el título (no sobre el archivo) y que corregirlo
+      permite continuar. Luego repetir sin dejar nada vacío, confirmar que "Archivo seleccionado: ..."
+      aparece apenas se elige el archivo.
+- [ ] Revisar la consola del navegador durante estos pasos, confirmar que no aparecen errores 400/403
+      nuevos.

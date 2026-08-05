@@ -119,6 +119,21 @@ export function DocumentoFormPage() {
     event.preventDefault()
     setError(null)
 
+    // Validación propia en vez de confiar en "required" del navegador
+    // (el form tiene noValidate): si el navegador bloqueara el submit de
+    // forma nativa por un campo requerido vacío, handleSubmit nunca
+    // llegaría a correr y el mensaje de error de un intento anterior (ej.
+    // "Adjuntá un archivo") quedaría pegado en pantalla sin actualizarse,
+    // aunque el usuario ya hubiera resuelto ese problema — pareciendo que
+    // el sistema "no se dio cuenta" de la selección.
+    if (!title.trim()) {
+      setError('Ingresá un título para el documento.')
+      return
+    }
+    if (!category.trim()) {
+      setError('Ingresá el tipo de documento.')
+      return
+    }
     if (scopeTarget === 'region' && !regionId) {
       setError('Seleccioná la región destino.')
       return
@@ -189,7 +204,7 @@ export function DocumentoFormPage() {
       {loading ? (
         <div className="empty-state">Cargando datos del documento…</div>
       ) : (
-        <form onSubmit={handleSubmit} className="card-solid">
+        <form onSubmit={handleSubmit} className="card-solid" noValidate>
           <div className="field">
             <label htmlFor="title">Título</label>
             <input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Circular N°12" />
@@ -207,7 +222,19 @@ export function DocumentoFormPage() {
 
           <div className="field">
             <label htmlFor="file">{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo adjunto'}</label>
-            <input id="file" type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <input
+              id="file"
+              type="file"
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null)
+                setError(null)
+              }}
+            />
+            {file && (
+              <p style={{ fontSize: 11, color: 'var(--color-success, #16a34a)', marginTop: 4 }}>
+                Archivo seleccionado: {file.name} ({Math.round(file.size / 1024)} KB)
+              </p>
+            )}
             {isEditing && (
               <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
                 Si subís un archivo nuevo, el actual queda guardado en el historial de versiones.

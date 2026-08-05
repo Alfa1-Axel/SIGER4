@@ -54,10 +54,15 @@ function buildMonthGrid(year: number, month: number): Date[] {
 }
 
 export function CalendarioPage() {
-  const { isAdmin, hasRole, profile } = useAuth()
+  const { isAdmin, hasRole, profile, scopes } = useAuth()
   const canCreate =
     isAdmin ||
     hasRole('secretario_regional', 'director_escuela', 'instructor', 'presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
+  // El cuartel del usuario puede venir de profiles.station_id o de una fila
+  // en user_scopes con scope_type='station' (mismo criterio que
+  // my_station_ids() en la base) — usar solo profile.station_id dejaba el
+  // filtro "Mi cuartel" invisible y sin match para estos usuarios.
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
 
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [regions, setRegions] = useState<Region[]>([])
@@ -105,10 +110,10 @@ export function CalendarioPage() {
           (!typeFilter || e.event_type === typeFilter) &&
           (!statusFilter || e.status === statusFilter) &&
           (!scopeFilter ||
-            (scopeFilter === 'mi_cuartel' && e.station_id === profile?.station_id) ||
+            (scopeFilter === 'mi_cuartel' && e.station_id === myStationId) ||
             (scopeFilter === 'escuela' && (e.event_type === 'escuela' || e.event_type === 'capacitacion'))),
       ),
-    [events, typeFilter, statusFilter, scopeFilter, profile?.station_id],
+    [events, typeFilter, statusFilter, scopeFilter, myStationId],
   )
 
   const eventsByDay = useMemo(() => {
@@ -165,7 +170,7 @@ export function CalendarioPage() {
         </select>
         <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todo el alcance</option>
-          {profile?.station_id && <option value="mi_cuartel">Mi cuartel</option>}
+          {myStationId && <option value="mi_cuartel">Mi cuartel</option>}
           <option value="escuela">Escuela</option>
         </select>
       </div>

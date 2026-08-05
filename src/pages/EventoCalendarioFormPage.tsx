@@ -24,11 +24,18 @@ export function EventoCalendarioFormPage() {
   const { id } = useParams<{ id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
-  const { profile, isAdmin, hasRole } = useAuth()
+  const { profile, scopes, isAdmin, hasRole } = useAuth()
   const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
   const isRegionalRole = hasRole('secretario_regional')
   const isEscuelaRole = hasRole('director_escuela', 'instructor')
   const canCreate = isAdmin || isStationRole || isRegionalRole || isEscuelaRole
+  // El cuartel del usuario puede venir de profiles.station_id (asignación
+  // directa) o de una fila en user_scopes con scope_type='station' (mismo
+  // criterio que my_station_ids() en la base, ver 0026) — usar solo
+  // profile.station_id deja a estos últimos sin poder cargar el station_id
+  // real al crear un evento "de mi cuartel", y el insert termina violando
+  // calendar_events_single_scope (ningún alcance seteado).
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -115,7 +122,10 @@ export function EventoCalendarioFormPage() {
     if (!isScopeless) {
       if (scopeTarget === 'region' && !regionId) return setError('Seleccioná la región destino.')
       if (scopeTarget === 'subsede' && !subsedeId) return setError('Seleccioná la subsede destino.')
-      if (scopeTarget === 'station' && !stationId) return setError('Seleccioná el cuartel destino.')
+      if (scopeTarget === 'station' && !stationLocked && !stationId) return setError('Seleccioná el cuartel destino.')
+      if (scopeTarget === 'station' && stationLocked && !myStationId) {
+        return setError('No pudimos determinar tu cuartel asignado. Contactá a un administrador.')
+      }
     }
     if (!startsAt) return setError('Ingresá la fecha/hora de inicio.')
 
@@ -130,7 +140,7 @@ export function EventoCalendarioFormPage() {
         all_day: allDay,
         region_id: isScopeless ? null : scopeTarget === 'region' ? regionId : null,
         subsede_id: isScopeless ? null : scopeTarget === 'subsede' ? subsedeId : null,
-        station_id: isScopeless ? null : scopeTarget === 'station' ? (stationLocked ? profile?.station_id ?? null : stationId) : null,
+        station_id: isScopeless ? null : scopeTarget === 'station' ? (stationLocked ? myStationId || null : stationId) : null,
         notify_on_create: notifyOnCreate,
         notify_before_minutes: notifyBeforeMinutes ? Number(notifyBeforeMinutes) : null,
       }

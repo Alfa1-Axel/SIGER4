@@ -12,6 +12,11 @@ import { supabase } from '../supabaseClient'
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5 MB
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024 // 20 MB
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
+// Coincide con el whitelist server-side real del bucket "documents" (ver
+// migración 0055_documents_mime_mobile.sql) — heic/heif son el formato por
+// defecto de fotos en iPhone, webp el de capturas de pantalla en Android
+// moderno; sin esto, elegir una foto desde la galería del celular fallaba
+// silenciosamente (Storage lo rechazaba server-side con un error poco claro).
 const DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',
@@ -20,11 +25,44 @@ const DOCUMENT_MIME_TYPES = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/png',
   'image/jpeg',
+  'image/webp',
+  'image/heic',
+  'image/heif',
 ])
 
+// Algunos selectores de archivos de Android (ciertos proveedores de
+// contenido de apps de galería/escáner) devuelven file.type vacío en vez del
+// MIME real, aunque el archivo sea perfectamente válido. En ese caso, en vez
+// de rechazarlo de entrada, se infiere el tipo por extensión — Storage igual
+// vuelve a validar el MIME real server-side, así que esto solo evita un
+// bloqueo client-side innecesario para un archivo que después va a subir bien.
+const EXTENSION_TO_MIME: Record<string, string> = {
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+}
+
+function inferMimeType(file: File): string {
+  if (file.type) return file.type
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  return EXTENSION_TO_MIME[ext] ?? ''
+}
+
 function assertFileAllowed(file: File, allowedTypes: Set<string>, maxBytes: number): void {
-  if (!allowedTypes.has(file.type)) {
-    throw new Error(`Tipo de archivo no permitido: ${file.type || 'desconocido'}.`)
+  const mimeType = inferMimeType(file)
+  if (!allowedTypes.has(mimeType)) {
+    throw new Error(
+      `Tipo de archivo no permitido${file.name ? ` (${file.name})` : ''}: ${file.type || 'no se pudo determinar el tipo'}. ` +
+        'Formatos aceptados: PDF, Word, Excel, PNG, JPG, WEBP, HEIC.',
+    )
   }
   if (file.size > maxBytes) {
     throw new Error(`El archivo supera el tamaño máximo permitido (${Math.round(maxBytes / 1024 / 1024)} MB).`)

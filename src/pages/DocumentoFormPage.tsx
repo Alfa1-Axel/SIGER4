@@ -75,9 +75,15 @@ export function DocumentoFormPage() {
   const [fileSize, setFileSize] = useState<number | null>(null)
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
   const [existingFolderId, setExistingFolderId] = useState<string | null>(null)
+  // uploadStatus separa explícitamente "hay una fila creada pero el archivo
+  // real todavía no se subió con éxito" (failed) de "ya está subido" (done) —
+  // documentId por sí solo no alcanza para esa distinción (queda seteado
+  // apenas se crea la fila, antes de saber si el upload del archivo
+  // funcionó), y handleSubmit lo usa para bloquear el guardado si el archivo
+  // no quedó realmente subido (ver más abajo).
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'failed'>('idle')
 
   const [loading, setLoading] = useState(isEditing)
-  const [uploadingFile, setUploadingFile] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -110,6 +116,12 @@ export function DocumentoFormPage() {
       setExistingStoragePath(doc.storage_path)
       setExistingFolderId(doc.folder_id)
       setVersions(docVersions)
+      // Un documento existente puede llegar en storage_path='pending' si una
+      // carga anterior (en este flujo, o en el anterior a este fix) se
+      // interrumpió sin que el archivo terminara de subirse — bloquear
+      // Guardar hasta que se adjunte un archivo real, igual que en modo
+      // creación (ver handleSubmit).
+      setUploadStatus(doc.storage_path === 'pending' ? 'failed' : 'done')
       if (doc.profile_id) {
         setScopeTarget('profile')
         setProfileId(doc.profile_id)
@@ -177,31 +189,20 @@ export function DocumentoFormPage() {
       return
     }
 
-    setUploadingFile(true)
+    setUploadStatus('uploading')
     setFileName(selected.name)
     setFileSize(selected.size)
     try {
       const targetId = isEditing ? id! : documentId
-      if (targetId) {
-        // Ya existe una fila (edición existente, o ya se subió un archivo
-        // antes en esta misma carga): el archivo anterior pasa a historial
-        // de versiones antes de reemplazarlo. existingStoragePath se
-        // mantiene al día en ambos casos (ver setExistingStoragePath más
-        // abajo y en la rama de creación), así que esta condición sirve
-        // para los dos modos por igual, sin distinguir isEditing.
-        if (existingStoragePath && existingStoragePath !== 'pending') {
-          await addDocumentVersion(targetId, existingStoragePath, currentProfile?.id ?? null)
-        }
-        const path = await uploadDocumentFile(targetId, selected)
-        await updateDocumentStoragePath(targetId, path)
-        setExistingStoragePath(path)
-      } else {
+      let createdId: string | null = null
+      if (!targetId) {
         // Primera vez que se elige un archivo en una carga nueva: crea la
         // fila real con el título/categoría que haya hasta el momento (o un
-        // valor por defecto a partir del nombre del archivo, nunca vacío) y
-        // sube el archivo enseguida. El usuario sigue pudiendo editar
-        // título/categoría/descripción/alcance después — eso es un UPDATE
-        // normal al hacer click en Guardar, el archivo ya no depende de eso.
+        // valor por defecto a partir del nombre del archivo, nunca vacío).
+        // Se hace ANTES de subir el archivo porque las policies de Storage
+        // necesitan un document_id real para validar el path (ver
+        // createDocument en lib/api/documents.ts) — la fila queda con
+        // storage_path='pending' hasta que el upload de abajo confirme.
         const created = await createDocument({
           title: title.trim() || titleFromFileName(selected.name),
           category: category.trim() || 'Sin categorizar',
@@ -210,17 +211,29 @@ export function DocumentoFormPage() {
           folder_id: folderIdFromQuery || null,
           uploaded_by_profile_id: currentProfile?.id ?? null,
         })
+        createdId = created.id
         setDocumentId(created.id)
-        const path = await uploadDocumentFile(created.id, selected)
-        await updateDocumentStoragePath(created.id, path)
-        setExistingStoragePath(path)
+      } else if (existingStoragePath && existingStoragePath !== 'pending') {
+        // Ya existe una fila con archivo real (edición existente, o ya se
+        // subió un archivo antes en esta misma carga): el archivo anterior
+        // pasa a historial de versiones antes de reemplazarlo.
+        await addDocumentVersion(targetId, existingStoragePath, currentProfile?.id ?? null)
       }
+
+      const finalId = targetId ?? createdId!
+      // Si esto falla (red, MIME rechazado server-side, tamaño excedido), la
+      // fila en "documents" ya existe pero storage_path queda en 'pending' —
+      // uploadStatus pasa a 'failed' en el catch de abajo, lo que bloquea
+      // Guardar (ver handleSubmit) hasta que se reintente. Nunca queda un
+      // archivo "subido" fantasma: o la fila tiene el path real, o el botón
+      // de guardar sigue deshabilitado.
+      const path = await uploadDocumentFile(finalId, selected)
+      await updateDocumentStoragePath(finalId, path)
+      setExistingStoragePath(path)
+      setUploadStatus('done')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos subir el archivo. Probá de nuevo.')
-      setFileName(null)
-      setFileSize(null)
-    } finally {
-      setUploadingFile(false)
+      setUploadStatus('failed')
     }
   }
 
@@ -260,6 +273,19 @@ export function DocumentoFormPage() {
     }
     if (!isEditing && !documentId) {
       setError('Adjuntá un archivo.')
+      return
+    }
+    // Bloquea el guardado si el archivo no quedó realmente subido: la fila
+    // puede existir (documentId seteado) con storage_path='pending' si el
+    // upload falló después de crearla (ver handleFileChange), o si un
+    // documento en edición nunca tuvo archivo. Nunca se debe poder guardar
+    // metadatos "como si" el archivo estuviera ahí cuando no lo está.
+    if (uploadStatus === 'uploading') {
+      setError('Esperá a que termine de subirse el archivo antes de guardar.')
+      return
+    }
+    if (uploadStatus === 'failed' || uploadStatus === 'idle') {
+      setError('El archivo todavía no se subió correctamente. Elegilo de nuevo antes de guardar.')
       return
     }
 
@@ -388,7 +414,7 @@ export function DocumentoFormPage() {
             <input
               id="file"
               type="file"
-              disabled={uploadingFile}
+              disabled={uploadStatus === 'uploading'}
               onChange={(e) => {
                 const selected = e.target.files?.[0] ?? null
                 void handleFileChange(selected)
@@ -400,16 +426,24 @@ export function DocumentoFormPage() {
                 e.target.value = ''
               }}
             />
-            {uploadingFile && (
-              <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>Subiendo archivo…</p>
+            {uploadStatus === 'uploading' && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
+                Subiendo archivo{fileName ? `: ${fileName}` : '…'}
+              </p>
             )}
-            {!uploadingFile && fileName && (
-              <p style={{ fontSize: 11, color: 'var(--color-success, #16a34a)', marginTop: 4 }}>
-                Archivo subido: {fileName}
+            {uploadStatus === 'done' && fileName && (
+              <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginTop: 4, fontWeight: 600 }}>
+                ✓ Archivo subido correctamente: {fileName}
                 {fileSize != null && ` (${Math.round(fileSize / 1024)} KB)`}
               </p>
             )}
-            {!uploadingFile && !fileName && isEditing && existingStoragePath && existingStoragePath !== 'pending' && (
+            {uploadStatus === 'failed' && (
+              <p className="field-error" style={{ marginTop: 4 }}>
+                No se pudo subir el archivo{fileName ? ` "${fileName}"` : ''}: {error ?? 'error desconocido'}. Elegilo de nuevo para reintentar.
+              </p>
+            )}
+            {uploadStatus === 'done' && !fileName && isEditing && existingStoragePath && existingStoragePath !== 'pending' && (
               <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
                 Ya tiene un archivo cargado. Elegí uno nuevo solo si querés reemplazarlo (el actual queda
                 en el historial de versiones).
@@ -417,11 +451,20 @@ export function DocumentoFormPage() {
             )}
           </div>
 
-          {error && <p className="field-error">{error}</p>}
+          {error && uploadStatus !== 'failed' && <p className="field-error">{error}</p>}
 
-          <button type="submit" className="btn btn-primary btn-block" disabled={submitting || uploadingFile}>
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={submitting || uploadStatus === 'uploading' || uploadStatus === 'failed' || uploadStatus === 'idle'}
+          >
             {submitting ? 'Guardando…' : 'Guardar'}
           </button>
+          {(uploadStatus === 'failed' || uploadStatus === 'idle') && (
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, textAlign: 'center' }}>
+              El botón se habilita cuando el archivo termine de subirse correctamente.
+            </p>
+          )}
 
           {versions.length > 0 && (
             <div style={{ marginTop: 20, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>

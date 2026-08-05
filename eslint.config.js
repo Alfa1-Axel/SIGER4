@@ -30,6 +30,7 @@ export default [
         Notification: 'readonly',
         NotificationPermission: 'readonly',
         PushSubscription: 'readonly',
+        ServiceWorkerRegistration: 'readonly',
         crypto: 'readonly',
       },
     },

@@ -9,6 +9,7 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
+import { triggerPushDiagnostic } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 
 export function AjustesPage() {
@@ -31,6 +32,7 @@ export function AjustesPage() {
 
   const [testingNotification, setTestingNotification] = useState(false)
   const [testNotificationResult, setTestNotificationResult] = useState<'ok' | 'error' | null>(null)
+  const [testPushResult, setTestPushResult] = useState<{ ok: boolean; sent: number; duplicate: boolean; error?: string } | null>(null)
 
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
@@ -81,21 +83,37 @@ export function AjustesPage() {
     if (!profile) return
     setTestingNotification(true)
     setTestNotificationResult(null)
+    setTestPushResult(null)
     try {
       // Se inserta directo (no via recordAuditEvent): notifications ya tiene
       // su propio trigger de auditoria automatico (audit_row_change, ver
       // 0004_audit_triggers.sql), asi que esto ya queda registrado en
       // audit_logs sin ensuciar nada extra. profile_id = uno mismo: nunca es
-      // un broadcast, y NotificationPushBridge dispara el push y el sonido
-      // automaticamente al detectar el insert por Realtime (si el usuario
-      // tiene push activado) — no hace falta llamar a triggerPush aca.
-      await createNotification({
+      // un broadcast. NotificationPushBridge también va a intentar disparar
+      // el push al detectar este insert por Realtime, pero ese camino es
+      // fire-and-forget (no informa resultado) — para el diagnóstico de esta
+      // pantalla se llama a triggerPushDiagnostic directo abajo, que sí
+      // devuelve si el push se envió realmente y a cuántos dispositivos, para
+      // poder distinguir "la notificación interna funciona pero el push real
+      // no llega" de "todo funciona".
+      const notification = await createNotification({
         type: 'prueba',
         title: 'Notificación de prueba',
         body: 'Si ves esto, las notificaciones internas funcionan correctamente.',
         profile_id: profile.id,
       })
       setTestNotificationResult('ok')
+
+      if (push.status === 'ready' && push.subscribed) {
+        const result = await triggerPushDiagnostic({
+          title: 'Notificación de prueba',
+          body: 'Si ves esto como notificación push, todo el circuito funciona correctamente.',
+          url: '/notificaciones',
+          profileId: profile.id,
+          notificationId: notification.id,
+        })
+        setTestPushResult(result)
+      }
     } catch {
       setTestNotificationResult('error')
     } finally {
@@ -252,16 +270,58 @@ export function AjustesPage() {
               Recibí avisos del sistema aunque no tengas SIGER4 abierto: cursos nuevos, documentos,
               cambios de estado y notificaciones importantes.
             </p>
-            {push.subscribed ? (
-              <button type="button" className="btn btn-outlined btn-block" disabled={push.loading} onClick={() => push.disable()}>
-                {push.loading ? 'Desactivando…' : 'Desactivar notificaciones push'}
+
+            {/* Estado real del push en este dispositivo — no solo "el
+                navegador recuerda haberse suscripto", sino confirmado contra
+                la base (ver usePushNotifications.checkStatus). */}
+            {!push.checking && push.diagnostic && (
+              <div
+                className={`badge ${
+                  push.diagnostic === 'active' ? 'badge-success' : push.diagnostic === 'denied' ? 'badge-danger' : 'badge-warning'
+                }`}
+                style={{ marginBottom: 12 }}
+              >
+                {push.diagnostic === 'active' && 'Push activo en este dispositivo'}
+                {push.diagnostic === 'denied' && 'Permiso de notificaciones denegado'}
+                {push.diagnostic === 'not_subscribed' && 'Sin suscripción'}
+                {push.diagnostic === 'stale' && 'Suscripción inválida — necesita reactivarse'}
+                {push.diagnostic === 'no_worker' && 'Service worker no disponible'}
+              </div>
+            )}
+
+            {push.diagnostic === 'stale' && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+                Este dispositivo tenía notificaciones activadas, pero la suscripción ya no es válida
+                (puede pasar si reinstalaste la PWA, o si estuvo mucho tiempo sin usarse). Reactivala
+                para seguir recibiendo avisos.
+              </p>
+            )}
+
+            {push.diagnostic === 'stale' ? (
+              <button type="button" className="btn btn-primary btn-block" disabled={push.loading} onClick={() => push.reactivate()}>
+                {push.loading ? 'Reactivando…' : 'Reactivar notificaciones push'}
               </button>
+            ) : push.subscribed ? (
+              <>
+                <button type="button" className="btn btn-outlined btn-block" disabled={push.loading} onClick={() => push.disable()}>
+                  {push.loading ? 'Desactivando…' : 'Desactivar notificaciones push'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outlined btn-block"
+                  style={{ marginTop: 8 }}
+                  disabled={push.loading}
+                  onClick={() => push.reactivate()}
+                >
+                  {push.loading ? 'Re-suscribiendo…' : 'Re-suscribir este dispositivo'}
+                </button>
+              </>
             ) : (
               <button type="button" className="btn btn-primary btn-block" disabled={push.loading} onClick={() => push.enable()}>
                 {push.loading ? 'Activando…' : 'Activar notificaciones push'}
               </button>
             )}
-            {push.error && <p className="field-error">{push.error}</p>}
+            {push.error && <p className="field-error" style={{ marginTop: 8 }}>{push.error}</p>}
             {push.permission === 'denied' && (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginTop: 8 }}>
                 Bloqueaste los permisos de notificaciones para este sitio. Para activarlas, habilitalas desde la
@@ -282,12 +342,33 @@ export function AjustesPage() {
         </button>
         {testNotificationResult === 'ok' && (
           <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginTop: 8 }}>
-            Notificación de prueba enviada. Revisá /notificaciones{push.subscribed ? ' y el aviso push' : ''}.
+            Notificación interna creada correctamente. Revisá /notificaciones.
           </p>
         )}
         {testNotificationResult === 'error' && (
           <p className="field-error" style={{ marginTop: 8 }}>
-            No pudimos enviar la notificación de prueba.
+            No pudimos crear la notificación de prueba.
+          </p>
+        )}
+        {testPushResult && (
+          <p
+            style={{
+              fontSize: 12,
+              marginTop: 4,
+              color: testPushResult.ok ? 'var(--color-success, #16a34a)' : 'var(--color-danger)',
+            }}
+          >
+            {testPushResult.ok && testPushResult.duplicate && 'Push ya enviado por otra pestaña/dispositivo activo (deduplicado).'}
+            {testPushResult.ok && !testPushResult.duplicate && testPushResult.sent > 0 &&
+              `Push real enviado a ${testPushResult.sent} dispositivo${testPushResult.sent === 1 ? '' : 's'}. Si no te llegó, revisá los permisos de notificaciones del navegador/SO.`}
+            {testPushResult.ok && !testPushResult.duplicate && testPushResult.sent === 0 &&
+              'La notificación interna se creó, pero no había ninguna suscripción push activa para enviar el push real (revisá el estado de arriba).'}
+            {!testPushResult.ok && `No se pudo enviar el push real: ${testPushResult.error}`}
+          </p>
+        )}
+        {testNotificationResult === 'ok' && push.status === 'ready' && !push.subscribed && (
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            Notificaciones push desactivadas en este dispositivo: solo se probó la notificación interna.
           </p>
         )}
       </div>

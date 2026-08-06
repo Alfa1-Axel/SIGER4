@@ -62,11 +62,18 @@ export function InventarioPage() {
 
   return (
     <AppShell title="Inventario Regional">
-      <h1 className="page-title">Inventario Regional</h1>
-      <p className="page-subtitle">
-        Elementos regionales disponibles para uso compartido entre cuarteles: herramientas, equipos
-        y material de práctica.
-      </p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <div>
+          <h1 className="page-title">Inventario Regional</h1>
+          <p className="page-subtitle">
+            Elementos regionales disponibles para uso compartido entre cuarteles: herramientas, equipos
+            y material de práctica.
+          </p>
+        </div>
+        <Link to="/inventario/solicitudes" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+          Solicitudes
+        </Link>
+      </div>
 
       {error && (
         <div className="card" style={{ marginBottom: 20 }}>
@@ -104,7 +111,7 @@ export function InventarioPage() {
         {filtered.map((item) => (
           <Link
             key={item.id}
-            to={canEdit ? `/inventario/${item.id}/editar` : '#'}
+            to={`/inventario/${item.id}`}
             className="card-solid"
             style={{
               display: 'flex',
@@ -113,7 +120,6 @@ export function InventarioPage() {
               gap: 12,
               textDecoration: 'none',
               color: 'inherit',
-              pointerEvents: canEdit ? 'auto' : 'none',
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>

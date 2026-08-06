@@ -36,6 +36,10 @@ import { EventoCalendarioFormPage } from './pages/EventoCalendarioFormPage'
 import { EventoCalendarioDetallePage } from './pages/EventoCalendarioDetallePage'
 import { InventarioPage } from './pages/InventarioPage'
 import { InventarioFormPage } from './pages/InventarioFormPage'
+import { InventarioDetallePage } from './pages/InventarioDetallePage'
+import { SolicitudesPrestamoPage } from './pages/SolicitudesPrestamoPage'
+import { SolicitudPrestamoFormPage } from './pages/SolicitudPrestamoFormPage'
+import { SolicitudPrestamoDetallePage } from './pages/SolicitudPrestamoDetallePage'
 import { DepartamentosPage } from './pages/DepartamentosPage'
 import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
@@ -86,7 +90,11 @@ export default function App() {
         <Route path="/calendario/:id" element={<ProtectedRoute><EventoCalendarioDetallePage /></ProtectedRoute>} />
         <Route path="/inventario" element={<ProtectedRoute><InventarioPage /></ProtectedRoute>} />
         <Route path="/inventario/nuevo" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
+        <Route path="/inventario/solicitudes" element={<ProtectedRoute><SolicitudesPrestamoPage /></ProtectedRoute>} />
+        <Route path="/inventario/solicitudes/:id" element={<ProtectedRoute><SolicitudPrestamoDetallePage /></ProtectedRoute>} />
+        <Route path="/inventario/:itemId/solicitudes/nueva" element={<ProtectedRoute><SolicitudPrestamoFormPage /></ProtectedRoute>} />
         <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
+        <Route path="/inventario/:id" element={<ProtectedRoute><InventarioDetallePage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />

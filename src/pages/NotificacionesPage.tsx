@@ -17,6 +17,10 @@ const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   reporte_generado: 'Reporte generado',
   prueba: 'Prueba',
   recordatorio_semanal: 'Recordatorio semanal',
+  prestamo_solicitado: 'Préstamo solicitado',
+  prestamo_aprobado: 'Préstamo aprobado',
+  prestamo_rechazado: 'Préstamo rechazado',
+  prestamo_devuelto: 'Préstamo devuelto',
 }
 
 export function NotificacionesPage() {

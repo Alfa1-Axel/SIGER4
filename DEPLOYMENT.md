@@ -2463,3 +2463,109 @@ diagnóstico esté disponible.
 - [ ] Confirmar que en escritorio (donde ya funciona) el panel muestra la secuencia completa de
       eventos hasta `uploadSuccess` — sirve como referencia de "cómo se ve un caso que funciona".
 - [ ] Reproducir en mobile/PWA y capturar el panel completo (ver 22.3).
+
+## 23. Wizard de documentos: dato nuevo confirma que la recarga vuelve al Paso 1 (2026-08)
+
+Con la instrumentación de la sección 22 en producción, el usuario reportó el dato que faltaba: en
+mobile/PWA, después de elegir un archivo o sacar una foto, la app **siempre vuelve al Paso 1**.
+Esto confirma directamente la hipótesis: Android/iOS recargan la página al abrir el selector
+nativo/la cámara — el borrador de metadatos se recuperaba bien (eso ya funcionaba desde la sección
+21), pero el paso actual del wizard no, así que la pantalla volvía al Paso 1 aunque los datos
+siguieran completos. No hizo falta esperar el panel de diagnóstico para confirmar esta causa
+puntual — el síntoma reportado ya la señala sin ambigüedad.
+
+### 23.1 Causa exacta (confirmada por lectura de código, no solo por el síntoma)
+
+`DocumentoFormPage.tsx` ya guardaba un borrador en `sessionStorage` con los metadatos del Paso 1 y
+un `pendingDocumentId` — pero **`pendingDocumentId` recién se asigna dentro de `handleFileChange`**
+(se crea la fila real en `documents` ahí, no antes), es decir, después de que el usuario ya eligió
+un archivo. El dato nuevo del usuario confirma que la recarga real pasa **al abrir** el selector/
+cámara, no después de elegir algo — o sea, exactamente en la ventana en la que
+`pendingDocumentId` todavía no se había guardado. La recuperación anterior solo saltaba al Paso 2
+`if (draft.pendingDocumentId)` — como ese campo nunca llegó a persistirse en el caso real, la
+condición daba falso y la pantalla se quedaba en el Paso 1 por defecto, con los metadatos ya
+recuperados pero sin reflejar en qué paso estaba el usuario.
+
+### 23.2 Qué se corrigió: persistir el paso del wizard, no solo los metadatos
+
+El borrador (`DocumentDraft`) ahora incluye `wizardStep: 'metadata' | 'file'` y `updatedAt`
+(timestamp). Se guarda:
+- Al confirmar el Paso 1 (`handleContinueToFile`), **antes** de que el usuario toque el selector de
+  archivos — este es el punto crítico: si la recarga pasa al abrir el selector, este guardado ya
+  ocurrió.
+- Cada vez que se crea la fila real en `handleFileChange` (mismo momento que antes, ahora usando el
+  mismo helper `currentDraft()`).
+- Al volver al Paso 1 con "Editar datos" (`handleBackToMetadata`) — así una recarga mientras se
+  está corrigiendo el Paso 1 no deja "file" persistido de la confirmación anterior.
+
+La recuperación (`useEffect` de restauración) ahora decide el paso a mostrar leyendo
+`draft.wizardStep` directamente, no infiriéndolo de si existe `pendingDocumentId`. Dos casos
+reales, distintos:
+- **`wizardStep === 'file'` sin `pendingDocumentId`** (el caso más común según el dato nuevo): se
+  llegó a confirmar el Paso 1, la recarga pasó antes de elegir archivo. Vuelve directo al Paso 2,
+  `uploadStatus` en `'idle'` (no `'failed'` — no hubo ningún intento de subida que haya fallado).
+- **`wizardStep === 'file'` con `pendingDocumentId`**: ya existía una fila `pending` cuando se
+  interrumpió — vuelve al Paso 2 con esa fila conocida, `uploadStatus` en `'failed'` para bloquear
+  "Guardar" hasta reintentar.
+
+En ambos casos se muestra el mismo mensaje pedido explícitamente: *"Recuperamos los datos del
+documento. Volvé a seleccionar el archivo para completar la carga."* — nunca el Paso 1 vacío, nunca
+un error genérico de "no seleccionaste archivo".
+
+### 23.3 UX: mensaje de recuperación separado de errores reales
+
+Antes, el aviso de recuperación se guardaba en el mismo estado `error` que los fallos reales de
+subida, mostrado con el mismo estilo rojo (`field-error`) — daba la impresión de que algo había
+salido mal cuando en realidad el sistema ya había recuperado todo lo posible. Se separó en un
+estado propio (`recoveryNotice`), mostrado en una tarjeta neutra (mismo estilo que el resto de los
+avisos informativos de la app), y la etiqueta del campo de archivo cambia a **"Seleccionar archivo
+nuevamente"** en vez de la genérica "Archivo adjunto" cuando hay una recuperación activa — el botón
+claro que se pidió. Se limpia apenas el usuario elige un archivo o vuelve a confirmar el Paso 1.
+
+### 23.4 Input de archivo: revisado, sin problemas de remount
+
+Se revisó el `<input type="file">` del Paso 2: sin `accept`, sin `capture`, sin `multiple`, sin
+ningún `key` en el input ni en el `<form>` que lo contiene, y ninguna condición de render que lo
+monte/desmonte entre re-renders — descartado como causa de un remount de React. La recarga es a
+nivel de sistema operativo (Android/iOS matan la página al abrir el picker/cámara para liberar
+memoria), no algo que este código esté provocando ni pueda evitar del lado del cliente — de ahí que
+la única solución robusta sea la persistencia de estado, no un cambio al input en sí.
+
+### 23.5 Diagnóstico: eventos nuevos
+
+[uploadDiagnostics.ts](src/lib/uploadDiagnostics.ts) suma:
+- `wizardStepChange` — cada cambio de paso, con `from`/`to`, si se persistió (`persisted: true/
+  false`) y el motivo (`draftRestore` cuando viene de una recuperación).
+- `pageshow` (con `persisted`: `true` si se restauró desde bfcache — el JS seguía vivo, NO hubo
+  recarga real; `false` en un pageshow posterior sugiere que sí la hubo).
+- `visibilitychange` (con el nuevo `document.visibilityState`) — marca cuándo el usuario deja la
+  pestaña, por ejemplo al abrir el selector nativo.
+- `pagehide` y `beforeunload` — último instante antes de que la página se descargue de verdad (a
+  diferencia de `visibilitychange`, que también dispara solo por cambiar de pestaña sin
+  descargarse). `attachPageLifecycleCapture()` (nuevo, mismo patrón que
+  `attachGlobalErrorCapture()`) instala los cuatro listeners mientras el formulario está montado.
+- `draftRecovered` ahora también registra `wizardStep`/`updatedAt` del borrador encontrado, no solo
+  `pendingDocumentId`.
+
+Sigue siendo instrumentación temporal — mismo criterio que la sección 22, pensada para borrarse una
+vez cerrado el diagnóstico completo.
+
+### 23.6 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function. Redeploy normal del frontend.
+
+### 23.7 Checklist de verificación
+
+- [ ] **Caso principal (el reportado)**: Paso 1 completo → "Continuar" → tocar el input de archivo
+      → si la app se recarga al abrir el selector/cámara, confirmar que vuelve directo al Paso 2
+      (no al Paso 1) con el aviso "Recuperamos los datos del documento. Volvé a seleccionar el
+      archivo para completar la carga." y el botón/label dice "Seleccionar archivo nuevamente".
+- [ ] Elegir el archivo después de la recuperación — confirmar que sube normalmente y no crea un
+      documento duplicado.
+- [ ] Volver al Paso 1 con "Editar datos", cambiar algo, forzar una recarga antes de volver a
+      confirmar — debe quedar en Paso 1 (no saltar de nuevo al Paso 2 con datos viejos).
+- [ ] Confirmar que en escritorio (donde no hay recarga real) el flujo se siente exactamente igual
+      que antes — sin pasos ni mensajes de más.
+- [ ] Con un usuario `informatica_r4`, revisar el panel de diagnóstico después de reproducir el
+      caso principal en mobile: confirmar que aparecen `wizardStepChange`, `pageshow` y
+      `visibilitychange` en la secuencia, y que ayudan a confirmar el momento exacto de la recarga.

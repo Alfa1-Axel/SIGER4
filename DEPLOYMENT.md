@@ -2819,3 +2819,102 @@ futuro se va a autoactualizar solo (recarga automática) sin necesitar este paso
       alguno falla.
 - [ ] Confirmar que el flujo en escritorio sigue funcionando igual (mismo flujo explícito, sin
       cambios de comportamiento esperados más allá de los dos botones separados).
+
+## 26. Causa real confirmada por captura: input.click() programático no siempre dispara change en Android/PWA (2026-08)
+
+Con capturas reales del panel de diagnóstico (ronda 25 ya desplegada) se confirmó el patrón exacto:
+`fileInputButtonClick` → `nativeFileInputClick` → `visibilitychange hidden` → `visibilitychange
+visible` → nunca `nativeFileInputChange`. El picker nativo se abre (el `visibilitychange` lo
+confirma: la app pasa a segundo plano y vuelve), pero el navegador no devuelve ningún archivo al
+input. Como nunca llega `nativeFileInputChange`, tampoco llegan `fileDetected` ni `uploadStart` —
+confirmando que el problema está estrictamente en la capa del input nativo, antes de que el archivo
+llegue siquiera a existir en la app. Por eso, en esta ronda, no se tocó nada de Storage/MIME/RLS.
+
+### 26.1 Causa exacta: `input.click()` programático como único disparador
+
+El input real vivía oculto con estilos (`position: absolute` + `clip: rect(0,0,0,0)`), y el único
+punto de interacción era un `<button>` que llamaba a `fileInputRef.current.click()` en su
+`onClick`. Este patrón — abrir un `<input type="file">` por código, desde un handler de evento, en
+vez de una asociación HTML real `<label for>` — es un patrón conocido como poco confiable
+específicamente en Android/Chrome dentro de una PWA instalada (standalone): el picker/cámara se
+abre igual, pero el navegador no siempre reconecta el evento `change` de vuelta al input cuando el
+click que lo originó fue disparado por JavaScript en vez de una interacción de usuario directamente
+sobre un control asociado por HTML.
+
+### 26.2 Qué se cambió en el input real
+
+- **Se eliminó `input.click()` como flujo principal** en los tres lugares donde se usaba
+  (`handleSelectFileButtonClick`, y el `.click()` que `handleChooseDifferentFile` disparaba al
+  volver a "idle"). Ya no se llama a `.click()` por código en ningún punto del flujo normal.
+- **Los inputs pasan a ser reales y visibles en el flujo de accesibilidad** (`sr-only-file-input`
+  en `styles.css` — `position: absolute` + `clip`, pero sin `display:none` ni sacarlos del árbol de
+  interacción), permanentes en el DOM durante todo el Paso 2 (mismo `id` estable, sin `key`
+  dinámica, nunca desmontados condicionalmente — confirmado).
+- **El punto de interacción real ahora es un `<label htmlFor="...">` asociado por HTML puro** —
+  sin JavaScript de por medio. Es el único mecanismo 100% estándar para abrir un file picker
+  disparado por una acción directa de usuario, sin depender de que el navegador trate un click
+  programático como "confiable" para reconectar `change`.
+- **No se limpia `value` antes de que `change` dispare**: el `e.target.value = ''` sigue ocurriendo
+  únicamente DENTRO del propio handler de `onChange`, después de haber leído `e.target.files` — no
+  se toca el input desde ningún otro lugar mientras el picker puede estar abierto.
+
+### 26.3 Elegir archivo vs. Tomar foto — dos inputs separados
+
+Se agregó un segundo input, `file-camera`, con `accept="image/*"` y `capture="environment"` —
+exclusivo para sacar una foto nueva con la cámara — separado del input general
+(`file-general`, sin `accept` restrictivo ni `capture`) que sigue sirviendo para PDF/Word/Excel/
+imágenes de galería. Ambos inputs están siempre montados; en el Paso 2 se muestran como dos labels
+lado a lado ("Elegir archivo" / "Tomar foto") mientras no hay ningún archivo elegido todavía. No se
+forzó `capture` en el input general (hubiera restringido a solo cámara, rompiendo la posibilidad de
+elegir un documento existente).
+
+### 26.4 Diagnóstico: espera antes de avisar "no devolvió archivo"
+
+`fileInputLabelClick` arranca un timer de 8 segundos (margen razonable: Android puede tardar en
+devolver el control a la app después de cerrar el picker/cámara). Si en ese margen no llega
+`nativeFileInputChange`, se loguea un evento SINTÉTICO separado (`nativeFileInputChangeTimeout` —
+deliberadamente NO reutiliza el nombre `nativeFileInputChange`, para no ensuciar la detección de "¿
+hubo un change real?" en el panel) y se muestra el mensaje pedido: *"El navegador no devolvió
+ningún archivo. Probá con la opción 'Elegir archivo' o abrí SIGER4 desde el navegador en vez de la
+app instalada."* — solo en el estado `idle` (si mientras tanto el usuario ya recargó y se recuperó
+un archivo por otro camino, no se pisa ese estado).
+
+### 26.5 Flujo de subida — sin cambios de fondo, verificado que sigue siendo imposible saltear
+
+Se confirmó explícitamente (no solo se asume) que no hay ningún camino de código que llegue a
+`createDocument`/notificación sin pasar antes por un `nativeFileInputChange` real con un archivo no
+nulo: `handleUploadFile()` retorna de inmediato si `selectedFile` es `null`, y `selectedFile` solo
+se setea dentro de `handleFileInputChange` después de recibir un `File` real desde el evento
+`onChange` nativo. El botón "Subir archivo" ni siquiera se renderiza fuera de los estados
+`selected`/`failed`, que solo se alcanzan por ese mismo camino.
+
+### 26.6 Página mínima de diagnóstico: `/diagnostico-upload`
+
+Nueva pantalla temporal, solo para informatica_r4/integrante_informatica
+([DiagnosticoUploadPage.tsx](src/pages/DiagnosticoUploadPage.tsx)) — un único
+`<input type="file">` real con el mismo patrón label+sr-only, sin wizard, sin metadatos, sin
+crear ni subir nada. Muestra en pantalla exactamente lo que el navegador devuelve (o no devuelve)
+al elegir un archivo. Sirve para aislar de una vez por todas si un fallo puntual es del formulario
+de Documentos (estado de React, wizard) o del navegador/PWA del dispositivo — si tampoco funciona
+acá, el problema es 100% del dispositivo/navegador, no de este código.
+
+### 26.7 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function — a propósito: como nunca llegaba `nativeFileInputChange`,
+no había ningún archivo real que Storage/RLS pudieran haber rechazado, así que no había nada que
+corregir de ese lado en esta ronda. Redeploy normal del frontend.
+
+### 26.8 Checklist de verificación
+
+- [ ] **Caso principal**: en mobile/PWA, tocar "Elegir archivo" — confirmar en el panel de
+      diagnóstico que ahora SÍ aparece `nativeFileInputChange` con `fileDetected` después.
+- [ ] Tocar "Tomar foto" — confirmar que abre la cámara (no la galería) y que también dispara
+      `nativeFileInputChange` al sacar la foto.
+- [ ] Si en algún dispositivo puntual el problema persiste, probar `/diagnostico-upload` (con un
+      usuario `informatica_r4`) para confirmar si es un problema aislado de esta pantalla o del
+      dispositivo en general.
+- [ ] Confirmar que "Subir archivo" sigue sin aparecer/habilitarse hasta que haya un archivo
+      realmente detectado, y que "Finalizar" sigue bloqueado hasta la confirmación real.
+- [ ] Escritorio: confirmar que "Elegir archivo"/"Tomar foto" siguen funcionando igual que antes
+      (en desktop, "Tomar foto" normalmente abre el selector de archivos común, sin cámara real,
+      que es el comportamiento esperado del atributo `capture` fuera de mobile).

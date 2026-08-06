@@ -20,6 +20,8 @@ export const TABLE_LABELS: Record<string, string> = {
   reports: 'Reportes',
   station_history_events: 'Historial institucional',
   calendar_events: 'Calendario',
+  inventory_items: 'Inventario Regional',
+  inventory_loan_requests: 'Solicitudes de préstamo',
 }
 
 export function translateTable(tableName: string): string {
@@ -127,6 +129,24 @@ export const FIELD_LABELS: Record<string, string> = {
   reminder_sent_at: 'Recordatorio enviado el',
   created_at: 'Creado el',
   updated_at: 'Actualizado el',
+  inventory_item_id: 'Elemento del inventario',
+  requesting_station_id: 'Cuartel solicitante',
+  requested_by_profile_id: 'Solicitado por',
+  responsible_profile_id: 'Responsable',
+  request_reason: 'Motivo de la solicitud',
+  requested_from: 'Solicitado desde',
+  expected_return_at: 'Devolución esperada',
+  approved_by_profile_id: 'Aprobado por',
+  approved_at: 'Aprobado el',
+  rejected_by_profile_id: 'Rechazado por',
+  rejected_at: 'Rechazado el',
+  rejection_reason: 'Motivo del rechazo',
+  delivered_at: 'Retirado el',
+  delivered_by_profile_id: 'Retirado por',
+  returned_at: 'Devuelto el',
+  returned_by_profile_id: 'Devuelto por',
+  delivery_condition: 'Estado al retirar',
+  return_condition: 'Estado al devolver',
 }
 
 export function translateField(field: string): string {
@@ -150,6 +170,12 @@ const STATUS_LABELS: Record<string, string> = {
   reserva: 'Reserva',
   aspirante: 'Aspirante',
   programado: 'Programado',
+  pendiente: 'Pendiente',
+  aprobada: 'Aprobada',
+  rechazada: 'Rechazada',
+  retirada: 'Retirada',
+  devuelta: 'Devuelta',
+  cancelada: 'Cancelada',
 }
 
 const SCOPE_TYPE_LABELS: Record<string, string> = {
@@ -169,6 +195,10 @@ const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   actividad_proxima: 'Actividad próxima',
   documento_actualizado: 'Documento actualizado',
   reporte_generado: 'Reporte generado',
+  prestamo_solicitado: 'Préstamo solicitado',
+  prestamo_aprobado: 'Préstamo aprobado',
+  prestamo_rechazado: 'Préstamo rechazado',
+  prestamo_devuelto: 'Préstamo devuelto',
 }
 
 const BOOLEAN_LABELS: Record<string, string> = { true: 'Sí', false: 'No' }
@@ -203,6 +233,13 @@ const NAME_RESOLVABLE_FIELDS = new Set([
   'uploaded_by_profile_id',
   'document_id',
   'course_id',
+  'inventory_item_id',
+  'requesting_station_id',
+  'requested_by_profile_id',
+  'approved_by_profile_id',
+  'rejected_by_profile_id',
+  'delivered_by_profile_id',
+  'returned_by_profile_id',
 ])
 
 export function resolveDisplayValue(field: string, value: unknown, lookup: EntityLookup): string {

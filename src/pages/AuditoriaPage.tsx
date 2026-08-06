@@ -14,6 +14,7 @@ import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
 import { fetchCourses } from '../lib/api/courses'
 import { fetchDocuments } from '../lib/api/documents'
+import { fetchInventoryItems } from '../lib/api/inventory'
 import type { Profile, Region, Station, Subsede } from '../types/database'
 import {
   buildEventSummary,
@@ -186,8 +187,9 @@ export function AuditoriaPage() {
       fetchDistinctAuditTables(),
       fetchCourses().catch(() => []),
       fetchDocuments().catch(() => []),
+      fetchInventoryItems().catch(() => []),
     ])
-      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData, coursesData, documentsData]) => {
+      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData, coursesData, documentsData, inventoryItemsData]) => {
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
@@ -202,6 +204,7 @@ export function AuditoriaPage() {
         for (const p of profilesData) names.set(p.id, p.full_name)
         for (const c of coursesData) names.set(c.id, c.title)
         for (const d of documentsData) names.set(d.id, d.title)
+        for (const i of inventoryItemsData) names.set(i.id, i.name)
         setEntityNames(names)
       })
       .catch(() => undefined)

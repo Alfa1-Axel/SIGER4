@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -17,6 +17,8 @@ import {
 import { uploadDocumentFile } from '../lib/api/storage'
 import type { DocumentVersion, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { attachGlobalErrorCapture, createUploadDiagnosticsLog, serializeError } from '../lib/uploadDiagnostics'
+import { UploadDiagnosticsPanel } from '../components/UploadDiagnosticsPanel'
 
 type DocScopeTarget = 'region' | 'subsede' | 'station' | 'profile'
 
@@ -138,6 +140,18 @@ export function DocumentoFormPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Instrumentación TEMPORAL de diagnóstico (ver src/lib/uploadDiagnostics.ts)
+  // para investigar por qué la carga falla en mobile/PWA pero funciona en
+  // escritorio. Solo visible para informatica_r4/integrante_informatica (ver
+  // UploadDiagnosticsPanel más abajo, gateado por isAdmin). No cambia ningún
+  // comportamiento del flujo — createUploadDiagnosticsLog() solo acumula
+  // eventos en memoria. Se crea una sola vez por montaje del formulario
+  // (useMemo con deps vacías, no useState, porque no necesita disparar
+  // re-render al loguear — el panel relee el snapshot con su propio timer).
+  const diagnosticsLog = useMemo(() => createUploadDiagnosticsLog(), [])
+
+  useEffect(() => attachGlobalErrorCapture(diagnosticsLog), [diagnosticsLog])
+
   useEffect(() => {
     if (!canCreate) return
     let active = true
@@ -174,6 +188,7 @@ export function DocumentoFormPage() {
     setSubsedeId(draft.subsedeId)
     setStationId(draft.stationId)
     setProfileId(draft.profileId)
+    diagnosticsLog.log('draftRecovered', { pendingDocumentId: draft.pendingDocumentId })
     if (draft.pendingDocumentId) {
       setPendingDocumentId(draft.pendingDocumentId)
       setStep('file')
@@ -258,6 +273,7 @@ export function DocumentoFormPage() {
   function handleContinueToFile(event: FormEvent) {
     event.preventDefault()
     const validationError = metadataIsValid()
+    diagnosticsLog.log('validateMetadata', { ok: !validationError, error: validationError })
     if (validationError) {
       setError(validationError)
       return
@@ -300,6 +316,16 @@ export function DocumentoFormPage() {
   // "a medias" visible para nadie.
   async function handleFileChange(selected: File | null) {
     setError(null)
+    // Loguea el evento onChange SIEMPRE, incluso si selected es null — si el
+    // handler nunca llega a correr en mobile (la sospecha más básica a
+    // descartar primero), este log tampoco va a aparecer, lo que ya sería un
+    // dato real en sí mismo.
+    diagnosticsLog.log('onChange', {
+      hasFile: Boolean(selected),
+      fileName: selected?.name,
+      fileType: selected?.type,
+      fileSize: selected?.size,
+    })
     if (!selected) return
 
     setUploadStatus('uploading')
@@ -309,6 +335,7 @@ export function DocumentoFormPage() {
       const targetId = isEditing ? id! : pendingDocumentId
       let createdId: string | null = null
       if (!targetId) {
+        diagnosticsLog.log('createPending', { title: title.trim(), category: category.trim(), scope: currentScopeInput() })
         const created = await createDocument({
           title: title.trim(),
           category: category.trim(),
@@ -317,6 +344,7 @@ export function DocumentoFormPage() {
           folder_id: folderIdFromQuery || null,
           uploaded_by_profile_id: currentProfile?.id ?? null,
         })
+        diagnosticsLog.log('createPending', { ok: true, documentId: created.id })
         createdId = created.id
         setPendingDocumentId(created.id)
         // Guarda el id de la fila recién creada en el borrador, para que si
@@ -348,19 +376,25 @@ export function DocumentoFormPage() {
         // edición), ese archivo anterior pasa a historial de versiones antes
         // de reemplazarlo.
         if (!isEditing) {
+          diagnosticsLog.log('updatePendingMetadata', { documentId: targetId })
           await updateDocument(targetId, { title: title.trim(), category: category.trim(), description: description || null, ...currentScopeInput() })
         }
         if (existingStoragePath && existingStoragePath !== 'pending') {
+          diagnosticsLog.log('addVersion', { documentId: targetId, previousStoragePath: existingStoragePath })
           await addDocumentVersion(targetId, existingStoragePath, currentProfile?.id ?? null)
         }
       }
 
       const finalId = targetId ?? createdId!
+      diagnosticsLog.log('uploadStart', { documentId: finalId, fileName: selected.name, fileType: selected.type, fileSize: selected.size })
       const path = await uploadDocumentFile(finalId, selected)
+      diagnosticsLog.log('uploadSuccess', { documentId: finalId, storagePath: path })
+      diagnosticsLog.log('updateStoragePath', { documentId: finalId, storagePath: path })
       await updateDocumentStoragePath(finalId, path)
       setExistingStoragePath(path)
       setUploadStatus('done')
     } catch (err) {
+      diagnosticsLog.log('uploadFail', serializeError(err))
       setError(err instanceof Error ? err.message : 'No pudimos subir el archivo. Probá de nuevo.')
       setUploadStatus('failed')
     }
@@ -380,6 +414,7 @@ export function DocumentoFormPage() {
     }
 
     setSubmitting(true)
+    diagnosticsLog.log('finalSave', { documentId: isEditing ? id : pendingDocumentId })
     try {
       const input = { title: title.trim(), category: category.trim(), description: description || null, ...currentScopeInput() }
 
@@ -603,6 +638,8 @@ export function DocumentoFormPage() {
           )}
         </form>
       ) : null}
+
+      {isAdmin && !loading && <UploadDiagnosticsPanel log={diagnosticsLog} />}
     </AppShell>
   )
 }

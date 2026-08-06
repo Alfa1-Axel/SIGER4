@@ -33,6 +33,11 @@ export default [
         PushSubscription: 'readonly',
         ServiceWorkerRegistration: 'readonly',
         crypto: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        Navigator: 'readonly',
+        ErrorEvent: 'readonly',
+        PromiseRejectionEvent: 'readonly',
       },
     },
     plugins: {

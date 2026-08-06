@@ -2918,3 +2918,108 @@ corregir de ese lado en esta ronda. Redeploy normal del frontend.
 - [ ] Escritorio: confirmar que "Elegir archivo"/"Tomar foto" siguen funcionando igual que antes
       (en desktop, "Tomar foto" normalmente abre el selector de archivos común, sin cámara real,
       que es el comportamiento esperado del atributo `capture` fuera de mobile).
+
+## 27. Diagnóstico fuera de React: raw-upload-test.html + fix real de un bug de service worker encontrado en el camino (2026-08)
+
+El fix de la sección 26 (label real en vez de `input.click()`) tampoco resolvió el problema: sigue
+fallando en Chrome mobile Y en el navegador propio de Xiaomi, y `/diagnostico-upload` (ya con el
+mismo patrón label+input real) también sigue sin disparar `nativeFileInputChange`. Como el síntoma
+es idéntico en dos navegadores motor-distintos y en una pantalla ya reducida al mínimo dentro de
+React, dejó de tener sentido seguir iterando sobre el input dentro de la app sin antes descartar (o
+confirmar) que el problema esté fuera de React por completo. Esta ronda se limitó a construir esa
+instrumentación — sin tocar Storage/MIME/RLS, tal como se pidió explícitamente, porque sigue sin
+haber confirmación de que un archivo real llegue a existir en ningún punto de la app.
+
+### 27.1 Bug real encontrado al preparar el test: el service worker interceptaba archivos estáticos sueltos
+
+Antes de crear `raw-upload-test.html`, se revisó qué pasaría si el service worker lo interceptara —
+y se confirmó un bug real, no hipotético: `sw.ts` registra un `NavigationRoute` de Workbox
+(`registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))`) que, con el
+`allowlist` default de Workbox (`[/./]`, es decir "todo") y sin `denylist`, intercepta **cualquier
+navegación** — escribir una URL, un bookmark, un link — sin importar la ruta, y sirve el shell de
+React (`index.html`) en su lugar. Esto es necesario para que el ruteo client-side de la SPA
+funcione en rutas reales de la app, pero también significa que navegar directo a
+`/raw-upload-test.html` (escribir la URL, un bookmark) devolvía el shell de React en vez del
+archivo HTML real — hubiera invalidado el test antes de poder usarlo, y es un bug real independiente
+del problema de fondo: cualquier archivo estático suelto servido desde la raíz quedaba inalcanzable
+por navegación directa mientras el SW estuviera activo.
+
+**Corrección**: se agregó un `denylist: [/\/[^/]+\.html$/]` al `NavigationRoute` — excluye
+explícitamente cualquier archivo `.html` suelto (nunca son rutas de la SPA, que no usa extensión en
+sus URLs) del fallback al shell. Verificado en el bundle compilado (`dist/sw.js`) que el denylist
+quedó presente después del build.
+
+### 27.2 `/raw-upload-test.html`: diagnóstico 100% fuera de React
+
+Nuevo archivo estático en `public/` (queda servido en la raíz, `/raw-upload-test.html`) — HTML/JS
+vanilla puro: sin build de Vite, sin bundlers, sin React, sin Supabase, sin CSS del sistema, sin
+ninguna dependencia del resto de la app salvo compartir origen/dominio (y, ahora, el fix del
+denylist de 27.1 para poder navegarse directo sin que el SW lo intercepte). Tiene:
+- Dos inputs reales (elegir archivo / tomar foto) con el mismo patrón label+sr-only ya usado en la
+  app, pero implementado a mano en JS plano — cero código compartido con React a propósito.
+- Log visible en pantalla de cada `click`/`change`, con `files.length`/`name`/`type`/`size`/
+  `lastModified`.
+- Entorno: `userAgent`, `platform`, `standalone` (PWA instalada o no), si hay un service worker
+  controlando la página.
+- Botón para limpiar el resultado.
+
+**Qué significa cada resultado posible:**
+- Si funciona en un dispositivo donde la app React falla → el problema está en algo de React/la
+  app (aunque ya se descartó bastante: AppShell, CSS del sistema, el wizard completo).
+- Si también falla acá → el problema es del navegador/SO/dispositivo en sí (posible causa MIUI/
+  Xiaomi, política de permisos, o algo del propio Chrome mobile en ese hardware), no de este
+  código — y en ese caso ya no tiene sentido seguir iterando sobre el input dentro de la app.
+
+### 27.3 `/diagnostico-upload`: ahora sí ultra mínimo
+
+Versión anterior de esta pantalla (sección 26) todavía envolvía todo en `AppShell` (sidebar/header/
+footer) y usaba las clases de `styles.css` del sistema. La nueva versión no tiene AppShell, no usa
+`styles.css` (estilos inline propios, iguales en espíritu a los de `raw-upload-test.html` para que
+la comparación sea limpia), y sigue detrás de sesión real (`useAuth` + `isAdmin`) sin depender de
+`AppShell` para funcionar — la única pieza de la app que sigue tocando es el `AuthProvider` que ya
+envuelve toda la aplicación (necesario: no hay forma segura de exponer esto sin autenticación).
+
+### 27.4 Versión de build visible + botón de actualización manual
+
+Nuevo en Ajustes (sección visible solo para `informatica_r4`/`integrante_informatica`): muestra el
+hash corto del commit de build (`__SIGER4_BUILD_VERSION__`, inyectado en build time por
+`vite.config.ts` — usa `VERCEL_GIT_COMMIT_SHA` en Vercel, o `git rev-parse --short HEAD` en un build
+local) y la fecha/hora de compilación. Sirve para confirmar, mirando la propia pantalla del
+celular, si el dispositivo está corriendo el JS del último deploy o uno viejo — comparándolo contra
+el último commit del repositorio.
+
+Se agregó también un botón explícito **"Actualizar app / limpiar caché"**: desregistra todos los
+service workers de este origen, borra toda la Cache Storage, y recarga. Es un fallback manual sobre
+el auto-update que ya existe (`registerSW({ immediate: true })` en `main.tsx`, agregado en la
+sección 25) — para los casos donde ese mecanismo automático no alcanzó, o para confirmar de una vez
+que un dispositivo puntual quedó legítimamente desactualizado. Requirió agregar `@types/node` como
+devDependency (para los tipos de `node:child_process`/`process` que usa `vite.config.ts` al
+resolver la versión de build) — no se usa en ningún código que corra en el navegador, solo en
+tiempo de build.
+
+### 27.5 Por qué no se tocó Storage/MIME/RLS en esta ronda
+
+Instrucción explícita del usuario, y además el motivo técnico ya lo justifica por sí solo: mientras
+no haya confirmación de que `nativeFileInputChange` dispare con un archivo real en ningún punto —
+ni en el formulario completo, ni en la versión mínima de React, y ahora se suma el test 100% fuera
+de React — no existe ningún `File` real en la app que Storage pudiera aceptar o rechazar. Cualquier
+cambio de ese lado en este punto sería, otra vez, un parche a ciegas.
+
+### 27.6 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function. Redeploy normal del frontend — importante para este caso
+puntual: `raw-upload-test.html` es un archivo estático nuevo en `public/`, así que solo va a existir
+en el dominio una vez que el deploy termine.
+
+### 27.7 Checklist de verificación — el orden importa
+
+1. **Primero**, en el celular donde falla: abrir `https://siger-4.vercel.app/raw-upload-test.html`
+   directo (escribir la URL, no navegar desde dentro de la app) — probar "Elegir archivo" y "Tomar
+   foto". Anotar si aparece o no el resultado con nombre/tipo/tamaño.
+2. Si el paso 1 funciona: entrar a `/diagnostico-upload` desde dentro de la app (con un usuario
+   `informatica_r4`) y repetir la prueba — comparar resultado.
+3. Si el paso 1 también falla: no hace falta seguir probando dentro de la app por ahora — el
+   problema está confirmado fuera de React, en el navegador/SO/dispositivo.
+4. En Ajustes (usuario `informatica_r4`), confirmar que aparece el build actual y que coincide con
+   el último commit pusheado. Probar "Actualizar app / limpiar caché" y confirmar que la app sigue
+   funcionando después de recargar.

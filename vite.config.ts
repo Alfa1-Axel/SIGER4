@@ -137,6 +137,19 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
+      // document-upload-mobile.html: segundo entry point real (SÍ pasa por
+      // el build de Vite, a diferencia de raw-upload-test.html en public/) —
+      // permite importar el cliente real de Supabase (src/lib/supabaseClient.ts)
+      // y las funciones ya auditadas de src/lib/api/storage.ts y
+      // src/lib/api/documents.ts sin duplicar lógica sensible (MIME, límites,
+      // paths seguros, RLS), mientras se sigue sirviendo como JS local (CSP
+      // script-src 'self' intacta) y sin React/AppShell/React Router — eso es
+      // lo que causaba el bug real en el input de archivo en Android, no
+      // Vite ni el bundler (ver DEPLOYMENT.md sección 31).
+      input: {
+        main: 'index.html',
+        'document-upload-mobile': 'document-upload-mobile.html',
+      },
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],

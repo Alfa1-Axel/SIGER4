@@ -44,6 +44,8 @@ export default [
         HTMLDivElement: 'readonly',
         HTMLElement: 'readonly',
         Event: 'readonly',
+        HTMLButtonElement: 'readonly',
+        URLSearchParams: 'readonly',
         caches: 'readonly',
         __SIGER4_BUILD_VERSION__: 'readonly',
         __SIGER4_BUILD_TIME__: 'readonly',

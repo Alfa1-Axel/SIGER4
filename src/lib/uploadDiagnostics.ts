@@ -1,23 +1,30 @@
 // SIGER4 - Instrumentación TEMPORAL de diagnóstico para la carga de
 // documentos en mobile/PWA.
 //
-// Contexto: en escritorio la carga funciona; en mobile/PWA (navegador y app
-// instalada) no sube nada — ni fotos, ni video, ni PDF, ni Word — después de
-// dos rondas previas de fixes basados en lectura de código (MIME/
-// contentType, rediseño en 2 pasos) que no lo resolvieron. Sin acceso a un
-// dispositivo real ni a los logs de consola del celular del usuario, no hay
-// forma de diagnosticar la causa real sin instrumentación que el usuario
-// pueda leer y reportar.
+// Contexto: en escritorio la carga funciona; en mobile/PWA no. Ronda 3 de
+// diagnóstico: el panel anterior guardaba los eventos SOLO en memoria
+// (un array de JS), lo que lo hacía inútil para este bug específico — la
+// causa confirmada es que Android/iOS recargan la página completa al abrir
+// el selector de archivos/cámara, y una recarga real destruye cualquier
+// estado en memoria. El resultado observado (solo aparecían
+// "draftRecovered"/"wizardStepChange", nunca "onChange"/"uploadStart"/
+// "uploadFail") es exactamente lo esperado de un log en memoria: esos
+// eventos SÍ se registraban, pero en la instancia de la página que la
+// recarga destruyó antes de que nadie llegara a abrir el panel a verlos.
 //
-// Este módulo NO cambia ningún comportamiento del flujo de carga — solo
-// registra en memoria (nunca en un servicio externo, nunca en Storage/DB)
-// una serie de eventos con datos no sensibles (nombre/tipo/tamaño de
-// archivo, id de documento, mensajes de error reales de Supabase). Se
-// muestra únicamente a informatica_r4/integrante_integrante (mismo gate que
-// el resto del panel de administración) en un panel colapsable dentro de
-// DocumentoFormPage. Diseñado para poder borrarse por completo una vez
-// diagnosticada la causa real, sin dejar rastros en el resto del código
-// (un solo import en DocumentoFormPage.tsx).
+// Ahora cada log() persiste inmediatamente a sessionStorage (no se acumula
+// en memoria y se vuelca al final) — así el snapshot sobrevive la recarga
+// real y el panel, al remontarse en la página nueva, puede seguir mostrando
+// TODO lo que pasó en el intento anterior, no solo lo que pasó después de
+// la recarga.
+//
+// Este módulo NO cambia ningún comportamiento del flujo de carga real — solo
+// registra eventos con datos no sensibles (nombre/tipo/tamaño de archivo, id
+// de documento, errores ya pensados para mostrarse al usuario). Se muestra
+// únicamente a informatica_r4/integrante_informatica en un panel colapsable
+// dentro de DocumentoFormPage. Diseñado para poder borrarse por completo una
+// vez diagnosticada la causa real (dos archivos + unos pocos puntos de
+// integración en DocumentoFormPage.tsx).
 //
 // Nunca registra: contraseñas, tokens, JWT, claves VAPID, ni el contenido
 // del archivo — solo metadata (nombre/tipo/tamaño) y errores ya pensados
@@ -25,15 +32,23 @@
 // pantalla, no algo nuevo más sensible).
 
 export type UploadDiagnosticEvent =
-  | 'onChange'
+  | 'fileInputClicked'
+  | 'fileInputChanged'
+  | 'fileDetected'
+  | 'fileRejectedClient'
   | 'validateMetadata'
-  | 'createPending'
+  | 'pendingCreateStart'
+  | 'pendingCreateSuccess'
+  | 'pendingCreateFail'
   | 'updatePendingMetadata'
   | 'addVersion'
   | 'uploadStart'
   | 'uploadSuccess'
   | 'uploadFail'
-  | 'updateStoragePath'
+  | 'confirmDocumentStart'
+  | 'confirmDocumentSuccess'
+  | 'confirmDocumentFail'
+  | 'notificationCreated'
   | 'finalSave'
   | 'draftRecovered'
   | 'wizardStepChange'
@@ -43,6 +58,10 @@ export type UploadDiagnosticEvent =
   | 'visibilitychange'
   | 'pagehide'
   | 'beforeunload'
+  // Marca explícita de "se abrió el panel y se vio este snapshot" — ayuda a
+  // distinguir, mirando los timestamps, si el usuario alcanzó a ver el
+  // resultado de un intento antes de que otra recarga lo tapara.
+  | 'panelViewed'
 
 export interface UploadDiagnosticEntry {
   timestamp: string
@@ -116,26 +135,65 @@ export interface UploadDiagnosticsSnapshot {
   entries: UploadDiagnosticEntry[]
 }
 
-// Instancia simple en memoria (no singleton exportado como clase para
-// mantener el import mínimo) — vive mientras dure el componente que la usa,
-// se descarta al desmontar. No persiste entre sesiones a propósito: es
-// diagnóstico de UNA carga concreta, no un log histórico.
-export function createUploadDiagnosticsLog() {
-  const entries: UploadDiagnosticEntry[] = []
+const STORAGE_KEY = 'siger4:upload-diagnostics-log'
+const MAX_ENTRIES = 200
 
+function readEntries(): UploadDiagnosticEntry[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function writeEntries(entries: UploadDiagnosticEntry[]): void {
+  try {
+    // Recorta a las últimas MAX_ENTRIES para no crecer sin límite dentro de
+    // una misma pestaña/sesión larga (varios intentos, varias recargas) —
+    // sessionStorage tiene cuota, y lo que importa para diagnosticar es el
+    // historial reciente, no absolutamente todo desde que se abrió la app.
+    const trimmed = entries.length > MAX_ENTRIES ? entries.slice(entries.length - MAX_ENTRIES) : entries
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+  } catch {
+    // sessionStorage puede fallar (modo privado, cuota agotada) — el
+    // diagnóstico es una ayuda para depurar, no un requisito para cargar.
+  }
+}
+
+// Log persistente: cada log() se guarda de inmediato en sessionStorage, no
+// solo en memoria — es la diferencia real respecto a la versión anterior,
+// que perdía todo lo registrado apenas Android/iOS recargaban la página a
+// mitad del flujo. No es un singleton per-key (todas las instancias en la
+// misma pestaña comparten la misma clave de sessionStorage) a propósito:
+// el objetivo es reconstruir la secuencia completa de UN intento de carga,
+// incluso si atraviesa varias recargas/remounts de React.
+export function createUploadDiagnosticsLog() {
   return {
     log(event: UploadDiagnosticEvent, detail?: Record<string, unknown>) {
+      const entries = readEntries()
       entries.push({ timestamp: new Date().toISOString(), event, detail })
+      writeEntries(entries)
     },
     async snapshot(): Promise<UploadDiagnosticsSnapshot> {
       return {
         environment: detectEnvironment(),
         serviceWorker: await detectServiceWorker(),
-        entries: [...entries],
+        entries: readEntries(),
       }
     },
+    // Borra el historial completo — para usar deliberadamente (ej. botón
+    // "Limpiar log" en el panel) al empezar a diagnosticar un caso nuevo,
+    // nunca automático: perder el historial de un intento fallido sin que
+    // alguien lo haya visto sería el mismo problema que esto vino a arreglar.
     clear() {
-      entries.length = 0
+      try {
+        sessionStorage.removeItem(STORAGE_KEY)
+      } catch {
+        // Idem writeEntries.
+      }
     },
   }
 }
@@ -172,13 +230,12 @@ export function attachGlobalErrorCapture(log: UploadDiagnosticsLog): () => void 
 //     hubo recarga real. persisted=false en un pageshow posterior al
 //     primero sí sugiere una recarga real.
 //   - "visibilitychange" a 'hidden' marca el momento en que el usuario deja
-//     la pestaña (ej. al abrir el selector nativo) — si el próximo evento
-//     registrado después es un remount de React (nuevo log de "onChange"
-//     nunca llega, en cambio aparece un "draftRecovered" fresco) en vez de
-//     un 'visible' de vuelta, confirma que hubo recarga real en el medio.
+//     la pestaña (ej. al abrir el selector nativo).
 //   - "pagehide"/"beforeunload" marcan el último instante antes de que la
 //     página se descargue de verdad (a diferencia de visibilitychange, que
-//     también dispara solo por cambiar de pestaña sin descargar nada).
+//     también dispara solo por cambiar de pestaña sin descargar nada). Como
+//     el log ahora persiste a sessionStorage en cada evento (no al final),
+//     estos SÍ quedan guardados aunque la página se descargue justo después.
 export function attachPageLifecycleCapture(log: UploadDiagnosticsLog): () => void {
   const onPageShow = (event: PageTransitionEvent) => {
     log.log('pageshow', { persisted: event.persisted })

@@ -13,6 +13,12 @@ interface UploadDiagnosticsPanelProps {
 // el problema. Pensado para borrarse una vez diagnosticada la causa real de
 // que la carga falle en mobile/PWA (ver DEPLOYMENT.md).
 //
+// A diferencia de la primera versión de este panel, el log ahora persiste en
+// sessionStorage (ver uploadDiagnostics.ts) — sobrevive la recarga real que
+// Android/iOS hacen de la página al abrir el selector/cámara, así que este
+// panel puede seguir mostrando eventos de ANTES de la última recarga, no
+// solo lo que pasó después de volver a montarse.
+//
 // Se refresca con un intervalo corto en vez de recibir el snapshot ya armado
 // por props porque createUploadDiagnosticsLog() no dispara re-render al
 // loguear (evitar volver a renderizar todo el formulario en cada evento) —
@@ -24,6 +30,7 @@ export function UploadDiagnosticsPanel({ log }: UploadDiagnosticsPanelProps) {
   useEffect(() => {
     if (!expanded) return
     let active = true
+    log.log('panelViewed', {})
     const refresh = () => {
       log.snapshot().then((s) => {
         if (active) setSnapshot(s)
@@ -37,6 +44,11 @@ export function UploadDiagnosticsPanel({ log }: UploadDiagnosticsPanelProps) {
     }
   }, [expanded, log])
 
+  function handleClear() {
+    log.clear()
+    log.snapshot().then(setSnapshot)
+  }
+
   return (
     <div className="card" style={{ marginTop: 20, border: '1px dashed var(--color-warning)' }}>
       <button
@@ -49,6 +61,11 @@ export function UploadDiagnosticsPanel({ log }: UploadDiagnosticsPanelProps) {
       </button>
       {expanded && snapshot && (
         <div style={{ marginTop: 12, fontSize: 11, fontFamily: 'var(--font-mono)' }}>
+          <p style={{ margin: '0 0 10px', color: 'var(--color-text-muted)' }}>
+            Este log persiste aunque la página se recargue (ej. al volver del selector de archivos)
+            — mostrando también eventos de intentos anteriores en esta pestaña.
+          </p>
+
           <div style={{ marginBottom: 10 }}>
             <div className="kpi-label" style={{ marginBottom: 4 }}>
               Entorno
@@ -70,8 +87,11 @@ export function UploadDiagnosticsPanel({ log }: UploadDiagnosticsPanelProps) {
           </div>
 
           <div>
-            <div className="kpi-label" style={{ marginBottom: 4 }}>
-              Eventos ({snapshot.entries.length})
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <div className="kpi-label">Eventos ({snapshot.entries.length})</div>
+              <button type="button" className="btn btn-outlined" style={{ padding: '3px 8px', fontSize: 10 }} onClick={handleClear}>
+                Limpiar log
+              </button>
             </div>
             {snapshot.entries.length === 0 && <div style={{ color: 'var(--color-text-muted)' }}>Todavía no hay eventos.</div>}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto' }}>

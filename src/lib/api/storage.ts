@@ -61,10 +61,22 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   heif: 'image/heif',
 }
 
-function inferMimeType(file: File): string {
+// Exportada (no solo de uso interno) para que la instrumentación de
+// diagnóstico de DocumentoFormPage.tsx pueda mostrar, ANTES de intentar
+// subir, el MIME real reportado por el navegador vs. el que esta app va a
+// usar realmente para validar/enviar — el dato concreto que hace falta para
+// diagnosticar por qué un archivo puntual falla en un dispositivo puntual.
+export function inferMimeType(file: File): string {
   if (!GENERIC_UNRELIABLE_MIME_TYPES.has(file.type)) return file.type
   const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
   return EXTENSION_TO_MIME[ext] ?? file.type
+}
+
+// Expone el whitelist real de "documents" para que el diagnóstico pueda
+// mostrar si un archivo va a ser rechazado client-side ANTES de intentarlo,
+// sin duplicar la lista en DocumentoFormPage.tsx.
+export function isDocumentMimeAllowed(mimeType: string): boolean {
+  return DOCUMENT_MIME_TYPES.has(mimeType)
 }
 
 // Devuelve el MIME resuelto (real o inferido por extensión) para que el

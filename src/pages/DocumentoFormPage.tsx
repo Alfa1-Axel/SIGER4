@@ -14,7 +14,7 @@ import {
   updateDocument,
   updateDocumentStoragePath,
 } from '../lib/api/documents'
-import { uploadDocumentFile } from '../lib/api/storage'
+import { inferMimeType, isDocumentMimeAllowed, uploadDocumentFile } from '../lib/api/storage'
 import type { DocumentVersion, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { attachGlobalErrorCapture, attachPageLifecycleCapture, createUploadDiagnosticsLog, serializeError } from '../lib/uploadDiagnostics'
@@ -378,25 +378,50 @@ export function DocumentoFormPage() {
   // metadatos del Paso 1 ya están validados y confirmados en este punto:
   // crea la fila real en "documents" (si todavía no existe una para esta
   // carga — puede ya existir si esto es un reintento después de un fallo, o
-  // si se recuperó un borrador con pendingDocumentId) y sube el archivo de
-  // inmediato. La fila queda con storage_path='pending' hasta que el upload
-  // confirma — invisible en listados normales mientras tanto (ver
+  // si se recuperó un borrador con pendingDocumentId), sube el archivo, y
+  // recién si el upload tiene éxito la CONFIRMA (updateDocumentStoragePath,
+  // que saca storage_path de 'pending'). Solo en ese momento el trigger de
+  // notificaciones de la base dispara el aviso de "documento nuevo" — ver
+  // migración 0056_document_notification_on_confirm.sql, que corrige el bug
+  // real de notificaciones falsas cuando el upload fallaba después de crear
+  // la fila. La fila queda con storage_path='pending' hasta que se confirma
+  // — invisible en listados normales mientras tanto (ver
   // fetchDocuments/fetchDocumentsByFolder), así que nunca es un documento
   // "a medias" visible para nadie.
   async function handleFileChange(selected: File | null) {
     setError(null)
     setRecoveryNotice(null)
-    // Loguea el evento onChange SIEMPRE, incluso si selected es null — si el
-    // handler nunca llega a correr en mobile (la sospecha más básica a
-    // descartar primero), este log tampoco va a aparecer, lo que ya sería un
-    // dato real en sí mismo.
-    diagnosticsLog.log('onChange', {
-      hasFile: Boolean(selected),
-      fileName: selected?.name,
-      fileType: selected?.type,
-      fileSize: selected?.size,
-    })
+    // Loguea el evento SIEMPRE, incluso si selected es null — si el handler
+    // nunca llega a correr en mobile (la sospecha más básica a descartar
+    // primero), este log tampoco va a aparecer, lo que ya sería un dato real
+    // en sí mismo. Ahora persiste a sessionStorage de inmediato (ver
+    // uploadDiagnostics.ts), así que sobrevive aunque la página se recargue
+    // un instante después.
+    diagnosticsLog.log('fileInputChanged', { hasFile: Boolean(selected) })
     if (!selected) return
+
+    const inferredMime = inferMimeType(selected)
+    diagnosticsLog.log('fileDetected', {
+      fileName: selected.name,
+      fileType: selected.type,
+      fileTypeInferred: inferredMime,
+      fileSize: selected.size,
+      lastModified: selected.lastModified,
+    })
+
+    // Chequeo explícito ANTES de intentar nada, para poder distinguir "el
+    // archivo nunca iba a pasar la validación client-side" (fileRejectedClient)
+    // de "pasó la validación pero Storage lo rechazó server-side" (uploadFail)
+    // — mismo whitelist real que usa uploadDocumentFile, expuesto desde
+    // storage.ts para no duplicarlo acá.
+    if (!isDocumentMimeAllowed(inferredMime)) {
+      diagnosticsLog.log('fileRejectedClient', {
+        fileName: selected.name,
+        fileType: selected.type,
+        fileTypeInferred: inferredMime,
+        reason: 'mime_not_allowed',
+      })
+    }
 
     setUploadStatus('uploading')
     setFileName(selected.name)
@@ -405,16 +430,22 @@ export function DocumentoFormPage() {
       const targetId = isEditing ? id! : pendingDocumentId
       let createdId: string | null = null
       if (!targetId) {
-        diagnosticsLog.log('createPending', { title: title.trim(), category: category.trim(), scope: currentScopeInput() })
-        const created = await createDocument({
-          title: title.trim(),
-          category: category.trim(),
-          description: description || null,
-          ...currentScopeInput(),
-          folder_id: folderIdFromQuery || null,
-          uploaded_by_profile_id: currentProfile?.id ?? null,
-        })
-        diagnosticsLog.log('createPending', { ok: true, documentId: created.id })
+        diagnosticsLog.log('pendingCreateStart', { title: title.trim(), category: category.trim(), scope: currentScopeInput() })
+        let created
+        try {
+          created = await createDocument({
+            title: title.trim(),
+            category: category.trim(),
+            description: description || null,
+            ...currentScopeInput(),
+            folder_id: folderIdFromQuery || null,
+            uploaded_by_profile_id: currentProfile?.id ?? null,
+          })
+        } catch (err) {
+          diagnosticsLog.log('pendingCreateFail', serializeError(err))
+          throw err
+        }
+        diagnosticsLog.log('pendingCreateSuccess', { documentId: created.id })
         createdId = created.id
         setPendingDocumentId(created.id)
         // Guarda el id de la fila recién creada en el borrador, para que si
@@ -446,14 +477,33 @@ export function DocumentoFormPage() {
 
       const finalId = targetId ?? createdId!
       diagnosticsLog.log('uploadStart', { documentId: finalId, fileName: selected.name, fileType: selected.type, fileSize: selected.size })
-      const path = await uploadDocumentFile(finalId, selected)
+      let path: string
+      try {
+        path = await uploadDocumentFile(finalId, selected)
+      } catch (err) {
+        diagnosticsLog.log('uploadFail', serializeError(err))
+        throw err
+      }
       diagnosticsLog.log('uploadSuccess', { documentId: finalId, storagePath: path })
-      diagnosticsLog.log('updateStoragePath', { documentId: finalId, storagePath: path })
-      await updateDocumentStoragePath(finalId, path)
+
+      diagnosticsLog.log('confirmDocumentStart', { documentId: finalId, storagePath: path })
+      try {
+        await updateDocumentStoragePath(finalId, path)
+      } catch (err) {
+        diagnosticsLog.log('confirmDocumentFail', serializeError(err))
+        throw err
+      }
+      // A partir de acá el trigger notify_document_created (0056) ya vio
+      // storage_path salir de 'pending' y disparó la notificación real —
+      // este log es solo informativo (no confirma que la notificación se
+      // haya creado de verdad, eso pasa en la base), pero deja registrado
+      // el momento exacto en que el documento pasó a ser "confirmado" desde
+      // la perspectiva del cliente.
+      diagnosticsLog.log('confirmDocumentSuccess', { documentId: finalId })
+      diagnosticsLog.log('notificationCreated', { documentId: finalId, note: 'Disparada por trigger de base al confirmar storage_path.' })
       setExistingStoragePath(path)
       setUploadStatus('done')
     } catch (err) {
-      diagnosticsLog.log('uploadFail', serializeError(err))
       setError(err instanceof Error ? err.message : 'No pudimos subir el archivo. Probá de nuevo.')
       setUploadStatus('failed')
     }
@@ -642,6 +692,15 @@ export function DocumentoFormPage() {
               id="file"
               type="file"
               disabled={uploadStatus === 'uploading'}
+              onClick={() => {
+                // Se dispara al tocar el input, ANTES de que se abra el
+                // selector/cámara nativo — si en el panel de diagnóstico
+                // aparece este evento pero nunca "fileInputChanged", confirma
+                // que la recarga real pasa mientras el picker está abierto
+                // (entre este click y que el usuario efectivamente elija
+                // algo), no antes ni después.
+                diagnosticsLog.log('fileInputClicked', {})
+              }}
               onChange={(e) => {
                 const selected = e.target.files?.[0] ?? null
                 void handleFileChange(selected)

@@ -3086,3 +3086,97 @@ adicional.
    celular → el problema es de navegador/dispositivo/sitio/SW/CSP/permisos, no de este código.
 5. No se toca `DocumentoFormPage` ni se sigue rediseñando Documentos hasta tener este resultado real
    del celular que falla.
+
+## 29. Causa raíz real y confirmada: setState síncrono en el onClick del label rompía el picker nativo en Android (2026-08)
+
+Resultado del test pedido en la sección 28, en el celular Android donde el bug reproducía: **`/raw-upload-test.html` funciona** — detecta `click`, `change`, `filesLength: 1`, `name`, `type`
+(`application/vnd.openxmlformats-officedocument.wordprocessingml.document`, un DOCX real) y `size`.
+**`/diagnostico-upload` (versión de la sección 27/28, React) no detectaba nada — log vacío.**
+
+Esto descarta de una vez, con evidencia directa y no por deducción, TODO lo que se venía sospechando
+sin poder confirmar: no es Android, no es Chrome, no es el navegador de Xiaomi, no es la CSP, no es
+el dominio, no es Supabase, no es MIME, no es RLS. El input nativo del sistema operativo funciona
+perfecto en ese celular. El problema estaba en algo específico de React en esta app.
+
+### 29.1 Diferencia exacta encontrada
+
+`raw-upload-test.js` registra cada evento con una escritura de DOM directa y síncrona
+(`logEl.textContent = ...`) — cero involucramiento de ningún framework, el navegador no tiene ningún
+motivo para alterar su manejo nativo del evento.
+
+La versión anterior de `/diagnostico-upload` (y, con el mismo patrón, `DocumentoFormPage.tsx`)
+llamaba `setState` de React **de forma síncrona, dentro del propio `onClick` del `<label>`/`<input>`
+de archivo** (`setAwaitingFileTimeout(timeoutId)`, `setNativeChangeMissingNotice(null)` en
+`handleFileInputLabelClick`; `setEntries(...)` en la versión anterior de `/diagnostico-upload`).
+
+Hipótesis técnica (no verificable al 100% sin instrumentación nativa del propio Android/WebView, pero
+consistente con toda la evidencia disponible y con el comportamiento documentado de React 18): el
+batching automático de React 18 agrupa ese `setState` y dispara un re-render/commit muy cerca en el
+tiempo del evento de click original. En el WebView/Chrome de ese dispositivo puntual, ese re-render
+alcanza a interrumpir la cadena nativa del navegador "click en el `<label>` → click reenviado al
+`<input>` asociado por `htmlFor`/`id` → abrir el selector de archivos del SO" **antes** de que el
+selector llegue a abrirse. Coincide exactamente con el síntoma reportado en rondas anteriores:
+`nativeFileInputClick` sí se registraba (el input recibía el click sintético), pero
+`nativeFileInputChange` nunca — no porque el usuario cancelara el picker ni por una recarga real, sino
+porque el picker nativo nunca llegaba a abrirse.
+
+Se descarta como causa: el propio `diagnosticsLog.log(...)` — persiste a `sessionStorage`, pero es una
+escritura síncrona sin pasar por ningún `setState` de React, no dispara re-render (ver
+`src/lib/uploadDiagnostics.ts`). Es seguro seguir llamándolo directo desde los `onClick` del input.
+
+### 29.2 Fix aplicado a `/diagnostico-upload`
+
+Reescrita para copiar el patrón de `raw-upload-test.html` lo más literal posible:
+- Input `type="file"` real y visible (sin `label` custom, sin click programático, sin overlay).
+- `onClick`/`onChange` directo en el input, sin passthrough por ningún wrapper.
+- El log deja de usar `useState`/`setEntries`: escribe directo a un `<pre>` vía `useRef` +
+  `textContent`, igual que `raw-upload-test.js` — saca cualquier re-render de React de la ecuación.
+- Se mantienen los campos agregados en la sección 28 (userAgent, mobile, standalone, build, timestamp,
+  aviso de "probar en el celular que falla").
+
+### 29.3 Fix aplicado a `DocumentoFormPage.tsx`
+
+Mismo diagnóstico, mismo fix, aplicado al formulario real (no solo a la página de diagnóstico):
+- `handleFileInputLabelClick` (el `onClick` de los dos `<label>` — "Elegir archivo" y "Tomar foto")
+  ya NO llama ningún `setState` de forma síncrona. Sigue logueando el intento
+  (`diagnosticsLog.log('fileInputLabelClick', ...)`, seguro — no toca React state) y programando el
+  timeout de "no volvió ningún archivo" con `setTimeout` puro; el `setState` que muestra ese aviso
+  (`setNativeChangeMissingNotice`) se sigue llamando, pero recién **dentro del callback del
+  `setTimeout`**, milisegundos después del click real — nunca en el mismo tick que el evento nativo.
+- El id del timeout (`awaitingFileTimeout`) pasó de `useState` a `useRef` — es bookkeeping interno
+  (para poder cancelarlo si `change` sí llega a tiempo), nunca necesitó disparar un re-render, y
+  mantenerlo en un `useRef` refuerza que este flujo no vuelva a depender de `setState` en el click.
+- El resto del flujo real (dos inputs SIEMPRE montados, labels reales con `htmlFor`, elegir vs. subir
+  como dos acciones separadas, `pending` hasta confirmar, sin notificación hasta confirmar) no
+  cambió — la sección 26 ya lo dejó bien encaminado; lo que faltaba era exactamente este `setState`
+  síncrono en el click, no el resto del diseño del wizard.
+- No se tocó Storage/MIME/RLS/Supabase/Edge Functions — no hacía falta, el archivo nunca llegaba a
+  generarse como para que importara.
+
+### 29.4 ¿`/diagnostico-upload` ya detecta el archivo en Android?
+
+No se puede confirmar desde acá — igual que en rondas anteriores, esto requiere probarse en el
+celular Android real donde el bug reproducía. El fix está aplicado, compilado y deployado; el
+resultado real queda pendiente de que se pruebe en el dispositivo (ver checklist 29.6).
+
+### 29.5 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function, ningún módulo nuevo. Se agregaron dos globals
+(`HTMLPreElement`, `HTMLDivElement`) al allowlist de `eslint.config.js` — mismo mecanismo ya usado
+para `HTMLInputElement`, necesario porque `no-undef` no reconoce tipos de `lib.dom.d.ts` en posición
+de tipo sin declararlos ahí explícitamente. Redeploy normal del frontend.
+
+### 29.6 Checklist de verificación — en el celular Android donde falla
+
+1. `https://siger-4.vercel.app/diagnostico-upload` — probar "Elegir archivo". Debería aparecer
+   `click` y después `change — ARCHIVO DETECTADO` con `name`/`type`/`size` reales, igual que ya pasa
+   en `raw-upload-test.html`.
+2. Si funciona: repetir el flujo completo en `DocumentoFormPage` (`/documentos/carpetas/general` →
+   Nuevo documento → completar Paso 1 → Paso 2, "Elegir archivo") y confirmar que ahora sí aparece
+   `nativeFileInputChange — ARCHIVO DETECTADO` en el panel de diagnóstico, con el archivo real listo
+   para "Subir archivo".
+3. Si el paso 1 sigue sin detectar nada: hay otra diferencia además del `setState` síncrono — anotar
+   el resultado completo (log de `/diagnostico-upload`, `userAgent`, build) para seguir comparando
+   contra `raw-upload-test.html` punto por punto (CSS computado, `disabled`, orden de montaje).
+4. Confirmar en Ajustes que el build visible coincide con el último commit — para asegurarse de que
+   el dispositivo está corriendo esta versión y no una cacheada.

@@ -205,14 +205,17 @@ export function DocumentoFormPage() {
   // nativeFileInputClick sin nativeFileInputChange después), se muestra un
   // aviso — pero recién después de un margen razonable, porque Android
   // puede tardar en devolver el control a la app tras cerrar el picker.
-  const [awaitingFileTimeout, setAwaitingFileTimeout] = useState<number | null>(null)
+  // Ref, no useState: se arma/lee desde el onClick del label, y un setState
+  // ahí es justo la causa raíz que rompía el picker nativo en Android (ver
+  // handleFileInputLabelClick más abajo) — el id del timeout es puro
+  // bookkeeping interno, no necesita disparar ningún re-render.
+  const awaitingFileTimeoutRef = useRef<number | null>(null)
   const [nativeChangeMissingNotice, setNativeChangeMissingNotice] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
-      if (awaitingFileTimeout) window.clearTimeout(awaitingFileTimeout)
+      if (awaitingFileTimeoutRef.current) window.clearTimeout(awaitingFileTimeoutRef.current)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Instrumentación TEMPORAL de diagnóstico (ver src/lib/uploadDiagnostics.ts)
@@ -405,26 +408,32 @@ export function DocumentoFormPage() {
     setStep('metadata')
   }
 
-  // Tocar el <label> asociado (htmlFor) es lo que abre el picker nativo —
-  // sin JavaScript de por medio, es el mecanismo estándar del HTML. Este
-  // handler solo loguea el intento; el navegador ya se encarga de abrir el
-  // input real (el "click" del label se propaga al input automáticamente
-  // por la asociación htmlFor/id, lo mismo que dispara el "nativeFileInputClick"
-  // logueado en el propio onClick del input).
+  // Causa real encontrada comparando contra /raw-upload-test.html (que SÍ
+  // detecta el archivo en el celular Android donde esto fallaba, ver
+  // DEPLOYMENT.md): este handler llamaba setState (setAwaitingFileTimeout /
+  // setNativeChangeMissingNotice) de forma SÍNCRONA dentro del onClick del
+  // <label>. El batching automático de React 18 dispara un re-render antes
+  // de que el navegador termine la cadena nativa "click en label -> click
+  // reenviado al input -> abrir selector" — en el WebView/Chrome de ese
+  // dispositivo eso corta la cadena antes de que el selector nativo llegue
+  // a abrirse (por eso aparecía nativeFileInputClick pero nunca
+  // nativeFileInputChange: el input recibía el click sintético, pero el
+  // picker real del SO nunca se abría). raw-upload-test.js loguea con una
+  // escritura de DOM directa (textContent, sin setState/re-render) y sí
+  // funciona — de ahí la corrección: sacar TODO setState del onClick, dejar
+  // solo el log (que ya no toca React state, ver uploadDiagnostics.ts) y
+  // programar el timeout de "no llegó archivo" con setTimeout puro,
+  // aplicando el setState recién dentro de su callback (no en el click).
   function handleFileInputLabelClick(source: 'general' | 'camera') {
     diagnosticsLog.log('fileInputLabelClick', { source })
-    // Si en un margen razonable no llega "change", se avisa explícito — ver
-    // limpieza de este timeout en handleFileInputChange (si change sí
-    // llega) y su disparo en el efecto de abajo.
-    if (awaitingFileTimeout) window.clearTimeout(awaitingFileTimeout)
-    setNativeChangeMissingNotice(null)
+    if (awaitingFileTimeoutRef.current) window.clearTimeout(awaitingFileTimeoutRef.current)
     const timeoutId = window.setTimeout(() => {
       diagnosticsLog.log('nativeFileInputChangeTimeout', { waitedMs: 8000 })
       setNativeChangeMissingNotice(
         'El navegador no devolvió ningún archivo. Probá con la opción "Elegir archivo" o abrí SIGER4 desde el navegador en vez de la app instalada.',
       )
     }, 8000)
-    setAwaitingFileTimeout(timeoutId)
+    awaitingFileTimeoutRef.current = timeoutId
   }
 
   // onChange del input real: SOLO guarda el archivo en memoria y lo
@@ -432,9 +441,9 @@ export function DocumentoFormPage() {
   // separación explícita que se pidió: elegir un archivo es un paso
   // completamente distinto de subirlo.
   function handleFileInputChange(selected: File | null, filesLength: number) {
-    if (awaitingFileTimeout) {
-      window.clearTimeout(awaitingFileTimeout)
-      setAwaitingFileTimeout(null)
+    if (awaitingFileTimeoutRef.current) {
+      window.clearTimeout(awaitingFileTimeoutRef.current)
+      awaitingFileTimeoutRef.current = null
     }
     setNativeChangeMissingNotice(null)
     setError(null)

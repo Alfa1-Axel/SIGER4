@@ -101,6 +101,10 @@ export type NotificationType =
   | 'reporte_generado'
   | 'prueba'
   | 'recordatorio_semanal'
+  | 'prestamo_solicitado'
+  | 'prestamo_aprobado'
+  | 'prestamo_rechazado'
+  | 'prestamo_devuelto'
 
 export interface Notification {
   id: string
@@ -302,6 +306,34 @@ export interface InventoryItemHistory {
   note: string | null
   changed_by_profile_id: string | null
   created_at: string
+}
+
+export type LoanRequestStatus = 'pendiente' | 'aprobada' | 'rechazada' | 'retirada' | 'devuelta' | 'cancelada'
+
+export interface InventoryLoanRequest {
+  id: string
+  inventory_item_id: string
+  requesting_station_id: string
+  requested_by_profile_id: string
+  responsible_profile_id: string | null
+  status: LoanRequestStatus
+  request_reason: string | null
+  requested_from: string
+  expected_return_at: string | null
+  approved_by_profile_id: string | null
+  approved_at: string | null
+  rejected_by_profile_id: string | null
+  rejected_at: string | null
+  rejection_reason: string | null
+  delivered_at: string | null
+  delivered_by_profile_id: string | null
+  returned_at: string | null
+  returned_by_profile_id: string | null
+  delivery_condition: string | null
+  return_condition: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Department {

@@ -16,7 +16,24 @@ declare const self: ServiceWorkerGlobalScope
 
 precacheAndRoute(self.__WB_MANIFEST)
 
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')))
+// El NavigationRoute de abajo intercepta CUALQUIER navegación (escribir una
+// URL, un bookmark, abrir un link — cualquier request con mode:'navigate')
+// y sirve el shell de React (index.html) en su lugar, sin importar a qué
+// ruta se navegó. Eso es lo que hace andar el ruteo client-side de la SPA
+// para rutas reales de la app — pero con el allowlist default de Workbox
+// (todo) también capturaba archivos estáticos reales sueltos como
+// /raw-upload-test.html: navegar directo a esa URL (escribirla, un
+// bookmark) devolvía el shell de React en vez del archivo HTML real,
+// contaminando cualquier intento de usarlo como diagnóstico aislado fuera
+// de React. bug real encontrado al investigar por qué un archivo de
+// diagnóstico vanilla podía comportarse de forma inconsistente. El
+// denylist excluye explícitamente archivos .html sueltos servidos desde la
+// raíz (nunca son rutas de la SPA) del fallback al shell.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+    denylist: [/\/[^/]+\.html$/],
+  }),
+)
 
 // Estrategia de cache (revision 2026-07, ver auditoria de seguridad). Workbox
 // evalua las rutas registradas EN ORDEN y usa la primera que matchea, por eso

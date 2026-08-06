@@ -2373,3 +2373,93 @@ metadatos si corresponde (ver 21.2).
       documento pendiente, y que "Limpiar pendientes de +24hs" sigue funcionando.
 - [ ] Confirmar que Papelera y versiones siguen funcionando igual que antes (sin cambios
       esperados).
+
+## 22. Instrumentación temporal de diagnóstico: carga sigue fallando en mobile/PWA (2026-08)
+
+Reporte del usuario después de las secciones 19-21: en escritorio la carga funciona; en
+mobile/PWA (navegador y app instalada) no sube nada — foto, video, PDF ni Word — en ningún
+formato, después de dos rondas de fixes basados en lectura de código (MIME/contentType, rediseño
+en 2 pasos). Sin acceso a un dispositivo real ni a la consola del navegador del celular del
+usuario, seguir "parchando a ciegas" no es razonable — se agregó instrumentación real en su lugar,
+más una revisión de las causas estructurales que sí se pudieron confirmar por código.
+
+### 22.1 Revisión de causas estructurales (lo que SÍ se pudo confirmar sin dispositivo)
+
+- **`sw.ts`**: la ruta `NetworkOnly()` para `*.supabase.co` no bloquea nada, solo evita cachear —
+  no interfiere con el POST de subida a Storage. La `NavigationRoute` sirve `index.html` desde
+  precache en navegaciones, comportamiento esperado de una PWA, no específico de esta app.
+- **`vercel.json` (CSP)**: el header `Content-Security-Policy` es el mismo para cualquier cliente
+  (desktop y mobile reciben exactamente el mismo header) — no puede ser la causa de una diferencia
+  desktop/mobile por sí solo, aunque si el navegador lo aplicara de forma más estricta en algún
+  caso, el error resultante ahora quedaría capturado por la instrumentación nueva (ver 22.2).
+- **Video nunca estuvo soportado, ni client-side ni server-side** — no hay ningún MIME `video/*`
+  en el whitelist del bucket `documents` (ni en 0033 ni en 0055), y el límite del bucket es 20MB
+  (un video de celular común pesa 50-500MB+). No es un bug nuevo de mobile: nunca funcionó, en
+  ningún dispositivo. Por decisión explícita del usuario, no se agregó soporte de video en este
+  cambio (queda fuera de alcance) — el mensaje de "tipo no permitido" que ya existía
+  (`assertFileAllowed` en storage.ts) ya es claro y nombra los formatos aceptados, así que no
+  hacía falta un mensaje especial para video.
+- No se encontró ninguna diferencia de código entre el camino de escritorio y el de mobile — es
+  el mismo `handleFileChange`, el mismo `uploadDocumentFile`, sin ninguna rama condicional por
+  user-agent. Esto hace más probable que la causa sea de entorno (permisos del navegador,
+  comportamiento real del `<input type="file">` en el dispositivo, una excepción no capturada) que
+  de lógica — de ahí la instrumentación en vez de otro fix a ciegas.
+
+### 22.2 Instrumentación agregada (temporal, solo para informatica_r4)
+
+Nuevo [uploadDiagnostics.ts](src/lib/uploadDiagnostics.ts) + [UploadDiagnosticsPanel.tsx](src/components/UploadDiagnosticsPanel.tsx),
+usados únicamente desde [DocumentoFormPage.tsx](src/pages/DocumentoFormPage.tsx). No cambia
+ningún comportamiento del flujo de carga — solo acumula eventos en memoria (nunca en
+Storage/DB/servicio externo) y los muestra en un panel colapsable "Ver diagnóstico técnico (solo
+informática)" al final del formulario, visible solo si `isAdmin` (informatica_r4/
+integrante_informatica, mismo gate que el resto del panel de administración).
+
+Qué registra, en orden:
+- **Entorno**: si el user-agent es mobile, si la PWA está instalada (`display-mode: standalone` /
+  `navigator.standalone`), si hay conexión, plataforma, user-agent completo.
+- **Service Worker**: si el navegador lo soporta, si hay uno activo, y su `scriptURL` (para
+  detectar un service worker viejo que no se actualizó).
+- **Eventos del flujo, en orden, con timestamp**: `onChange` (con nombre/tipo/tamaño real del
+  archivo elegido — clave para saber si el evento llega a dispararse siquiera en mobile),
+  `validateMetadata`, `createPending`, `updatePendingMetadata`, `addVersion`, `uploadStart`,
+  `uploadSuccess`/`uploadFail` (con el error real: `message`/`code`/`details`/`hint`/`status` —
+  los campos que Supabase Postgrest/Storage agregan sobre `Error` y que hoy nunca se mostraban en
+  pantalla), `updateStoragePath`, `finalSave`, `draftRecovered`.
+- **Errores no capturados**: `window.onerror`/`unhandledrejection` mientras el formulario está
+  montado — red de seguridad por si el fallo real está fuera de los bloques try/catch ya
+  instrumentados (ej. una excepción síncrona antes de entrar al try).
+
+Nunca registra contraseñas, tokens, JWT, claves VAPID ni el contenido del archivo — solo metadata
+(nombre/tipo/tamaño) y los mismos mensajes de error que ya se le muestran al usuario en pantalla,
+con sus campos completos.
+
+**Es instrumentación temporal a propósito**: pensada para borrarse una vez diagnosticada la causa
+real (dos archivos nuevos + 3 puntos de integración en `DocumentoFormPage.tsx`, fácil de revertir
+por completo).
+
+### 22.3 Qué falta para cerrar esto de verdad
+
+No se puede "corregir" esto sin saber qué error real aparece — cualquier cambio adicional en este
+punto volvería a ser una corrección a ciegas, exactamente lo que se pidió evitar. El paso
+siguiente depende 100% de lo que el panel de diagnóstico muestre en un dispositivo real:
+
+1. Entrar a `/documentos/nuevo` desde el celular (navegador y/o PWA instalada) con un usuario
+   `informatica_r4`.
+2. Completar el Paso 1 y pasar al Paso 2.
+3. Elegir un archivo (probar con una foto primero, es el caso más simple).
+4. Tocar "Ver diagnóstico técnico (solo informática)" al final de la pantalla.
+5. Copiar/fotografiar el contenido completo (Entorno + Service Worker + lista de Eventos) y
+   pasarlo — especialmente si aparece o no el evento `onChange`, y el contenido completo de
+   `uploadFail` si aparece.
+
+### 22.4 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function. Redeploy normal del frontend para que el panel de
+diagnóstico esté disponible.
+
+### 22.5 Checklist de verificación
+
+- [ ] Confirmar que el panel de diagnóstico NO aparece para un usuario sin rol de informática.
+- [ ] Confirmar que en escritorio (donde ya funciona) el panel muestra la secuencia completa de
+      eventos hasta `uploadSuccess` — sirve como referencia de "cómo se ve un caso que funciona".
+- [ ] Reproducir en mobile/PWA y capturar el panel completo (ver 22.3).

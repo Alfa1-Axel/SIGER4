@@ -2426,3 +2426,144 @@ lógica adicional. `z-index: 60`, por encima de cualquier otro elemento con posi
 
 Ninguna migración, ninguna Edge Function, ninguna variable de entorno nueva. Redeploy normal del
 frontend.
+
+## 23. Solicitudes de Préstamo del Inventario Regional (2026-08) — migraciones 0057-0059
+
+Primer ciclo funcional del flujo de préstamos, fase explícitamente documentada como futura en
+`0041_inventory_module.sql`: un cuartel solicita un elemento del Inventario Regional, el responsable
+del elemento (o un rol regional) aprueba/rechaza, y se registra retiro y devolución con su propio
+estado de conservación. Nada se borra nunca — toda solicitud queda como historial permanente.
+
+### 23.1 Estados y ciclo de vida
+
+```
+pendiente -> aprobada -> retirada -> devuelta
+         \-> rechazada
+pendiente|aprobada -> cancelada
+```
+
+`pendiente` (recién creada), `aprobada` (el responsable/regional la aprobó, falta coordinar el
+retiro), `rechazada` (terminal), `retirada` (el elemento ya está físicamente en el cuartel
+solicitante), `devuelta` (terminal, ciclo completo), `cancelada` (terminal — el propio solicitante se
+arrepiente, o el responsable cancela algo ya aprobado antes de que se retire). El frontend solo ofrece
+los botones de la transición válida según el estado actual; la base no impide otros caminos a nivel de
+RLS, pero no hay ninguna UI que los dispare.
+
+### 23.2 Migración 0057 — tabla, RLS, validación y auditoría
+
+Tabla `inventory_loan_requests` (todas las columnas pedidas: `inventory_item_id`,
+`requesting_station_id`, `requested_by_profile_id`, `responsible_profile_id` opcional, `status`,
+`request_reason`, `requested_from`, `expected_return_at`, `approved_by_profile_id`/`approved_at`,
+`rejected_by_profile_id`/`rejected_at`/`rejection_reason`, `delivered_at`/`delivered_by_profile_id`/
+`delivery_condition`, `returned_at`/`returned_by_profile_id`/`return_condition`, `notes`,
+`created_at`/`updated_at`) + enum `loan_request_status`.
+
+Un trigger `before insert` (`validate_inventory_loan_request_item_status`) bloquea crear una
+solicitud sobre un elemento `baja`/`no_disponible`/`mantenimiento` — el elemento sigue visible en el
+catálogo (`inventory_items` no cambió), solo se bloquea la solicitud nueva. No se revalida en updates:
+aprobar/rechazar/retirar/devolver una solicitud ya existente no depende del estado actual del ítem,
+que pudo cambiar después de creada la solicitud.
+
+`audit_row_change()` (la misma función genérica que ya audita el resto del sistema) se extiende con
+un branch para `inventory_loan_requests` (resuelve `region_id`/`subsede_id`/`station_id` desde
+`requesting_station_id`) + `trg_audit_inventory_loan_requests` — solicitud creada, aprobación,
+rechazo, retiro, devolución y cancelación quedan todas auditadas automáticamente (son todas
+operaciones `update` sobre la misma fila, salvo la creación que es el `insert`).
+
+### 23.3 Permisos (RLS, migración 0057)
+
+- **Lectura**: cualquier usuario autenticado (mismo criterio que `inventory_items` — todos necesitan
+  ver qué está disponible/reservado).
+- **Crear solicitud**: `informatica_r4`, `secretario_regional`/`director_escuela` (cualquier cuartel,
+  por si necesitan cargar en nombre de uno), o `jefe_cuerpo_activo`/`presidente_cuartel`/
+  `usuario_carga_cuartel` **solo para su propio cuartel** (vía `my_station_ids()`, mismo criterio que
+  vehicles/documents — nunca para un cuartel ajeno). En la UI, `requesting_station_id` se completa
+  solo desde el cuartel del propio perfil, nunca es un `<select>` editable.
+- **Aprobar/rechazar/retiro/devolución/cancelar**: `informatica_r4`, `secretario_regional`,
+  `director_escuela` (mismo set que ya administra el catálogo de `inventory_items`), más el
+  responsable puntual del elemento (`inventory_items.responsible_profile_id`) **solo para su propio
+  elemento**. El solicitante también puede actualizar su propia solicitud (necesario para poder
+  cancelarla).
+- **Sin policy de delete** para ningún rol no-admin — "no borrar solicitudes históricas" es un
+  requisito explícito, no hay ningún camino de borrado desde la app.
+- `informatica_r4` administra todo; `secretario_regional`/`director_escuela` mantienen el mismo nivel
+  de permisos que ya tenían sobre `inventory_items`, ahora extendido a las solicitudes.
+
+### 23.4 Migraciones 0058-0059 — notificaciones automáticas
+
+`ALTER TYPE ... ADD VALUE` no puede correr en la misma transacción que después usa el valor nuevo
+(mismo motivo ya documentado en `0035_notification_types_test_and_reminder.sql`), por eso son dos
+migraciones separadas:
+
+- **0058**: agrega `prestamo_solicitado`, `prestamo_aprobado`, `prestamo_rechazado`,
+  `prestamo_devuelto` a `notification_type`.
+- **0059**: dos triggers sobre `inventory_loan_requests`, mismo patrón que el resto del sistema
+  (insert en `notifications` desde Postgres, nunca desde el frontend — `NotificationPushBridge.tsx`
+  ya escucha cualquier insert en esa tabla vía Realtime y dispara el push solo, sin cambios ahí):
+  - `trg_notify_loan_request_created` (`after insert`): notifica al responsable puntual de la
+    solicitud si se cargó, si no al responsable del elemento, si no a un aviso de alcance
+    territorial del elemento (nadie asignado puntualmente, pero el equipo regional necesita
+    enterarse igual).
+  - `trg_notify_loan_request_status_change` (`after update`, guardado con
+    `old.status is distinct from new.status` para no reenviar en updates que no cambian el estado):
+    notifica al solicitante cuando se aprueba/rechaza su solicitud, y al responsable cuando se
+    confirma la devolución. No notifica en `retirada`/`cancelada` a propósito — son acciones que el
+    propio usuario que las ejecuta ya sabe que pasaron.
+
+**Recordatorio antes de la fecha esperada de devolución: NO implementado en este ciclo.**
+Requeriría un mecanismo de job programado (cron) que no existe hoy en el proyecto — evaluado y
+descartado a propósito para este ciclo, queda como fase futura explícita (ver 23.7).
+
+### 23.5 UI
+
+- **`InventarioPage.tsx`**: las tarjetas ahora llevan al detalle del elemento (`/inventario/:id`)
+  para cualquier usuario, no solo a editar — antes los usuarios sin permiso de edición no podían ni
+  siquiera abrir un elemento (`pointerEvents: 'none'`). Nuevo botón "Solicitudes" en el encabezado.
+- **`InventarioDetallePage.tsx`** (nueva): vista de un elemento con su info, botón **Solicitar**
+  (solo visible si `status === 'disponible'` y el usuario puede solicitar), lista de solicitudes de
+  ESE elemento, e historial (`inventory_item_history`, sin cambios). Un aviso explícito reemplaza el
+  botón cuando el elemento no está disponible ("no está disponible para solicitar en este momento").
+- **`SolicitudesPrestamoPage.tsx`** (nueva, `/inventario/solicitudes`): listado filtrable por estado
+  y cuartel. `jefe_cuerpo_activo` (sin rol regional) ve por defecto solo las solicitudes de su propio
+  cuartel — puede sacar el filtro si quiere ver otro.
+- **`SolicitudPrestamoFormPage.tsx`** (nueva, `/inventario/:itemId/solicitudes/nueva`): formulario de
+  creación — motivo, fecha de devolución estimada, notas. `requesting_station_id` se completa solo,
+  nunca editable.
+- **`SolicitudPrestamoDetallePage.tsx`** (nueva, `/inventario/solicitudes/:id`): detalle con botones
+  de acción según el rol del usuario actual y el estado de la solicitud (Aprobar/Rechazar cuando
+  `pendiente`, Registrar retiro cuando `aprobada`, Registrar devolución cuando `retirada`, Cancelar
+  cuando `pendiente`/`aprobada` y el usuario es el solicitante o un manager). Los gates de UI
+  (`isManager`/`isRequester`) son una mejora de experiencia — la autorización real la sigue haciendo
+  la RLS de la base.
+- **`AuditoriaPage.tsx`**: se agrega `fetchInventoryItems()` al lookup de nombres (antes faltaba
+  incluso para `inventory_items`, que ya existía) para que los diffs de auditoría muestren el nombre
+  del elemento en vez del UUID crudo.
+- **`humanize.ts`**: `TABLE_LABELS`/`STATUS_LABELS`/`FIELD_LABELS`/`NOTIFICATION_TYPE_LABELS`/
+  `NAME_RESOLVABLE_FIELDS` extendidos con las etiquetas de la tabla y los campos nuevos.
+
+### 23.6 Cómo probar (checklist recomendado, sin pruebas funcionales largas)
+
+1. Con un usuario `jefe_cuerpo_activo`/`presidente_cuartel`/`usuario_carga_cuartel`: entrar a un
+   elemento `disponible` del Inventario Regional, tocar "Solicitar", completar y enviar — confirmar
+   que queda en estado `pendiente` y que el responsable del elemento (o el alcance regional si no
+   tiene responsable asignado) recibe la notificación.
+2. Confirmar que un elemento `baja`/`no_disponible`/`mantenimiento` se sigue viendo en el catálogo
+   pero el botón "Solicitar" no aparece (o muestra el aviso de no disponible).
+3. Con el responsable del elemento (o `secretario_regional`/`director_escuela`): aprobar la
+   solicitud — confirmar que el solicitante recibe la notificación de aprobación.
+4. Registrar retiro (con estado de conservación) y después devolución — confirmar que el responsable
+   recibe la notificación de devolución, y que el ciclo completo queda visible en
+   `/inventario/solicitudes` con su badge de estado correcto en cada paso.
+5. Confirmar en `/auditoria` que aparecen los eventos de creación/aprobación/retiro/devolución con el
+   nombre del elemento resuelto (no un UUID).
+6. Probar rechazar una solicitud con motivo, y cancelar una solicitud `pendiente` como el propio
+   solicitante — confirmar los mensajes/notificaciones correspondientes.
+
+### 23.7 Fase futura
+
+Recordatorio automático antes de la fecha esperada de devolución: requiere un mecanismo de cron
+(`pg_cron` en Supabase, o un cron de Vercel que llame una Edge Function) que corra periódicamente,
+busque solicitudes `retirada` con `expected_return_at` próximo, y cree una notificación
+`recordatorio_devolucion` — con cuidado explícito de no duplicar el aviso si ya se mandó uno
+reciente. No evaluado en profundidad en este ciclo; el tipo de notificación ni siquiera se agregó al
+enum todavía, para no dejar un valor sin uso real.

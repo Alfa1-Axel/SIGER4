@@ -24,9 +24,18 @@ import { useAuth } from '../hooks/useAuth'
 // dispositivo pero esta no, el problema está en algo de React/la app. Si
 // NINGUNA de las dos funciona, el problema es 100% del navegador/SO/
 // dispositivo, no de este código.
+// Misma heurística que raw-upload-test.js — no hay forma 100% confiable de
+// detectar mobile por userAgent, pero alcanza para avisar "esto hay que
+// probarlo en el celular que falla" si alguien la abre sin querer desde PC.
+function detectMobile() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+}
+
 export function DiagnosticoUploadPage() {
   const { isAdmin, loading } = useAuth()
   const [entries, setEntries] = useState<string[]>([])
+  const [loadTimestamp] = useState(() => new Date().toISOString())
+  const isMobile = detectMobile()
 
   function log(line: string) {
     var stamp = new Date().toTimeString().split(' ')[0]
@@ -47,6 +56,16 @@ export function DiagnosticoUploadPage() {
       <p style={{ fontSize: 12, color: '#999', margin: '0 0 20px' }}>
         Comparar contra <code>/raw-upload-test.html</code> (sin React). No crea ni sube nada.
       </p>
+
+      {!isMobile && (
+        <div style={{ background: '#78350f', color: '#fde68a', padding: '10px 12px', borderRadius: 8, fontSize: 13, marginBottom: 16 }}>
+          ⚠️ Esta prueba debe hacerse en el celular que falla.
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: '#666', marginBottom: 16 }}>
+        build: {__SIGER4_BUILD_VERSION__} · compilado: {new Date(__SIGER4_BUILD_TIME__).toLocaleString('es-AR')}
+      </div>
 
       <div style={{ marginBottom: 16 }}>
         <label
@@ -78,8 +97,13 @@ export function DiagnosticoUploadPage() {
       </div>
 
       <div style={{ fontSize: 12, marginBottom: 16 }}>
+        <div style={{ wordBreak: 'break-all' }}>
+          <b>userAgent:</b>
+          <br />
+          {navigator.userAgent}
+        </div>
         <div>
-          <b>userAgent:</b> {navigator.userAgent}
+          <b>mobile (heurística):</b> <span style={{ color: isMobile ? '#4ade80' : '#f87171' }}>{String(isMobile)}</span>
         </div>
         <div>
           <b>standalone/PWA:</b>{' '}
@@ -87,6 +111,9 @@ export function DiagnosticoUploadPage() {
             (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) ||
               (navigator as Navigator & { standalone?: boolean }).standalone === true,
           )}
+        </div>
+        <div>
+          <b>timestamp de carga:</b> {loadTimestamp}
         </div>
       </div>
 

@@ -3023,3 +3023,66 @@ en el dominio una vez que el deploy termine.
 4. En Ajustes (usuario `informatica_r4`), confirmar que aparece el build actual y que coincide con
    el último commit pusheado. Probar "Actualizar app / limpiar caché" y confirmar que la app sigue
    funcionando después de recargar.
+
+## 28. raw-upload-test.html bloqueado por CSP (script inline) + datos de entorno en ambos diagnósticos (2026-08)
+
+El test de la sección 27 nunca llegó a correr de verdad: `raw-upload-test.html` tenía todo su JS en
+un `<script>` inline, y la CSP de `vercel.json` usa `script-src 'self'` sin `'unsafe-inline'` —
+el navegador lo bloqueó directo ("Executing inline script violates Content Security Policy directive
+script-src 'self'"), la página nunca ejecutó una sola línea de JS, y quedó fija en "Esperando
+selección…" sin que eso significara nada sobre el bug real. El resultado de `/diagnostico-upload`
+de la ronda anterior tampoco sirvió como descarte: se probó desde Windows/escritorio, donde la carga
+ya funcionaba antes de empezar todo este diagnóstico — no aporta señal sobre el bug, que es
+específico de Android (reproducido igual en Chrome mobile y en el navegador propio de Xiaomi, dos
+motores distintos en el mismo equipo — esto apunta a algo del dispositivo/SO o del sitio, no de un
+browser puntual). iOS no se probó y no se asume nada sobre su comportamiento.
+
+### 28.1 Fix real: JS externo, mismo patrón que theme-init.js
+
+Se movió todo el JS de `raw-upload-test.html` a un archivo nuevo, `public/raw-upload-test.js`,
+cargado con `<script src="/raw-upload-test.js"></script>` — mismo patrón ya establecido en
+`public/theme-init.js` por el mismo motivo exacto (ver comentario en ese archivo y sección de
+auditoría de seguridad, Prioridad 11). La CSP no se tocó: sigue sin `'unsafe-inline'`, sin nonce, sin
+hash — no hacía falta debilitarla, hacía falta dejar de usar script inline. `style-src` sí tiene
+`'unsafe-inline'`, así que el `<style>` de la página se mantuvo inline sin problema.
+
+### 28.2 Datos de entorno agregados a ambos diagnósticos
+
+Tanto `/raw-upload-test.html` (vía `raw-upload-test.js`) como `/diagnostico-upload` ahora muestran:
+- `userAgent` completo, bien visible (antes ya estaba pero poco destacado).
+- `mobile` (heurística por regex sobre userAgent: `/Android|iPhone|iPad|iPod|Mobile/i`) — no es
+  100% confiable, pero alcanza para el aviso siguiente.
+- `standalone`/PWA (ya existía en ambos).
+- Versión de build y fecha de compilación:
+  - En `/diagnostico-upload` (módulo React real, pasa por Vite): lee directo
+    `__SIGER4_BUILD_VERSION__`/`__SIGER4_BUILD_TIME__`, las mismas constantes que ya usa Ajustes.
+  - En `raw-upload-test.js` (archivo estático en `public/`, nunca pasa por el bundler, no puede leer
+    esas constantes): se agregó un plugin mínimo a `vite.config.ts` (`buildInfoPlugin`, usa el hook
+    `generateBundle` + `this.emitFile` de Rollup) que escribe `dist/build-info.json` con
+    `{ version, time }` en cada build. `raw-upload-test.js` lo pide con
+    `fetch('/build-info.json', { cache: 'no-store' })` en tiempo de ejecución y llena los `<span>`
+    correspondientes; si falla (build viejo sin ese archivo, red, lo que sea) muestra "no disponible"
+    en vez de romper el resto de la página — es una pantalla de diagnóstico, tiene que degradar bien.
+- Timestamp de carga (`new Date().toISOString()` al montar/ejecutar).
+- Aviso visible si el userAgent no parece mobile: **"Esta prueba debe hacerse en el celular que
+  falla."** — evita interpretar como válida una prueba hecha por error desde una PC.
+
+### 28.3 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function. `dist/build-info.json` es un archivo nuevo que genera el
+build y que Vercel sirve como estático — se regenera en cada deploy, no requiere configuración
+adicional.
+
+### 28.4 Checklist de verificación — orden actualizado, en el celular Android donde falla
+
+1. Abrir `https://siger-4.vercel.app/raw-upload-test.html` directo (escribir la URL). Confirmar que
+   ya NO aparece ningún error de CSP en la consola y que el log muestra `page-load` — eso confirma
+   que el JS externo se ejecutó. Revisar `userAgent`/`mobile`/build visibles arriba.
+2. Probar "Elegir archivo" y "Tomar foto". Anotar si `change` dispara con archivo real o no.
+3. Repetir en `https://siger-4.vercel.app/diagnostico-upload`, mismo celular, mismo resultado a
+   comparar.
+4. Interpretación: si `raw-upload-test.html` funciona en el celular → el input nativo del navegador
+   anda bien y el problema está en algo de React/la app. Si `raw-upload-test.html` NO funciona en el
+   celular → el problema es de navegador/dispositivo/sitio/SW/CSP/permisos, no de este código.
+5. No se toca `DocumentoFormPage` ni se sigue rediseñando Documentos hasta tener este resultado real
+   del celular que falla.

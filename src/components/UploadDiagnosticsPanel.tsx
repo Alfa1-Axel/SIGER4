@@ -86,6 +86,27 @@ export function UploadDiagnosticsPanel({ log }: UploadDiagnosticsPanelProps) {
             {snapshot.serviceWorker.scriptURL && <div style={{ wordBreak: 'break-all' }}>Script: {snapshot.serviceWorker.scriptURL}</div>}
           </div>
 
+          {(() => {
+            const lastClickIndex = snapshot.entries.map((e) => e.event).lastIndexOf('nativeFileInputClick')
+            const hasChangeAfterClick =
+              lastClickIndex !== -1 && snapshot.entries.slice(lastClickIndex + 1).some((e) => e.event === 'nativeFileInputChange')
+            if (lastClickIndex !== -1 && !hasChangeAfterClick) {
+              return (
+                <div className="card" style={{ marginBottom: 10, padding: 10, border: '1px solid var(--color-danger)' }}>
+                  <p style={{ margin: 0, color: 'var(--color-danger)', fontWeight: 600 }}>
+                    El navegador no devolvió archivo al input.
+                  </p>
+                  <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)' }}>
+                    Se detectó el click en el input real pero ningún "nativeFileInputChange" después — el picker se
+                    abrió pero el evento de selección nunca llegó (recarga real mientras estaba abierto, o el usuario
+                    canceló).
+                  </p>
+                </div>
+              )
+            }
+            return null
+          })()}
+
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
               <div className="kpi-label">Eventos ({snapshot.entries.length})</div>

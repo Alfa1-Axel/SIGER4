@@ -103,6 +103,21 @@ function assertFileAllowed(file: File, allowedTypes: Set<string>, maxBytes: numb
   return mimeType
 }
 
+// Cuando el navegador reporta un file.type genérico/vacío (ver
+// GENERIC_UNRELIABLE_MIME_TYPES), reconstruye un File nuevo con el MIME
+// correcto ya puesto en su propio .type — en vez de depender únicamente del
+// parámetro contentType de .upload(). Esto es defensivo por partida doble:
+// el contentType explícito ya alcanza para la ruta normal (File/Blob body,
+// ver arriba), pero reconstruir el objeto asegura que CUALQUIER lugar que
+// lea file.type (logs, reintentos, un cambio futuro en supabase-js) vea el
+// tipo correcto desde el origen, no un valor que solo se corrige en el
+// punto de envío. Si el tipo ya es confiable, devuelve el mismo File sin
+// tocar (evita una copia innecesaria del contenido en el caso común).
+function withCorrectedMimeType(file: File, resolvedMimeType: string): File {
+  if (file.type === resolvedMimeType) return file
+  return new File([file], file.name, { type: resolvedMimeType, lastModified: file.lastModified })
+}
+
 // Sanitiza el nombre original del archivo para usarlo como parte de un path
 // de Storage seguro: quita cualquier segmento de directorio (path traversal
 // vía "../" o nombres con "/"), se queda solo con caracteres ASCII
@@ -183,7 +198,8 @@ export async function deleteAvatar(previousUrl: string | null | undefined): Prom
 export async function uploadDocumentFile(documentId: string, file: File): Promise<string> {
   const contentType = assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
   const path = buildSafePath(documentId, file)
-  const { error } = await supabase.storage.from('documents').upload(path, file, { upsert: true, contentType })
+  const correctedFile = withCorrectedMimeType(file, contentType)
+  const { error } = await supabase.storage.from('documents').upload(path, correctedFile, { upsert: true, contentType })
   if (error) throw error
   return path
 }

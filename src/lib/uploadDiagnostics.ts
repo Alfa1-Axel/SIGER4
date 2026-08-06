@@ -32,11 +32,21 @@
 // pantalla, no algo nuevo más sensible).
 
 export type UploadDiagnosticEvent =
-  | 'fileInputClicked'
-  | 'fileInputChanged'
+  // Cadena completa del input real, en el orden en que deberían aparecer:
+  // botón visible tocado -> click nativo del <input> real (dispara el
+  // picker/cámara del SO) -> onChange nativo (el navegador devolvió algo).
+  // Si aparece fileInputButtonClick pero nunca nativeFileInputClick, el
+  // click nunca llegó al input real. Si aparece nativeFileInputClick pero
+  // nunca nativeFileInputChange, el usuario canceló el picker O el
+  // navegador nunca disparó el evento — la recarga real que mata la página
+  // mientras el picker está abierto puede producir exactamente este patrón.
+  | 'fileInputButtonClick'
+  | 'nativeFileInputClick'
+  | 'nativeFileInputChange'
   | 'fileDetected'
   | 'fileRejectedClient'
   | 'validateMetadata'
+  | 'uploadButtonClicked'
   | 'pendingCreateStart'
   | 'pendingCreateSuccess'
   | 'pendingCreateFail'

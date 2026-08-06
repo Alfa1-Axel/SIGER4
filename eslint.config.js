@@ -39,6 +39,7 @@ export default [
         ErrorEvent: 'readonly',
         PromiseRejectionEvent: 'readonly',
         PageTransitionEvent: 'readonly',
+        HTMLInputElement: 'readonly',
       },
     },
     plugins: {

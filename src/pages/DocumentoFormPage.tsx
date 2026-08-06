@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -32,22 +32,14 @@ const DOC_SCOPE_OPTIONS: { value: DocScopeTarget; label: string }[] = [
 type FormStep = 'metadata' | 'file'
 
 // Borrador de metadatos del Paso 1 (nueva carga, no edición) — se guarda en
-// sessionStorage en cada cambio, NUNCA se guarda el File ahí (solo texto).
-// Sirve para sobrevivir la recarga real que Android/iOS hacen de la PWA al
-// abrir el selector de archivos o la cámara — el dato clave confirmado con
-// el panel de diagnóstico es que la recarga pasa AL ABRIR el selector/
-// cámara, no recién después de elegir algo, así que puede pasar apenas se
-// entra al Paso 2, antes de que exista ninguna fila en "documents" todavía.
-//
-// wizardStep es justamente lo que faltaba antes: se guardaba el id de la
-// fila pending (pendingDocumentId) para saber que había que reanudar en el
-// Paso 2, pero esa fila recién se crea DENTRO de handleFileChange — es
-// decir, después de elegir un archivo. Si la recarga pasa antes de eso (que
-// es el caso real, según el dato nuevo del usuario), pendingDocumentId
-// nunca llegó a guardarse, y la recuperación anterior volvía silenciosamente
-// al Paso 1 aunque el usuario ya hubiese completado todos los datos. Ahora
-// el paso actual se persiste en el momento en que se confirma (Paso 1 -> 2),
-// independiente de si ya existe o no una fila real.
+// sessionStorage en cada cambio, NUNCA se guarda el File ahí (solo texto,
+// nunca binario) — un File no sobrevive una recarga real de todos modos
+// (Android/iOS lo descartan junto con el resto de la memoria JS), así que
+// intentar persistirlo sería inútil además de innecesario. Si la recarga
+// pasa después de seleccionar un archivo pero antes de tocar "Subir
+// archivo", el archivo se pierde y hay que volver a elegirlo — eso se
+// comunica explícito en pantalla (ver fileLostNotice), nunca se finge que
+// "ya está" ni se crea nada en la base por esto.
 interface DocumentDraft {
   title: string
   category: string
@@ -59,12 +51,16 @@ interface DocumentDraft {
   profileId: string
   folderId: string | null
   wizardStep: FormStep
-  // Si el Paso 2 ya alcanzó a crear la fila en "documents" (necesario antes
-  // de poder subir el archivo, ver createDocument) antes de que la página se
-  // recargara, se guarda su id acá para reanudar sobre la MISMA fila en vez
-  // de crear una segunda — evita duplicados si Android recarga justo después
-  // de crear la fila pero antes de terminar de subir el archivo.
+  // Si ya se llegó a crear la fila real en "documents" (recién pasa al
+  // tocar "Subir archivo", nunca al solo elegir el archivo — ver
+  // handleUploadFile), se guarda su id para reanudar sobre la MISMA fila en
+  // vez de crear una segunda si la página se recarga a mitad de una subida.
   pendingDocumentId: string | null
+  // true si se llegó a confirmar el documento (storage_path real, ya no
+  // 'pending') antes de que la fila se recargara — permite distinguir, al
+  // recuperar el borrador, "ya se subió, falta solo Finalizar" de "hay que
+  // volver a elegir el archivo".
+  uploadConfirmed: boolean
   updatedAt: string
 }
 
@@ -99,6 +95,32 @@ function clearDraft(folderIdFromQuery: string | null): void {
   }
 }
 
+// Estado real del Paso 2 — separa explícitamente "elegido pero no subido"
+// de "subiendo" y "subido", que es exactamente lo que el usuario pidió:
+// elegir un archivo NUNCA dispara la subida por sí solo, hace falta tocar
+// "Subir archivo" a propósito.
+//   - idle: nada elegido todavía.
+//   - selected: hay un File en memoria, no se tocó nada del lado del
+//     servidor todavía (ni fila pending ni upload).
+//   - uploading: se tocó "Subir archivo" — creando/confirmando la fila y
+//     subiendo a Storage.
+//   - uploaded: confirmado con éxito (storage_path real, notificación real
+//     disparada por el trigger de la base).
+//   - failed: el intento de subida falló — el File se conserva en memoria
+//     para poder reintentar sin tener que volver a elegirlo.
+type FileStageStatus = 'idle' | 'selected' | 'uploading' | 'uploaded' | 'failed'
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function fileExtension(fileName: string): string {
+  const match = fileName.match(/\.([a-zA-Z0-9]{1,10})$/)
+  return match ? match[1].toLowerCase() : '(sin extensión)'
+}
+
 export function DocumentoFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
@@ -125,46 +147,57 @@ export function DocumentoFormPage() {
 
   // En modo creación, el formulario tiene dos pasos reales: 'metadata'
   // (título/tipo/alcance/descripción, todo obligatorio salvo descripción) y
-  // 'file' (elegir y subir el archivo). Nunca se crea una fila en
-  // "documents" durante el Paso 1 — recién se crea al entrar al Paso 2, justo
-  // antes de intentar subir el archivo (ver handleFileChange). En modo
-  // edición no hay pasos: el documento ya existe completo, solo se edita.
+  // 'file' (elegir Y subir el archivo, dos acciones separadas). Nunca se
+  // crea una fila en "documents" durante el Paso 1. En modo edición no hay
+  // pasos: el documento ya existe completo, solo se edita.
   const [step, setStep] = useState<FormStep>('metadata')
 
-  // pendingDocumentId: la fila que el Paso 2 crea para poder subir el
-  // archivo (las policies de Storage exigen un document_id real para
-  // validar el path, ver createDocument en lib/api/documents.ts). Se llama
-  // "pending" a propósito — mientras uploadStatus no sea 'done', esta fila
-  // NO es un documento válido: fetchDocuments/fetchDocumentsByFolder la
-  // excluyen de todos los listados normales (storage_path='pending'), así
-  // que nunca aparece como un documento incompleto para otros usuarios.
+  // pendingDocumentId: la fila que se crea recién al tocar "Subir archivo"
+  // (las policies de Storage exigen un document_id real para validar el
+  // path, ver createDocument en lib/api/documents.ts) — nunca al solo
+  // elegir el archivo. Mientras storage_path siga en 'pending',
+  // fetchDocuments/fetchDocumentsByFolder la excluyen de todos los listados
+  // normales, así que nunca aparece como un documento incompleto para otros
+  // usuarios, y el trigger de notificaciones (0056) no dispara ningún aviso
+  // hasta que se confirma.
   const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null)
-  const [fileName, setFileName] = useState<string | null>(null)
-  const [fileSize, setFileSize] = useState<number | null>(null)
+
+  // selectedFile: el File real en memoria, elegido pero todavía no
+  // necesariamente subido — nunca se persiste (ni a sessionStorage ni a
+  // ningún otro lado) porque un File no es serializable ni sobrevive una
+  // recarga real de todos modos.
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileStageStatus, setFileStageStatus] = useState<FileStageStatus>('idle')
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
   const [existingFolderId, setExistingFolderId] = useState<string | null>(null)
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'done' | 'failed'>('idle')
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Mensaje de recuperación de borrador (ver useEffect de recuperación más
-  // abajo) — deliberadamente separado de "error": recuperar los datos del
-  // Paso 1 después de una recarga NO es un fallo, es el comportamiento
-  // esperado en mobile. Mezclarlo con "error" lo mostraba con el mismo
-  // estilo rojo que un fallo real de subida, dando la falsa impresión de que
-  // algo salió mal cuando en realidad el sistema ya recuperó todo lo que
-  // podía recuperar.
+  // Mensaje de recuperación de borrador — deliberadamente separado de
+  // "error": recuperar los datos del Paso 1 después de una recarga NO es un
+  // fallo, es el comportamiento esperado en mobile.
   const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null)
+  // Mensaje específico para "el File se perdió por una recarga mientras
+  // estaba elegido pero no subido" — pedido explícito del usuario, con texto
+  // exacto ("El archivo se perdió al volver del selector. Volvé a
+  // seleccionarlo.") y SIN crear ni notificar nada, porque en este caso no
+  // se llegó a crear ninguna fila (elegir un archivo no crea nada, ver
+  // handleFileInputChange).
+  const [fileLostNotice, setFileLostNotice] = useState<string | null>(null)
+
+  // Ref estable al <input type="file"> real — nunca se le pone key
+  // dinámica ni se desmonta condicionalmente entre renders (confirmado al
+  // revisar el JSX de abajo), así que la misma instancia del elemento vive
+  // durante todo el Paso 2. El botón visible "Seleccionar archivo" dispara
+  // el picker nativo llamando a este ref, en vez de que el input esté
+  // escondido con estilos que algunos navegadores/Android tratan distinto a
+  // un input realmente interactivo.
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Instrumentación TEMPORAL de diagnóstico (ver src/lib/uploadDiagnostics.ts)
-  // para investigar por qué la carga falla en mobile/PWA pero funciona en
-  // escritorio. Solo visible para informatica_r4/integrante_informatica (ver
-  // UploadDiagnosticsPanel más abajo, gateado por isAdmin). No cambia ningún
-  // comportamiento del flujo — createUploadDiagnosticsLog() solo acumula
-  // eventos en memoria. Se crea una sola vez por montaje del formulario
-  // (useMemo con deps vacías, no useState, porque no necesita disparar
-  // re-render al loguear — el panel relee el snapshot con su propio timer).
+  // — persiste a sessionStorage en cada log(), sobrevive recargas reales.
+  // Solo visible para informatica_r4/integrante_informatica.
   const diagnosticsLog = useMemo(() => createUploadDiagnosticsLog(), [])
 
   useEffect(() => attachGlobalErrorCapture(diagnosticsLog), [diagnosticsLog])
@@ -189,20 +222,12 @@ export function DocumentoFormPage() {
   }, [canCreate])
 
   // Al entrar en modo creación (no edición), intenta recuperar un borrador
-  // de una carga anterior interrumpida por una recarga (ver loadDraft).
-  //
-  // Dato clave confirmado con el panel de diagnóstico (ver DEPLOYMENT.md):
-  // en mobile/PWA, Android/iOS recargan la página al ABRIR el selector de
-  // archivos o la cámara — no recién después de elegir algo. Eso significa
-  // que la recarga puede pasar apenas se entra al Paso 2, ANTES de que
-  // exista ninguna fila en "documents" todavía (esa fila recién se crea
-  // dentro de handleFileChange, que nunca llegó a correr). Restaurar el
-  // Paso 2 solo cuando había un pendingDocumentId guardado (como hacía la
-  // versión anterior) volvía silenciosamente al Paso 1 en ese caso — el
-  // usuario ya había completado todo el Paso 1, pero la pantalla no lo
-  // reflejaba. Ahora wizardStep se persiste apenas se confirma el Paso 1
-  // (ver handleContinueToFile), así que la restauración ya no depende de
-  // que exista una fila real.
+  // de una carga anterior interrumpida por una recarga real (Android/iOS
+  // pueden recargar la PWA al abrir el selector de archivos/cámara). El
+  // File en sí NUNCA se recupera (no se persiste, ver DocumentDraft) — si el
+  // borrador dice que ya se había elegido un archivo pero no `uploadConfirmed`,
+  // se le avisa al usuario que el archivo se perdió y hay que elegirlo de
+  // nuevo, sin haber creado nada.
   useEffect(() => {
     if (isEditing) return
     const draft = loadDraft(folderIdFromQuery)
@@ -210,6 +235,7 @@ export function DocumentoFormPage() {
       found: Boolean(draft),
       wizardStep: draft?.wizardStep ?? null,
       pendingDocumentId: draft?.pendingDocumentId ?? null,
+      uploadConfirmed: draft?.uploadConfirmed ?? null,
       updatedAt: draft?.updatedAt ?? null,
     })
     if (!draft) return
@@ -223,21 +249,25 @@ export function DocumentoFormPage() {
     setProfileId(draft.profileId)
     if (draft.wizardStep === 'file') {
       setStep('file')
-      if (draft.pendingDocumentId) {
-        // La fila ya existía cuando se interrumpió — el archivo no llegó a
-        // terminar de subirse (storage_path sigue en 'pending'), hace falta
-        // reintentar sobre esa misma fila.
+      if (draft.pendingDocumentId && draft.uploadConfirmed) {
+        // Se había confirmado la subida antes de la recarga — el documento
+        // ya es válido (storage_path real), solo falta tocar Finalizar.
         setPendingDocumentId(draft.pendingDocumentId)
-        setUploadStatus('failed')
-        setRecoveryNotice('Recuperamos los datos del documento. Volvé a seleccionar el archivo para completar la carga.')
+        setExistingStoragePath('confirmed') // valor no 'pending': solo se usa para el chequeo != 'pending' de abajo
+        setFileStageStatus('uploaded')
+        setRecoveryNotice('El archivo ya se había subido correctamente. Tocá Finalizar para completar la carga.')
+      } else if (draft.pendingDocumentId) {
+        // Había una fila pending (se había tocado "Subir archivo" pero no
+        // llegó a confirmarse) — el archivo real nunca llegó a Storage con
+        // certeza, hay que reintentar desde cero con un archivo nuevo.
+        setPendingDocumentId(draft.pendingDocumentId)
+        setFileStageStatus('idle')
+        setFileLostNotice('El archivo se perdió al volver del selector. Volvé a seleccionarlo.')
       } else {
-        // Se llegó a confirmar el Paso 1 pero la recarga pasó antes de
-        // elegir un archivo (el caso real más común, según el diagnóstico
-        // en mobile) — no hay ninguna fila creada todavía, así que no es un
-        // error de "no se pudo subir": simplemente hay que elegir el
-        // archivo por primera vez, con los datos del Paso 1 ya completos.
-        setUploadStatus('idle')
-        setRecoveryNotice('Recuperamos los datos del documento. Volvé a seleccionar el archivo para completar la carga.')
+        // Se confirmó el Paso 1 pero la recarga pasó antes de tocar "Subir
+        // archivo" (o incluso antes de elegir uno) — no se creó nada.
+        setFileStageStatus('idle')
+        setFileLostNotice('El archivo se perdió al volver del selector. Volvé a seleccionarlo.')
       }
       diagnosticsLog.log('wizardStepChange', { from: null, to: 'file', persisted: false, reason: 'draftRestore' })
     } else {
@@ -258,11 +288,11 @@ export function DocumentoFormPage() {
       setExistingFolderId(doc.folder_id)
       setVersions(docVersions)
       // Un documento existente puede llegar en storage_path='pending' si una
-      // carga anterior se interrumpió sin que el archivo terminara de
-      // subirse (no debería ser visible en listados normales, pero se puede
-      // llegar acá por URL directa, ej. desde el panel de pendientes de
-      // informática) — bloquear Guardar hasta que se adjunte un archivo real.
-      setUploadStatus(doc.storage_path === 'pending' ? 'failed' : 'done')
+      // carga anterior se interrumpió sin confirmarse (no debería ser
+      // visible en listados normales, pero se puede llegar acá por URL
+      // directa, ej. desde el panel de pendientes de informática) —
+      // bloquear Finalizar hasta que se suba un archivo real.
+      setFileStageStatus(doc.storage_path === 'pending' ? 'idle' : 'uploaded')
       if (doc.profile_id) {
         setScopeTarget('profile')
         setProfileId(doc.profile_id)
@@ -314,12 +344,7 @@ export function DocumentoFormPage() {
     return null
   }
 
-  // Arma el borrador completo con el estado actual del formulario —
-  // centralizado para no repetir los mismos 10 campos en cada punto que
-  // necesita guardar (handleContinueToFile, handleFileChange). wizardStep y
-  // pendingDocumentId se pasan explícitos porque son justo lo que cambia
-  // entre esos puntos.
-  function currentDraft(wizardStep: FormStep, pendingId: string | null): DocumentDraft {
+  function currentDraft(wizardStep: FormStep, pendingId: string | null, uploadConfirmed: boolean): DocumentDraft {
     return {
       title,
       category,
@@ -332,16 +357,11 @@ export function DocumentoFormPage() {
       folderId: folderIdFromQuery,
       wizardStep,
       pendingDocumentId: pendingId,
+      uploadConfirmed,
       updatedAt: new Date().toISOString(),
     }
   }
 
-  // Paso 1 -> Paso 2: los metadatos ya están completos y validados acá, no
-  // recién al guardar al final — así el Paso 2 solo se ocupa del archivo.
-  // Guarda el borrador apenas se confirma el paso, ANTES de tocar el
-  // selector de archivos — es la única forma de que sobreviva una recarga
-  // que Android/iOS puede disparar al abrir el selector/cámara, no recién
-  // después de elegir algo (ver el useEffect de recuperación más arriba).
   function handleContinueToFile(event: FormEvent) {
     event.preventDefault()
     const validationError = metadataIsValid()
@@ -352,52 +372,43 @@ export function DocumentoFormPage() {
     }
     setError(null)
     setRecoveryNotice(null)
-    // Si ya existe una fila pending de un intento anterior en esta misma
-    // carga (el usuario volvió al Paso 1 para corregir algo después de que
-    // el Paso 2 ya la había creado), se preserva su id en el borrador — así
-    // una recarga en este punto sigue apuntando a la fila correcta en vez de
-    // "olvidarla" y terminar creando una segunda cuando el Paso 2 vuelva a
-    // correr.
-    saveDraft(folderIdFromQuery, currentDraft('file', pendingDocumentId))
+    setFileLostNotice(null)
+    saveDraft(folderIdFromQuery, currentDraft('file', pendingDocumentId, fileStageStatus === 'uploaded'))
     diagnosticsLog.log('wizardStepChange', { from: 'metadata', to: 'file', persisted: true })
     setStep('file')
   }
 
   function handleBackToMetadata() {
     setError(null)
-    // Persiste el retroceso: si la página se recarga mientras el usuario
-    // sigue corrigiendo el Paso 1, debe quedar en Paso 1 (no en el "file"
-    // guardado la última vez que se confirmó) — pendingDocumentId se
-    // conserva igual, ver handleContinueToFile.
-    if (!isEditing) saveDraft(folderIdFromQuery, currentDraft('metadata', pendingDocumentId))
+    if (!isEditing) saveDraft(folderIdFromQuery, currentDraft('metadata', pendingDocumentId, fileStageStatus === 'uploaded'))
     diagnosticsLog.log('wizardStepChange', { from: 'file', to: 'metadata', persisted: true })
     setStep('metadata')
   }
 
-  // Se dispara apenas el usuario elige un archivo en el Paso 2. Los
-  // metadatos del Paso 1 ya están validados y confirmados en este punto:
-  // crea la fila real en "documents" (si todavía no existe una para esta
-  // carga — puede ya existir si esto es un reintento después de un fallo, o
-  // si se recuperó un borrador con pendingDocumentId), sube el archivo, y
-  // recién si el upload tiene éxito la CONFIRMA (updateDocumentStoragePath,
-  // que saca storage_path de 'pending'). Solo en ese momento el trigger de
-  // notificaciones de la base dispara el aviso de "documento nuevo" — ver
-  // migración 0056_document_notification_on_confirm.sql, que corrige el bug
-  // real de notificaciones falsas cuando el upload fallaba después de crear
-  // la fila. La fila queda con storage_path='pending' hasta que se confirma
-  // — invisible en listados normales mientras tanto (ver
-  // fetchDocuments/fetchDocumentsByFolder), así que nunca es un documento
-  // "a medias" visible para nadie.
-  async function handleFileChange(selected: File | null) {
+  // Botón visible "Seleccionar archivo" — dispara el input real por
+  // referencia estable, en vez de que el usuario tenga que interactuar con
+  // un <input type="file"> escondido/estilizado de formas que algunos
+  // navegadores mobile manejan mal.
+  function handleSelectFileButtonClick() {
+    diagnosticsLog.log('fileInputButtonClick', {})
+    fileInputRef.current?.click()
+  }
+
+  // onChange del input real: SOLO guarda el archivo en memoria y lo
+  // muestra — nunca crea nada en el servidor ni sube nada. Esa es la
+  // separación explícita que se pidió: elegir un archivo es un paso
+  // completamente distinto de subirlo.
+  function handleFileInputChange(selected: File | null, filesLength: number) {
     setError(null)
-    setRecoveryNotice(null)
-    // Loguea el evento SIEMPRE, incluso si selected es null — si el handler
-    // nunca llega a correr en mobile (la sospecha más básica a descartar
-    // primero), este log tampoco va a aparecer, lo que ya sería un dato real
-    // en sí mismo. Ahora persiste a sessionStorage de inmediato (ver
-    // uploadDiagnostics.ts), así que sobrevive aunque la página se recargue
-    // un instante después.
-    diagnosticsLog.log('fileInputChanged', { hasFile: Boolean(selected) })
+    setFileLostNotice(null)
+    diagnosticsLog.log('nativeFileInputChange', {
+      filesLength,
+      hasFile: Boolean(selected),
+      fileName: selected?.name,
+      fileType: selected?.type,
+      fileSize: selected?.size,
+      lastModified: selected?.lastModified,
+    })
     if (!selected) return
 
     const inferredMime = inferMimeType(selected)
@@ -408,12 +419,6 @@ export function DocumentoFormPage() {
       fileSize: selected.size,
       lastModified: selected.lastModified,
     })
-
-    // Chequeo explícito ANTES de intentar nada, para poder distinguir "el
-    // archivo nunca iba a pasar la validación client-side" (fileRejectedClient)
-    // de "pasó la validación pero Storage lo rechazó server-side" (uploadFail)
-    // — mismo whitelist real que usa uploadDocumentFile, expuesto desde
-    // storage.ts para no duplicarlo acá.
     if (!isDocumentMimeAllowed(inferredMime)) {
       diagnosticsLog.log('fileRejectedClient', {
         fileName: selected.name,
@@ -421,11 +426,32 @@ export function DocumentoFormPage() {
         fileTypeInferred: inferredMime,
         reason: 'mime_not_allowed',
       })
+      setError(
+        `Tipo de archivo no permitido (${selected.name}): ${inferredMime || 'no se pudo determinar el tipo'}. ` +
+          'Formatos aceptados: PDF, Word, Excel, PNG, JPG, WEBP, HEIC.',
+      )
+      setSelectedFile(null)
+      setFileStageStatus('idle')
+      return
     }
 
-    setUploadStatus('uploading')
-    setFileName(selected.name)
-    setFileSize(selected.size)
+    setSelectedFile(selected)
+    setFileStageStatus('selected')
+  }
+
+  // Botón explícito "Subir archivo" — recién acá se crea la fila pending
+  // (si hace falta) y se sube a Storage. Los metadatos del Paso 1 ya están
+  // validados y confirmados en este punto. La fila queda con
+  // storage_path='pending' hasta que updateDocumentStoragePath confirma —
+  // invisible en listados normales mientras tanto, y sin disparar ninguna
+  // notificación hasta ese momento (ver migración 0056).
+  async function handleUploadFile() {
+    if (!selectedFile) return
+    setError(null)
+    setFileLostNotice(null)
+    diagnosticsLog.log('uploadButtonClicked', { fileName: selectedFile.name })
+
+    setFileStageStatus('uploading')
     try {
       const targetId = isEditing ? id! : pendingDocumentId
       let createdId: string | null = null
@@ -448,23 +474,10 @@ export function DocumentoFormPage() {
         diagnosticsLog.log('pendingCreateSuccess', { documentId: created.id })
         createdId = created.id
         setPendingDocumentId(created.id)
-        // Guarda el id de la fila recién creada en el borrador, para que si
-        // la página se recarga entre este punto y que termine el upload de
-        // abajo, la próxima carga de la pantalla reanude sobre esta misma
-        // fila en vez de crear una segunda (ver el useEffect de recuperación
-        // de borrador más arriba).
         if (!isEditing) {
-          saveDraft(folderIdFromQuery, currentDraft('file', created.id))
+          saveDraft(folderIdFromQuery, currentDraft('file', created.id, false))
         }
       } else {
-        // Ya existe una fila (reintento después de un fallo, o el usuario
-        // volvió al Paso 1 a corregir algo y volvió a esta misma fila
-        // pending). Se re-sincronizan los metadatos por si cambiaron desde
-        // que se creó — sin esto, quedarían con los valores del primer
-        // intento hasta el guardado final. Si además ya tenía un archivo
-        // real (no este caso en el flujo normal de creación, pero sí en
-        // edición), ese archivo anterior pasa a historial de versiones antes
-        // de reemplazarlo.
         if (!isEditing) {
           diagnosticsLog.log('updatePendingMetadata', { documentId: targetId })
           await updateDocument(targetId, { title: title.trim(), category: category.trim(), description: description || null, ...currentScopeInput() })
@@ -476,10 +489,15 @@ export function DocumentoFormPage() {
       }
 
       const finalId = targetId ?? createdId!
-      diagnosticsLog.log('uploadStart', { documentId: finalId, fileName: selected.name, fileType: selected.type, fileSize: selected.size })
+      diagnosticsLog.log('uploadStart', {
+        documentId: finalId,
+        fileName: selectedFile.name,
+        fileType: selectedFile.type,
+        fileSize: selectedFile.size,
+      })
       let path: string
       try {
-        path = await uploadDocumentFile(finalId, selected)
+        path = await uploadDocumentFile(finalId, selectedFile)
       } catch (err) {
         diagnosticsLog.log('uploadFail', serializeError(err))
         throw err
@@ -493,32 +511,36 @@ export function DocumentoFormPage() {
         diagnosticsLog.log('confirmDocumentFail', serializeError(err))
         throw err
       }
-      // A partir de acá el trigger notify_document_created (0056) ya vio
-      // storage_path salir de 'pending' y disparó la notificación real —
-      // este log es solo informativo (no confirma que la notificación se
-      // haya creado de verdad, eso pasa en la base), pero deja registrado
-      // el momento exacto en que el documento pasó a ser "confirmado" desde
-      // la perspectiva del cliente.
       diagnosticsLog.log('confirmDocumentSuccess', { documentId: finalId })
       diagnosticsLog.log('notificationCreated', { documentId: finalId, note: 'Disparada por trigger de base al confirmar storage_path.' })
+      if (!isEditing) {
+        saveDraft(folderIdFromQuery, currentDraft('file', finalId, true))
+      }
       setExistingStoragePath(path)
-      setUploadStatus('done')
+      setFileStageStatus('uploaded')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No pudimos subir el archivo. Probá de nuevo.')
-      setUploadStatus('failed')
+      setFileStageStatus('failed')
     }
+  }
+
+  function handleChooseDifferentFile() {
+    setSelectedFile(null)
+    setFileStageStatus('idle')
+    setError(null)
+    fileInputRef.current?.click()
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
 
-    if (uploadStatus === 'uploading') {
-      setError('Esperá a que termine de subirse el archivo antes de guardar.')
+    if (fileStageStatus === 'uploading') {
+      setError('Esperá a que termine de subirse el archivo antes de finalizar.')
       return
     }
-    if (uploadStatus !== 'done') {
-      setError(isEditing ? 'Adjuntá un archivo antes de guardar.' : 'Seleccioná un archivo antes de guardar.')
+    if (fileStageStatus !== 'uploaded') {
+      setError(isEditing ? 'Subí un archivo antes de finalizar.' : 'Elegí y subí un archivo antes de finalizar.')
       return
     }
 
@@ -531,12 +553,6 @@ export function DocumentoFormPage() {
         await updateDocument(id, input)
         navigate(existingFolderId ? `/documentos/carpetas/${existingFolderId}` : '/documentos/carpetas/general')
       } else if (pendingDocumentId) {
-        // El archivo ya se subió en handleFileChange y la fila ya se creó
-        // con los metadatos correctos del Paso 1 — esto solo confirma/
-        // actualiza por si algo cambió. Con el archivo ya subido
-        // (uploadStatus === 'done'), storage_path ya no es 'pending', así
-        // que el documento pasa a ser visible en los listados normales
-        // recién en este punto.
         await updateDocument(pendingDocumentId, input)
         clearDraft(folderIdFromQuery)
         navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general')
@@ -671,66 +687,93 @@ export function DocumentoFormPage() {
           )}
 
           {recoveryNotice && (
-            <div
-              className="card"
-              style={{ marginBottom: 16, padding: 12, background: 'var(--color-bg-card-soft)', border: '1px solid var(--color-border)' }}
-            >
+            <div className="card" style={{ marginBottom: 16, padding: 12, background: 'var(--color-bg-card-soft)', border: '1px solid var(--color-border)' }}>
               <p style={{ margin: 0, fontSize: 13 }}>{recoveryNotice}</p>
             </div>
           )}
+          {fileLostNotice && (
+            <div className="card" style={{ marginBottom: 16, padding: 12, background: 'var(--color-bg-card-soft)', border: '1px solid var(--color-warning)' }}>
+              <p style={{ margin: 0, fontSize: 13 }}>{fileLostNotice}</p>
+            </div>
+          )}
+
+          {/* Input real, con ref estable — nunca se le pone key dinámica ni
+              se desmonta condicionalmente, y no tiene "capture" (que fuerza
+              la cámara directamente, sin dejar elegir de galería/archivos —
+              comportamiento distinto y más restrictivo del que se pidió) ni
+              "accept" restrictivo a nivel de picker (la validación real de
+              tipo pasa en handleFileInputChange, con mensaje claro si
+              rechaza). Se mantiene oculto visualmente con un estilo que no
+              lo saca del flujo de accesibilidad/interacción (no display:none
+              ni un truco que algunos Android manejan mal) — el botón visible
+              de abajo es el único punto de interacción real. */}
+          <input
+            ref={fileInputRef}
+            id="file"
+            type="file"
+            style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}
+            tabIndex={-1}
+            aria-hidden="true"
+            disabled={fileStageStatus === 'uploading'}
+            onClick={() => diagnosticsLog.log('nativeFileInputClick', {})}
+            onChange={(e) => {
+              const files = e.target.files
+              const selected = files?.[0] ?? null
+              handleFileInputChange(selected, files?.length ?? 0)
+              e.target.value = ''
+            }}
+          />
 
           <div className="field">
-            <label htmlFor="file">
-              {isEditing ? 'Reemplazar archivo (opcional)' : recoveryNotice ? 'Seleccionar archivo nuevamente' : 'Archivo adjunto'}
-            </label>
-            {!isEditing && uploadStatus === 'idle' && !recoveryNotice && (
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 8 }}>
-                Seleccioná un archivo — se sube apenas lo elegís.
-              </p>
+            <label>{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo'}</label>
+
+            {fileStageStatus === 'idle' && (
+              <button type="button" className="btn btn-outlined btn-block" onClick={handleSelectFileButtonClick}>
+                Seleccionar archivo
+              </button>
             )}
-            <input
-              id="file"
-              type="file"
-              disabled={uploadStatus === 'uploading'}
-              onClick={() => {
-                // Se dispara al tocar el input, ANTES de que se abra el
-                // selector/cámara nativo — si en el panel de diagnóstico
-                // aparece este evento pero nunca "fileInputChanged", confirma
-                // que la recarga real pasa mientras el picker está abierto
-                // (entre este click y que el usuario efectivamente elija
-                // algo), no antes ni después.
-                diagnosticsLog.log('fileInputClicked', {})
-              }}
-              onChange={(e) => {
-                const selected = e.target.files?.[0] ?? null
-                void handleFileChange(selected)
-                // Se limpia el input para poder volver a elegir el mismo
-                // archivo dos veces seguidas (ej. si la primera subida
-                // falló) — el nombre/tamaño ya quedaron guardados en estado
-                // propio (fileName/fileSize), no dependen del valor del
-                // input nativo.
-                e.target.value = ''
-              }}
-            />
-            {uploadStatus === 'uploading' && (
-              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+
+            {(fileStageStatus === 'selected' || fileStageStatus === 'failed') && selectedFile && (
+              <>
+                <div style={{ fontSize: 12, padding: '8px 0', color: 'var(--color-text-secondary)' }}>
+                  <div>
+                    Archivo seleccionado: <strong>{selectedFile.name}</strong>
+                  </div>
+                  <div style={{ marginTop: 2 }}>
+                    {formatBytes(selectedFile.size)} · {fileExtension(selectedFile.name)} · listo para subir
+                  </div>
+                </div>
+                {fileStageStatus === 'failed' && error && <p className="field-error">No se pudo subir el archivo: {error}</p>}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-primary" style={{ flex: 1 }} onClick={() => void handleUploadFile()}>
+                    {fileStageStatus === 'failed' ? 'Reintentar subida' : 'Subir archivo'}
+                  </button>
+                  <button type="button" className="btn btn-outlined" onClick={handleChooseDifferentFile}>
+                    Elegir otro
+                  </button>
+                </div>
+              </>
+            )}
+
+            {fileStageStatus === 'uploading' && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} />
-                Subiendo archivo{fileName ? `: ${fileName}` : '…'}
+                Subiendo archivo{selectedFile ? `: ${selectedFile.name}` : '…'}
               </p>
             )}
-            {uploadStatus === 'done' && fileName && (
-              <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginTop: 4, fontWeight: 600 }}>
-                ✓ Archivo subido correctamente: {fileName}
-                {fileSize != null && ` (${Math.round(fileSize / 1024)} KB)`}
-              </p>
+
+            {fileStageStatus === 'uploaded' && (
+              <>
+                <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', fontWeight: 600, marginBottom: 8 }}>
+                  ✓ Archivo subido correctamente{selectedFile ? `: ${selectedFile.name}` : ''}
+                </p>
+                <button type="button" className="btn btn-outlined" style={{ fontSize: 12, padding: '6px 12px' }} onClick={handleChooseDifferentFile}>
+                  Reemplazar archivo
+                </button>
+              </>
             )}
-            {uploadStatus === 'failed' && (
-              <p className="field-error" style={{ marginTop: 4 }}>
-                No se pudo subir el archivo{fileName ? ` "${fileName}"` : ''}
-                {error ? `: ${error}` : ''}. Elegilo de nuevo para reintentar.
-              </p>
-            )}
-            {uploadStatus === 'done' && !fileName && isEditing && existingStoragePath && existingStoragePath !== 'pending' && (
+
+            {fileStageStatus === 'idle' && !selectedFile && isEditing && existingStoragePath && existingStoragePath !== 'pending' && (
               <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
                 Ya tiene un archivo cargado. Elegí uno nuevo solo si querés reemplazarlo (el actual queda
                 en el historial de versiones).
@@ -738,16 +781,12 @@ export function DocumentoFormPage() {
             )}
           </div>
 
-          {error && uploadStatus !== 'failed' && <p className="field-error">{error}</p>}
+          {error && fileStageStatus !== 'failed' && <p className="field-error">{error}</p>}
 
-          <button
-            type="submit"
-            className="btn btn-primary btn-block"
-            disabled={submitting || uploadStatus !== 'done'}
-          >
-            {submitting ? 'Guardando…' : 'Guardar'}
+          <button type="submit" className="btn btn-primary btn-block" disabled={submitting || fileStageStatus !== 'uploaded'}>
+            {submitting ? 'Finalizando…' : 'Finalizar'}
           </button>
-          {uploadStatus !== 'done' && (
+          {fileStageStatus !== 'uploaded' && (
             <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 6, textAlign: 'center' }}>
               El botón se habilita cuando el archivo termine de subirse correctamente.
             </p>

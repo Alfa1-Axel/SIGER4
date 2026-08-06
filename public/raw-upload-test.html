@@ -7,7 +7,8 @@
 <style>
   /* Estilos mínimos inline a propósito — nada del CSS del sistema SIGER4,
      nada de fuentes externas, nada que dependa de que el resto de la app
-     haya cargado. */
+     haya cargado. Los estilos SÍ pueden ir inline (la CSP permite
+     style-src 'unsafe-inline'); el JS no — ver raw-upload-test.js. */
   body { font-family: -apple-system, Roboto, Arial, sans-serif; margin: 0; padding: 16px; background: #111; color: #eee; }
   h1 { font-size: 18px; margin: 0 0 4px; }
   p.sub { font-size: 12px; color: #999; margin: 0 0 20px; }
@@ -22,12 +23,20 @@
   .row b { color: #fff; }
   .ok { color: #4ade80; }
   .bad { color: #f87171; }
+  #desktopWarning { display: none; background: #78350f; color: #fde68a; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
+  #buildInfo { font-size: 11px; color: #666; margin-bottom: 16px; }
 </style>
 </head>
 <body>
 <h1>Raw upload test — sin React, sin SW propio de la app, sin Supabase</h1>
-<p class="sub">Página HTML/JS estática pura. Si esto tampoco funciona en un celular, el problema es del
+<p class="sub">Página HTML/JS estática pura (JS en archivo externo, no inline — la Content-Security-Policy
+del sitio no permite scripts inline). Si esto tampoco funciona en un celular, el problema es del
 navegador/dispositivo/red, no de SIGER4.</p>
+
+<div id="desktopWarning">⚠️ Esta prueba debe hacerse en el celular que falla. El userAgent detectado abajo
+no parece ser de un dispositivo mobile.</div>
+
+<div id="buildInfo">build: <span id="buildVersion"></span> · compilado: <span id="buildTime"></span></div>
 
 <div>
   <label class="filebtn" for="rawFile">Elegir archivo</label>
@@ -44,105 +53,6 @@ navegador/dispositivo/red, no de SIGER4.</p>
 <h2 style="font-size:14px;margin-top:20px;">Log de eventos</h2>
 <pre id="log">(vacío)</pre>
 
-<script>
-(function () {
-  'use strict';
-
-  var logEl = document.getElementById('log');
-  var statusEl = document.getElementById('status');
-  var envEl = document.getElementById('env');
-  var entries = [];
-
-  function nowStamp() {
-    var d = new Date();
-    return d.toTimeString().split(' ')[0] + '.' + String(d.getMilliseconds()).padStart(3, '0');
-  }
-
-  function render() {
-    logEl.textContent = entries.length ? entries.join('\n\n') : '(vacío)';
-  }
-
-  function log(label, detailObj) {
-    var line = '[' + nowStamp() + '] ' + label;
-    if (detailObj) {
-      try { line += '\n' + JSON.stringify(detailObj, null, 2); } catch (e) { line += '\n(no serializable)'; }
-    }
-    entries.push(line);
-    render();
-  }
-
-  function detectStandalone() {
-    try {
-      if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
-      if (window.navigator && window.navigator.standalone === true) return true;
-    } catch (e) {}
-    return false;
-  }
-
-  // Entorno se muestra una sola vez al cargar, no depende de ningún evento.
-  var envHtml = ''
-    + '<div class="row"><b>userAgent:</b> ' + navigator.userAgent + '</div>'
-    + '<div class="row"><b>platform:</b> ' + (navigator.platform || '(no disponible)') + '</div>'
-    + '<div class="row"><b>standalone/PWA:</b> ' + String(detectStandalone()) + '</div>'
-    + '<div class="row"><b>URL actual:</b> ' + window.location.href + '</div>'
-    + '<div class="row"><b>Service worker en este scope:</b> ' + ('serviceWorker' in navigator ? 'soportado' : 'no soportado') + '</div>';
-  envEl.innerHTML = envHtml;
-  log('page-load', { href: window.location.href, userAgent: navigator.userAgent });
-
-  // Si hay un service worker controlando esta página, es una señal real:
-  // este archivo debería servirse directo desde red/precache estático, no
-  // pasar por ningún router de la SPA. Se deja constancia en el log.
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistration().then(function (reg) {
-      log('serviceWorker.getRegistration', {
-        hasRegistration: !!reg,
-        active: !!(reg && reg.active),
-        scriptURL: reg && reg.active ? reg.active.scriptURL : null,
-        controller: !!navigator.serviceWorker.controller,
-        controllerScriptURL: navigator.serviceWorker.controller ? navigator.serviceWorker.controller.scriptURL : null,
-      });
-    }).catch(function (err) {
-      log('serviceWorker.getRegistration ERROR', { message: String(err) });
-    });
-  }
-
-  function wireInput(input, sourceLabel) {
-    input.addEventListener('click', function () {
-      log('click (' + sourceLabel + ')', {});
-    });
-
-    input.addEventListener('change', function (e) {
-      var files = e.target.files;
-      var n = files ? files.length : 0;
-      if (!n) {
-        statusEl.innerHTML = '<span class="bad">change disparó, pero sin archivos (files.length = 0)</span>';
-        log('change (' + sourceLabel + ') — SIN ARCHIVO', { filesLength: 0 });
-        return;
-      }
-      var f = files[0];
-      var detail = {
-        filesLength: n,
-        name: f.name,
-        type: f.type || '(vacío)',
-        size: f.size,
-        lastModified: f.lastModified,
-        lastModifiedISO: new Date(f.lastModified).toISOString(),
-      };
-      statusEl.innerHTML = '<span class="ok">change disparó correctamente</span> — ver detalle abajo';
-      log('change (' + sourceLabel + ') — ARCHIVO DETECTADO', detail);
-      e.target.value = '';
-    });
-  }
-
-  wireInput(document.getElementById('rawFile'), 'elegir archivo');
-  wireInput(document.getElementById('rawCamera'), 'tomar foto');
-
-  document.getElementById('clearBtn').addEventListener('click', function () {
-    entries = [];
-    statusEl.textContent = 'Esperando selección…';
-    render();
-  });
-})();
-</script>
+<script src="/raw-upload-test.js"></script>
 </body>
 </html>

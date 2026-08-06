@@ -3,39 +3,41 @@ import { useAuth } from '../hooks/useAuth'
 
 // SIGER4 - Página de diagnóstico TEMPORAL, ULTRA mínima a propósito.
 //
-// Resultado confirmado en el celular Android que falla: /raw-upload-test.html
-// (HTML/JS vanilla, sin React) SÍ detecta click + change + archivo real. La
-// versión anterior de esta página (React, con onClick/onChange declarativos
-// que llamaban setState en cada evento) NO detectaba nada — log vacío. Eso
-// aísla el bug a algo de React/el binding declarativo, no del navegador/SO/
-// dispositivo/CSP/dominio (ver DEPLOYMENT.md).
+// Resultado ronda anterior: /raw-upload-test.html (sin React) detecta click +
+// change + archivo real en el celular Android que falla. La versión anterior
+// de esta página (React, onClick/onChange declarativos, sin setState
+// síncrono en el click — ya corregido ese problema) tampoco funcionó: el log
+// solo mostraba "page-load", ni siquiera "click". Eso mueve la sospecha de
+// "el setState interfiere con el picker" a algo más temprano: el toque ni
+// siquiera está llegando al input, o los synthetic events de React no están
+// enganchando en esta pantalla en particular (ver DEPLOYMENT.md).
 //
-// Sospecha concreta: en raw-upload-test.js, "loguear un evento" es una
-// escritura de DOM directa y síncrona (textContent = ...), cero overhead de
-// framework. Acá, el onClick del label/input original llamaba setEntries()
-// -> el batching automático de React 18 dispara un re-render antes de que
-// el navegador termine la cadena nativa "click en label -> click reenviado
-// al input -> abrir selector" — en algunos WebView/Chrome de Android eso
-// corta esa cadena antes de que el selector nativo llegue a abrirse.
+// Esta versión agrega listeners NATIVOS (addEventListener, no depende de
+// React) sobre el mismo input real, en paralelo a los handlers declarativos
+// de React — así se puede ver, evento por evento, si el DOM recibe el toque
+// (nativo) aunque React no lo reporte (synthetic), o si ninguno de los dos
+// lo recibe (entonces el problema es de layout/overlay/CSS, no de React).
 //
-// Esta versión copia el patrón de raw-upload-test.html lo más literal
-// posible en React:
-//   - Input file REAL y VISIBLE (no oculto con label custom, no click
-//     programático) — si esto también fallara, el problema volvería a
-//     estar abierto a input oculto/label, pero ya no hace falta probar eso
-//     primero.
-//   - onChange va directo en el input (como en raw), sin passthrough por
-//     ningún wrapper.
-//   - El log NO usa useState/setState: escribe directo al DOM vía useRef +
-//     textContent, igual que raw, para sacar de la ecuación cualquier
-//     re-render de React como posible interferencia.
-//   - Sin AppShell, sin styles.css del sistema, sin form, sin
-//     preventDefault, sin sessionStorage.
+//   - pointerdown/touchstart/mousedown/click/change nativos, vía
+//     addEventListener en un useEffect — logueados con event.type,
+//     target.tagName, isTrusted.
+//   - Los mismos eventos también como props de React (onPointerDown,
+//     onClick, onChange) — logueados por separado, con el prefijo "React:".
+//   - El log sigue sin usar useState: useRef + escritura directa a
+//     textContent, para que ni siquiera un re-render por click pueda
+//     interferir con la cadena nativa del picker (causa confirmada en la
+//     ronda anterior).
+//   - Debug visual del propio input: boundingClientRect, computed
+//     pointer-events/display/visibility/opacity, disabled, tabIndex, y qué
+//     elemento devuelve document.elementFromPoint() en el centro del input
+//     — si no es el input mismo, hay algo tapándolo.
 export function DiagnosticoUploadPage() {
   const { isAdmin, loading } = useAuth()
   const logRef = useRef<HTMLPreElement>(null)
   const statusRef = useRef<HTMLDivElement>(null)
+  const debugRef = useRef<HTMLPreElement>(null)
   const entriesRef = useRef<string[]>([])
+  const inputRef = useRef<HTMLInputElement>(null)
 
   function log(label: string, detail?: Record<string, unknown>) {
     var stamp = new Date().toTimeString().split(' ')[0] + '.' + String(new Date().getMilliseconds()).padStart(3, '0')
@@ -51,8 +53,84 @@ export function DiagnosticoUploadPage() {
     if (logRef.current) logRef.current.textContent = entriesRef.current.join('\n\n')
   }
 
+  function logNativeEvent(e: Event) {
+    var target = e.target as HTMLElement | null
+    log('NATIVE:' + e.type, {
+      targetTagName: target ? target.tagName : null,
+      isTrusted: 'isTrusted' in e ? e.isTrusted : undefined,
+    })
+  }
+
+  function renderDebugInfo() {
+    var el = inputRef.current
+    if (!el || !debugRef.current) return
+    var rect = el.getBoundingClientRect()
+    var cs = window.getComputedStyle(el)
+    var centerX = rect.left + rect.width / 2
+    var centerY = rect.top + rect.height / 2
+    var elAtPoint = document.elementFromPoint(centerX, centerY)
+    var info = {
+      boundingClientRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      computedPointerEvents: cs.pointerEvents,
+      computedDisplay: cs.display,
+      computedVisibility: cs.visibility,
+      computedOpacity: cs.opacity,
+      disabled: el.disabled,
+      tabIndex: el.tabIndex,
+      elementFromPointAtCenter: elAtPoint ? elAtPoint.tagName + (elAtPoint.id ? '#' + elAtPoint.id : '') : null,
+      elementFromPointIsInput: elAtPoint === el,
+    }
+    debugRef.current.textContent = JSON.stringify(info, null, 2)
+  }
+
   useEffect(() => {
     log('page-load', { href: window.location.href, userAgent: navigator.userAgent })
+
+    const el = inputRef.current
+    if (!el) return
+
+    var onPointerDown = (e: Event) => logNativeEvent(e)
+    var onTouchStart = (e: Event) => logNativeEvent(e)
+    var onMouseDown = (e: Event) => logNativeEvent(e)
+    var onClick = (e: Event) => logNativeEvent(e)
+    var onChange = (e: Event) => {
+      logNativeEvent(e)
+      var files = (e.target as HTMLInputElement).files
+      var n = files ? files.length : 0
+      if (!files || !n) {
+        log('NATIVE:change — SIN ARCHIVO', { filesLength: 0 })
+        return
+      }
+      var f = files[0]
+      log('NATIVE:change — ARCHIVO DETECTADO', {
+        filesLength: n,
+        name: f.name,
+        type: f.type || '(vacío)',
+        size: f.size,
+      })
+    }
+
+    // passive: false en pointerdown/touchstart no hace falta (no se llama
+    // preventDefault en ninguno) — se dejan pasivos a propósito para no
+    // interferir de ningún modo con el comportamiento nativo del navegador.
+    el.addEventListener('pointerdown', onPointerDown, { passive: true })
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('mousedown', onMouseDown, { passive: true })
+    el.addEventListener('click', onClick)
+    el.addEventListener('change', onChange)
+
+    renderDebugInfo()
+    var debugInterval = window.setInterval(renderDebugInfo, 1000)
+
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('mousedown', onMouseDown)
+      el.removeEventListener('click', onClick)
+      el.removeEventListener('change', onChange)
+      window.clearInterval(debugInterval)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   var isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
@@ -70,7 +148,7 @@ export function DiagnosticoUploadPage() {
 
   return (
     <div style={{ padding: 16, fontFamily: '-apple-system, Roboto, Arial, sans-serif', background: '#111', color: '#eee', minHeight: '100vh' }}>
-      <h1 style={{ fontSize: 18, margin: '0 0 4px' }}>Diagnóstico ultra mínimo (React, input real y visible)</h1>
+      <h1 style={{ fontSize: 18, margin: '0 0 4px' }}>Diagnóstico — React synthetic vs. native listeners</h1>
       <p style={{ fontSize: 12, color: '#999', margin: '0 0 20px' }}>
         Comparar contra <code>/raw-upload-test.html</code> (sin React). No crea ni sube nada.
       </p>
@@ -85,19 +163,24 @@ export function DiagnosticoUploadPage() {
         build: {__SIGER4_BUILD_VERSION__} · compilado: {new Date(__SIGER4_BUILD_TIME__).toLocaleString('es-AR')}
       </div>
 
-      {/* Input real, visible, sin label custom ni click programático — igual
-          que rawFile en raw-upload-test.html. onChange directo, sin
-          passthrough. */}
+      {/* Input real, visible, sin label custom, sin wrappers, sin overlay,
+          sin CSS del sistema, pointer-events/z-index explícitos, no
+          disabled. onClick/onChange/onPointerDown de React CONVIVEN acá con
+          los listeners nativos agregados por useEffect más arriba — mismo
+          nodo DOM, dos formas distintas de escuchar el mismo evento. */}
       <div style={{ marginBottom: 16 }}>
         <input
+          ref={inputRef}
           type="file"
-          onClick={() => log('click')}
+          style={{ position: 'static', width: 'auto', height: 'auto', opacity: 1, pointerEvents: 'auto', zIndex: 1, display: 'block' }}
+          onPointerDown={() => log('REACT:onPointerDown')}
+          onClick={() => log('REACT:onClick')}
           onChange={(e) => {
             var files = e.target.files
             var n = files ? files.length : 0
             if (!files || !n) {
-              if (statusRef.current) statusRef.current.textContent = 'change disparó, pero sin archivos (files.length = 0)'
-              log('change — SIN ARCHIVO', { filesLength: 0 })
+              if (statusRef.current) statusRef.current.textContent = 'REACT change disparó, pero sin archivos (files.length = 0)'
+              log('REACT:onChange — SIN ARCHIVO', { filesLength: 0 })
               return
             }
             var f = files[0]
@@ -109,8 +192,8 @@ export function DiagnosticoUploadPage() {
               lastModified: f.lastModified,
               lastModifiedISO: new Date(f.lastModified).toISOString(),
             }
-            if (statusRef.current) statusRef.current.textContent = 'change disparó correctamente — ver detalle abajo'
-            log('change — ARCHIVO DETECTADO', detail)
+            if (statusRef.current) statusRef.current.textContent = 'REACT change disparó correctamente — ver detalle abajo'
+            log('REACT:onChange — ARCHIVO DETECTADO', detail)
             e.target.value = ''
           }}
         />
@@ -137,7 +220,15 @@ export function DiagnosticoUploadPage() {
         </div>
       </div>
 
-      <h2 style={{ fontSize: 14, margin: '20px 0 8px' }}>Log de eventos</h2>
+      <h2 style={{ fontSize: 14, margin: '20px 0 8px' }}>Debug visual del input (se actualiza cada 1s)</h2>
+      <pre
+        ref={debugRef}
+        style={{ background: '#000', color: '#38bdf8', padding: 12, borderRadius: 8, fontSize: 11, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+      >
+        (cargando…)
+      </pre>
+
+      <h2 style={{ fontSize: 14, margin: '20px 0 8px' }}>Log de eventos (NATIVE: = addEventListener directo · REACT: = prop synthetic)</h2>
       <button
         type="button"
         onClick={() => {

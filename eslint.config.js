@@ -42,6 +42,8 @@ export default [
         HTMLInputElement: 'readonly',
         HTMLPreElement: 'readonly',
         HTMLDivElement: 'readonly',
+        HTMLElement: 'readonly',
+        Event: 'readonly',
         caches: 'readonly',
         __SIGER4_BUILD_VERSION__: 'readonly',
         __SIGER4_BUILD_TIME__: 'readonly',

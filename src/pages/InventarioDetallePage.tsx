@@ -6,6 +6,7 @@ import { fetchInventoryItemById, fetchInventoryItemHistory } from '../lib/api/in
 import { fetchLoanRequestsByItem } from '../lib/api/inventoryLoanRequests'
 import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
+import { describeSupabaseError } from '../lib/api/errors'
 import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPage'
 import { LOAN_REQUEST_STATUS_BADGE, LOAN_REQUEST_STATUS_LABEL } from './SolicitudesPrestamoPage'
 import type { InventoryItem, InventoryItemHistory, InventoryLoanRequest, Profile, Station } from '../types/database'
@@ -45,7 +46,7 @@ export function InventarioDetallePage() {
         setProfiles(profilesData)
         setLoading(false)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar el elemento'))
+      .catch((err) => active && setError(describeSupabaseError(err)))
     return () => {
       active = false
     }

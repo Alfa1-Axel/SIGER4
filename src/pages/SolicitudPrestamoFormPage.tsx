@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchInventoryItemById } from '../lib/api/inventory'
 import { createLoanRequest } from '../lib/api/inventoryLoanRequests'
+import { describeSupabaseError } from '../lib/api/errors'
 import { INVENTORY_CATEGORY_LABEL } from './InventarioPage'
 import type { InventoryItem } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -80,7 +81,7 @@ export function SolicitudPrestamoFormPage() {
       })
       navigate(`/inventario/solicitudes/${created.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos registrar la solicitud.')
+      setError(describeSupabaseError(err))
     } finally {
       setSubmitting(false)
     }

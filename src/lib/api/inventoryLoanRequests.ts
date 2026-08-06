@@ -17,9 +17,17 @@ export async function fetchLoanRequestsByItem(itemId: string): Promise<Inventory
   return (data ?? []) as InventoryLoanRequest[]
 }
 
+// Distingue "no existe" (PGRST116, 0 filas -- id inválido o borrado, caso
+// legítimo de devolver null) de cualquier otro error real (RLS, red, etc.)
+// -- antes esta función devolvía null ante CUALQUIER error, incluida una
+// falla real de la base, y la pantalla de detalle mostraba "No se encontró
+// la solicitud" sin ninguna pista de qué había fallado en realidad.
 export async function fetchLoanRequestById(id: string): Promise<InventoryLoanRequest | null> {
   const { data, error } = await supabase.from('inventory_loan_requests').select('*').eq('id', id).single()
-  if (error) return null
+  if (error) {
+    if (error.code === 'PGRST116') return null
+    throw error
+  }
   return data as InventoryLoanRequest
 }
 

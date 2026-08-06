@@ -4,6 +4,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { fetchLoanRequests } from '../lib/api/inventoryLoanRequests'
 import { fetchInventoryItems } from '../lib/api/inventory'
 import { fetchStations } from '../lib/api/stations'
+import { describeSupabaseError } from '../lib/api/errors'
 import type { InventoryItem, InventoryLoanRequest, LoanRequestStatus, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 
@@ -57,7 +58,7 @@ export function SolicitudesPrestamoPage() {
         setStations(stationsData)
         setLoading(false)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar las solicitudes'))
+      .catch((err) => active && setError(describeSupabaseError(err)))
     return () => {
       active = false
     }

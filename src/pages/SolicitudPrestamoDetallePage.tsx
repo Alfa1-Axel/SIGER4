@@ -12,6 +12,7 @@ import {
 import { fetchInventoryItemById } from '../lib/api/inventory'
 import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
+import { describeSupabaseError } from '../lib/api/errors'
 import { LOAN_REQUEST_STATUS_BADGE, LOAN_REQUEST_STATUS_LABEL } from './SolicitudesPrestamoPage'
 import type { InventoryItem, InventoryLoanRequest, Profile, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -69,7 +70,11 @@ export function SolicitudPrestamoDetallePage() {
 
   useEffect(() => {
     let active = true
-    load().catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar la solicitud'))
+    load().catch((err) => {
+      if (!active) return
+      setError(describeSupabaseError(err))
+      setLoading(false)
+    })
     return () => {
       active = false
     }
@@ -99,7 +104,7 @@ export function SolicitudPrestamoDetallePage() {
       const updated = await approveLoanRequest(request.id, profile.id)
       setRequest(updated)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos aprobar la solicitud.')
+      setError(describeSupabaseError(err))
     } finally {
       setUpdating(false)
     }
@@ -115,7 +120,7 @@ export function SolicitudPrestamoDetallePage() {
       setShowRejectForm(false)
       setRejectionReason('')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos rechazar la solicitud.')
+      setError(describeSupabaseError(err))
     } finally {
       setUpdating(false)
     }
@@ -130,7 +135,7 @@ export function SolicitudPrestamoDetallePage() {
       setRequest(updated)
       setShowDeliveryForm(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos registrar el retiro.')
+      setError(describeSupabaseError(err))
     } finally {
       setUpdating(false)
     }
@@ -145,7 +150,7 @@ export function SolicitudPrestamoDetallePage() {
       setRequest(updated)
       setShowReturnForm(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos registrar la devolución.')
+      setError(describeSupabaseError(err))
     } finally {
       setUpdating(false)
     }
@@ -160,7 +165,7 @@ export function SolicitudPrestamoDetallePage() {
       const updated = await cancelLoanRequest(request.id)
       setRequest(updated)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cancelar la solicitud.')
+      setError(describeSupabaseError(err))
     } finally {
       setUpdating(false)
     }
@@ -177,7 +182,15 @@ export function SolicitudPrestamoDetallePage() {
   if (!request || !item) {
     return (
       <AppShell title="Solicitud de préstamo">
-        <div className="empty-state">No se encontró la solicitud solicitada.</div>
+        {error ? (
+          <div className="card">
+            <p className="field-error" style={{ margin: 0 }}>
+              {error}
+            </p>
+          </div>
+        ) : (
+          <div className="empty-state">No se encontró la solicitud solicitada.</div>
+        )}
       </AppShell>
     )
   }

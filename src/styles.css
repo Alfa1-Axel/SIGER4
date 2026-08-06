@@ -811,3 +811,110 @@ img {
     transform: rotate(360deg);
   }
 }
+
+/* ---------- Novedades del sistema (AppUpdateBanner) ---------- */
+
+/* z-index por encima de todo lo demás en el sistema (sidebar 50, backdrop
+   del drawer mobile 40, header 20) — es un modal real, tiene que ganarle a
+   cualquier elemento con posición fija de cualquier pantalla. No bloquea
+   scroll del body a propósito (ver AppUpdateBanner.tsx: "no debe bloquear
+   el uso del sistema" es un requisito explícito, aunque visualmente se vea
+   como un modal centrado). */
+.app-update-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.app-update-card {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 420px;
+  margin-bottom: 16px;
+  animation: app-update-in 0.25s ease;
+}
+
+@keyframes app-update-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 900px) {
+  .app-update-overlay {
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 24px;
+  }
+  .app-update-card {
+    margin-bottom: 0;
+  }
+}
+
+.app-update-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.app-update-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.app-update-close:hover {
+  background: var(--color-bg-card-soft);
+}
+
+.app-update-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin: 0 0 2px;
+}
+
+.app-update-date {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin: 0 0 10px;
+  text-transform: capitalize;
+}
+
+.app-update-description {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin: 0 0 12px;
+}
+
+.app-update-changes {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-update-actions {
+  display: flex;
+}

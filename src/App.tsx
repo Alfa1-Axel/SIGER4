@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
+import { AppUpdateBanner } from './components/AppUpdateBanner'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
@@ -43,6 +44,7 @@ export default function App() {
   return (
     <AuthProvider>
       <NotificationPushBridge />
+      <AppUpdateBanner />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />

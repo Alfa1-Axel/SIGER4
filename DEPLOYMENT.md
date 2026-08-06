@@ -2349,3 +2349,80 @@ React/AppShell/Router, que reutiliza el cliente real de Supabase — funcionó e
 se probó. Quedaría por resolver si vale la pena mantenerlo como segunda superficie permanente, o
 seguir buscando la causa exacta por la que el input dentro de React no respondía en esos Android
 puntuales.
+
+## 22. Banner de novedades del sistema (2026-08)
+
+Sistema para avisar a los usuarios de cambios importantes al iniciar sesión — un banner flotante, no
+invasivo, que aparece una sola vez por usuario por cada novedad publicada.
+
+### 22.1 Cómo funciona
+
+Tres piezas nuevas, cada una con una responsabilidad sola:
+- **`src/config/appUpdates.ts`**: la fuente de contenido. Un array `APP_UPDATES` de objetos
+  `{ id, date, title, description, changes[], severity }` — el **primer** elemento del array es la
+  única novedad que se muestra en cada momento (el resto queda como historial en el código, no se
+  borra, por si más adelante conviene una pantalla de "novedades anteriores").
+- **`src/lib/appUpdateSeen.ts`**: guarda/consulta si el usuario ya vio una novedad puntual, por su
+  `id`, en `localStorage` (clave `siger4:update-seen:<id>`).
+- **`src/components/AppUpdateBanner.tsx`**: el componente visual. Se monta una sola vez dentro de
+  `AuthProvider` en `App.tsx` (mismo patrón que `NotificationPushBridge`, ver sección de
+  notificaciones push) — así se evalúa una vez por sesión real, sin importar en qué pantalla esté el
+  usuario. Gateado por `session`/`profile` reales (no solo "terminó de cargar"), por lo que nunca
+  aparece en `/login` ni en pantallas previas a terminar de autenticar.
+
+Al montar, si hay sesión y la novedad más reciente todavía no fue vista (`hasSeenAppUpdate` devuelve
+`false`), se muestra el banner. Tocar "Entendido" (o la X) llama a `markAppUpdateSeen` y lo oculta —
+no vuelve a aparecer en ese navegador para esa misma novedad.
+
+### 22.2 Por qué localStorage y no una tabla en la base
+
+Se evaluaron las dos opciones que pedía el objetivo original. Se eligió `localStorage` porque la
+única función de este control es "no repetir el banner en el mismo navegador" — no hace falta que
+sobreviva a un cambio de dispositivo, no hace falta consultarlo desde ningún otro lugar del sistema
+(ningún reporte, ninguna auditoría), y no hace falta saber "cuándo" lo vio cada usuario. Agregar una
+tabla (`user_id`/`update_id`/`seen_at` + políticas RLS + una consulta de red extra en cada login)
+sería infraestructura real para resolver un booleano que ya vive perfectamente bien en el propio
+navegador. Si en el futuro hiciera falta una métrica agregada (cuántos usuarios vieron la última
+novedad, por ejemplo, para saber si conviene reforzar la comunicación) ahí sí valdría la pena
+reconsiderar una tabla — pero no es el caso hoy.
+
+### 22.3 Cómo agregar una novedad nueva
+
+1. Abrir `src/config/appUpdates.ts`.
+2. Agregar un objeto nuevo **al principio** del array `APP_UPDATES` (antes del que hoy es el
+   primero) — es el único que se va a mostrar a partir del próximo deploy.
+3. Completar:
+   - `id`: único y estable, nunca reutilizar uno ya usado. Convención sugerida:
+     `"YYYY-MM-DD-slug-corto"`. Cambiar el `id` de una novedad ya publicada hace que vuelva a
+     mostrarse a todos los usuarios que ya la habían visto — normalmente no es lo que se quiere.
+   - `date`: formato `"YYYY-MM-DD"`, solo se muestra en el banner.
+   - `title`/`description`: texto corto, en el mismo tono institucional del resto de SIGER4.
+   - `changes`: array de strings, una línea por cambio — se muestra como lista.
+   - `severity`: `'info'` (celeste), `'improvement'` (verde), o `'important'` (rojo) — define el
+     color del badge en la esquina del banner.
+4. Guardar, commitear, desplegar. No hace falta ninguna migración ni variable de entorno nueva.
+
+### 22.4 Cómo funciona el "mostrar una sola vez"
+
+Cada novedad tiene un `id` fijo. Al mostrarse y cerrarse, se guarda `localStorage["siger4:update-seen:<id>"] = "1"`
+en el navegador del usuario. La próxima vez que `AppUpdateBanner` se monte (nuevo login, nueva pestaña,
+recarga), si el `id` de la novedad más reciente ya tiene esa clave guardada, no se vuelve a mostrar.
+Si se agrega una novedad nueva con un `id` distinto, se muestra de nuevo — es "una vez por usuario por
+versión/novedad", no "una vez para siempre". Si el usuario borra los datos del sitio o cambia de
+navegador/dispositivo, vuelve a ver la última novedad — comportamiento esperado y aceptado dado que se
+eligió `localStorage` (ver 22.2).
+
+### 22.5 UX
+
+No bloquea el uso del sistema: la superposición (`.app-update-overlay`) tiene `pointer-events: none`,
+solo la tarjeta en sí (`.app-update-card`) captura clicks — se puede seguir navegando/interactuando
+con el resto de la pantalla mientras el banner está visible. Se ubica abajo a la derecha en escritorio
+y abajo centrado en mobile (`max-width: 420px`, `width: 100%` dentro de ese máximo). Usa las mismas
+variables CSS de tema (`--color-*`) que el resto del sistema, así que respeta claro/oscuro sin
+lógica adicional. `z-index: 60`, por encima de cualquier otro elemento con posición fija del sistema
+(sidebar 50, backdrop del drawer mobile 40, header 20).
+
+### 22.6 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function, ninguna variable de entorno nueva. Redeploy normal del
+frontend.

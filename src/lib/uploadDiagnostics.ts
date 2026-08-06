@@ -54,6 +54,12 @@ export type UploadDiagnosticEvent =
   // UploadDiagnosticsPanel.tsx), que necesita distinguir "no pasó nada" de
   // "sí pasó algo".
   | 'nativeFileInputChangeTimeout'
+  // El usuario tocó "Cargar archivo desde modo compatible mobile" y salió
+  // de esta ruta de React hacia /document-upload-mobile.html (ver
+  // DEPLOYMENT.md secciones 30-31) — el resto de la subida, si ocurre, se
+  // loguea en el log de esa página, no acá (son dos ejecuciones de JS
+  // distintas, esta pantalla ya no está montada para cuando eso pasa).
+  | 'compatibleMobileUploadOpened'
   | 'fileDetected'
   | 'fileRejectedClient'
   | 'validateMetadata'

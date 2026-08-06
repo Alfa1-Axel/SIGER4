@@ -212,6 +212,21 @@ export function DocumentoFormPage() {
   const awaitingFileTimeoutRef = useRef<number | null>(null)
   const [nativeChangeMissingNotice, setNativeChangeMissingNotice] = useState<string | null>(null)
 
+  // Causa raíz confirmada en Android (ver DEPLOYMENT.md, secciones 30-31):
+  // en ciertos celulares, el <input type="file"> dentro de esta ruta de
+  // React nunca recibe ni siquiera el evento nativo "click" del sistema
+  // operativo — no es un problema de handlers, layout ni CSS (todo eso se
+  // descartó con evidencia real vía /diagnostico-upload), es el input
+  // dentro de React el que no es confiable en esos dispositivos puntuales.
+  // /document-upload-mobile.html (HTML/JS vanilla, sin React/AppShell/
+  // Router — mismo patrón que /raw-upload-test.html, que sí funciona en esos
+  // celulares) es la vía alternativa: mismos metadatos, mismo documento,
+  // mismo Storage/RLS, solo cambia qué código dispara el picker de archivo.
+  // Mostrado por heurística de userAgent (no 100% confiable) + botón manual
+  // para quien lo necesite aunque el userAgent no lo detecte como mobile.
+  const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+  const [showCompatibleUploadOption, setShowCompatibleUploadOption] = useState(false)
+
   useEffect(() => {
     return () => {
       if (awaitingFileTimeoutRef.current) window.clearTimeout(awaitingFileTimeoutRef.current)
@@ -406,6 +421,24 @@ export function DocumentoFormPage() {
     if (!isEditing) saveDraft(folderIdFromQuery, currentDraft('metadata', pendingDocumentId, fileStageStatus === 'uploaded'))
     diagnosticsLog.log('wizardStepChange', { from: 'file', to: 'metadata', persisted: true })
     setStep('metadata')
+  }
+
+  // /document-upload-mobile.html lee el MISMO borrador de sessionStorage que
+  // este formulario ya guarda al llegar al Paso 2 (misma clave, ver
+  // draftStorageKey) — solo hace falta asegurarse de que esté guardado y
+  // actualizado justo antes de navegar (mismo dato que ya se persiste en
+  // handleContinueToFile/handleBackToMetadata, pero re-guardado acá por si
+  // el usuario llegó a este paso por recuperación de borrador en vez de por
+  // el wizard normal). Navegación real (window.location.href, no
+  // react-router): tiene que ser una carga de página nueva para que el
+  // segundo entry point de Vite (document-upload-mobile.html) se sirva de
+  // cero, sin nada del árbol de React montado.
+  function handleUseCompatibleMobileUpload() {
+    diagnosticsLog.log('compatibleMobileUploadOpened', { folderId: folderIdFromQuery })
+    saveDraft(folderIdFromQuery, currentDraft('file', pendingDocumentId, fileStageStatus === 'uploaded'))
+    const params = new URLSearchParams()
+    if (folderIdFromQuery) params.set('folderId', folderIdFromQuery)
+    window.location.href = `/document-upload-mobile.html${params.toString() ? `?${params.toString()}` : ''}`
   }
 
   // Causa real encontrada comparando contra /raw-upload-test.html (que SÍ
@@ -822,6 +855,39 @@ export function DocumentoFormPage() {
               <p className="field-error" style={{ marginTop: 8 }}>
                 {nativeChangeMissingNotice}
               </p>
+            )}
+
+            {/* Vía alternativa fuera de React (ver DEPLOYMENT.md secciones
+                30-31): en algunos Android, el input de arriba no recibe el
+                toque dentro de esta ruta de React, aunque esté visible y
+                técnicamente disponible. Solo tiene sentido en modo creación
+                (usa el mismo borrador de sessionStorage que ya arma este
+                wizard) — en edición no hay un mecanismo de borrador
+                equivalente todavía. Se ofrece por heurística de mobile o
+                manualmente, para no depender 100% de que el userAgent
+                detecte bien el dispositivo. */}
+            {fileStageStatus === 'idle' && !isEditing && (
+              <div style={{ marginTop: 8 }}>
+                {(isMobileDevice || showCompatibleUploadOption) && (
+                  <button
+                    type="button"
+                    className="btn btn-outlined"
+                    style={{ width: '100%', fontSize: 12 }}
+                    onClick={handleUseCompatibleMobileUpload}
+                  >
+                    Cargar archivo desde modo compatible mobile
+                  </button>
+                )}
+                {!isMobileDevice && !showCompatibleUploadOption && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompatibleUploadOption(true)}
+                    style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: 11, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                  >
+                    ¿El selector de archivo no responde? Probar modo compatible mobile
+                  </button>
+                )}
+              </div>
             )}
 
             {(fileStageStatus === 'selected' || fileStageStatus === 'failed') && selectedFile && (

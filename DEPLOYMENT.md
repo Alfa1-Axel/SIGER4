@@ -3264,3 +3264,145 @@ app, no del lado del servidor.
    `elementFromPointIsInput`, `boundingClientRect`, y los computed styles.
 3. Reportar el log completo y el debug visual — con eso se puede determinar la causa exacta (30.2) y
    recién ahí aplicar el fix correspondiente a `DocumentoFormPage.tsx`.
+
+## 31. El input dentro de React no es confiable en ese Android: vía de carga alternativa fuera de React (2026-08)
+
+Resultado del checklist de la sección 30.6, en el mismo celular Android: `/raw-upload-test.html` sigue
+funcionando perfecto. `/diagnostico-upload` con la instrumentación de la sección 30 **no registró
+NINGÚN evento** — ni `NATIVE:pointerdown`, ni `NATIVE:click`, ni `REACT:pointerdown`, ni
+`REACT:click`, ni `change`. El debug visual, sin embargo, mostró todo en orden:
+`elementFromPointAtCenter` = el input mismo, `elementFromPointIsInput = true`, `pointer-events: auto`,
+`display: block`, `visibility: visible`, `opacity: 1`, `disabled: false`, `tabIndex: 0`. No hay ningún
+overlay, no hay ningún problema de layout/CSS detectable — el elemento está ahí, visible, disponible,
+y el toque igual no genera ningún evento, ni siquiera a nivel de `addEventListener` nativo sin pasar
+por React.
+
+Esto agota razonablemente el espacio de causas dentro de React: no es `setState` en el click (sección
+29), no es un problema de synthetic events vs. nativo (ambos caminos probados en paralelo, sección
+30), no es CSS/overlay/layout (debug visual limpio). La conclusión práctica, y la que se sigue en esta
+ronda: en ese Android puntual, un `<input type="file">` dentro de esta ruta de React específicamente
+no es confiable, por una causa que no se pudo aislar más y que dejó de perseguirse — mientras que el
+mismo tipo de input, en una página sin React/AppShell/React Router, sí funciona siempre. Se deja de
+insistir con el input dentro de React y se implementa una vía de carga alternativa.
+
+### 31.1 `/document-upload-mobile.html`: uploader de Documentos fuera de React
+
+A diferencia de `/raw-upload-test.html` (que vive en `public/` y nunca pasa por el bundler de Vite,
+por diseño, para servir de control 100% ajeno a la app), `document-upload-mobile.html` es un
+**segundo entry point real de Vite** (`document-upload-mobile.html` en la raíz del repo +
+`src/document-upload-mobile/main.ts`, agregado a `build.rollupOptions.input` en `vite.config.ts`).
+Elegido así — y no como archivo estático puro — para poder importar el cliente real de Supabase
+(`src/lib/supabaseClient.ts`) y las funciones ya auditadas de `src/lib/api/storage.ts` y
+`src/lib/api/documents.ts` (`inferMimeType`, `isDocumentMimeAllowed`, `uploadDocumentFile`,
+`createDocument`, `updateDocument`, `updateDocumentStoragePath`) sin duplicar ninguna lógica sensible
+(MIME, límites de tamaño, sanitización de paths, RLS). Sigue sin usar React, sin `AppShell`, sin React
+Router, sin `styles.css` del sistema — que es exactamente lo que causaba el bug real. El JS sigue
+siendo un módulo servido desde el mismo origen (cumple `script-src 'self'` sin debilitar la CSP, igual
+que `raw-upload-test.js`/`theme-init.js`), solo que ahora pasa por el bundler de Vite en vez de ser un
+archivo suelto.
+
+La página muestra, igual que `raw-upload-test.html`: userAgent, aviso de "modo pensado para el celular
+que falla" si el userAgent no parece mobile, build/versión (vía `fetch('/build-info.json')`, mismo
+mecanismo que `raw-upload-test.js`), y un log completo de eventos (`page-load`, `sessionCheck`,
+`draftLoad`, `click`, `change`, `fileRejectedClient`, `uploadButtonClicked`, `pendingCreateStart/
+Success`, `uploadStart/Success/Fail`, `confirmDocumentStart/Success`, `notificationCreated`,
+`finalSave`) — cada uno con el error completo de Supabase serializado cuando corresponde
+(`serializeUploadError`, mismos campos que `serializeError` en `uploadDiagnostics.ts`:
+message/name/code/details/hint/status).
+
+### 31.2 Cómo pasa y lee los metadatos
+
+Reutiliza el MISMO mecanismo de borrador que ya existía en `DocumentoFormPage.tsx`
+(`siger4:document-draft:<folderId>` en `sessionStorage`, `draftStorageKey`/`loadDraft`/`saveDraft`
+duplicados literalmente en `main.ts` — no se creó una segunda clave ni un segundo formato). El botón
+nuevo en el formulario ("Cargar archivo desde modo compatible mobile", visible en el Paso 2 cuando
+`fileStageStatus === 'idle'` y `!isEditing`) guarda el borrador actualizado y navega con
+`window.location.href` (carga de página real, no `react-router`) a
+`/document-upload-mobile.html?folderId=<id>`. Como `sessionStorage` es por pestaña y esta navegación
+ocurre en la misma pestaña/misma origin, la página vanilla puede leer exactamente el mismo borrador
+que el formulario de React acaba de guardar — título, categoría, descripción, alcance, y
+`pendingDocumentId` si ya se había llegado a crear la fila. Solo disponible en modo creación (no
+edición): no hay un mecanismo de borrador equivalente para reemplazar el archivo de un documento
+existente todavía.
+
+### 31.3 Cómo reutiliza la sesión de Supabase
+
+Ninguna lógica de login propia. Llama a `supabase.auth.getSession()` del mismo cliente real
+(`src/lib/supabaseClient.ts`, `persistSession: true`) — como es el mismo origen y la misma clave de
+`localStorage` que ya usa toda la app, si el usuario tiene sesión iniciada en SIGER4, esta página la
+ve directo, sin ningún paso adicional. Usa la misma `anon key` pública que el resto del frontend
+(nunca `service_role`), y como pasa por las mismas funciones de `lib/api/`, respeta exactamente las
+mismas políticas RLS que ya rigen la carga de documentos. Si no hay sesión (`sessionData.session` es
+`null`), no se intenta nada más: se muestra el mensaje exacto pedido — "No se pudo confirmar tu sesión
+de SIGER4 en este navegador. Iniciá sesión nuevamente desde SIGER4…" — sin ningún intento de mostrar
+el selector de archivo.
+
+### 31.4 Sube usando el patrón que funciona en raw
+
+El input es un `<input type="file">` real y visible, sin `label` custom, sin `display:none`/clip
+sr-only, sin overlay — mismo espíritu que `raw-upload-test.html`. `click`/`change` van directo como
+`addEventListener` sobre ese input (no hay React de por medio en absoluto en esta página: es HTML/JS
+plano, aunque generado por el bundler). El flujo real de subida es el mismo que ya usa
+`DocumentoFormPage.tsx` (`handleUploadFile`): crea la fila `documents` con `storage_path: 'pending'`
+si todavía no existe (usando `createDocument`), sube el archivo a Storage con `uploadDocumentFile`
+(mismas validaciones de MIME/tamaño, misma corrección de `contentType` para selectores de Android que
+devuelven `application/octet-stream`), confirma con `updateDocumentStoragePath` (dispara la
+notificación real vía el trigger de la migración 0056), y recién ahí el documento se vuelve visible en
+los listados normales — nunca antes.
+
+### 31.5 Cómo vuelve a la app
+
+Al terminar con éxito: se limpia el borrador (`clearDraft`) y se muestra un botón "Volver a
+Documentos" que navega (de nuevo, `window.location.href`, carga de página real) a
+`/documentos/carpetas/<folderId>` (o `/documentos/carpetas/general` sin carpeta) — la ruta real de
+React, que para ese momento ya lista el documento recién confirmado. Si el usuario cancela antes de
+subir, el botón "Cancelar y volver" hace la misma navegación sin haber tocado nada del lado del
+servidor (si nunca se llegó a crear la fila `pending`, no queda ningún rastro; si ya se había creado
+en un intento anterior por la vía normal, queda igual que antes — pending, invisible en listados
+normales, limpiable por informática vía `cleanupPendingDocuments`).
+
+### 31.6 Integración en `DocumentoFormPage.tsx`
+
+En el Paso 2, con `fileStageStatus === 'idle'` y en modo creación, aparece el botón "Cargar archivo
+desde modo compatible mobile" automáticamente si el userAgent parece mobile (misma heurística que el
+resto del diagnóstico), o mediante un link secundario ("¿El selector de archivo no responde? Probar
+modo compatible mobile") si no — para no depender 100% de que la heurística acierte. En **desktop**,
+si el flujo normal de React funciona (que es el caso: el bug es específico de Android, nunca
+reprodujo en PC/Chrome escritorio), no hay ningún cambio de comportamiento — el input de siempre sigue
+ahí y sigue funcionando igual.
+
+### 31.7 Diagnóstico
+
+`/raw-upload-test.html` y `/diagnostico-upload` se mantienen tal cual quedaron (secciones 27-30) —
+siguen siendo la herramienta de diagnóstico de bajo nivel si hace falta seguir investigando la causa
+exacta de por qué React no recibe el evento en ese dispositivo. `document-upload-mobile.html` es la
+vía de **producción**, no un diagnóstico descartable: es el camino real por el que un usuario en ese
+tipo de dispositivo va a cargar un documento de ahora en más.
+
+### 31.8 Migraciones / Edge Functions / Vercel
+
+Ninguna migración — no hizo falta un mecanismo de draft/pending más claro que el que ya existía
+(`storage_path: 'pending'` + el borrador de `sessionStorage`, reutilizados tal cual). Ninguna Edge
+Function nueva. Se agregó `document-upload-mobile.html` como segundo entry point en
+`build.rollupOptions.input` (`vite.config.ts`) — el build ahora genera dos HTML/bundle sets
+independientes; ambos quedan precacheados por el service worker (confirmado en `dist/sw.js`: pasó de
+28 a 31 entradas) y ambos quedan excluidos del fallback de `NavigationRoute` por el mismo `denylist`
+que ya protegía a `raw-upload-test.html` (`/\/[^/]+\.html$/`, cualquier `.html` suelto en la raíz).
+Se agregaron cuatro globals más (`HTMLButtonElement`, `URLSearchParams`) al allowlist de
+`eslint.config.js`, mismo mecanismo que rondas anteriores. Redeploy normal del frontend. No se tocó
+Storage/MIME/RLS server-side — se reutilizan tal cual las mismas funciones y políticas que ya existían.
+
+### 31.9 Checklist de verificación — en el celular Android donde falla
+
+1. Ir a `/documentos/carpetas/general` → Nuevo documento → completar título/tipo/alcance → Continuar.
+2. En el Paso 2, debería aparecer el botón "Cargar archivo desde modo compatible mobile" (por
+   heurística de userAgent). Tocarlo.
+3. En `document-upload-mobile.html`: confirmar que NO aparece el aviso de sesión ("Iniciá sesión
+   nuevamente…") — si aparece, revisar que la sesión de SIGER4 siga activa en ese navegador.
+4. Confirmar que se ven los datos del documento (título/tipo/alcance) tomados del borrador.
+5. Tocar "Elegir archivo", elegir un documento real — debería mostrar name/type/size igual que
+   `raw-upload-test.html`.
+6. Tocar "Subir archivo" — debería mostrar el log completo hasta `finalSave` y terminar en "✓
+   Documento cargado correctamente."
+7. Tocar "Volver a Documentos" — confirmar que el documento aparece en la carpeta correspondiente con
+   el archivo real adjunto (abrir/descargar para confirmar que no quedó corrupto).

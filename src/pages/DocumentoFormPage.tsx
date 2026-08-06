@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -186,14 +187,33 @@ export function DocumentoFormPage() {
   // handleFileInputChange).
   const [fileLostNotice, setFileLostNotice] = useState<string | null>(null)
 
-  // Ref estable al <input type="file"> real — nunca se le pone key
-  // dinámica ni se desmonta condicionalmente entre renders (confirmado al
-  // revisar el JSX de abajo), así que la misma instancia del elemento vive
-  // durante todo el Paso 2. El botón visible "Seleccionar archivo" dispara
-  // el picker nativo llamando a este ref, en vez de que el input esté
-  // escondido con estilos que algunos navegadores/Android tratan distinto a
-  // un input realmente interactivo.
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  // Refs a los DOS inputs reales, permanentes en el DOM durante todo el
+  // Paso 2 (nunca se desmontan, nunca cambian de key) — YA NO se usan para
+  // disparar el picker por código (inputRef.current.click()): confirmado
+  // por captura real de diagnóstico que en Android/Chrome dentro de la PWA
+  // instalada eso abre el picker pero NO garantiza que "change" vuelva a
+  // disparar (aparecía nativeFileInputClick pero nunca
+  // nativeFileInputChange). El punto de interacción real ahora es un
+  // <label htmlFor> asociado directo a cada input, que es la única forma
+  // 100% estándar del HTML de abrir un file picker sin pasar por
+  // JavaScript en absoluto. Los refs se conservan solo por si hace falta
+  // instrumentación adicional más adelante (ej. leer .files directo para
+  // diagnóstico) — no tienen uso funcional en el flujo actual.
+  const fileInputGeneralRef = useRef<HTMLInputElement>(null)
+  const fileInputCameraRef = useRef<HTMLInputElement>(null)
+  // Si se tocó el label pero nunca llegó "change" (el caso exacto reportado:
+  // nativeFileInputClick sin nativeFileInputChange después), se muestra un
+  // aviso — pero recién después de un margen razonable, porque Android
+  // puede tardar en devolver el control a la app tras cerrar el picker.
+  const [awaitingFileTimeout, setAwaitingFileTimeout] = useState<number | null>(null)
+  const [nativeChangeMissingNotice, setNativeChangeMissingNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (awaitingFileTimeout) window.clearTimeout(awaitingFileTimeout)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Instrumentación TEMPORAL de diagnóstico (ver src/lib/uploadDiagnostics.ts)
   // — persiste a sessionStorage en cada log(), sobrevive recargas reales.
@@ -385,13 +405,26 @@ export function DocumentoFormPage() {
     setStep('metadata')
   }
 
-  // Botón visible "Seleccionar archivo" — dispara el input real por
-  // referencia estable, en vez de que el usuario tenga que interactuar con
-  // un <input type="file"> escondido/estilizado de formas que algunos
-  // navegadores mobile manejan mal.
-  function handleSelectFileButtonClick() {
-    diagnosticsLog.log('fileInputButtonClick', {})
-    fileInputRef.current?.click()
+  // Tocar el <label> asociado (htmlFor) es lo que abre el picker nativo —
+  // sin JavaScript de por medio, es el mecanismo estándar del HTML. Este
+  // handler solo loguea el intento; el navegador ya se encarga de abrir el
+  // input real (el "click" del label se propaga al input automáticamente
+  // por la asociación htmlFor/id, lo mismo que dispara el "nativeFileInputClick"
+  // logueado en el propio onClick del input).
+  function handleFileInputLabelClick(source: 'general' | 'camera') {
+    diagnosticsLog.log('fileInputLabelClick', { source })
+    // Si en un margen razonable no llega "change", se avisa explícito — ver
+    // limpieza de este timeout en handleFileInputChange (si change sí
+    // llega) y su disparo en el efecto de abajo.
+    if (awaitingFileTimeout) window.clearTimeout(awaitingFileTimeout)
+    setNativeChangeMissingNotice(null)
+    const timeoutId = window.setTimeout(() => {
+      diagnosticsLog.log('nativeFileInputChangeTimeout', { waitedMs: 8000 })
+      setNativeChangeMissingNotice(
+        'El navegador no devolvió ningún archivo. Probá con la opción "Elegir archivo" o abrí SIGER4 desde el navegador en vez de la app instalada.',
+      )
+    }, 8000)
+    setAwaitingFileTimeout(timeoutId)
   }
 
   // onChange del input real: SOLO guarda el archivo en memoria y lo
@@ -399,6 +432,11 @@ export function DocumentoFormPage() {
   // separación explícita que se pidió: elegir un archivo es un paso
   // completamente distinto de subirlo.
   function handleFileInputChange(selected: File | null, filesLength: number) {
+    if (awaitingFileTimeout) {
+      window.clearTimeout(awaitingFileTimeout)
+      setAwaitingFileTimeout(null)
+    }
+    setNativeChangeMissingNotice(null)
     setError(null)
     setFileLostNotice(null)
     diagnosticsLog.log('nativeFileInputChange', {
@@ -524,11 +562,14 @@ export function DocumentoFormPage() {
     }
   }
 
+  // Vuelve al estado "idle" — ya NO dispara el picker por código (mismo
+  // motivo que arriba). El usuario vuelve a tocar uno de los labels
+  // visibles, que quedan mostrados de nuevo en ese estado.
   function handleChooseDifferentFile() {
     setSelectedFile(null)
     setFileStageStatus('idle')
     setError(null)
-    fileInputRef.current?.click()
+    setNativeChangeMissingNotice(null)
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -697,26 +738,47 @@ export function DocumentoFormPage() {
             </div>
           )}
 
-          {/* Input real, con ref estable — nunca se le pone key dinámica ni
-              se desmonta condicionalmente, y no tiene "capture" (que fuerza
-              la cámara directamente, sin dejar elegir de galería/archivos —
-              comportamiento distinto y más restrictivo del que se pidió) ni
-              "accept" restrictivo a nivel de picker (la validación real de
-              tipo pasa en handleFileInputChange, con mensaje claro si
-              rechaza). Se mantiene oculto visualmente con un estilo que no
-              lo saca del flujo de accesibilidad/interacción (no display:none
-              ni un truco que algunos Android manejan mal) — el botón visible
-              de abajo es el único punto de interacción real. */}
+          {/* Dos inputs reales, SIEMPRE montados (nunca condicionalmente, sin
+              key dinámica), cada uno con un <label htmlFor> asociado — es el
+              mecanismo estándar del HTML para abrir un file picker sin pasar
+              por JavaScript, a diferencia del input.click() programático que
+              se sacó de acá (confirmado por diagnóstico real: abría el picker
+              pero "change" no siempre volvía a disparar en Android/Chrome
+              dentro de la PWA instalada). El input queda visualmente oculto
+              con un estilo que no lo saca del flujo de accesibilidad
+              (clip tipo sr-only, no display:none) — el label es el elemento
+              visible e interactivo real.
+              - fileInputGeneral: sin accept restrictivo ni capture, para
+                elegir PDF/Word/Excel/foto desde archivos o galería.
+              - fileInputCamera: accept="image/*" + capture="environment",
+                exclusivo para sacar una foto nueva con la cámara — separado
+                a propósito para no forzar la cámara en el flujo general
+                (que debe poder elegir cualquier documento) ni mezclar
+                capture con tipos no-imagen. */}
           <input
-            ref={fileInputRef}
-            id="file"
+            ref={fileInputGeneralRef}
+            id="file-general"
             type="file"
-            style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}
-            tabIndex={-1}
-            aria-hidden="true"
+            className="sr-only-file-input"
             disabled={fileStageStatus === 'uploading'}
-            onClick={() => diagnosticsLog.log('nativeFileInputClick', {})}
-            onChange={(e) => {
+            onClick={() => diagnosticsLog.log('nativeFileInputClick', { source: 'general' })}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              const files = e.target.files
+              const selected = files?.[0] ?? null
+              handleFileInputChange(selected, files?.length ?? 0)
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={fileInputCameraRef}
+            id="file-camera"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only-file-input"
+            disabled={fileStageStatus === 'uploading'}
+            onClick={() => diagnosticsLog.log('nativeFileInputClick', { source: 'camera' })}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
               const files = e.target.files
               const selected = files?.[0] ?? null
               handleFileInputChange(selected, files?.length ?? 0)
@@ -725,12 +787,32 @@ export function DocumentoFormPage() {
           />
 
           <div className="field">
-            <label>{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo'}</label>
+            <label htmlFor="file-general">{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo'}</label>
 
             {fileStageStatus === 'idle' && (
-              <button type="button" className="btn btn-outlined btn-block" onClick={handleSelectFileButtonClick}>
-                Seleccionar archivo
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <label
+                  htmlFor="file-general"
+                  className="btn btn-outlined"
+                  style={{ flex: 1, minWidth: 140 }}
+                  onClick={() => handleFileInputLabelClick('general')}
+                >
+                  Elegir archivo
+                </label>
+                <label
+                  htmlFor="file-camera"
+                  className="btn btn-outlined"
+                  style={{ flex: 1, minWidth: 140 }}
+                  onClick={() => handleFileInputLabelClick('camera')}
+                >
+                  Tomar foto
+                </label>
+              </div>
+            )}
+            {fileStageStatus === 'idle' && nativeChangeMissingNotice && (
+              <p className="field-error" style={{ marginTop: 8 }}>
+                {nativeChangeMissingNotice}
+              </p>
             )}
 
             {(fileStageStatus === 'selected' || fileStageStatus === 'failed') && selectedFile && (

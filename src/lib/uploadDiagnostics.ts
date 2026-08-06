@@ -33,16 +33,27 @@
 
 export type UploadDiagnosticEvent =
   // Cadena completa del input real, en el orden en que deberían aparecer:
-  // botón visible tocado -> click nativo del <input> real (dispara el
-  // picker/cámara del SO) -> onChange nativo (el navegador devolvió algo).
-  // Si aparece fileInputButtonClick pero nunca nativeFileInputClick, el
-  // click nunca llegó al input real. Si aparece nativeFileInputClick pero
-  // nunca nativeFileInputChange, el usuario canceló el picker O el
-  // navegador nunca disparó el evento — la recarga real que mata la página
-  // mientras el picker está abierto puede producir exactamente este patrón.
-  | 'fileInputButtonClick'
+  // label visible tocado -> click nativo del <input> real, disparado por la
+  // asociación htmlFor/id del label (abre el picker/cámara del SO) ->
+  // onChange nativo (el navegador devolvió algo). Si aparece
+  // fileInputLabelClick pero nunca nativeFileInputClick, el click del label
+  // no llegó a propagarse al input real (no debería pasar con htmlFor/id
+  // correctos, pero queda instrumentado por las dudas). Si aparece
+  // nativeFileInputClick pero nunca nativeFileInputChange, el usuario
+  // canceló el picker O el navegador nunca disparó el evento — la recarga
+  // real que mata la página mientras el picker está abierto puede producir
+  // exactamente este patrón.
+  | 'fileInputLabelClick'
   | 'nativeFileInputClick'
   | 'nativeFileInputChange'
+  // Se registra por separado de nativeFileInputChange (nunca con el mismo
+  // nombre) a propósito: es un evento SINTÉTICO que este código dispara
+  // cuando pasó el margen de espera sin que el navegador devolviera nada —
+  // mezclarlo con nativeFileInputChange real rompería cualquier detección
+  // tipo "¿hubo un change real después de este click?" (ver
+  // UploadDiagnosticsPanel.tsx), que necesita distinguir "no pasó nada" de
+  // "sí pasó algo".
+  | 'nativeFileInputChangeTimeout'
   | 'fileDetected'
   | 'fileRejectedClient'
   | 'validateMetadata'

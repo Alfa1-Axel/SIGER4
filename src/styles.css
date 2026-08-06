@@ -431,6 +431,24 @@ img {
   width: 100%;
 }
 
+/* Input de archivo real, SIEMPRE presente en el DOM (nunca desmontado ni con
+   key dinámica) pero oculto visualmente sin sacarlo del flujo de
+   accesibilidad/interacción — patrón estándar "sr-only", deliberadamente
+   distinto de display:none, que en algunos casos puede afectar si el
+   navegador considera al elemento realmente interactivo. El label
+   asociado (htmlFor) es el único punto de interacción visible real. */
+.sr-only-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Botón de acción flotante ("+"): posición fija a distancia normal del borde
    en cualquier tamaño de pantalla (ya no hay navegación inferior de la cual
    esquivar). */

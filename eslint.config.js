@@ -40,6 +40,8 @@ export default [
         PromiseRejectionEvent: 'readonly',
         PageTransitionEvent: 'readonly',
         HTMLInputElement: 'readonly',
+        HTMLPreElement: 'readonly',
+        HTMLDivElement: 'readonly',
         caches: 'readonly',
         __SIGER4_BUILD_VERSION__: 'readonly',
         __SIGER4_BUILD_TIME__: 'readonly',

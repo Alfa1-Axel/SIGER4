@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -24,28 +24,6 @@ function resolveBuildVersion(): string {
 const BUILD_VERSION = resolveBuildVersion()
 const BUILD_TIME = new Date().toISOString()
 
-// public/raw-upload-test.html es un archivo estático real, servido tal cual
-// sin pasar por el bundler de Vite — por diseño, para que la prueba de
-// diagnóstico sea 100% ajena a React/build de la app (ver DEPLOYMENT.md).
-// Eso significa que NO puede leer __SIGER4_BUILD_VERSION__ (esa constante
-// solo existe dentro de módulos que Vite procesa). Este plugin mínimo
-// escribe la misma info a un JSON estático en la raíz del build
-// (dist/build-info.json) que raw-upload-test.js puede pedir con fetch() en
-// tiempo de ejecución — así ambas pantallas de diagnóstico (la de React y
-// la estática) muestran el mismo build real sin duplicar lógica de git.
-function buildInfoPlugin(): Plugin {
-  return {
-    name: 'siger4-build-info',
-    generateBundle() {
-      this.emitFile({
-        type: 'asset',
-        fileName: 'build-info.json',
-        source: JSON.stringify({ version: BUILD_VERSION, time: BUILD_TIME }, null, 2),
-      })
-    },
-  }
-}
-
 export default defineConfig({
   define: {
     __SIGER4_BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
@@ -53,7 +31,6 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    buildInfoPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       // El plugin, por default, inyecta un <script> en index.html que solo
@@ -137,19 +114,6 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      // document-upload-mobile.html: segundo entry point real (SÍ pasa por
-      // el build de Vite, a diferencia de raw-upload-test.html en public/) —
-      // permite importar el cliente real de Supabase (src/lib/supabaseClient.ts)
-      // y las funciones ya auditadas de src/lib/api/storage.ts y
-      // src/lib/api/documents.ts sin duplicar lógica sensible (MIME, límites,
-      // paths seguros, RLS), mientras se sigue sirviendo como JS local (CSP
-      // script-src 'self' intacta) y sin React/AppShell/React Router — eso es
-      // lo que causaba el bug real en el input de archivo en Android, no
-      // Vite ni el bundler (ver DEPLOYMENT.md sección 31).
-      input: {
-        main: 'index.html',
-        'document-upload-mobile': 'document-upload-mobile.html',
-      },
       output: {
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],

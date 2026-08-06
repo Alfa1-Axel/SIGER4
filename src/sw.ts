@@ -21,14 +21,11 @@ precacheAndRoute(self.__WB_MANIFEST)
 // y sirve el shell de React (index.html) en su lugar, sin importar a qué
 // ruta se navegó. Eso es lo que hace andar el ruteo client-side de la SPA
 // para rutas reales de la app — pero con el allowlist default de Workbox
-// (todo) también capturaba archivos estáticos reales sueltos como
-// /raw-upload-test.html: navegar directo a esa URL (escribirla, un
-// bookmark) devolvía el shell de React en vez del archivo HTML real,
-// contaminando cualquier intento de usarlo como diagnóstico aislado fuera
-// de React. bug real encontrado al investigar por qué un archivo de
-// diagnóstico vanilla podía comportarse de forma inconsistente. El
-// denylist excluye explícitamente archivos .html sueltos servidos desde la
-// raíz (nunca son rutas de la SPA) del fallback al shell.
+// (todo) también capturaba cualquier archivo .html estático suelto servido
+// desde la raíz (ej. public/*.html): navegar directo a esa URL devolvía el
+// shell de React en vez del archivo real. El denylist excluye
+// explícitamente archivos .html sueltos (nunca son rutas de la SPA, que no
+// usa extensión en sus URLs) del fallback al shell.
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL('/index.html'), {
     denylist: [/\/[^/]+\.html$/],

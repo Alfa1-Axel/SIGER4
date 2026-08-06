@@ -2569,3 +2569,116 @@ Ninguna migración, ninguna Edge Function. Redeploy normal del frontend.
 - [ ] Con un usuario `informatica_r4`, revisar el panel de diagnóstico después de reproducir el
       caso principal en mobile: confirmar que aparecen `wizardStepChange`, `pageshow` y
       `visibilitychange` en la secuencia, y que ayudan a confirmar el momento exacto de la recarga.
+
+## 24. Notificaciones falsas en documentos pending + diagnóstico que no sobrevivía la recarga (2026-08)
+
+Con capturas reales del usuario aparecieron dos bugs concretos y verificables por código, distintos
+entre sí: notificaciones que llegaban aunque la subida fallara, y un panel de diagnóstico que
+mostraba muy pocos eventos porque los perdía en cada recarga real de mobile.
+
+### 24.1 Por qué se disparaba notificación aunque fallara la subida
+
+Causa exacta, confirmada leyendo el trigger real en la base: `trg_notify_document_created`
+(creado en `0023_automatic_notifications.sql`) corre `after insert on documents`, sin mirar
+`storage_path` en absoluto. `createDocument()` en el cliente **siempre** inserta la fila con
+`storage_path='pending'` primero (es una restricción real de RLS de Storage — la fila tiene que
+existir antes de poder subir el archivo, ver `documents_storage_write_admin_regional_station`).
+Es decir: la notificación se disparaba en ese insert inicial, en el mismo instante en que se creaba
+la fila `pending` — mucho antes de saber si el archivo se iba a terminar de subir o no. Sacar una
+foto disparaba el insert, el insert disparaba la notificación, y recién después (a veces con éxito,
+a veces no) corría el upload real.
+
+**Corrección — migración `0056_document_notification_on_confirm.sql`**: el trigger pasa de
+`after insert` a `after insert or update`, y la función `notify_document_created()` ahora chequea
+`storage_path` explícitamente:
+- Nunca notifica si `new.storage_path = 'pending'` (cubre el insert inicial, siempre pending, y
+  cualquier update que deje la fila todavía pending — ej. `updatePendingMetadata`).
+- En un `update`, solo notifica la vez que `storage_path` deja de ser `'pending'` (la confirmación
+  real) — no en ediciones posteriores de título/categoría/alcance sobre un documento ya confirmado
+  (`old.storage_path is not distinct from new.storage_path` corta ese caso), ni si ya tenía un
+  archivo real antes (`old.storage_path <> 'pending'` — reemplazo de archivo en edición, que ya se
+  notificó la primera vez).
+
+No hace falta ningún cambio en `notifications`, `push_send_log`, `send-push` ni
+`NotificationPushBridge` — todos ellos ya reaccionan a un insert en `notifications`, sin importar
+qué lo generó; el fix está enteramente en cuándo se genera esa fila.
+
+### 24.2 Por qué el diagnóstico no mostraba onChange/uploadStart/uploadFail
+
+El panel anterior (secciones 22-23) guardaba los eventos **solo en memoria** — un array de
+JavaScript dentro de `createUploadDiagnosticsLog()`, creado una vez por montaje del componente
+(`useMemo`). Una recarga real de la página (confirmada como la causa de fondo desde la sección 23)
+destruye por completo ese array. La secuencia real observada por el usuario —
+`draftRecovered`/`wizardStepChange` sí aparecían, `onChange`/`uploadStart`/`uploadFail` no— es
+exactamente lo que un log en memoria produce cuando hay una recarga en el medio: esos eventos
+posteriores SÍ se registraban en su momento, pero en la instancia de página que la siguiente
+recarga (o el cierre de la pestaña) destruyó antes de que alguien llegara a abrir el panel a
+verlos.
+
+**Corrección**: [uploadDiagnostics.ts](src/lib/uploadDiagnostics.ts) ahora persiste cada evento a
+`sessionStorage` de inmediato (`log()` ya no acumula en un array en memoria, escribe y lee directo
+de `sessionStorage` en cada llamada) — sobrevive cualquier recarga real dentro de la misma pestaña.
+El panel ([UploadDiagnosticsPanel.tsx](src/components/UploadDiagnosticsPanel.tsx)) ahora puede
+mostrar eventos de un intento anterior a la última recarga, no solo lo que pasó después de volver a
+montarse. Se agregó un botón "Limpiar log" explícito (nunca automático) para arrancar un diagnóstico
+limpio a propósito.
+
+### 24.3 Eventos nuevos / renombrados
+
+Vocabulario más granular, alineado a los pasos reales del flujo:
+
+| Antes | Ahora |
+|---|---|
+| `onChange` | `fileInputChanged` (+ nuevo `fileInputClicked` antes de que se abra el picker) |
+| — | `fileDetected` (incluye `fileTypeInferred`, el MIME que esta app realmente va a usar) |
+| — | `fileRejectedClient` (el archivo no pasa el whitelist client-side, ANTES de intentar nada) |
+| `createPending` (2 logs distintos con el mismo nombre) | `pendingCreateStart`/`pendingCreateSuccess`/`pendingCreateFail` |
+| `uploadStart`/`uploadSuccess`/`uploadFail` | sin cambios, ahora exclusivamente sobre la llamada real a Storage |
+| `updateStoragePath` | `confirmDocumentStart`/`confirmDocumentSuccess`/`confirmDocumentFail` — la operación que saca `storage_path` de `'pending'` y es la que dispara la notificación real (ver 24.1) |
+| — | `notificationCreated` (informativo — deja registrado el momento en que el trigger de la base ya vio la confirmación, no confirma la fila de `notifications` en sí) |
+
+`fileDetected` también expone `fileType` (el que reportó el navegador) junto a `fileTypeInferred`
+(el que esta app va a usar realmente, ver `inferMimeType`/`isDocumentMimeAllowed`, ahora exportadas
+desde [storage.ts](src/lib/api/storage.ts)) — la comparación directa que hace falta para seguir
+diagnosticando Word/PDF en un dispositivo puntual la próxima vez que se reproduzca.
+
+### 24.4 Gating de "Guardar"
+
+Ya estaba correcto desde el rediseño de la sección 21, confirmado de nuevo acá: el botón se
+habilita recién cuando `uploadStatus === 'done'`, y ese estado solo se setea DESPUÉS de loguear
+`confirmDocumentSuccess` (es decir, después de que `updateDocumentStoragePath` — la confirmación
+real — haya terminado con éxito). No hizo falta ningún cambio adicional de gating.
+
+### 24.5 Word/PDF: sigue sin causa nueva confirmada
+
+No se encontró una causa adicional a la ya corregida (MIME genérico + contentType forzado, sección
+21). Con los eventos nuevos de esta sección (`fileDetected` con `fileTypeInferred`,
+`fileRejectedClient`, `uploadFail` con el error completo de Storage), la próxima reproducción en un
+celular real debería dejar exactamente el dato que falta: si el archivo se rechaza client-side
+(`fileRejectedClient`) o si pasa esa validación y falla server-side (`uploadFail` con
+`code`/`details`/`hint`/`status` reales de Storage).
+
+### 24.6 Migraciones / Edge Functions / Vercel
+
+- **Migración nueva**: `0056_document_notification_on_confirm.sql` — aplicar con el flujo normal
+  de migraciones.
+- **Edge Functions**: ninguna modificada.
+- **Vercel**: redeploy normal del frontend.
+
+### 24.7 Checklist de verificación
+
+- [ ] **Notificación falsa**: en mobile, iniciar una carga y forzar que la subida falle (ej. cortar
+      la conexión justo después de elegir el archivo) — confirmar que NO llega ninguna notificación
+      (interna ni push) mientras el documento siga en `pending`.
+- [ ] **Notificación real**: completar una carga con éxito de punta a punta — confirmar que la
+      notificación de "Nuevo documento" sí llega, recién después de que el archivo terminó de
+      subirse (no antes).
+- [ ] **Diagnóstico sobrevive recarga**: reproducir el caso de recarga real en mobile (Paso 1 →
+      Paso 2 → elegir archivo/cámara) y, sea cual sea el resultado, abrir el panel de diagnóstico —
+      confirmar que aparece la secuencia completa (`fileInputClicked`, `fileInputChanged`,
+      `fileDetected`, etc.), no solo `draftRecovered`/`wizardStepChange`.
+- [ ] **Word/PDF con datos nuevos**: reproducir el fallo de Word/PDF en mobile y capturar el panel
+      completo — reportar `fileType` vs `fileTypeInferred` en `fileDetected`, y el `uploadFail`
+      completo si aparece.
+- [ ] Confirmar que editar un documento existente (cambiar solo título/categoría, sin tocar el
+      archivo) NO dispara una notificación nueva.

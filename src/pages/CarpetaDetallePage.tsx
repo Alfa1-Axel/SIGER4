@@ -13,6 +13,7 @@ import {
 import { getDocumentSignedUrl } from '../lib/api/storage'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { isMobileUserAgent } from '../lib/device'
 
 export function CarpetaDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -20,6 +21,11 @@ export function CarpetaDetallePage() {
   const { isAdmin, hasRole, profile } = useAuth()
   const canManageFolders = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
   const isGeneral = id === 'general'
+  // Carga/edición de archivos disponible solo en escritorio (ver
+  // DEPLOYMENT.md) — administrar la carpeta en sí (nombre/descripción,
+  // eliminar carpeta) no involucra ningún input de archivo y sigue
+  // disponible en mobile.
+  const canUploadFiles = canManageFolders && !isMobileUserAgent()
 
   const [folder, setFolder] = useState<DocumentFolder | null>(null)
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
@@ -200,9 +206,11 @@ export function CarpetaDetallePage() {
               </button>
               {canManageFolders && (
                 <>
-                  <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined btn-icon-sm" aria-label="Editar">
-                    <Icon name="edit" size={14} />
-                  </Link>
+                  {canUploadFiles && (
+                    <Link to={`/documentos/${doc.id}/editar`} className="btn btn-outlined btn-icon-sm" aria-label="Editar">
+                      <Icon name="edit" size={14} />
+                    </Link>
+                  )}
                   <button
                     type="button"
                     className="btn btn-outlined btn-icon-sm"
@@ -219,7 +227,7 @@ export function CarpetaDetallePage() {
         ))}
       </div>
 
-      {canManageFolders && (
+      {canUploadFiles && (
         <Link
           to={isGeneral ? '/documentos/nuevo' : `/documentos/nuevo?folderId=${id}`}
           className="btn btn-primary btn-icon fab"

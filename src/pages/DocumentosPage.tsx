@@ -5,6 +5,7 @@ import { Icon } from '../components/ui/Icon'
 import { fetchDocuments, fetchDocumentFolders, fetchPendingDocuments, cleanupPendingDocuments } from '../lib/api/documents'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { isMobileUserAgent } from '../lib/device'
 
 // Vista por carpetas: cada carpeta activa es una tarjeta que lleva a
 // /documentos/carpetas/:id (CarpetaDetallePage), donde vive el listado de
@@ -23,6 +24,9 @@ export function DocumentosPage() {
   const [error, setError] = useState<string | null>(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
+  // Carga de archivos disponible solo en escritorio (ver DEPLOYMENT.md) — no
+  // afecta "Crear carpeta" (no involucra ningún input de archivo).
+  const canUploadFiles = canManageFolders && !isMobileUserAgent()
 
   const unfiledCount = documents.filter((doc) => !doc.folder_id).length
 
@@ -164,9 +168,11 @@ export function DocumentosPage() {
               <Link to="/documentos/carpetas/nueva" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
                 Crear carpeta
               </Link>
-              <Link to="/documentos/nuevo" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
-                Cargar archivo
-              </Link>
+              {canUploadFiles && (
+                <Link to="/documentos/nuevo" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
+                  Cargar archivo
+                </Link>
+              )}
             </div>
           )}
           <button

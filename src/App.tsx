@@ -38,7 +38,6 @@ import { InventarioFormPage } from './pages/InventarioFormPage'
 import { DepartamentosPage } from './pages/DepartamentosPage'
 import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
-import { DiagnosticoUploadPage } from './pages/DiagnosticoUploadPage'
 
 export default function App() {
   return (
@@ -89,10 +88,6 @@ export default function App() {
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />
-        {/* Página de diagnóstico TEMPORAL (ver DEPLOYMENT.md) — input file
-            real sin wizard alrededor, solo para informatica_r4/
-            integrante_informatica (gate dentro del propio componente). */}
-        <Route path="/diagnostico-upload" element={<ProtectedRoute><DiagnosticoUploadPage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

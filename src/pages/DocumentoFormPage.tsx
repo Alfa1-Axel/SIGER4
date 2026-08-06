@@ -17,7 +17,7 @@ import {
 import { uploadDocumentFile } from '../lib/api/storage'
 import type { DocumentVersion, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { attachGlobalErrorCapture, createUploadDiagnosticsLog, serializeError } from '../lib/uploadDiagnostics'
+import { attachGlobalErrorCapture, attachPageLifecycleCapture, createUploadDiagnosticsLog, serializeError } from '../lib/uploadDiagnostics'
 import { UploadDiagnosticsPanel } from '../components/UploadDiagnosticsPanel'
 
 type DocScopeTarget = 'region' | 'subsede' | 'station' | 'profile'
@@ -29,16 +29,25 @@ const DOC_SCOPE_OPTIONS: { value: DocScopeTarget; label: string }[] = [
   { value: 'profile', label: 'Usuario específico' },
 ]
 
+type FormStep = 'metadata' | 'file'
+
 // Borrador de metadatos del Paso 1 (nueva carga, no edición) — se guarda en
 // sessionStorage en cada cambio, NUNCA se guarda el File ahí (solo texto).
-// Sirve para sobrevivir la recarga real que Android puede hacer de la PWA
-// mientras el selector nativo de archivos está abierto (ver DEPLOYMENT.md):
-// como ahora el archivo se elige recién en el Paso 2, después de confirmar
-// los metadatos del Paso 1, hace falta poder recuperar esos metadatos si la
-// página se recarga a mitad del Paso 2 — sin este borrador, el usuario
-// volvería a un formulario vacío después de haber completado todo el Paso 1.
-// Se limpia apenas el documento se guarda con éxito, o si el usuario cancela
-// el Paso 2 y vuelve a editar el Paso 1 desde cero.
+// Sirve para sobrevivir la recarga real que Android/iOS hacen de la PWA al
+// abrir el selector de archivos o la cámara — el dato clave confirmado con
+// el panel de diagnóstico es que la recarga pasa AL ABRIR el selector/
+// cámara, no recién después de elegir algo, así que puede pasar apenas se
+// entra al Paso 2, antes de que exista ninguna fila en "documents" todavía.
+//
+// wizardStep es justamente lo que faltaba antes: se guardaba el id de la
+// fila pending (pendingDocumentId) para saber que había que reanudar en el
+// Paso 2, pero esa fila recién se crea DENTRO de handleFileChange — es
+// decir, después de elegir un archivo. Si la recarga pasa antes de eso (que
+// es el caso real, según el dato nuevo del usuario), pendingDocumentId
+// nunca llegó a guardarse, y la recuperación anterior volvía silenciosamente
+// al Paso 1 aunque el usuario ya hubiese completado todos los datos. Ahora
+// el paso actual se persiste en el momento en que se confirma (Paso 1 -> 2),
+// independiente de si ya existe o no una fila real.
 interface DocumentDraft {
   title: string
   category: string
@@ -49,12 +58,14 @@ interface DocumentDraft {
   stationId: string
   profileId: string
   folderId: string | null
+  wizardStep: FormStep
   // Si el Paso 2 ya alcanzó a crear la fila en "documents" (necesario antes
   // de poder subir el archivo, ver createDocument) antes de que la página se
   // recargara, se guarda su id acá para reanudar sobre la MISMA fila en vez
   // de crear una segunda — evita duplicados si Android recarga justo después
   // de crear la fila pero antes de terminar de subir el archivo.
   pendingDocumentId: string | null
+  updatedAt: string
 }
 
 function draftStorageKey(folderIdFromQuery: string | null): string {
@@ -87,8 +98,6 @@ function clearDraft(folderIdFromQuery: string | null): void {
     // Idem saveDraft.
   }
 }
-
-type FormStep = 'metadata' | 'file'
 
 export function DocumentoFormPage() {
   const { id } = useParams<{ id: string }>()
@@ -139,6 +148,14 @@ export function DocumentoFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Mensaje de recuperación de borrador (ver useEffect de recuperación más
+  // abajo) — deliberadamente separado de "error": recuperar los datos del
+  // Paso 1 después de una recarga NO es un fallo, es el comportamiento
+  // esperado en mobile. Mezclarlo con "error" lo mostraba con el mismo
+  // estilo rojo que un fallo real de subida, dando la falsa impresión de que
+  // algo salió mal cuando en realidad el sistema ya recuperó todo lo que
+  // podía recuperar.
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null)
 
   // Instrumentación TEMPORAL de diagnóstico (ver src/lib/uploadDiagnostics.ts)
   // para investigar por qué la carga falla en mobile/PWA pero funciona en
@@ -151,6 +168,7 @@ export function DocumentoFormPage() {
   const diagnosticsLog = useMemo(() => createUploadDiagnosticsLog(), [])
 
   useEffect(() => attachGlobalErrorCapture(diagnosticsLog), [diagnosticsLog])
+  useEffect(() => attachPageLifecycleCapture(diagnosticsLog), [diagnosticsLog])
 
   useEffect(() => {
     if (!canCreate) return
@@ -171,14 +189,29 @@ export function DocumentoFormPage() {
   }, [canCreate])
 
   // Al entrar en modo creación (no edición), intenta recuperar un borrador
-  // de una carga anterior interrumpida por una recarga (ver loadDraft). Si
-  // hay un pendingDocumentId guardado, salta directo al Paso 2 con esa fila
-  // ya conocida — el usuario solo tiene que volver a elegir el archivo
-  // (nunca se guardó el File, solo sus metadatos), sin perder lo que ya
-  // había escrito en el Paso 1 ni crear una segunda fila duplicada.
+  // de una carga anterior interrumpida por una recarga (ver loadDraft).
+  //
+  // Dato clave confirmado con el panel de diagnóstico (ver DEPLOYMENT.md):
+  // en mobile/PWA, Android/iOS recargan la página al ABRIR el selector de
+  // archivos o la cámara — no recién después de elegir algo. Eso significa
+  // que la recarga puede pasar apenas se entra al Paso 2, ANTES de que
+  // exista ninguna fila en "documents" todavía (esa fila recién se crea
+  // dentro de handleFileChange, que nunca llegó a correr). Restaurar el
+  // Paso 2 solo cuando había un pendingDocumentId guardado (como hacía la
+  // versión anterior) volvía silenciosamente al Paso 1 en ese caso — el
+  // usuario ya había completado todo el Paso 1, pero la pantalla no lo
+  // reflejaba. Ahora wizardStep se persiste apenas se confirma el Paso 1
+  // (ver handleContinueToFile), así que la restauración ya no depende de
+  // que exista una fila real.
   useEffect(() => {
     if (isEditing) return
     const draft = loadDraft(folderIdFromQuery)
+    diagnosticsLog.log('draftRecovered', {
+      found: Boolean(draft),
+      wizardStep: draft?.wizardStep ?? null,
+      pendingDocumentId: draft?.pendingDocumentId ?? null,
+      updatedAt: draft?.updatedAt ?? null,
+    })
     if (!draft) return
     setTitle(draft.title)
     setCategory(draft.category)
@@ -188,12 +221,27 @@ export function DocumentoFormPage() {
     setSubsedeId(draft.subsedeId)
     setStationId(draft.stationId)
     setProfileId(draft.profileId)
-    diagnosticsLog.log('draftRecovered', { pendingDocumentId: draft.pendingDocumentId })
-    if (draft.pendingDocumentId) {
-      setPendingDocumentId(draft.pendingDocumentId)
+    if (draft.wizardStep === 'file') {
       setStep('file')
-      setUploadStatus('failed')
-      setError('Se recuperaron los datos de una carga anterior interrumpida. Volvé a elegir el archivo para continuar.')
+      if (draft.pendingDocumentId) {
+        // La fila ya existía cuando se interrumpió — el archivo no llegó a
+        // terminar de subirse (storage_path sigue en 'pending'), hace falta
+        // reintentar sobre esa misma fila.
+        setPendingDocumentId(draft.pendingDocumentId)
+        setUploadStatus('failed')
+        setRecoveryNotice('Recuperamos los datos del documento. Volvé a seleccionar el archivo para completar la carga.')
+      } else {
+        // Se llegó a confirmar el Paso 1 pero la recarga pasó antes de
+        // elegir un archivo (el caso real más común, según el diagnóstico
+        // en mobile) — no hay ninguna fila creada todavía, así que no es un
+        // error de "no se pudo subir": simplemente hay que elegir el
+        // archivo por primera vez, con los datos del Paso 1 ya completos.
+        setUploadStatus('idle')
+        setRecoveryNotice('Recuperamos los datos del documento. Volvé a seleccionar el archivo para completar la carga.')
+      }
+      diagnosticsLog.log('wizardStepChange', { from: null, to: 'file', persisted: false, reason: 'draftRestore' })
+    } else {
+      diagnosticsLog.log('wizardStepChange', { from: null, to: 'metadata', persisted: false, reason: 'draftRestore' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing])
@@ -266,26 +314,13 @@ export function DocumentoFormPage() {
     return null
   }
 
-  // Paso 1 -> Paso 2: los metadatos ya están completos y validados acá, no
-  // recién al guardar al final — así el Paso 2 solo se ocupa del archivo.
-  // Guarda el borrador apenas se confirma el paso, para que sobreviva una
-  // recarga mientras el usuario está en el selector de archivos del Paso 2.
-  function handleContinueToFile(event: FormEvent) {
-    event.preventDefault()
-    const validationError = metadataIsValid()
-    diagnosticsLog.log('validateMetadata', { ok: !validationError, error: validationError })
-    if (validationError) {
-      setError(validationError)
-      return
-    }
-    setError(null)
-    // Si ya existe una fila pending de un intento anterior en esta misma
-    // carga (el usuario volvió al Paso 1 para corregir algo después de que
-    // el Paso 2 ya la había creado), se preserva su id en el borrador — así
-    // una recarga en este punto sigue apuntando a la fila correcta en vez de
-    // "olvidarla" y terminar creando una segunda cuando el Paso 2 vuelva a
-    // correr.
-    saveDraft(folderIdFromQuery, {
+  // Arma el borrador completo con el estado actual del formulario —
+  // centralizado para no repetir los mismos 10 campos en cada punto que
+  // necesita guardar (handleContinueToFile, handleFileChange). wizardStep y
+  // pendingDocumentId se pasan explícitos porque son justo lo que cambia
+  // entre esos puntos.
+  function currentDraft(wizardStep: FormStep, pendingId: string | null): DocumentDraft {
+    return {
       title,
       category,
       description,
@@ -295,13 +330,47 @@ export function DocumentoFormPage() {
       stationId,
       profileId,
       folderId: folderIdFromQuery,
-      pendingDocumentId,
-    })
+      wizardStep,
+      pendingDocumentId: pendingId,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  // Paso 1 -> Paso 2: los metadatos ya están completos y validados acá, no
+  // recién al guardar al final — así el Paso 2 solo se ocupa del archivo.
+  // Guarda el borrador apenas se confirma el paso, ANTES de tocar el
+  // selector de archivos — es la única forma de que sobreviva una recarga
+  // que Android/iOS puede disparar al abrir el selector/cámara, no recién
+  // después de elegir algo (ver el useEffect de recuperación más arriba).
+  function handleContinueToFile(event: FormEvent) {
+    event.preventDefault()
+    const validationError = metadataIsValid()
+    diagnosticsLog.log('validateMetadata', { ok: !validationError, error: validationError })
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+    setError(null)
+    setRecoveryNotice(null)
+    // Si ya existe una fila pending de un intento anterior en esta misma
+    // carga (el usuario volvió al Paso 1 para corregir algo después de que
+    // el Paso 2 ya la había creado), se preserva su id en el borrador — así
+    // una recarga en este punto sigue apuntando a la fila correcta en vez de
+    // "olvidarla" y terminar creando una segunda cuando el Paso 2 vuelva a
+    // correr.
+    saveDraft(folderIdFromQuery, currentDraft('file', pendingDocumentId))
+    diagnosticsLog.log('wizardStepChange', { from: 'metadata', to: 'file', persisted: true })
     setStep('file')
   }
 
   function handleBackToMetadata() {
     setError(null)
+    // Persiste el retroceso: si la página se recarga mientras el usuario
+    // sigue corrigiendo el Paso 1, debe quedar en Paso 1 (no en el "file"
+    // guardado la última vez que se confirmó) — pendingDocumentId se
+    // conserva igual, ver handleContinueToFile.
+    if (!isEditing) saveDraft(folderIdFromQuery, currentDraft('metadata', pendingDocumentId))
+    diagnosticsLog.log('wizardStepChange', { from: 'file', to: 'metadata', persisted: true })
     setStep('metadata')
   }
 
@@ -316,6 +385,7 @@ export function DocumentoFormPage() {
   // "a medias" visible para nadie.
   async function handleFileChange(selected: File | null) {
     setError(null)
+    setRecoveryNotice(null)
     // Loguea el evento onChange SIEMPRE, incluso si selected es null — si el
     // handler nunca llega a correr en mobile (la sospecha más básica a
     // descartar primero), este log tampoco va a aparecer, lo que ya sería un
@@ -353,18 +423,7 @@ export function DocumentoFormPage() {
         // fila en vez de crear una segunda (ver el useEffect de recuperación
         // de borrador más arriba).
         if (!isEditing) {
-          saveDraft(folderIdFromQuery, {
-            title,
-            category,
-            description,
-            scopeTarget,
-            regionId,
-            subsedeId,
-            stationId,
-            profileId,
-            folderId: folderIdFromQuery,
-            pendingDocumentId: created.id,
-          })
+          saveDraft(folderIdFromQuery, currentDraft('file', created.id))
         }
       } else {
         // Ya existe una fila (reintento después de un fallo, o el usuario
@@ -561,9 +620,20 @@ export function DocumentoFormPage() {
             </div>
           )}
 
+          {recoveryNotice && (
+            <div
+              className="card"
+              style={{ marginBottom: 16, padding: 12, background: 'var(--color-bg-card-soft)', border: '1px solid var(--color-border)' }}
+            >
+              <p style={{ margin: 0, fontSize: 13 }}>{recoveryNotice}</p>
+            </div>
+          )}
+
           <div className="field">
-            <label htmlFor="file">{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo adjunto'}</label>
-            {!isEditing && uploadStatus === 'idle' && (
+            <label htmlFor="file">
+              {isEditing ? 'Reemplazar archivo (opcional)' : recoveryNotice ? 'Seleccionar archivo nuevamente' : 'Archivo adjunto'}
+            </label>
+            {!isEditing && uploadStatus === 'idle' && !recoveryNotice && (
               <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 8 }}>
                 Seleccioná un archivo — se sube apenas lo elegís.
               </p>

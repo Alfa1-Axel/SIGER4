@@ -36,8 +36,13 @@ export type UploadDiagnosticEvent =
   | 'updateStoragePath'
   | 'finalSave'
   | 'draftRecovered'
+  | 'wizardStepChange'
   | 'unhandledError'
   | 'unhandledRejection'
+  | 'pageshow'
+  | 'visibilitychange'
+  | 'pagehide'
+  | 'beforeunload'
 
 export interface UploadDiagnosticEntry {
   timestamp: string
@@ -155,5 +160,46 @@ export function attachGlobalErrorCapture(log: UploadDiagnosticsLog): () => void 
   return () => {
     window.removeEventListener('error', onError)
     window.removeEventListener('unhandledrejection', onRejection)
+  }
+}
+
+// Captura el ciclo de vida real de la página mientras el formulario está
+// montado — pensado específicamente para confirmar (no solo suponer) que
+// Android/iOS recargan la página al abrir el selector de archivos/cámara,
+// en vez de solo backgroundear la pestaña:
+//   - "pageshow" con persisted=true significa que la página se restauró
+//     desde bfcache (back-forward cache) — el JS en memoria sigue vivo, NO
+//     hubo recarga real. persisted=false en un pageshow posterior al
+//     primero sí sugiere una recarga real.
+//   - "visibilitychange" a 'hidden' marca el momento en que el usuario deja
+//     la pestaña (ej. al abrir el selector nativo) — si el próximo evento
+//     registrado después es un remount de React (nuevo log de "onChange"
+//     nunca llega, en cambio aparece un "draftRecovered" fresco) en vez de
+//     un 'visible' de vuelta, confirma que hubo recarga real en el medio.
+//   - "pagehide"/"beforeunload" marcan el último instante antes de que la
+//     página se descargue de verdad (a diferencia de visibilitychange, que
+//     también dispara solo por cambiar de pestaña sin descargar nada).
+export function attachPageLifecycleCapture(log: UploadDiagnosticsLog): () => void {
+  const onPageShow = (event: PageTransitionEvent) => {
+    log.log('pageshow', { persisted: event.persisted })
+  }
+  const onVisibilityChange = () => {
+    log.log('visibilitychange', { visibilityState: document.visibilityState })
+  }
+  const onPageHide = (event: PageTransitionEvent) => {
+    log.log('pagehide', { persisted: event.persisted })
+  }
+  const onBeforeUnload = () => {
+    log.log('beforeunload', {})
+  }
+  window.addEventListener('pageshow', onPageShow)
+  document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('beforeunload', onBeforeUnload)
+  return () => {
+    window.removeEventListener('pageshow', onPageShow)
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('pagehide', onPageHide)
+    window.removeEventListener('beforeunload', onBeforeUnload)
   }
 }

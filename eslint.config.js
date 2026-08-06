@@ -38,6 +38,7 @@ export default [
         Navigator: 'readonly',
         ErrorEvent: 'readonly',
         PromiseRejectionEvent: 'readonly',
+        PageTransitionEvent: 'readonly',
       },
     },
     plugins: {

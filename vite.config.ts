@@ -1,8 +1,34 @@
+import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Versión de build visible en Ajustes/diagnóstico (ver AjustesPage.tsx) —
+// necesaria para poder confirmar, mirando la propia pantalla del celular,
+// si el dispositivo está corriendo el JS del último deploy o uno viejo (ver
+// DEPLOYMENT.md, causa real de "los fixes no se reflejan en el
+// dispositivo"). VERCEL_GIT_COMMIT_SHA es la variable que Vercel expone en
+// el entorno de build (no llega al cliente sin pasar por acá); en un build
+// local sin ese entorno, se cae a git rev-parse directo. Si ninguno está
+// disponible (build sin git, ej. un export limpio), queda "unknown" en vez
+// de romper el build.
+function resolveBuildVersion(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+const BUILD_VERSION = resolveBuildVersion()
+const BUILD_TIME = new Date().toISOString()
+
 export default defineConfig({
+  define: {
+    __SIGER4_BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
+    __SIGER4_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   plugins: [
     react(),
     VitePWA({

@@ -1,95 +1,106 @@
-import { useRef, useState } from 'react'
-import { AppShell } from '../components/layout/AppShell'
+import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 
-// SIGER4 - Página de diagnóstico TEMPORAL, mínima a propósito.
+// SIGER4 - Página de diagnóstico TEMPORAL, ULTRA mínima a propósito.
 //
-// Objetivo único: aislar si el problema de "el navegador no devuelve
-// archivo al input" (ver DEPLOYMENT.md, diagnóstico de carga de documentos
-// en mobile/PWA) es del formulario de Documentos en sí (wizard, estado de
-// React, lo que sea) o del navegador/PWA — un <input type="file"> real,
-// sin ningún wizard ni metadatos alrededor, es la prueba más simple posible.
-// Si ACÁ tampoco dispara "change" en un dispositivo puntual, el problema es
-// 100% del navegador/PWA de ese dispositivo, no de este código.
+// Objetivo único: aislar si "el navegador no devuelve archivo al input" (ver
+// DEPLOYMENT.md) es un problema de la app (AppShell, CSS global, wizard de
+// Documentos, lo que sea de este código) o del navegador/dispositivo en sí.
+// Reporte real: la versión anterior de esta pantalla (con AppShell +
+// styles.css del sistema) YA fallaba igual que el formulario de Documentos
+// — mismo síntoma exacto (nativeFileInputClick sí, nativeFileInputChange
+// nunca). Esta versión saca TODO lo que no sea estrictamente necesario para
+// la comparación sea limpia:
+//   - Sin AppShell (nada de sidebar/header/footer).
+//   - Sin styles.css del sistema — estilos inline mínimos, propios.
+//   - Sin router anidado, sin AppShell, sin nada más que este componente.
+//   - Sigue detrás de sesión real (useAuth + isAdmin) porque no hay forma
+//     segura de exponer esto sin autenticación sin abrir una superficie de
+//     ataque nueva — pero ya no depende de ProtectedRoute ni de AppShell
+//     para funcionar, solo del contexto de auth que ya envuelve toda la app.
 //
-// Nunca crea nada en la base, nunca sube nada a Storage — solo muestra en
-// pantalla lo que el input real devuelve (o no devuelve). Visible
-// únicamente para informatica_r4/integrante_informatica (mismo criterio que
-// el resto de las herramientas de diagnóstico/administración).
+// Se compara directo contra /raw-upload-test.html (HTML/JS vanilla, cero
+// React, servido estático — ver public/). Si ESA página funciona en un
+// dispositivo pero esta no, el problema está en algo de React/la app. Si
+// NINGUNA de las dos funciona, el problema es 100% del navegador/SO/
+// dispositivo, no de este código.
 export function DiagnosticoUploadPage() {
-  const { isAdmin } = useAuth()
-  const [log, setLog] = useState<string[]>([])
-  const [awaitingSince, setAwaitingSince] = useState<number | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const { isAdmin, loading } = useAuth()
+  const [entries, setEntries] = useState<string[]>([])
 
-  function appendLog(line: string) {
-    setLog((prev) => [...prev, `${new Date().toLocaleTimeString('es-AR')} — ${line}`])
+  function log(line: string) {
+    var stamp = new Date().toTimeString().split(' ')[0]
+    setEntries((prev) => prev.concat(stamp + ' — ' + line))
+  }
+
+  if (loading) {
+    return <div style={{ padding: 16, fontFamily: 'sans-serif' }}>Cargando…</div>
   }
 
   if (!isAdmin) {
-    return (
-      <AppShell title="Diagnóstico">
-        <div className="empty-state">No tenés permisos para ver esta pantalla.</div>
-      </AppShell>
-    )
+    return <div style={{ padding: 16, fontFamily: 'sans-serif' }}>No tenés permisos para ver esta pantalla.</div>
   }
 
   return (
-    <AppShell title="Diagnóstico de carga">
-      <h1 className="page-title">Diagnóstico de input de archivo</h1>
-      <p className="page-subtitle">
-        Pantalla mínima temporal, sin wizard ni metadatos — solo confirma si el navegador devuelve un
-        archivo real al elegir uno. No crea ni sube nada.
+    <div style={{ padding: 16, fontFamily: '-apple-system, Roboto, Arial, sans-serif', background: '#111', color: '#eee', minHeight: '100vh' }}>
+      <h1 style={{ fontSize: 18, margin: '0 0 4px' }}>Diagnóstico ultra mínimo (React, sin AppShell)</h1>
+      <p style={{ fontSize: 12, color: '#999', margin: '0 0 20px' }}>
+        Comparar contra <code>/raw-upload-test.html</code> (sin React). No crea ni sube nada.
       </p>
 
-      <div className="card-solid" style={{ marginBottom: 20 }}>
-        <label htmlFor="diag-file" className="btn btn-primary btn-block">
+      <div style={{ marginBottom: 16 }}>
+        <label
+          htmlFor="diag-file"
+          style={{ display: 'inline-block', fontSize: 15, padding: '12px 20px', borderRadius: 8, background: '#d32f2f', color: '#fff', cursor: 'pointer' }}
+          onClick={() => log('label click (Elegir archivo)')}
+        >
           Elegir archivo
         </label>
         <input
-          ref={inputRef}
           id="diag-file"
           type="file"
-          className="sr-only-file-input"
-          onClick={() => {
-            appendLog('nativeFileInputClick')
-            setAwaitingSince(Date.now())
-          }}
+          style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0 }}
+          onClick={() => log('nativeFileInputClick')}
           onChange={(e) => {
-            const files = e.target.files
-            const selected = files?.[0] ?? null
-            setAwaitingSince(null)
+            var files = e.target.files
+            var selected = files && files[0] ? files[0] : null
             if (!selected) {
-              appendLog(`nativeFileInputChange: files.length=${files?.length ?? 0}, sin archivo`)
+              log('nativeFileInputChange — SIN ARCHIVO (files.length=' + (files ? files.length : 0) + ')')
             } else {
-              appendLog(
-                `nativeFileInputChange: files.length=${files?.length ?? 0} · name="${selected.name}" · ` +
-                  `type="${selected.type || '(vacío)'}" · size=${selected.size} bytes · lastModified=${new Date(selected.lastModified).toISOString()}`,
+              log(
+                'nativeFileInputChange — ARCHIVO DETECTADO — name="' + selected.name + '" · type="' + (selected.type || '(vacío)') +
+                  '" · size=' + selected.size + ' bytes · lastModified=' + new Date(selected.lastModified).toISOString(),
               )
             }
             e.target.value = ''
           }}
         />
-        {awaitingSince && (
-          <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 8 }}>
-            Esperando respuesta del selector…
-          </p>
-        )}
       </div>
 
-      <div className="card-solid">
-        <div className="kpi-label" style={{ marginBottom: 8 }}>
-          Log ({log.length})
+      <div style={{ fontSize: 12, marginBottom: 16 }}>
+        <div>
+          <b>userAgent:</b> {navigator.userAgent}
         </div>
-        {log.length === 0 && <p className="empty-state">Todavía no hay eventos. Tocá "Elegir archivo" arriba.</p>}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, fontFamily: 'var(--font-mono)' }}>
-          {log.map((line, i) => (
-            <div key={i} style={{ borderTop: i > 0 ? '1px solid var(--color-border)' : undefined, paddingTop: i > 0 ? 6 : 0 }}>
-              {line}
-            </div>
-          ))}
+        <div>
+          <b>standalone/PWA:</b>{' '}
+          {String(
+            (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) ||
+              (navigator as Navigator & { standalone?: boolean }).standalone === true,
+          )}
         </div>
       </div>
-    </AppShell>
+
+      <h2 style={{ fontSize: 14, margin: '20px 0 8px' }}>Log ({entries.length})</h2>
+      <button
+        type="button"
+        onClick={() => setEntries([])}
+        style={{ fontSize: 12, padding: '6px 12px', borderRadius: 6, background: '#333', color: '#eee', border: 'none', cursor: 'pointer', marginBottom: 8 }}
+      >
+        Limpiar
+      </button>
+      <pre style={{ background: '#000', color: '#0f0', padding: 12, borderRadius: 8, fontSize: 12, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        {entries.length === 0 ? '(vacío)' : entries.join('\n')}
+      </pre>
+    </div>
   )
 }

@@ -10,3 +10,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// Inyectadas por vite.config.ts (define) en tiempo de build — ver
+// AjustesPage.tsx, sección de versión de build / diagnóstico.
+declare const __SIGER4_BUILD_VERSION__: string
+declare const __SIGER4_BUILD_TIME__: string

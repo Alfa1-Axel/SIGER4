@@ -13,8 +13,10 @@ import { triggerPushDiagnostic } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 
 export function AjustesPage() {
-  const { profile, user, roles, signOut, refreshProfile } = useAuth()
+  const { profile, user, roles, isAdmin, signOut, refreshProfile } = useAuth()
   const push = usePushNotifications(profile?.id)
+  const [clearingCache, setClearingCache] = useState(false)
+  const [clearCacheError, setClearCacheError] = useState<string | null>(null)
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [phone, setPhone] = useState(profile?.phone ?? '')
@@ -146,6 +148,33 @@ export function AjustesPage() {
       setPasswordError(err instanceof Error ? err.message : 'No pudimos cambiar la contraseña.')
     } finally {
       setChangingPassword(false)
+    }
+  }
+
+  // Reinicio manual completo del service worker/caché de la PWA — fallback
+  // explícito para informática cuando el auto-update (ver main.tsx,
+  // registerSW con reload automático al detectar una versión nueva) no
+  // alcanza, o para confirmar de una vez que un dispositivo puntual quedó
+  // con una versión vieja. Desregistra TODOS los service workers de este
+  // origen y borra TODA la Cache Storage (no solo la de SIGER4 — en este
+  // origen no hay otra app, así que no hay riesgo de borrar caché ajena),
+  // y recarga forzando bypass de cualquier caché HTTP intermedia.
+  async function handleClearCacheAndReload() {
+    setClearCacheError(null)
+    setClearingCache(true)
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(registrations.map((r) => r.unregister()))
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys()
+        await Promise.all(keys.map((key) => caches.delete(key)))
+      }
+      window.location.href = window.location.origin + '/panel?cache-cleared=' + Date.now()
+    } catch (err) {
+      setClearCacheError(err instanceof Error ? err.message : 'No pudimos limpiar la caché. Cerrá y reabrí la app manualmente.')
+      setClearingCache(false)
     }
   }
 
@@ -395,6 +424,36 @@ export function AjustesPage() {
         </button>
         {weeklyReminderError && <p className="field-error" style={{ marginTop: 8 }}>{weeklyReminderError}</p>}
       </div>
+
+      {isAdmin && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Versión / actualización de la app (informática)</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
+              Build: <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_BUILD_VERSION__}</code>
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
+              Compilado: {new Date(__SIGER4_BUILD_TIME__).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+              La app se actualiza sola apenas hay una versión nueva (recarga automática). Si un
+              dispositivo puntual parece estar corriendo una versión vieja (compará el build de
+              arriba con el último commit en el repositorio), usá este botón para forzar un reinicio
+              completo del service worker y la caché local.
+            </p>
+            <button type="button" className="btn btn-outlined btn-block" disabled={clearingCache} onClick={() => void handleClearCacheAndReload()}>
+              {clearingCache ? 'Limpiando…' : 'Actualizar app / limpiar caché'}
+            </button>
+            {clearCacheError && <p className="field-error" style={{ marginTop: 8 }}>{clearCacheError}</p>}
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8 }}>
+              Si esto no alcanza, cerrá la PWA por completo (deslizarla fuera de la lista de apps
+              recientes en Android, no solo minimizarla) y volvé a abrirla.
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h2 className="section-title" style={{ marginBottom: 10 }}>

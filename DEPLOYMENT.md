@@ -2682,3 +2682,140 @@ celular real debería dejar exactamente el dato que falta: si el archivo se rech
       completo si aparece.
 - [ ] Confirmar que editar un documento existente (cambiar solo título/categoría, sin tocar el
       archivo) NO dispara una notificación nueva.
+
+## 25. Causa real encontrada: service worker viejo corriendo en el dispositivo + rediseño manual de selección/subida (2026-08)
+
+Con una captura real del panel de diagnóstico (solo `draftRecovered`/`panelViewed`/`validateMetadata`/
+`wizardStepChange`, nunca `fileInputClicked`/`fileInputChanged`/`fileDetected`/`uploadStart`) más el
+reporte de comportamiento imposible con el código real (una foto "se sube sola" con confirmación
+antes de terminar, error y éxito a la vez, notificación real) se investigó la causa de fondo en vez
+de seguir ajustando el wizard — el código que se venía revisando en las últimas rondas era
+correcto, pero **el dispositivo del usuario nunca llegó a ejecutarlo**.
+
+### 25.1 Por qué el diagnóstico no capturaba nada — causa raíz real
+
+`vite.config.ts` tenía `registerType: 'autoUpdate'`, pero el plugin (`vite-plugin-pwa`) con su
+configuración default (`injectRegister: 'auto'`) solo inyecta un `<script>` que hace
+`navigator.serviceWorker.register(...)` **a secas**, sin ningún listener de "hay una versión nueva
+del service worker, recargá la página". En modo `autoUpdate` real (usando `virtual:pwa-register`,
+que la app nunca invocaba) ese listener sí existe y fuerza `location.reload()` automático apenas el
+SW nuevo termina de activarse. Sin él, un service worker nuevo puede instalarse y activarse en
+segundo plano — el archivo `sw.js` en el servidor sí cambia con cada deploy — pero la pestaña/PWA ya
+abierta **sigue corriendo el JavaScript viejo que ya tiene cargado en memoria**, indefinidamente,
+hasta que el usuario cierra la app de verdad. En una PWA instalada en Android, el sistema operativo
+mantiene la app "tibia" entre cambios de app en vez de matarla — puede pasar días sin un cierre real.
+
+Esto explica **cada síntoma reportado exactamente**: el diagnóstico nuevo (secciones 22-24) no
+aparecía porque el JS que corría en el celular era de antes de esas secciones. El "auto-upload sin
+confirmación" y el "error y éxito a la vez" son exactamente el comportamiento de versiones
+anteriores de este archivo (rondas previas, ya no vigentes en el código fuente) — no hay ningún bug
+nuevo ahí, es código viejo. La notificación real que llegaba confirma que el archivo sí se subía
+(con el flujo viejo, automático) — otra pieza que encaja con "corriendo JS de hace varios commits".
+
+**Corrección**: `vite.config.ts` pasa a `injectRegister: false` (ya no inyecta el script automático
+e inerte), y [main.tsx](src/main.tsx) ahora llama a `registerSW({ immediate: true })` desde
+`virtual:pwa-register` — que sí agrega el listener real de actualización y recarga la página sola
+apenas detecta una versión nueva activada. Se agregó `workbox-window` como dependencia directa
+(antes solo estaba anidada dentro de `node_modules/vite-plugin-pwa`, sin poder resolverse desde el
+bundle de la app) y `vite-plugin-pwa/client` a los tipos de [vite-env.d.ts](src/vite-env.d.ts) para
+que TypeScript reconozca el módulo virtual.
+
+**Esto es la causa de fondo real** — sin este fix, cualquier corrección futura en este archivo
+corre el mismo riesgo de "no reflejarse" en un dispositivo que ya tenía la PWA abierta desde antes
+del deploy. Con este fix, el próximo deploy va a autoactualizar solo la próxima vez que se abra o
+use la app (recarga automática apenas el SW nuevo se activa).
+
+### 25.2 Rediseño: selección y subida como dos acciones explícitas y separadas
+
+Aun con la causa de fondo corregida, se implementó también el rediseño pedido explícitamente — elegir
+un archivo y subirlo dejan de ser la misma acción:
+
+- **Input real con ref estable** (`useRef<HTMLInputElement>`) — nunca se le puso `key` dinámica ni se
+  desmonta condicionalmente (confirmado al revisar el JSX). Se mantiene visualmente oculto con un
+  estilo que no lo saca del flujo de interacción (clip-path tipo "sr-only", no `display:none`), y el
+  único punto de interacción real es un botón visible "Seleccionar archivo" que llama a
+  `fileInputRef.current.click()`.
+- **Sin `capture`**: nunca estuvo presente en el input, confirmado — `capture` fuerza la cámara
+  directamente sin dejar elegir de galería/archivos, un comportamiento distinto y más restrictivo
+  del que se quiere (el usuario elige la fuente desde el selector nativo del propio SO).
+- **Sin `accept` restrictivo**: la validación real de tipo pasa en JS (`handleFileInputChange`), con
+  mensaje claro si rechaza — un `accept` a nivel de atributo HTML puede comportarse de forma
+  inconsistente entre navegadores/Android y no es la defensa real de todos modos (esa sigue siendo
+  el whitelist server-side del bucket).
+- **Elegir un archivo (`nativeFileInputChange`) SOLO lo guarda en memoria y lo muestra** —
+  nombre, tamaño, extensión, "listo para subir". No crea ninguna fila en `documents`, no sube nada,
+  no puede disparar ninguna notificación.
+- **Botón explícito "Subir archivo"** — recién ahí se crea la fila `pending` (si hace falta) y se
+  sube a Storage. Si falla, el archivo se conserva en memoria (no hay que volver a elegirlo) y el
+  botón pasa a decir "Reintentar subida", con el motivo real del error mostrado.
+- **"Finalizar"** (antes "Guardar") sigue deshabilitado hasta que la subida se confirma con éxito
+  (mismo mecanismo ya correcto de rondas anteriores).
+- **Si la página se recarga mientras el archivo está solo "seleccionado" (nunca se tocó "Subir
+  archivo")**: no se creó nada en la base — el aviso es exactamente el texto pedido: *"El archivo se
+  perdió al volver del selector. Volvé a seleccionarlo."*, sin crear ni notificar nada. Si ya se
+  había tocado "Subir archivo" pero no llegó a confirmarse, mismo aviso (la fila `pending` que haya
+  quedado se recupera para reintentar, invisible en listados normales igual que siempre). Si ya se
+  había confirmado antes de la recarga, el aviso es distinto: "El archivo ya se había subido
+  correctamente. Tocá Finalizar para completar la carga."
+
+### 25.3 Reconstrucción de Blob/File con MIME corregido
+
+Además del `contentType` explícito ya forzado en el upload (ronda anterior), [storage.ts](src/lib/api/storage.ts)
+ahora reconstruye el `File` en sí (`withCorrectedMimeType`) cuando el navegador reportó un tipo
+genérico/vacío: crea un `File` nuevo con el mismo contenido pero `.type` ya corregido al MIME
+inferido por extensión, antes de pasarlo a `.upload()`. Es defensivo por partida doble sobre el fix
+anterior — asegura que cualquier lugar que lea `file.type` (logs, reintentos, un cambio futuro en
+supabase-js) vea el tipo correcto desde el origen, no solo en el punto de envío.
+
+### 25.4 Diagnóstico: eventos del input real
+
+Vocabulario alineado exactamente a lo pedido, reemplazando los eventos genéricos anteriores:
+`fileInputButtonClick` (botón visible tocado) → `nativeFileInputClick` (click en el input real,
+justo antes de que se abra el picker/cámara) → `nativeFileInputChange` (el navegador devolvió algo,
+incluye `filesLength`) → `fileDetected` → `uploadButtonClicked` → el resto de la cadena sin cambios
+(`pendingCreateStart/Success/Fail`, `uploadStart/Success/Fail`, `confirmDocumentStart/Success/Fail`).
+[UploadDiagnosticsPanel.tsx](src/components/UploadDiagnosticsPanel.tsx) ahora detecta explícitamente
+el patrón "hubo `nativeFileInputClick` pero nunca un `nativeFileInputChange` después" y muestra un
+banner rojo con el texto pedido: *"El navegador no devolvió archivo al input."*
+
+### 25.5 Causa real de Word/PDF (actualizada)
+
+Con la causa de fondo de 25.1 confirmada, es probable que buena parte de los reportes de Word/PDF
+fallando en mobile fueran también síntoma del mismo service worker viejo — el fix de MIME/contentType
+de una ronda anterior nunca llegó a ejecutarse en el dispositivo del usuario. No se encontró ninguna
+causa adicional más allá de la ya corregida (MIME genérico + contentType forzado + reconstrucción de
+File, ver 25.3). El próximo reporte, ya con el service worker actualizándose solo, debería reflejar
+el comportamiento real del código actual.
+
+### 25.6 Migraciones / Edge Functions / Vercel
+
+Ninguna migración nueva, ninguna Edge Function. **Redeploy de Vercel es obligatorio** para este fix
+en particular — es lo que corrige que el dispositivo deje de quedarse con una versión vieja del
+service worker.
+
+### 25.7 Qué tenés que hacer en el celular (importante, una sola vez)
+
+Para que el dispositivo actual deje el service worker viejo atrás: cerrar la PWA por completo
+(no solo minimizarla — en Android, deslizarla fuera de la lista de apps recientes) y volver a
+abrirla. A partir de ese primer reinicio con el nuevo `main.tsx` ya desplegado, cualquier deploy
+futuro se va a autoactualizar solo (recarga automática) sin necesitar este paso de nuevo.
+
+### 25.8 Checklist de verificación
+
+- [ ] **Verificación del fix de fondo**: después de cerrar y reabrir la PWA una vez (ver 25.7),
+      confirmar en el panel de diagnóstico que aparece la secuencia completa de eventos nuevos
+      (`fileInputButtonClick`, `nativeFileInputClick`, `nativeFileInputChange`, etc.) al reproducir
+      cualquier intento de carga.
+- [ ] **Selección sin subida automática**: tocar "Seleccionar archivo", elegir uno — confirmar que
+      NO se sube solo, que aparece "Archivo seleccionado: ... listo para subir" con nombre/tamaño/
+      extensión, y que no se creó ningún documento ni llegó ninguna notificación todavía.
+- [ ] **Subida manual**: tocar "Subir archivo" — confirmar "Subiendo archivo…" y después "✓ Archivo
+      subido correctamente", con "Finalizar" recién habilitado en ese momento.
+- [ ] **Recarga con archivo solo seleccionado**: elegir un archivo, forzar una recarga ANTES de
+      tocar "Subir archivo" — confirmar el aviso "El archivo se perdió al volver del selector. Volvé
+      a seleccionarlo." y que no se creó ningún documento.
+- [ ] **PDF, DOCX, foto de cámara, foto de galería**: probar los cuatro en mobile — reportar
+      `fileType` vs `fileTypeInferred` de `fileDetected` y el error completo de `uploadFail` si
+      alguno falla.
+- [ ] Confirmar que el flujo en escritorio sigue funcionando igual (mismo flujo explícito, sin
+      cambios de comportamiento esperados más allá de los dos botones separados).

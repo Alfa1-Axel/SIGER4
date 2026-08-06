@@ -138,16 +138,28 @@ img {
 
 /* ---------- Layout shell ---------- */
 
+/* height: 100vh (no min-height) a proposito: el shell ocupa EXACTAMENTE la
+   ventana, nunca crece con el contenido -- eso es lo que permite que
+   sidebar y main-column sean cada uno su propio contenedor de scroll
+   independiente en vez de compartir el scroll del documento. overflow:
+   hidden ademas evita un scroll fantasma del body cuando algun hijo se
+   pasa por redondeo de subpixeles. */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
+  overflow: hidden;
 }
 
-/* En escritorio el sidebar es una columna fija de la grilla (position:
-   sticky). En mobile/tablet (<900px) se convierte en un drawer off-canvas:
-   position fixed, corrido fuera de pantalla con translateX, y se desliza al
-   agregar .open. El botón hamburguesa del header lo controla. */
+/* En escritorio el sidebar es una columna fija de altura completa. El
+   <aside> EN SI no scrollea (sin overflow-y acá) -- lo que scrollea es
+   SOLO .sidebar-nav, adentro (ver mas abajo), para que la marca/logo de
+   arriba y el pie con "Cerrar sesion" de abajo queden siempre fijos y
+   visibles sin importar cuantos items tenga el menu. En mobile/tablet
+   (<900px) se convierte en un drawer off-canvas: position fixed, corrido
+   fuera de pantalla con translateX, se desliza al agregar .open -- mismo
+   criterio de scroll interno aplica ahi tambien, sin cambios adicionales
+   porque ya es el mismo <aside>. */
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
@@ -155,39 +167,53 @@ img {
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  padding: 20px 16px;
-  position: sticky;
-  top: 0;
   height: 100vh;
-  overflow-y: auto;
+  padding: 20px 16px;
   transition: transform 0.2s ease;
   z-index: 50;
 }
 
+/* Columna principal: header y footer quedan fijos dentro de esta columna
+   (no position:fixed -- flex-shrink:0 alcanza porque la columna en si ya
+   tiene altura fija via .app-shell), y SOLO .app-content adentro scrollea.
+   min-height: 0 es necesario para que un hijo flex con overflow pueda
+   angostarse por debajo de su contenido en vez de forzar a la columna
+   entera a crecer (bug clasico de flexbox: sin esto, el overflow-y de
+   .app-content no tiene efecto y el scroll se escapa al documento). */
 .app-main-column {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  height: 100vh;
 }
 
 .app-header {
   height: var(--header-height);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-card);
-  position: sticky;
-  top: 0;
   z-index: 20;
 }
 
+/* Unico contenedor con scroll propio de la columna principal -- el header
+   y el footer, al ser hermanos flex con flex-shrink:0, quedan fijos arriba
+   y abajo sin necesidad de position:fixed (que sacaria al footer del flujo
+   y exigiria calcular un padding-bottom a mano en cada pantalla). El
+   padding-bottom extra asegura que el ultimo elemento de cualquier pantalla
+   (ej. un FAB flotante, un boton "Guardar") nunca quede pegado/tapado por
+   el borde del contenedor. */
 .app-content {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 16px;
-  padding-bottom: 24px;
+  padding-bottom: 32px;
   max-width: 1440px;
   width: 100%;
   margin: 0 auto;
@@ -267,11 +293,22 @@ img {
   color: var(--color-primary);
 }
 
+/* min-height: 0 + overflow-y: auto es lo que hace que ESTE elemento (y no
+   el <aside> entero, ni el documento) sea el que scrollea cuando el menu
+   tiene mas items de los que entran en la altura disponible -- sin
+   min-height: 0, un hijo flex nunca se angosta por debajo de su contenido
+   y el overflow-y no tiene ningun efecto (mismo motivo que .app-content /
+   .app-main-column mas arriba). El scroll de acá NUNCA mueve
+   .sidebar-brand-row ni .sidebar-footer (hermanos flex con flex-shrink: 0
+   implícito al no ser flex-grow), que quedan siempre visibles arriba y
+   abajo, "Cerrar sesión" incluido. */
 .sidebar-nav {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sidebar-link {
@@ -308,6 +345,7 @@ img {
 /* ---------- Footer institucional ---------- */
 
 .app-footer {
+  flex-shrink: 0;
   text-align: center;
   font-size: 11px;
   color: var(--color-text-muted);
@@ -783,6 +821,7 @@ img {
 }
 
 .offline-banner {
+  flex-shrink: 0;
   background: var(--color-secondary);
   color: #fff;
   text-align: center;

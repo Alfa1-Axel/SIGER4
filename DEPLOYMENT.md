@@ -2567,3 +2567,98 @@ busque solicitudes `retirada` con `expected_return_at` próximo, y cree una noti
 `recordatorio_devolucion` — con cuidado explícito de no duplicar el aviso si ya se mandó uno
 reciente. No evaluado en profundidad en este ciclo; el tipo de notificación ni siquiera se agregó al
 enum todavía, para no dejar un valor sin uso real.
+
+## 24. Bugs post-implementación de Solicitudes de Préstamo: error genérico + layout del shell (2026-08) — migración 0060
+
+### 24.1 Causa exacta de "No fue posible procesar la solicitud"
+
+**Bug real, confirmado**: crear una solicitud de préstamo, o registrar una devolución, fallaba
+siempre que el elemento no tuviera un responsable puntual asignado — que es el caso más común (no
+todos los elementos del inventario tienen `responsible_profile_id` cargado). Causa exacta:
+`notify_loan_request_created()` y el branch `devuelta` de `notify_loan_request_status_change()`
+(`0059_loan_request_notifications.sql`) armaban el alcance territorial de la notificación copiando
+**a la vez** `region_id` **y** `station_id` del elemento cuando no había responsable a quien avisar
+puntualmente. Como `inventory_items.region_id` es `NOT NULL` y `station_id` (dónde está físicamente
+el elemento) también suele estar cargado, la notificación quedaba con DOS columnas de alcance
+territorial no nulas a la vez con `profile_id` nulo — violando el constraint
+`notifications_scope_not_ambiguous` (`0032_data_consistency_constraints.sql`: una notificación
+masiva solo puede tener **una** de region/subsede/station seteada). Esa violación abortaba toda la
+transacción del INSERT/UPDATE que disparó el trigger, y el error de constraint terminaba
+mostrándose (o quedando enmascarado) como un mensaje genérico en pantalla.
+
+El patrón se había copiado de `notify_document_created()` (0056), que es seguro únicamente porque
+`documents` tiene el constraint `documents_single_scope` garantizando que como mucho un campo de
+alcance viene seteado en el origen — garantía que `inventory_items` no tiene.
+
+**Fix (migración 0060)**: ambas funciones ahora eligen un único nivel de alcance, el más específico
+disponible (`station_id` > `subsede_id` > `region_id`), en vez de copiar los tres campos a la vez.
+
+### 24.2 Mensajes de error reales, no genéricos
+
+Nuevo `src/lib/api/errors.ts` (`describeSupabaseError`) traduce el error real de Supabase a un
+mensaje entendible, reemplazando el patrón `err instanceof Error ? err.message : 'mensaje genérico'`
+en las pantallas de Solicitudes de Préstamo (`SolicitudPrestamoDetallePage`,
+`SolicitudPrestamoFormPage`, `SolicitudesPrestamoPage`, `InventarioDetallePage`):
+- `42501` (RLS deniega la operación) → "No tenés permisos para realizar esta acción."
+- `PGRST116` (el `UPDATE` no encontró ninguna fila para el `.select().single()` posterior — el caso
+  más común cuando la policy `USING` rechaza la fila antes de llegar a ningún check explícito de
+  permisos) → mismo mensaje de permisos, con una nota de "recargá e intentá de nuevo" por si en
+  cambio fue que el estado cambió entre que se cargó la pantalla y se tocó el botón.
+- `23502` (falta una columna `NOT NULL`) → "Falta completar un campo obligatorio: `<columna>`."
+- `23503` (foreign key) → referencia a un registro que no existe o fue eliminado.
+- `23514` (check constraint) → "El valor ingresado no es válido para el estado actual del registro."
+- `P0001` (un `raise exception` explícito de un trigger nuestro, ej.
+  `validate_inventory_loan_request_item_status` de la migración 0057) → se muestra tal cual, ya está
+  escrito en español pensado para el usuario final.
+- Cualquier otro caso → el `message`/`hint` real de Postgres, nunca un texto genérico inventado.
+
+También se corrigió `fetchLoanRequestById` (`inventoryLoanRequests.ts`), que antes devolvía `null`
+("no encontrado") ante **cualquier** error, incluida una falla real de RLS o de red — ahora solo
+devuelve `null` para el código `PGRST116` (0 filas, caso legítimo de "no existe"), cualquier otro
+error se relanza y se muestra con `describeSupabaseError`.
+
+### 24.3 Sidebar y footer fijos, scroll independiente
+
+Bug de layout real: `.app-shell` usaba `min-height: 100vh` (crecía con el contenido) y el documento
+entero scrolleaba como una sola unidad — el sidebar usaba `position: sticky`, que solo re-ancla
+dentro de ESE scroll compartido, no le da scroll propio. Resultado: en una pantalla con un menú
+largo o con mucho contenido, todo se movía junto, y no había garantía de que "Cerrar sesión" quedara
+visible.
+
+**Fix**: `.app-shell` pasa a `height: 100vh` (nunca crece) + `overflow: hidden`. Sidebar
+(`.app-sidebar`) y columna principal (`.app-main-column`) son ahora dos contenedores de altura fija
+independientes. Dentro del sidebar, solo `.sidebar-nav` tiene `overflow-y: auto` — la marca/logo de
+arriba (`.sidebar-brand-row`) y el pie con "Cerrar sesión" (`.sidebar-footer`) quedan siempre fijos y
+visibles, sin importar cuántos ítems tenga el menú. Dentro de la columna principal, solo
+`.app-content` tiene `overflow-y: auto` — el header (`.app-header`) y el footer institucional
+(`.app-footer`, "Sistema creado por Dpto. Informática y Estadística R4") quedan fijos arriba y abajo
+respectivamente, nunca se mueven ni se tapan con el contenido. `min-height: 0` en los contenedores
+flex padres (`.app-main-column`, `.sidebar-nav`, `.app-content`) es lo que hace que el `overflow-y`
+realmente tenga efecto en vez de que el hijo fuerce a crecer al padre (bug clásico de flexbox). El
+drawer mobile usa el mismo `<aside>` y hereda el mismo criterio de scroll interno sin cambios
+adicionales. Nada de esto depende del tema — usa las mismas variables CSS de siempre, se comporta
+igual en claro y oscuro.
+
+### 24.4 Migraciones / Edge Functions / Vercel
+
+Una migración nueva: `0060_fix_loan_request_notification_scope.sql` (corrige las dos funciones de
+notificación, no toca la tabla ni la RLS de `inventory_loan_requests`). Ninguna Edge Function.
+Redeploy normal del frontend para el resto de los cambios (mensajes de error, layout).
+
+### 24.5 Cómo verificar
+
+1. Con un usuario de cuartel, solicitar un elemento del inventario que **no tenga responsable
+   asignado** (`responsible_profile_id`/`responsible_name` vacíos) pero sí tenga `station_id` — antes
+   fallaba siempre, ahora debe crear la solicitud sin error.
+2. Completar el ciclo hasta devolución sobre ese mismo tipo de elemento (sin responsable) —
+   `registerLoanReturn` es el otro punto que tenía el mismo bug.
+3. Probar que un usuario sin permiso (ej. un rol de cuartel que no es responsable ni tiene rol
+   regional) intentando aprobar una solicitud ajena vea el mensaje "No tenés permisos para realizar
+   esta acción." en vez de un error técnico.
+4. En desktop, con un usuario con muchos ítems visibles en el menú (ej. `informatica_r4`, que ve
+   todo): confirmar que el menú lateral scrollea internamente si hace falta, y que "Cerrar sesión"
+   sigue visible siempre abajo.
+5. En cualquier pantalla con poco contenido (ej. un detalle vacío) y en una con mucho contenido (ej.
+   un listado largo): confirmar que el footer institucional queda fijo abajo en ambos casos, nunca
+   tapa contenido ni se despega del borde inferior de la ventana.
+6. Repetir 4 y 5 en mobile (drawer) y en modo oscuro.

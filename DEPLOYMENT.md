@@ -3180,3 +3180,87 @@ de tipo sin declararlos ahí explícitamente. Redeploy normal del frontend.
    contra `raw-upload-test.html` punto por punto (CSS computado, `disabled`, orden de montaje).
 4. Confirmar en Ajustes que el build visible coincide con el último commit — para asegurarse de que
    el dispositivo está corriendo esta versión y no una cacheada.
+
+## 30. El fix de la sección 29 no alcanzó: en build 3fbc8bc, /diagnostico-upload solo registraba "page-load" (2026-08)
+
+Resultado del checklist de la sección 29.6, en el mismo celular Android: `/raw-upload-test.html`
+sigue funcionando perfecto (click, change, archivo detectado). Pero `/diagnostico-upload` en el build
+`3fbc8bc` (ya con el fix de sacar el `setState` síncrono del click) **solo registraba `page-load`** —
+ni `click`, ni `pointerdown`, ni `change`, nada. Esto es un dato nuevo y más temprano en la cadena que
+lo que se había diagnosticado antes: si ni siquiera un `click` llega a registrarse, el problema ya no
+puede ser "el `setState` interrumpe el picker después del click" (esa teoría asume que el click sí
+llega) — algo está impidiendo que el toque/click llegue al elemento, o los synthetic events de React
+no están enganchando en esa pantalla en particular. Se descarta como explicación única (aunque puede
+seguir siendo un factor secundario) la interferencia de `setState` con el picker nativo.
+
+### 30.1 Instrumentación agregada para aislar la causa real
+
+`/diagnostico-upload` se reescribió para poder distinguir, evento por evento, entre tres causas
+posibles: React synthetic events rotos, DOM/input no recibiendo el toque, o layout/CSS/overlay
+tapando el elemento:
+
+- **Listeners nativos** (`addEventListener`, sin pasar por React) sobre el mismo nodo `<input>` real,
+  agregados en un `useEffect` vía `useRef`: `pointerdown`, `touchstart`, `mousedown`, `click`,
+  `change` — todos pasivos (`{ passive: true }` donde aplica, sin `preventDefault` en ninguno).
+  Cada uno loguea `event.type`, `target.tagName` y `isTrusted` con el prefijo `NATIVE:`.
+- **Los mismos eventos también como props de React** (`onPointerDown`, `onClick`, `onChange`) sobre
+  el mismo input, logueados con el prefijo `REACT:` — permite ver en el mismo log si uno dispara y el
+  otro no.
+- **Debug visual del input**, recalculado cada 1 segundo: `getBoundingClientRect()`,
+  `getComputedStyle().pointerEvents/display/visibility/opacity`, `disabled`, `tabIndex`, y el
+  resultado de `document.elementFromPoint()` en el centro exacto del input — si ese punto no
+  devuelve el input mismo, hay otro elemento tapándolo ahí.
+- El log sigue sin usar `useState` (mismo motivo que la sección 29: no arriesgar que un re-render
+  interfiera con nada) — todo vía `useRef` + escritura directa a `textContent`.
+- El input quedó con estilos explícitos que fuerzan lo contrario de cualquier sospecha de CSS
+  (`position: static`, `opacity: 1`, `pointerEvents: 'auto'`, `zIndex: 1`, `display: 'block'`, sin
+  `disabled`), sin label custom, sin wrapper con estilos raros, sin CSS del sistema.
+
+### 30.2 Qué significa cada resultado posible (para leer en el celular)
+
+- Si aparecen eventos `NATIVE:` pero ningún `REACT:` → el DOM/input sí recibe el toque, el problema
+  es específico de los synthetic events de React en esta pantalla (posible causa: algún problema de
+  hidratación/delegación de eventos de React 18 en esta ruta particular).
+- Si NO aparece ni `NATIVE:` ni `REACT:` (ni siquiera `pointerdown`/`touchstart`) → el toque no está
+  llegando al elemento en absoluto — hay que mirar el debug visual: `elementFromPointAtCenter`
+  distinto al input mismo confirmaría un overlay; `computedDisplay`/`computedVisibility`/
+  `boundingClientRect` con tamaño 0 confirmaría un problema de layout/CSS.
+- Si SÍ aparecen ambos (`NATIVE:` y `REACT:`) → el input funciona en esta versión; hay que repetir la
+  comparación directo en `DocumentoFormPage.tsx`, que todavía no se tocó en esta ronda (ver 30.4).
+
+### 30.3 Por qué no se tocó `DocumentoFormPage.tsx` en esta ronda
+
+Instrucción explícita: identificar la causa exacta en `/diagnostico-upload` primero (con evidencia
+nativa vs. React, no por deducción) antes de decidir qué patrón aplicarle al formulario real. Aplicar
+un cambio a `DocumentoFormPage` ahora, sin ese resultado, volvería a ser un parche a ciegas — ya pasó
+dos veces (secciones 26 y 29) que una corrección razonable no alcanzó porque la causa real estaba un
+paso más atrás de lo que parecía.
+
+### 30.4 Próximo paso según el resultado
+
+- Si los listeners nativos SÍ disparan en `/diagnostico-upload` pero los de React no: usar
+  `addEventListener` directo (vía `useRef` + `useEffect`, igual que acá) para el input de archivo
+  dentro de `DocumentoFormPage`, al menos en mobile, en vez de depender de `onClick`/`onChange`
+  declarativos de React en esos dos inputs puntuales.
+- Si ni los nativos disparan en `/diagnostico-upload`: hay un overlay/CSS/layout/problema de ruta
+  bloqueando el elemento — corregir eso primero (probablemente algo compartido con
+  `DocumentoFormPage`, dado que esa pantalla sí usa `AppShell` + `styles.css` del sistema, que
+  `/diagnostico-upload` deliberadamente no usa — comparar cuál de las dos configuraciones reproduce
+  el bloqueo).
+
+### 30.5 Migraciones / Edge Functions / Vercel
+
+Ninguna migración, ninguna Edge Function, ningún módulo nuevo. Se agregaron dos globals más
+(`HTMLElement`, `Event`) al allowlist de `eslint.config.js`, mismo mecanismo que las rondas
+anteriores. Redeploy normal del frontend. No se tocó Storage/MIME/RLS/Supabase — `raw-upload-test.html`
+ya confirmó que el navegador entrega el archivo real, así que el bug sigue estando 100% en React/la
+app, no del lado del servidor.
+
+### 30.6 Checklist de verificación — en el celular Android donde falla
+
+1. `https://siger-4.vercel.app/diagnostico-upload` — tocar "Elegir archivo". Mirar el log completo:
+   ¿aparece algún `NATIVE:`? ¿algún `REACT:`? ¿en qué orden?
+2. Revisar el bloque "Debug visual del input" — anotar `elementFromPointAtCenter`,
+   `elementFromPointIsInput`, `boundingClientRect`, y los computed styles.
+3. Reportar el log completo y el debug visual — con eso se puede determinar la causa exacta (30.2) y
+   recién ahí aplicar el fix correspondiente a `DocumentoFormPage.tsx`.

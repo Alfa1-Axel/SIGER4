@@ -46,8 +46,19 @@ export function DocumentoFormPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const folderIdFromQuery = searchParams.get('folderId')
-  const { profile: currentProfile, isAdmin, hasRole } = useAuth()
-  const canCreate = isAdmin || hasRole('secretario_regional', 'presidente_cuartel', 'usuario_carga_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  const { profile: currentProfile, scopes, isAdmin, hasRole } = useAuth()
+  const isStationRole = hasRole('presidente_cuartel', 'usuario_carga_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  const isRegionalRole = hasRole('secretario_regional')
+  const canCreate = isAdmin || isRegionalRole || isStationRole
+  // documents_write_admin_regional_station (migración 0047): un rol de
+  // cuartel SOLO puede escribir con station_id = su propio cuartel (nunca
+  // region/subsede/usuario); secretario_regional solo dentro de su región.
+  // Antes el picker ofrecía los 4 alcances y todos los cuarteles/regiones del
+  // sistema a cualquiera de estos roles, rechazado recién al guardar.
+  const myStationId = currentProfile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
+  const myRegionId = currentProfile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? ''
+  const stationLocked = isStationRole && !isAdmin && !isRegionalRole
+  const regionLocked = isRegionalRole && !isAdmin
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -58,11 +69,13 @@ export function DocumentoFormPage() {
   const [title, setTitle] = useState('')
   const [category, setCategory] = useState('')
   const [description, setDescription] = useState('')
-  const [scopeTarget, setScopeTarget] = useState<DocScopeTarget>('region')
+  const [scopeTarget, setScopeTarget] = useState<DocScopeTarget>(stationLocked ? 'station' : 'region')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
-  const [stationId, setStationId] = useState('')
+  const [stationId, setStationId] = useState(stationLocked ? myStationId : '')
   const [profileId, setProfileId] = useState('')
+
+  const visibleScopeOptions = stationLocked ? DOC_SCOPE_OPTIONS.filter((o) => o.value === 'station') : DOC_SCOPE_OPTIONS
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
@@ -78,17 +91,26 @@ export function DocumentoFormPage() {
     Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchProfiles()]).then(
       ([regionsData, subsedesData, stationsData, profilesData]) => {
         if (!active) return
-        setRegions(regionsData)
-        setSubsedes(subsedesData)
-        setStations(stationsData)
+        if (stationLocked) {
+          setStations(stationsData.filter((s) => s.id === myStationId))
+        } else if (regionLocked) {
+          setRegions(regionsData.filter((r) => r.id === myRegionId))
+          setSubsedes(subsedesData.filter((s) => s.region_id === myRegionId))
+          setStations(stationsData.filter((s) => s.region_id === myRegionId))
+          setRegionId((prev) => prev || myRegionId)
+        } else {
+          setRegions(regionsData)
+          setSubsedes(subsedesData)
+          setStations(stationsData)
+          setRegionId((prev) => prev || regionsData[0]?.id || '')
+        }
         setProfiles(profilesData)
-        setRegionId((prev) => prev || regionsData[0]?.id || '')
       },
     )
     return () => {
       active = false
     }
-  }, [canCreate])
+  }, [canCreate, stationLocked, regionLocked, myStationId, myRegionId])
 
   useEffect(() => {
     if (!id) return
@@ -246,62 +268,68 @@ export function DocumentoFormPage() {
 
           <div className="field">
             <label>Alcance</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {DOC_SCOPE_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => setScopeTarget(option.value)}
-                  className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 12px', fontSize: 12 }}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+            {stationLocked ? (
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>Este documento va a quedar dentro de tu propio cuartel.</p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {visibleScopeOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setScopeTarget(option.value)}
+                      className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
+                      style={{ padding: '6px 12px', fontSize: 12 }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
 
-            {scopeTarget === 'region' && (
-              <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-                <option value="">Seleccionar región</option>
-                {regions.map((region) => (
-                  <option key={region.id} value={region.id}>
-                    {region.name}
-                  </option>
-                ))}
-              </select>
-            )}
+                {scopeTarget === 'region' && (
+                  <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+                    <option value="">Seleccionar región</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-            {scopeTarget === 'subsede' && (
-              <select value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
-                <option value="">Seleccionar subsede</option>
-                {subsedes.map((subsede) => (
-                  <option key={subsede.id} value={subsede.id}>
-                    {subsede.name}
-                  </option>
-                ))}
-              </select>
-            )}
+                {scopeTarget === 'subsede' && (
+                  <select value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
+                    <option value="">Seleccionar subsede</option>
+                    {subsedes.map((subsede) => (
+                      <option key={subsede.id} value={subsede.id}>
+                        {subsede.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-            {scopeTarget === 'station' && (
-              <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
-                <option value="">Seleccionar cuartel</option>
-                {stations.map((station) => (
-                  <option key={station.id} value={station.id}>
-                    {station.name}
-                  </option>
-                ))}
-              </select>
-            )}
+                {scopeTarget === 'station' && (
+                  <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                    <option value="">Seleccionar cuartel</option>
+                    {stations.map((station) => (
+                      <option key={station.id} value={station.id}>
+                        {station.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-            {scopeTarget === 'profile' && (
-              <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
-                <option value="">Seleccionar usuario</option>
-                {profiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.full_name}
-                  </option>
-                ))}
-              </select>
+                {scopeTarget === 'profile' && (
+                  <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+                    <option value="">Seleccionar usuario</option>
+                    {profiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.full_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
             )}
           </div>
 

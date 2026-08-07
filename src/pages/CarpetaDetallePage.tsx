@@ -11,7 +11,9 @@ import {
   trashDocument,
 } from '../lib/api/documents'
 import { getDocumentSignedUrl } from '../lib/api/storage'
-import type { DocumentFolder, DocumentRecord } from '../types/database'
+import { fetchStations } from '../lib/api/stations'
+import { fetchSubsedes } from '../lib/api/subsedes'
+import type { DocumentFolder, DocumentRecord, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { isMobileUserAgent } from '../lib/device'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -19,17 +21,17 @@ import { describeSupabaseError } from '../lib/api/errors'
 export function CarpetaDetallePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isAdmin, hasRole, profile } = useAuth()
-  const canManageFolders = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  const { isAdmin, hasRole, profile, scopes } = useAuth()
+  const isRegionalRole = hasRole('secretario_regional')
+  const isStationRole = hasRole('usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
   const isGeneral = id === 'general'
-  // Carga/edición de archivos disponible solo en escritorio (ver
-  // DEPLOYMENT.md) — administrar la carpeta en sí (nombre/descripción,
-  // eliminar carpeta) no involucra ningún input de archivo y sigue
-  // disponible en mobile.
-  const canUploadFiles = canManageFolders && !isMobileUserAgent()
 
   const [folder, setFolder] = useState<DocumentFolder | null>(null)
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [stations, setStations] = useState<Station[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<string | null>(null)
@@ -40,14 +42,44 @@ export function CarpetaDetallePage() {
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // document_folders_write_admin_regional_station (migración 0047): antes
+  // canManageFolders era un chequeo de rol puro, mostrando Editar/Eliminar/
+  // Cargar en CUALQUIER carpeta (incluida "General", sin scope, y carpetas de
+  // otras regiones/cuarteles) con solo tener el rol adecuado. Ahora se
+  // revalida contra el scope real de la carpeta abierta -- "General" (sin
+  // folder.region_id/station_id) solo la administra informatica_r4.
+  const canManageFolders =
+    isAdmin ||
+    (folder
+      ? (isRegionalRole &&
+          Boolean(
+            (folder.region_id && folder.region_id === myRegionId) ||
+              (folder.station_id && stations.find((s) => s.id === folder.station_id)?.region_id === myRegionId) ||
+              (folder.subsede_id && subsedes.find((s) => s.id === folder.subsede_id)?.region_id === myRegionId),
+          )) ||
+        (isStationRole && Boolean(folder.station_id) && folder.station_id === myStationId)
+      : false)
+  // Carga/edición de archivos disponible solo en escritorio (ver
+  // DEPLOYMENT.md) — administrar la carpeta en sí (nombre/descripción,
+  // eliminar carpeta) no involucra ningún input de archivo y sigue
+  // disponible en mobile.
+  const canUploadFiles = canManageFolders && !isMobileUserAgent()
+
   useEffect(() => {
     if (!id) return
     let active = true
-    Promise.all([isGeneral ? Promise.resolve(null) : fetchDocumentFolderById(id), fetchDocumentsByFolder(isGeneral ? null : id)])
-      .then(([folderData, documentsData]) => {
+    Promise.all([
+      isGeneral ? Promise.resolve(null) : fetchDocumentFolderById(id),
+      fetchDocumentsByFolder(isGeneral ? null : id),
+      fetchStations(),
+      fetchSubsedes(),
+    ])
+      .then(([folderData, documentsData, stationsData, subsedesData]) => {
         if (!active) return
         setFolder(folderData)
         setDocuments(documentsData)
+        setStations(stationsData)
+        setSubsedes(subsedesData)
         if (folderData) {
           setName(folderData.name)
           setDescription(folderData.description ?? '')

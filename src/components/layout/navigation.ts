@@ -16,7 +16,16 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building' },
   { to: '/calendario', label: 'Calendario', icon: 'calendar' },
   { to: '/escuela', label: 'Escuela', icon: 'school' },
-  { to: '/reportes', label: 'Reportes', icon: 'chart' },
+  // Acceso total: informatica_r4/integrante_informatica (isAdmin). Alcance
+  // regional/subsede/cuartel: director_escuela, secretario_regional. Solo su
+  // propio cuartel: jefe_cuerpo_activo, usuario_carga_cuartel. El resto de
+  // roles no ve Reportes (ver ReportsRoute para la guarda real de acceso).
+  {
+    to: '/reportes',
+    label: 'Reportes',
+    icon: 'chart',
+    showForRoles: ['director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel'],
+  },
   { to: '/documentos', label: 'Documentos', icon: 'file' },
   { to: '/inventario', label: 'Inventario', icon: 'tag' },
   { to: '/departamentos', label: 'Departamentos', icon: 'building' },

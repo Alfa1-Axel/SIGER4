@@ -10,6 +10,7 @@ import { translateAction, translateTable } from '../lib/audit/humanize'
 import { formatPercent } from '../lib/format'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { describeSupabaseError } from '../lib/api/errors'
+import { useAuth } from '../hooks/useAuth'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -22,6 +23,8 @@ function timeAgo(iso: string): string {
 }
 
 export function PanelPage() {
+  const { isAdmin, hasRole } = useAuth()
+  const canAccessReports = isAdmin || hasRole('director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [stations, setStations] = useState<Station[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -60,11 +63,13 @@ export function PanelPage() {
         <p style={{ margin: '0 0 14px', fontSize: 13, opacity: 0.9 }}>
           Gestión centralizada de recursos, personal y alertas críticas para la región.
         </p>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Link to="/reportes" className="btn btn-inverted">
-            Nuevo Reporte
-          </Link>
-        </div>
+        {canAccessReports && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <Link to="/reportes" className="btn btn-inverted">
+              Nuevo Reporte
+            </Link>
+          </div>
+        )}
       </div>
 
       {error && (

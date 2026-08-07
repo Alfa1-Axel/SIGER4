@@ -4,6 +4,7 @@ import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { AppUpdateBanner } from './components/AppUpdateBanner'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
+import { ReportsRoute } from './components/layout/ReportsRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { LoginPage } from './pages/LoginPage'
 import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
@@ -67,7 +68,7 @@ export default function App() {
         <Route path="/escuela" element={<ProtectedRoute><EscuelaPage /></ProtectedRoute>} />
         <Route path="/escuela/nuevo" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
-        <Route path="/reportes" element={<ProtectedRoute><ReportesPage /></ProtectedRoute>} />
+        <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<UserManagerRoute><UsuariosPage /></UserManagerRoute>} />
         <Route path="/usuarios/nuevo" element={<UserCreatorRoute><UsuarioFormPage /></UserCreatorRoute>} />

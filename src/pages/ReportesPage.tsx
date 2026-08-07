@@ -20,6 +20,15 @@ const REPORT_TYPES: { key: ReportKey; label: string; needsStation?: boolean }[] 
   { key: 'regional_consolidado', label: 'Reporte Regional Consolidado' },
 ]
 
+// director_escuela y secretario_regional tienen visión regional/subsede/cuartel,
+// pero acotada a Escuela/capacitación y panorama general — no a datos
+// operativos de cuartel como Vehículos e Intervenciones.
+const ESCUELA_REGIONAL_REPORT_KEYS: ReportKey[] = ['asistencias', 'cursos', 'regional_consolidado', 'cuartel_general']
+
+// jefe_cuerpo_activo y usuario_carga_cuartel solo ven reportes de su propio
+// cuartel: no tiene sentido mostrarles "Reporte Regional Consolidado".
+const STATION_ONLY_REPORT_KEYS: ReportKey[] = ['asistencias', 'intervenciones', 'cursos', 'vehiculos', 'cuartel_general']
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -30,17 +39,30 @@ function slugify(text: string): string {
 }
 
 export function ReportesPage() {
-  const { profile } = useAuth()
+  const { profile, isAdmin, hasRole } = useAuth()
+  // Alcance regional/subsede/cuartel: informatica_r4, integrante_informatica
+  // (isAdmin), director_escuela, secretario_regional. Alcance limitado a su
+  // propio cuartel: jefe_cuerpo_activo, usuario_carga_cuartel (sin selector de
+  // región/subsede/otro cuartel — ReportsRoute ya bloquea al resto de roles).
+  const isStationOnly = !isAdmin && hasRole('jefe_cuerpo_activo', 'usuario_carga_cuartel') && !hasRole('director_escuela', 'secretario_regional')
+  const isEscuelaRegional = !isAdmin && hasRole('director_escuela', 'secretario_regional')
+
+  const availableReportTypes = isStationOnly
+    ? REPORT_TYPES.filter((r) => STATION_ONLY_REPORT_KEYS.includes(r.key))
+    : isEscuelaRegional
+      ? REPORT_TYPES.filter((r) => ESCUELA_REGIONAL_REPORT_KEYS.includes(r.key))
+      : REPORT_TYPES
+
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
 
-  const [reportKey, setReportKey] = useState<ReportKey>('asistencias')
+  const [reportKey, setReportKey] = useState<ReportKey>(availableReportTypes[0]?.key ?? 'asistencias')
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
-  const [stationId, setStationId] = useState('')
+  const [stationId, setStationId] = useState(isStationOnly ? (profile?.station_id ?? '') : '')
 
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,14 +74,17 @@ export function ReportesPage() {
       if (!active) return
       setRegions(regionsData)
       setSubsedes(subsedesData)
-      setStations(stationsData)
+      // Un rol de solo-cuartel jamás debe ver otros cuarteles en el selector,
+      // ni siquiera de solo lectura: reduce la lista al propio.
+      setStations(isStationOnly ? stationsData.filter((s) => s.id === profile?.station_id) : stationsData)
     })
     return () => {
       active = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const reportDef = REPORT_TYPES.find((r) => r.key === reportKey)!
+  const reportDef = availableReportTypes.find((r) => r.key === reportKey) ?? availableReportTypes[0] ?? REPORT_TYPES[0]
 
   function scopeLabelFor(): string {
     if (stationId) return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel seleccionado'
@@ -84,6 +109,14 @@ export function ReportesPage() {
       return
     }
 
+    // Defensa en profundidad: un rol de solo-cuartel siempre genera acotado a
+    // su propio cuartel, sin importar el estado de regionId/subsedeId/stationId
+    // (RLS ya lo garantiza a nivel de datos; esto evita además cualquier
+    // filtro "todos" inconsistente en el PDF/label mostrado al usuario).
+    const effectiveStationId = isStationOnly ? profile?.station_id ?? null : stationId || null
+    const effectiveRegionId = isStationOnly ? null : regionId || null
+    const effectiveSubsedeId = isStationOnly ? null : subsedeId || null
+
     setGenerating(true)
     try {
       const generator = REPORT_GENERATORS[reportKey]
@@ -91,9 +124,9 @@ export function ReportesPage() {
         filters: {
           periodStart: periodStart || null,
           periodEnd: periodEnd || null,
-          regionId: regionId || null,
-          subsedeId: subsedeId || null,
-          stationId: stationId || null,
+          regionId: effectiveRegionId,
+          subsedeId: effectiveSubsedeId,
+          stationId: effectiveStationId,
         },
         scopeLabel: scopeLabelFor(),
         periodLabel: periodLabelFor(),
@@ -140,7 +173,7 @@ export function ReportesPage() {
         <div className="field">
           <label htmlFor="reportType">Tipo de reporte</label>
           <select id="reportType" value={reportKey} onChange={(e) => setReportKey(e.target.value as ReportKey)}>
-            {REPORT_TYPES.map((r) => (
+            {availableReportTypes.map((r) => (
               <option key={r.key} value={r.key}>
                 {r.label}
               </option>
@@ -160,55 +193,64 @@ export function ReportesPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <div className="field" style={{ flex: 1, minWidth: 160 }}>
-            <label htmlFor="regionFilter">Regional</label>
-            <select
-              id="regionFilter"
-              value={regionId}
-              onChange={(e) => {
-                setRegionId(e.target.value)
-                setSubsedeId('')
-                setStationId('')
-              }}
-            >
-              <option value="">Todas</option>
-              {regions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field" style={{ flex: 1, minWidth: 160 }}>
-            <label htmlFor="subsedeFilter">Subsede</label>
-            <select
-              id="subsedeFilter"
-              value={subsedeId}
-              onChange={(e) => {
-                setSubsedeId(e.target.value)
-                setStationId('')
-              }}
-            >
-              <option value="">Todas</option>
-              {subsedes.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isStationOnly && (
+            <>
+              <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="regionFilter">Regional</label>
+                <select
+                  id="regionFilter"
+                  value={regionId}
+                  onChange={(e) => {
+                    setRegionId(e.target.value)
+                    setSubsedeId('')
+                    setStationId('')
+                  }}
+                >
+                  <option value="">Todas</option>
+                  {regions.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="subsedeFilter">Subsede</label>
+                <select
+                  id="subsedeFilter"
+                  value={subsedeId}
+                  onChange={(e) => {
+                    setSubsedeId(e.target.value)
+                    setStationId('')
+                  }}
+                >
+                  <option value="">Todas</option>
+                  {subsedes.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <div className="field" style={{ flex: 1, minWidth: 160 }}>
             <label htmlFor="stationFilter">
               Cuartel {reportDef.needsStation && <span style={{ color: 'var(--color-primary)' }}>*</span>}
             </label>
-            <select id="stationFilter" value={stationId} onChange={(e) => setStationId(e.target.value)}>
-              <option value="">{reportDef.needsStation ? 'Seleccionar cuartel' : 'Todos'}</option>
+            <select id="stationFilter" value={stationId} onChange={(e) => setStationId(e.target.value)} disabled={isStationOnly}>
+              {!isStationOnly && <option value="">{reportDef.needsStation ? 'Seleccionar cuartel' : 'Todos'}</option>}
               {stations.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
+            {isStationOnly && (
+              <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                Solo podés generar reportes de tu propio cuartel.
+              </p>
+            )}
           </div>
         </div>
 
@@ -226,7 +268,7 @@ export function ReportesPage() {
       </div>
 
       <div className="card-grid" style={{ marginBottom: 24 }}>
-        {REPORT_TYPES.map((report) => (
+        {availableReportTypes.map((report) => (
           <button
             key={report.key}
             type="button"

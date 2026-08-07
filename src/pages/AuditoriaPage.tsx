@@ -25,6 +25,7 @@ import {
   type EntityLookup,
 } from '../lib/audit/humanize'
 import { describeSupabaseError } from '../lib/api/errors'
+import { useAuth } from '../hooks/useAuth'
 
 function actionBadgeClass(action: string): string {
   const a = action.toLowerCase()
@@ -154,6 +155,14 @@ function AuditLogDetail({ log, lookup }: { log: AuditLogRow; lookup: EntityLooku
 }
 
 export function AuditoriaPage() {
+  const { hasRole } = useAuth()
+  // invitado es "solo lectura limitado" (ver ROLE_DEFINITIONS) -- ver el
+  // historial completo de auditoría de su cuartel (diffs old/new de cada
+  // cambio) excede ese alcance. El sidebar ya lo ocultaba (hideForRoles en
+  // navigation.ts) pero la ruta y la RLS (audit_logs_select_station/_subsede,
+  // migración 0063) no lo excluían -- se cierra acá en los tres niveles.
+  const canAccess = !hasRole('invitado')
+
   const [logs, setLogs] = useState<AuditLogRow[]>([])
   const [page, setPage] = useState(0)
   const [hasMore, setHasMore] = useState(false)
@@ -250,6 +259,14 @@ export function AuditoriaPage() {
 
   function resetFiltersPage() {
     setPage(0)
+  }
+
+  if (!canAccess) {
+    return (
+      <AppShell title="Auditoría">
+        <div className="empty-state">No tenés permisos para ver la auditoría del sistema.</div>
+      </AppShell>
+    )
   }
 
   return (

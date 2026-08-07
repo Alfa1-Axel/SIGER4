@@ -14,10 +14,12 @@ import { describeSupabaseError } from '../lib/api/errors'
 export function EventoCalendarioDetallePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { isAdmin, hasRole } = useAuth()
-  const canManage =
-    isAdmin ||
-    hasRole('secretario_regional', 'director_escuela', 'instructor', 'presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
+  const { profile, scopes, isAdmin, hasRole } = useAuth()
+  const isEscuelaRole = hasRole('director_escuela', 'instructor')
+  const isRegionalRole = hasRole('secretario_regional')
+  const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
 
   const [event, setEvent] = useState<CalendarEvent | null>(null)
   const [regions, setRegions] = useState<Region[]>([])
@@ -44,6 +46,23 @@ export function EventoCalendarioDetallePage() {
       active = false
     }
   }, [id])
+
+  // Refleja calendar_events_write_admin_regional_station_escuela (migración
+  // 0051) en vez de solo chequear el rol: antes se mostraba Editar/Cancelar/
+  // Eliminar en CUALQUIER evento con solo tener el rol adecuado, y la RLS
+  // rechazaba el guardado si el evento no era del alcance propio del usuario.
+  const canManage = (() => {
+    if (isAdmin || !event) return isAdmin
+    if (['escuela', 'capacitacion'].includes(event.event_type)) return isEscuelaRole
+    if (isRegionalRole) {
+      if (event.region_id) return event.region_id === myRegionId
+      if (event.station_id) return stations.find((s) => s.id === event.station_id)?.region_id === myRegionId
+      if (event.subsede_id) return subsedes.find((s) => s.id === event.subsede_id)?.region_id === myRegionId
+      return false
+    }
+    if (isStationRole) return Boolean(event.station_id) && event.station_id === myStationId
+    return false
+  })()
 
   function scopeLabel(e: CalendarEvent): string {
     if (e.station_id) return stations.find((s) => s.id === e.station_id)?.name ?? 'Cuartel'

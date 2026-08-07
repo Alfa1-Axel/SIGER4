@@ -37,6 +37,12 @@ export function EventoCalendarioFormPage() {
   // real al crear un evento "de mi cuartel", y el insert termina violando
   // calendar_events_single_scope (ningún alcance seteado).
   const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
+  // calendar_events_write_admin_regional_station_escuela (migración 0051)
+  // acota a secretario_regional a region_id in my_region_ids() -- antes el
+  // picker de región/subsede/cuartel no reflejaba ese límite y dejaba elegir
+  // cualquier región del sistema, rechazada recién al guardar.
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? ''
+  const regionLocked = isRegionalRole && !isAdmin
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -88,15 +94,18 @@ export function EventoCalendarioFormPage() {
     let active = true
     Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()]).then(([regionsData, subsedesData, stationsData]) => {
       if (!active) return
-      setRegions(regionsData)
-      setSubsedes(subsedesData)
-      setStations(stationsData)
-      if (!stationLocked) setRegionId((prev) => prev || regionsData[0]?.id || '')
+      const regionsInScope = regionLocked ? regionsData.filter((r) => r.id === myRegionId) : regionsData
+      const subsedesInScope = regionLocked ? subsedesData.filter((s) => s.region_id === myRegionId) : subsedesData
+      const stationsInScope = regionLocked ? stationsData.filter((s) => s.region_id === myRegionId) : stationsData
+      setRegions(regionsInScope)
+      setSubsedes(subsedesInScope)
+      setStations(stationsInScope)
+      if (!stationLocked) setRegionId((prev) => prev || (regionLocked ? myRegionId : regionsData[0]?.id ?? ''))
     })
     return () => {
       active = false
     }
-  }, [canCreate, stationLocked])
+  }, [canCreate, stationLocked, regionLocked, myRegionId])
 
   useEffect(() => {
     if (!id) return

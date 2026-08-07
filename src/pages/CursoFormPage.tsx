@@ -14,6 +14,7 @@ import {
 } from '../lib/api/courses'
 import type { CourseStatus, Profile, Region, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const STATUS_OPTIONS: { value: CourseStatus; label: string }[] = [
   { value: 'planificado', label: 'Planificado' },
@@ -117,7 +118,7 @@ export function CursoFormPage() {
       await setParticipatingStations(course.id, selectedStationIds)
       navigate('/escuela')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el curso.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el curso.'))
     } finally {
       setSubmitting(false)
     }

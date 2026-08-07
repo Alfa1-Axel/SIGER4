@@ -14,6 +14,7 @@ import { getDocumentSignedUrl } from '../lib/api/storage'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { isMobileUserAgent } from '../lib/device'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function CarpetaDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -53,7 +54,7 @@ export function CarpetaDetallePage() {
         }
         setLoading(false)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar la carpeta'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la carpeta')))
     return () => {
       active = false
     }
@@ -66,7 +67,7 @@ export function CarpetaDetallePage() {
       const url = await getDocumentSignedUrl(doc.storage_path)
       window.open(url, '_blank', 'noopener,noreferrer')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos abrir el documento.')
+      setError(describeSupabaseError(err, 'No pudimos abrir el documento.'))
     } finally {
       setOpeningId(null)
     }
@@ -80,7 +81,7 @@ export function CarpetaDetallePage() {
       await trashDocument(doc.id, profile?.id ?? null)
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos enviar el documento a la papelera.')
+      setError(describeSupabaseError(err, 'No pudimos enviar el documento a la papelera.'))
     } finally {
       setTrashingId(null)
     }
@@ -96,7 +97,7 @@ export function CarpetaDetallePage() {
       setFolder(updated)
       setEditingFolder(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar la carpeta.')
+      setError(describeSupabaseError(err, 'No pudimos guardar la carpeta.'))
     } finally {
       setSaving(false)
     }
@@ -110,7 +111,7 @@ export function CarpetaDetallePage() {
       await deleteDocumentFolder(id)
       navigate('/documentos')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos eliminar la carpeta.')
+      setError(describeSupabaseError(err, 'No pudimos eliminar la carpeta.'))
     }
   }
 

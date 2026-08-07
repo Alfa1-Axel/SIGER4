@@ -15,6 +15,7 @@ import {
 import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPage'
 import type { InventoryCategory, InventoryItemHistory, InventoryStatus, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function InventarioFormPage() {
   const { id } = useParams<{ id?: string }>()
@@ -118,7 +119,7 @@ export function InventarioFormPage() {
       }
       navigate('/inventario')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el elemento.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el elemento.'))
     } finally {
       setSubmitting(false)
     }

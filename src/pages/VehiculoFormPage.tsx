@@ -5,6 +5,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { createVehicle, fetchVehicleById, updateVehicle } from '../lib/api/vehicles'
 import type { VehicleStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 // Solo los 3 estados operativos son editables libremente desde este
 // formulario. Vendido/transferido/baja requieren un motivo obligatorio y se
@@ -82,7 +83,7 @@ export function VehiculoFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el vehículo.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el vehículo.'))
     } finally {
       setSubmitting(false)
     }

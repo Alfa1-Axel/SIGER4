@@ -23,6 +23,7 @@ import {
   translateTable,
   type EntityLookup,
 } from '../lib/audit/humanize'
+import { describeSupabaseError } from '../lib/api/errors'
 
 function actionBadgeClass(action: string): string {
   const a = action.toLowerCase()
@@ -237,7 +238,7 @@ export function AuditoriaPage() {
         setLogs(rows)
         setHasMore(more)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar la auditoría'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la auditoría')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

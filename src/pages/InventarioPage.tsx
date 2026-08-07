@@ -5,6 +5,7 @@ import { Icon } from '../components/ui/Icon'
 import { fetchInventoryItems } from '../lib/api/inventory'
 import type { InventoryCategory, InventoryItem, InventoryStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export const INVENTORY_CATEGORY_LABEL: Record<InventoryCategory, string> = {
   herramienta_manual: 'Herramienta Manual',
@@ -43,7 +44,7 @@ export function InventarioPage() {
     let active = true
     fetchInventoryItems()
       .then((data) => active && setItems(data))
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar el inventario'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el inventario')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

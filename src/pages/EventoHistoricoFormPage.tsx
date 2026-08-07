@@ -9,6 +9,7 @@ import {
 } from '../lib/api/stationHistory'
 import type { StationHistoryCategory } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const CATEGORY_OPTIONS: { value: StationHistoryCategory; label: string }[] = [
   { value: 'institucional', label: 'Institucional' },
@@ -78,7 +79,7 @@ export function EventoHistoricoFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el evento histórico.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el evento histórico.'))
     } finally {
       setSubmitting(false)
     }

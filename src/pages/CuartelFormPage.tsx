@@ -9,6 +9,7 @@ import { createStation, fetchStationById, updateStation } from '../lib/api/stati
 import { deleteStationMedia, uploadStationMedia } from '../lib/api/storage'
 import type { Region, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
@@ -140,7 +141,7 @@ export function CuartelFormPage() {
 
       navigate(`/cuarteles/${stationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el cuartel.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el cuartel.'))
     } finally {
       setSubmitting(false)
     }

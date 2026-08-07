@@ -18,6 +18,7 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const SCOPE_LABEL: Record<ScopeType, string> = {
   system: 'Informática (Sistema)',
@@ -134,7 +135,7 @@ export function UsuarioDetallePage() {
       }
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar los cambios.')
+      setError(describeSupabaseError(err, 'No pudimos guardar los cambios.'))
     } finally {
       setSaving(false)
     }
@@ -152,7 +153,7 @@ export function UsuarioDetallePage() {
       }
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos actualizar el rol.')
+      setError(describeSupabaseError(err, 'No pudimos actualizar el rol.'))
     }
   }
 
@@ -168,7 +169,7 @@ export function UsuarioDetallePage() {
       })
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos agregar el alcance.')
+      setError(describeSupabaseError(err, 'No pudimos agregar el alcance.'))
     }
   }
 
@@ -178,7 +179,7 @@ export function UsuarioDetallePage() {
       await removeScope(scopeId)
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos quitar el alcance.')
+      setError(describeSupabaseError(err, 'No pudimos quitar el alcance.'))
     }
   }
 
@@ -197,7 +198,7 @@ export function UsuarioDetallePage() {
       }
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cambiar el estado del usuario.')
+      setError(describeSupabaseError(err, 'No pudimos cambiar el estado del usuario.'))
     }
   }
 
@@ -211,7 +212,7 @@ export function UsuarioDetallePage() {
       await reload()
       setEmailSaved(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cambiar el email.')
+      setError(describeSupabaseError(err, 'No pudimos cambiar el email.'))
     } finally {
       setSavingEmail(false)
     }
@@ -234,7 +235,7 @@ export function UsuarioDetallePage() {
       await reload()
       setPasswordResetDone(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cambiar la contraseña.')
+      setError(describeSupabaseError(err, 'No pudimos cambiar la contraseña.'))
     } finally {
       setResettingPassword(false)
     }
@@ -248,7 +249,7 @@ export function UsuarioDetallePage() {
       await updateUserAccount({ profile_id: id, must_change_password: !profile.must_change_password })
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos actualizar el estado de cambio de contraseña.')
+      setError(describeSupabaseError(err, 'No pudimos actualizar el estado de cambio de contraseña.'))
     } finally {
       setResettingMustChangePassword(false)
     }

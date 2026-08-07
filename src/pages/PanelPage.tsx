@@ -9,6 +9,7 @@ import type { Station } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
 import { formatPercent } from '../lib/format'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
+import { describeSupabaseError } from '../lib/api/errors'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -36,7 +37,7 @@ export function PanelPage() {
       })
       .catch((err) => {
         if (!active) return
-        setError(err instanceof Error ? err.message : 'No pudimos cargar el panel regional.')
+        setError(describeSupabaseError(err, 'No pudimos cargar el panel regional.'))
       })
       .finally(() => {
         if (active) setLoading(false)

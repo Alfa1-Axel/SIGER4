@@ -11,6 +11,7 @@ import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
 import { triggerPushDiagnostic } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function AjustesPage() {
   const { profile, user, roles, isAdmin, signOut, refreshProfile } = useAuth()
@@ -61,7 +62,7 @@ export function AjustesPage() {
       await refreshProfile()
       setProfileSaved(true)
     } catch (err) {
-      setProfileError(err instanceof Error ? err.message : 'No pudimos guardar tus datos.')
+      setProfileError(describeSupabaseError(err, 'No pudimos guardar tus datos.'))
     } finally {
       setSavingProfile(false)
     }
@@ -75,7 +76,7 @@ export function AjustesPage() {
       await updateProfile(profile.id, { weekly_reminder_enabled: !profile.weekly_reminder_enabled })
       await refreshProfile()
     } catch (err) {
-      setWeeklyReminderError(err instanceof Error ? err.message : 'No pudimos guardar el cambio.')
+      setWeeklyReminderError(describeSupabaseError(err, 'No pudimos guardar el cambio.'))
     } finally {
       setSavingWeeklyReminder(false)
     }
@@ -145,7 +146,7 @@ export function AjustesPage() {
       setConfirmPassword('')
       setPasswordSaved(true)
     } catch (err) {
-      setPasswordError(err instanceof Error ? err.message : 'No pudimos cambiar la contraseña.')
+      setPasswordError(describeSupabaseError(err, 'No pudimos cambiar la contraseña.'))
     } finally {
       setChangingPassword(false)
     }
@@ -173,7 +174,7 @@ export function AjustesPage() {
       }
       window.location.href = window.location.origin + '/panel?cache-cleared=' + Date.now()
     } catch (err) {
-      setClearCacheError(err instanceof Error ? err.message : 'No pudimos limpiar la caché. Cerrá y reabrí la app manualmente.')
+      setClearCacheError(describeSupabaseError(err, 'No pudimos limpiar la caché. Cerrá y reabrí la app manualmente.'))
       setClearingCache(false)
     }
   }

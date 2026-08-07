@@ -6,6 +6,7 @@ import { fetchDocuments, fetchDocumentFolders, fetchPendingDocuments, cleanupPen
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { isMobileUserAgent } from '../lib/device'
+import { describeSupabaseError } from '../lib/api/errors'
 
 // Vista por carpetas: cada carpeta activa es una tarjeta que lleva a
 // /documentos/carpetas/:id (CarpetaDetallePage), donde vive el listado de
@@ -49,7 +50,7 @@ export function DocumentosPage() {
   useEffect(() => {
     let active = true
     reload()
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar documentos'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar documentos')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -65,7 +66,7 @@ export function DocumentosPage() {
       await reload()
       if (removed === 0) setError('No había documentos pendientes hace más de 24hs para limpiar.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos limpiar los documentos pendientes.')
+      setError(describeSupabaseError(err, 'No pudimos limpiar los documentos pendientes.'))
     } finally {
       setCleaningUp(false)
     }

@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { describeSupabaseError } from './errors'
 
 export async function savePushSubscription(
   profileId: string,
@@ -97,6 +98,6 @@ export async function triggerPushDiagnostic(input: PushTriggerInput): Promise<Pu
     if (data?.duplicate) return { ok: true, sent: 0, duplicate: true }
     return { ok: true, sent: data?.sent ?? 0, duplicate: false }
   } catch (err) {
-    return { ok: false, sent: 0, duplicate: false, error: err instanceof Error ? err.message : 'Error desconocido al invocar send-push.' }
+    return { ok: false, sent: 0, duplicate: false, error: describeSupabaseError(err, 'Error desconocido al invocar send-push.') }
   }
 }

@@ -5,6 +5,7 @@ import { Icon } from '../components/ui/Icon'
 import { fetchProfiles } from '../lib/api/users'
 import type { Profile } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 // jefe_cuerpo_activo entra a esta misma pantalla (ver UserManagerRoute), pero
 // solo puede ver/gestionar usuarios de su propio cuartel: el listado se
@@ -24,7 +25,7 @@ export function UsuariosPage() {
     let active = true
     fetchProfiles()
       .then((data) => active && setProfiles(data))
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar usuarios'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar usuarios')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

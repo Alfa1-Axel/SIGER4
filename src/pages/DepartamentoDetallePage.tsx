@@ -16,6 +16,7 @@ import { fetchProfiles } from '../lib/api/users'
 import { fetchStations } from '../lib/api/stations'
 import type { Department, Profile, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function DepartamentoDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -100,7 +101,7 @@ export function DepartamentoDetallePage() {
       })
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar los cambios.')
+      setError(describeSupabaseError(err, 'No pudimos guardar los cambios.'))
     } finally {
       setSavingDetails(false)
     }
@@ -122,7 +123,7 @@ export function DepartamentoDetallePage() {
       setNewMemberProfileId('')
       await reload()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos agregar el miembro.')
+      setError(describeSupabaseError(err, 'No pudimos agregar el miembro.'))
     } finally {
       setAddingMember(false)
     }

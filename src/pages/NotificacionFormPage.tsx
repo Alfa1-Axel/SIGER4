@@ -9,6 +9,7 @@ import { fetchProfiles } from '../lib/api/users'
 import { createNotification } from '../lib/api/notifications'
 import type { NotificationType, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const NOTIFICATION_TYPE_OPTIONS: { value: NotificationType; label: string }[] = [
   { value: 'curso_nuevo', label: 'Curso nuevo' },
@@ -112,7 +113,7 @@ export function NotificacionFormPage() {
       })
       navigate('/notificaciones')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos crear la notificación.')
+      setError(describeSupabaseError(err, 'No pudimos crear la notificación.'))
     } finally {
       setSubmitting(false)
     }

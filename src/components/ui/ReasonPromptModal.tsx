@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
+import { describeSupabaseError } from '../../lib/api/errors'
 
 interface ReasonPromptModalProps {
   title: string
@@ -37,7 +38,7 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
     try {
       await onConfirm(reason.trim())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos completar la acción.')
+      setError(describeSupabaseError(err, 'No pudimos completar la acción.'))
     } finally {
       setSubmitting(false)
     }

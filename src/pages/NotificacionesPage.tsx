@@ -5,6 +5,7 @@ import { Icon } from '../components/ui/Icon'
 import { fetchNotificationsForProfile, markNotificationRead } from '../lib/api/notifications'
 import type { Notification, NotificationType } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   curso_nuevo: 'Curso nuevo',
@@ -35,7 +36,7 @@ export function NotificacionesPage() {
     let active = true
     fetchNotificationsForProfile(profile.id)
       .then((data) => active && setNotifications(data))
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar notificaciones'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar notificaciones')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -48,7 +49,7 @@ export function NotificacionesPage() {
       await markNotificationRead(id)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos marcar la notificación como leída.')
+      setError(describeSupabaseError(err, 'No pudimos marcar la notificación como leída.'))
     }
   }
 

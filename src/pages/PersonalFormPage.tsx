@@ -5,6 +5,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { createPersonnel, fetchPersonnelById, updatePersonnel } from '../lib/api/personnel'
 import type { PersonnelStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 // Solo los estados "libres" son editables desde este formulario.
 // Renuncia/baja/pase/reserva requieren un motivo obligatorio y se hacen
@@ -90,7 +91,7 @@ export function PersonalFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el personal.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el personal.'))
     } finally {
       setSubmitting(false)
     }

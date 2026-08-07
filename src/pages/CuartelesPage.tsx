@@ -7,6 +7,7 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStationCompliance, COMPLIANCE_STATUS_BADGE, COMPLIANCE_STATUS_LABEL } from '../lib/api/compliance'
 import type { Station, StationCompliance, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const STATUS_LABEL: Record<StationStatus, string> = {
   operativo: 'Operativo',
@@ -38,7 +39,7 @@ export function CuartelesPage() {
         setSubsedes(subsedesData)
         setCompliance(complianceData)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar cuarteles'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar cuarteles')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

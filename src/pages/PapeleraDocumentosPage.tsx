@@ -9,6 +9,7 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import type { DocumentFolder, DocumentRecord, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const RETENTION_DAYS = 30
 
@@ -59,7 +60,7 @@ export function PapeleraDocumentosPage() {
   useEffect(() => {
     let active = true
     reload()
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar la papelera'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la papelera')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -86,7 +87,7 @@ export function PapeleraDocumentosPage() {
       setDocuments((prev) => prev.filter((d) => d.id !== doc.id))
       setInfo(`"${doc.title}" fue restaurado.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos restaurar el documento.')
+      setError(describeSupabaseError(err, 'No pudimos restaurar el documento.'))
     } finally {
       setBusyId(null)
     }
@@ -106,7 +107,7 @@ export function PapeleraDocumentosPage() {
         setInfo(`"${doc.title}" fue borrado definitivamente.`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos purgar el documento.')
+      setError(describeSupabaseError(err, 'No pudimos purgar el documento.'))
     } finally {
       setBusyId(null)
     }
@@ -126,7 +127,7 @@ export function PapeleraDocumentosPage() {
         setInfo(`Se purgaron ${result.purged} documento${result.purged === 1 ? '' : 's'}.${result.failed > 0 ? ` ${result.failed} fallaron (ver detalle en los logs).` : ''}`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos ejecutar la purga.')
+      setError(describeSupabaseError(err, 'No pudimos ejecutar la purga.'))
     } finally {
       setPurgingAll(false)
     }

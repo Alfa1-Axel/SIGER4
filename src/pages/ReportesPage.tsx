@@ -9,6 +9,7 @@ import { fetchStations } from '../lib/api/stations'
 import { REPORT_GENERATORS, type ReportKey } from '../lib/pdf/reportGenerators'
 import type { Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const REPORT_TYPES: { key: ReportKey; label: string; needsStation?: boolean }[] = [
   { key: 'asistencias', label: 'Reporte de Asistencias' },
@@ -124,7 +125,7 @@ export function ReportesPage() {
 
       setConfirmedKey(reportKey)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos generar el reporte.')
+      setError(describeSupabaseError(err, 'No pudimos generar el reporte.'))
     } finally {
       setGenerating(false)
     }

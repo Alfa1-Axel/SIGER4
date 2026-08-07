@@ -8,6 +8,7 @@ import {
   updateAttendanceSummary,
 } from '../lib/api/attendance'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function AsistenciaFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
@@ -65,7 +66,7 @@ export function AsistenciaFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el resumen de asistencia.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el resumen de asistencia.'))
     } finally {
       setSubmitting(false)
     }

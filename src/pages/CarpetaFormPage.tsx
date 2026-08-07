@@ -9,6 +9,7 @@ import { fetchProfiles } from '../lib/api/users'
 import { createDocumentFolder } from '../lib/api/documents'
 import type { Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 type FolderScopeTarget = 'region' | 'subsede' | 'station' | 'profile'
 
@@ -110,7 +111,7 @@ export function CarpetaFormPage() {
       })
       navigate('/documentos')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos crear la carpeta.')
+      setError(describeSupabaseError(err, 'No pudimos crear la carpeta.'))
     } finally {
       setSubmitting(false)
     }

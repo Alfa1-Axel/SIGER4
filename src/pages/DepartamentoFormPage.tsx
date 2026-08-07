@@ -6,6 +6,7 @@ import { createDepartment } from '../lib/api/departments'
 import { fetchProfiles } from '../lib/api/users'
 import type { Profile } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function DepartamentoFormPage() {
   const navigate = useNavigate()
@@ -43,7 +44,7 @@ export function DepartamentoFormPage() {
       })
       navigate('/departamentos')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos crear el departamento.')
+      setError(describeSupabaseError(err, 'No pudimos crear el departamento.'))
     } finally {
       setSubmitting(false)
     }

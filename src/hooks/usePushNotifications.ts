@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { hasActiveSubscriptionRow, removePushSubscription, savePushSubscription } from '../lib/api/pushSubscriptions'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
 
@@ -133,7 +134,7 @@ export function usePushNotifications(profileId: string | undefined): UsePushNoti
       }
       await checkStatus()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos activar las notificaciones push.')
+      setError(describeSupabaseError(err, 'No pudimos activar las notificaciones push.'))
     } finally {
       setLoading(false)
     }
@@ -154,7 +155,7 @@ export function usePushNotifications(profileId: string | undefined): UsePushNoti
       setSubscribed(false)
       setDiagnostic('not_subscribed')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos desactivar las notificaciones push.')
+      setError(describeSupabaseError(err, 'No pudimos desactivar las notificaciones push.'))
     } finally {
       setLoading(false)
     }
@@ -188,7 +189,7 @@ export function usePushNotifications(profileId: string | undefined): UsePushNoti
       await subscribeAndSave(registration)
       await checkStatus()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos reactivar las notificaciones push.')
+      setError(describeSupabaseError(err, 'No pudimos reactivar las notificaciones push.'))
     } finally {
       setLoading(false)
     }

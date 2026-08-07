@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../hooks/useAuth'
 import { updateProfile } from '../lib/api/users'
 import { Footer } from '../components/layout/Footer'
+import { describeSupabaseError } from '../lib/api/errors'
 
 // Pantalla de cambio de contraseña obligatorio: se muestra en vez de
 // cualquier ruta protegida mientras profile.must_change_password sea true
@@ -54,7 +55,7 @@ export function CambiarPasswordPage() {
       if (profile) await updateProfile(profile.id, { must_change_password: false })
       await refreshProfile()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cambiar la contraseña.')
+      setError(describeSupabaseError(err, 'No pudimos cambiar la contraseña.'))
     } finally {
       setSubmitting(false)
     }

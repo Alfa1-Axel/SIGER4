@@ -18,7 +18,15 @@ import { PostgrestError } from '@supabase/supabase-js'
 // (or no) rows returned"). Ese caso hay que tratarlo explícitamente como
 // "no tenés permiso" (la causa más común) en vez de mostrar ese texto
 // técnico.
-export function describeSupabaseError(err: unknown): string {
+// fallback: mensaje a mostrar cuando el error NO es un PostgrestError (por
+// ejemplo, una falla de Storage/caches/red que no viene de una tabla) y
+// tampoco tiene su propio .message útil -- cada pantalla puede pasar un
+// texto más específico que el genérico si lo tiene (ej. AjustesPage.tsx:
+// "Cerrá y reabrí la app manualmente" para el botón de limpiar caché). Los
+// errores de Postgres/RLS SIEMPRE se traducen primero sin importar este
+// parámetro -- es solo el último recurso para errores que no vienen de la
+// base o que no traen ningún mensaje propio.
+export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un error inesperado. Intentá de nuevo.'): string {
   if (err instanceof PostgrestError) {
     if (err.code === '42501') return 'No tenés permisos para realizar esta acción.'
     if (err.code === 'PGRST116') {
@@ -37,6 +45,6 @@ export function describeSupabaseError(err: unknown): string {
     if (err.hint) return `${err.message} (${err.hint})`
     return err.message
   }
-  if (err instanceof Error) return err.message
-  return 'Ocurrió un error inesperado. Intentá de nuevo.'
+  if (err instanceof Error) return err.message || fallback
+  return fallback
 }

@@ -10,6 +10,7 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 import type { Region, ScopeType, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const SCOPE_OPTIONS: { value: ScopeType; label: string }[] = [
   { value: 'region', label: 'Regional' },
@@ -157,7 +158,7 @@ export function UsuarioFormPage() {
 
       setCreatedPassword(password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos crear el usuario.')
+      setError(describeSupabaseError(err, 'No pudimos crear el usuario.'))
     } finally {
       setSubmitting(false)
     }

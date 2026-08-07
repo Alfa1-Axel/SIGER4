@@ -9,6 +9,7 @@ import { fetchStations } from '../lib/api/stations'
 import type { CalendarEvent, Region, Station, Subsede } from '../types/database'
 import { EVENT_STATUS_LABEL, EVENT_TYPE_LABEL } from './CalendarioPage'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function EventoCalendarioDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -60,7 +61,7 @@ export function EventoCalendarioDetallePage() {
       const updated = await updateCalendarEvent(id, { status: 'cancelado' })
       setEvent(updated)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos cancelar el evento.')
+      setError(describeSupabaseError(err, 'No pudimos cancelar el evento.'))
     } finally {
       setUpdating(false)
     }
@@ -74,7 +75,7 @@ export function EventoCalendarioDetallePage() {
       await deleteCalendarEvent(id)
       navigate('/calendario')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos eliminar el evento.')
+      setError(describeSupabaseError(err, 'No pudimos eliminar el evento.'))
     }
   }
 

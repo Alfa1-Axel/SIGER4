@@ -6,6 +6,7 @@ import { fetchDepartments } from '../lib/api/departments'
 import { fetchProfiles } from '../lib/api/users'
 import type { Department, Profile } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export function DepartamentosPage() {
   const { isAdmin } = useAuth()
@@ -22,7 +23,7 @@ export function DepartamentosPage() {
         setDepartments(departmentsData)
         setProfiles(profilesData)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar departamentos'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar departamentos')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

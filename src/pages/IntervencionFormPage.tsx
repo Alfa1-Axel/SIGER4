@@ -9,6 +9,7 @@ import {
 } from '../lib/api/interventions'
 import type { InterventionTimeOfDay } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 const TIME_OF_DAY_OPTIONS: { value: InterventionTimeOfDay; label: string }[] = [
   { value: 'diurno', label: 'Diurno' },
@@ -84,7 +85,7 @@ export function IntervencionFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el resumen de intervenciones.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el resumen de intervenciones.'))
     } finally {
       setSubmitting(false)
     }

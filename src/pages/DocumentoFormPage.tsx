@@ -11,6 +11,7 @@ import { inferMimeType, isDocumentMimeAllowed, uploadDocumentFile } from '../lib
 import type { DocumentVersion, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { isMobileUserAgent } from '../lib/device'
+import { describeSupabaseError } from '../lib/api/errors'
 
 type DocScopeTarget = 'region' | 'subsede' | 'station' | 'profile'
 
@@ -213,7 +214,7 @@ export function DocumentoFormPage() {
         navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el documento.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el documento.'))
     } finally {
       setSubmitting(false)
     }

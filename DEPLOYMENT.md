@@ -2662,3 +2662,82 @@ Redeploy normal del frontend para el resto de los cambios (mensajes de error, la
    un listado largo): confirmar que el footer institucional queda fijo abajo en ambos casos, nunca
    tapa contenido ni se despega del borde inferior de la ventana.
 6. Repetir 4 y 5 en mobile (drawer) y en modo oscuro.
+
+## 25. QA final del sistema antes de nuevos módulos (2026-08)
+
+Pasada de revisión general (layout, Documentos, Solicitudes de préstamo, módulos principales, manejo
+de errores) pedida explícitamente antes de empezar módulos nuevos. Hecha como auditoría de código
+(RLS de cada migración contra el gate de cada pantalla, revisión de todos los `catch` de error) — no
+se pudo hacer un click-through real en navegador en este entorno (sin herramienta de automatización
+de browser disponible), así que la capa visual sigue pendiente de una verificación manual.
+
+### 25.1 Bug real encontrado: tipo de evento del Calendario sin filtrar por rol
+
+`EventoCalendarioFormPage.tsx` mostraba los 9 tipos de evento a cualquier usuario con permiso de
+crear/editar, pero `calendar_events_write_admin_regional_station_escuela` (migración 0051) es
+condicional por tipo: `is_escuela_role()` (`director_escuela`/`instructor`) únicamente puede escribir
+`escuela`/`capacitacion`; el resto de los roles (regional o de cuartel) únicamente puede escribir los
+otros 7 tipos. Un `director_escuela` podía elegir "Regional" en el `<select>` y recién enterarse del
+rechazo al tocar Guardar — exactamente la clase de "botón que el backend rechaza" pedida en el QA.
+
+**Fix**: el `<select>` de tipo ahora se arma con `allowedEventTypes`, filtrado según el rol actual
+(`isAdmin` ve los 9, `is_escuela_role` ve solo escuela/capacitación, el resto ve los demás). En
+edición, si el evento cargado ya tenía un tipo fuera de lo que el rol actual puede elegir (ej. lo
+cargó un admin), se agrega igual como opción — si no, el `<select>` quedaría sin ninguna opción
+realmente seleccionada y guardar sin tocar el campo cambiaría el tipo del evento sin que nadie lo
+haya elegido. El valor inicial para un usuario de Escuela pasa de `'regional'` a `'escuela'`.
+
+### 25.2 Mensajes de error reales en todo el sistema, no solo en Documentos/Solicitudes
+
+El patrón `err instanceof Error ? err.message : 'mensaje genérico'` (introducido antes de que
+existiera `describeSupabaseError`, ver sección 24.2) seguía repetido en 33 archivos más — cualquier
+error real de RLS/constraint en esas pantallas se mostraba como texto técnico de Postgres, o el
+`.message` real quedaba oculto detrás del fallback genérico sin ninguna pista. Se reemplazó en todo
+el sistema (páginas, `usePushNotifications.ts`, `pushSubscriptions.ts`) por `describeSupabaseError`.
+
+`describeSupabaseError` ahora acepta un **segundo argumento opcional** (`fallback`) para no perder
+los mensajes específicos que algunas pantallas ya tenían pensados para el caso "no es un error de
+Postgres" (ej. `AjustesPage.tsx`: "Cerrá y reabrí la app manualmente" al limpiar caché) — ese texto
+solo se usa como último recurso, cuando el error no es un `PostgrestError` traducible.
+
+### 25.3 Verificado, sin bugs encontrados (auditoría RLS vs. UI)
+
+Se revisó explícitamente, migración por migración, que el gate de permisos de cada pantalla coincida
+con la policy RLS real vigente — incluyendo casos donde una migración posterior redefine una función
+`security definer` compartida (ej. `is_regional_role()` redefinida en la migración 0048 para dejar de
+incluir a `director_escuela`, con efecto inmediato sobre todas las policies que la referencian por
+nombre sin tener que tocarlas de nuevo):
+- Documentos: `canCreate` en `DocumentoFormPage.tsx` coincide con `documents_insert_admin_regional_station`
+  (0053) — incluye `jefe_cuerpo_activo`, agregado en la migración 0047.
+- Solicitudes de préstamo: `canRequest`/`isManager` coinciden con `inventory_loan_requests_insert_station`/
+  `inventory_loan_requests_update_managers` (0057).
+- Vehículos/Personal/Asistencia/Intervenciones: los 4 `canEdit` coinciden con sus policies
+  territoriales — correctamente sin `director_escuela` (post-0048).
+- Cursos/Escuela: `canEdit` en `CursoFormPage.tsx` coincide con `courses_write_admin_escuela`.
+- Cuarteles: create/edit en `CuartelFormPage.tsx` coincide con `stations_write_admin_regional` (solo
+  `secretario_regional`) / `stations_update_admin_regional_or_own` (+ roles de cuartel).
+- Departamentos: `canManage` (coordinador o admin) coincide con `departments_write_coordinator_or_admin`;
+  creación limitada a admin coincide con que un no-admin no podría autoasignarse coordinador desde la UI.
+- `UserManagerRoute`: gate de UI documentado explícitamente como conveniencia, la autorización real
+  vive server-side — sin cambios necesarios.
+- Semáforo de cumplimiento: confirmado integrado en `CuartelesPage`/`CuartelDetallePage`/`PanelPage`
+  (no es una pantalla separada, es parte del módulo Cuarteles) — sin bugs.
+- Ningún `supabase.from(...)` fuera de la capa `lib/api/` — todas las pantallas pasan por ahí, sin
+  riesgo de queries directas con columnas equivocadas.
+
+### 25.4 Dependencia
+
+`npm audit` encontró una vulnerabilidad nueva (no presente en rondas anteriores): `js-yaml`
+(dependencia transitiva de ESLint, nunca se empaqueta en el build de producción) con
+CVE-2026-59870. Corregida con `npm audit fix` (sin `--force`, sin cambios de comportamiento) — subió
+de 4.3.0 a 4.3.1. Las mismas 2 vulnerabilidades de `react-router` de rondas anteriores siguen
+pendientes (requieren un downgrade con breaking changes, fuera de alcance de este ciclo).
+
+### 25.5 Qué queda pendiente
+
+- Verificación visual real (click-through en navegador) del layout — no se pudo hacer en este
+  entorno. Recomendado: confirmar sidebar/footer fijos, drawer mobile, y claro/oscuro con una sesión
+  real en desktop y mobile.
+- Probar el flujo completo de Solicitudes de préstamo (crear → aprobar → retirar → devolver) en el
+  celular/PC real, con las notificaciones y la auditoría a la vista — la corrección de la migración
+  0060 (sección 24.1) no se había verificado todavía en producción real al momento de este ciclo.

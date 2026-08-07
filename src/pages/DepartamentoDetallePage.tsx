@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -12,11 +12,44 @@ import {
   removeDepartmentMember,
   type DepartmentMemberWithProfile,
 } from '../lib/api/departments'
+import { fetchDepartmentActivityReports, deleteDepartmentActivityReport } from '../lib/api/departmentActivityReports'
 import { fetchProfiles } from '../lib/api/users'
 import { fetchStations } from '../lib/api/stations'
-import type { Department, Profile, Station } from '../types/database'
+import { fetchSubsedes } from '../lib/api/subsedes'
+import type { Department, DepartmentActivityReport, DepartmentActivityType, Profile, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+
+export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
+  reunion: 'Reunión',
+  capacitacion: 'Capacitación',
+  practica: 'Práctica',
+  mantenimiento: 'Mantenimiento',
+  gestion: 'Gestión',
+  informe: 'Informe',
+  otro: 'Otro',
+}
+
+const MONTH_LABEL_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+
+// Fila de barra simple (una sola serie, sin librería de gráficos, ver
+// styles.css .simple-bar-*) — el ancho de la barra es proporcional al valor
+// más alto del conjunto (maxValue), nunca a un eje fijo, para que la barra
+// más grande siempre llegue al 100% del ancho disponible.
+function SimpleBarRow({ label, value, maxValue, formatValue }: { label: string; value: number; maxValue: number; formatValue?: (v: number) => string }) {
+  const percent = maxValue > 0 ? Math.max((value / maxValue) * 100, value > 0 ? 3 : 0) : 0
+  return (
+    <div className="simple-bar-row">
+      <span className="simple-bar-label" title={label}>
+        {label}
+      </span>
+      <div className="simple-bar-track">
+        <div className="simple-bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <span className="simple-bar-value">{formatValue ? formatValue(value) : value}</span>
+    </div>
+  )
+}
 
 export function DepartamentoDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -27,6 +60,8 @@ export function DepartamentoDetallePage() {
   const [members, setMembers] = useState<DepartmentMemberWithProfile[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
+  const [reports, setReports] = useState<DepartmentActivityReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,11 +75,28 @@ export function DepartamentoDetallePage() {
   const [newMemberProfileId, setNewMemberProfileId] = useState('')
   const [addingMember, setAddingMember] = useState(false)
 
+  const [typeFilter, setTypeFilter] = useState('')
+  const [stationFilter, setStationFilter] = useState('')
+  const [subsedeFilter, setSubsedeFilter] = useState('')
+  const [dateFromFilter, setDateFromFilter] = useState('')
+  const [dateToFilter, setDateToFilter] = useState('')
+  const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
+
   const canManage = isAdmin || (department?.coordinator_profile_id && department.coordinator_profile_id === currentProfile?.id)
+  const isMember = Boolean(currentProfile?.id) && members.some((m) => m.profile_id === currentProfile?.id)
+  // Cualquier miembro puede cargar/editar informes de actividad de su
+  // departamento (department_members no distingue roles internos, ver
+  // migración 0061) -- no solo el coordinador, a diferencia de canManage
+  // (que rige los datos del departamento en sí y la lista de miembros).
+  const canLogActivity = canManage || isMember
 
   async function reload() {
     if (!id) return
-    const [departmentData, membersData] = await Promise.all([fetchDepartmentById(id), fetchDepartmentMembers(id)])
+    const [departmentData, membersData, reportsData] = await Promise.all([
+      fetchDepartmentById(id),
+      fetchDepartmentMembers(id),
+      fetchDepartmentActivityReports(id),
+    ])
     if (departmentData) {
       setDepartment(departmentData)
       setName(departmentData.name)
@@ -54,13 +106,21 @@ export function DepartamentoDetallePage() {
       setIsActive(departmentData.is_active)
     }
     setMembers(membersData)
+    setReports(reportsData)
   }
 
   useEffect(() => {
     if (!id) return
     let active = true
-    Promise.all([fetchDepartmentById(id), fetchDepartmentMembers(id), fetchProfiles(), fetchStations()]).then(
-      ([departmentData, membersData, profilesData, stationsData]) => {
+    Promise.all([
+      fetchDepartmentById(id),
+      fetchDepartmentMembers(id),
+      fetchDepartmentActivityReports(id),
+      fetchProfiles(),
+      fetchStations(),
+      fetchSubsedes(),
+    ])
+      .then(([departmentData, membersData, reportsData, profilesData, stationsData, subsedesData]) => {
         if (!active) return
         if (departmentData) {
           setDepartment(departmentData)
@@ -71,11 +131,13 @@ export function DepartamentoDetallePage() {
           setIsActive(departmentData.is_active)
         }
         setMembers(membersData)
+        setReports(reportsData)
         setProfiles(profilesData)
         setStations(stationsData)
+        setSubsedes(subsedesData)
         setLoading(false)
-      },
-    )
+      })
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el departamento')))
     return () => {
       active = false
     }
@@ -84,6 +146,90 @@ export function DepartamentoDetallePage() {
   function stationName(stationId: string | null): string {
     if (!stationId) return 'Sin cuartel asignado'
     return stations.find((s) => s.id === stationId)?.name ?? 'Sin cuartel asignado'
+  }
+
+  function subsedeName(subsedeId: string | null): string {
+    if (!subsedeId) return '—'
+    return subsedes.find((s) => s.id === subsedeId)?.name ?? '—'
+  }
+
+  const filteredReports = useMemo(() => {
+    return reports.filter(
+      (r) =>
+        (!typeFilter || r.activity_type === typeFilter) &&
+        (!stationFilter || r.station_id === stationFilter) &&
+        (!subsedeFilter || r.subsede_id === subsedeFilter) &&
+        (!dateFromFilter || r.activity_date >= dateFromFilter) &&
+        (!dateToFilter || r.activity_date <= dateToFilter),
+    )
+  }, [reports, typeFilter, stationFilter, subsedeFilter, dateFromFilter, dateToFilter])
+
+  // KPIs y datos de gráficos se calculan SIEMPRE sobre filteredReports (no
+  // sobre el total) -- así los filtros de arriba también recalculan las
+  // estadísticas livianas, no solo la lista.
+  const kpis = useMemo(() => {
+    const totalActivities = filteredReports.length
+    const totalHours = filteredReports.reduce((sum, r) => sum + Number(r.hours_worked), 0)
+    const totalAttendees = filteredReports.reduce((sum, r) => sum + r.attendees_count, 0)
+    return { totalActivities, totalHours, totalAttendees }
+  }, [filteredReports])
+
+  const byType = useMemo(() => {
+    const counts = new Map<DepartmentActivityType, number>()
+    for (const r of filteredReports) counts.set(r.activity_type, (counts.get(r.activity_type) ?? 0) + 1)
+    return (Object.keys(DEPARTMENT_ACTIVITY_TYPE_LABEL) as DepartmentActivityType[])
+      .map((type) => ({ type, label: DEPARTMENT_ACTIVITY_TYPE_LABEL[type], count: counts.get(type) ?? 0 }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count)
+  }, [filteredReports])
+
+  // Últimos 6 meses con actividad (incluyendo el actual), para no mostrar un
+  // gráfico vacío de 12 meses cuando recién se está empezando a cargar
+  // informes -- si hay actividad más vieja que eso, se sigue viendo en la
+  // lista/filtros, solo no entra en el gráfico de barras por mes.
+  const byMonth = useMemo(() => {
+    const now = new Date()
+    const months: { key: string; label: string; activities: number; hours: number }[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      months.push({ key, label: `${MONTH_LABEL_SHORT[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`, activities: 0, hours: 0 })
+    }
+    const byKey = new Map(months.map((m) => [m.key, m]))
+    for (const r of filteredReports) {
+      const key = r.activity_date.slice(0, 7)
+      const bucket = byKey.get(key)
+      if (bucket) {
+        bucket.activities += 1
+        bucket.hours += Number(r.hours_worked)
+      }
+    }
+    return months
+  }, [filteredReports])
+
+  const byStation = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const r of filteredReports) {
+      const label = r.station_id ? stationName(r.station_id) : r.subsede_id ? subsedeName(r.subsede_id) : null
+      if (!label) continue
+      counts.set(label, (counts.get(label) ?? 0) + 1)
+    }
+    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredReports, stations, subsedes])
+
+  async function handleDeleteReport(report: DepartmentActivityReport) {
+    if (!window.confirm(`¿Eliminar el informe "${report.title}"? Esta acción no se puede deshacer.`)) return
+    setError(null)
+    setDeletingReportId(report.id)
+    try {
+      await deleteDepartmentActivityReport(report.id)
+      setReports((prev) => prev.filter((r) => r.id !== report.id))
+    } catch (err) {
+      setError(describeSupabaseError(err, 'No pudimos eliminar el informe.'))
+    } finally {
+      setDeletingReportId(null)
+    }
   }
 
   async function handleSaveDetails(event: FormEvent) {
@@ -261,6 +407,174 @@ export function DepartamentoDetallePage() {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="section-header">
+        <h2 className="section-title">Actividad / Informes</h2>
+        {canLogActivity && (
+          <Link to={`/departamentos/${department.id}/informes/nuevo`} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>
+            <Icon name="plus" size={14} />
+            Nuevo informe
+          </Link>
+        )}
+      </div>
+
+      <div className="card-grid" style={{ marginBottom: 20 }}>
+        <div className="kpi-card">
+          <div className="kpi-label">Actividades</div>
+          <div className="kpi-value">{kpis.totalActivities}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Horas acumuladas</div>
+          <div className="kpi-value">{kpis.totalHours.toLocaleString('es-AR', { maximumFractionDigits: 1 })}</div>
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Asistentes acumulados</div>
+          <div className="kpi-value">{kpis.totalAttendees}</div>
+        </div>
+      </div>
+
+      {reports.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <div className="kpi-label" style={{ marginBottom: 10 }}>
+                Actividades por mes (últimos 6 meses)
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {byMonth.map((m) => (
+                  <SimpleBarRow key={m.key} label={m.label} value={m.activities} maxValue={Math.max(...byMonth.map((x) => x.activities), 1)} />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="kpi-label" style={{ marginBottom: 10 }}>
+                Horas por mes (últimos 6 meses)
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {byMonth.map((m) => (
+                  <SimpleBarRow
+                    key={m.key}
+                    label={m.label}
+                    value={m.hours}
+                    maxValue={Math.max(...byMonth.map((x) => x.hours), 1)}
+                    formatValue={(v) => v.toLocaleString('es-AR', { maximumFractionDigits: 1 })}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {byType.length > 0 && (
+              <div>
+                <div className="kpi-label" style={{ marginBottom: 10 }}>
+                  Actividad por tipo
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {byType.map((row) => (
+                    <SimpleBarRow key={row.type} label={row.label} value={row.count} maxValue={byType[0].count} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {byStation.length > 0 && (
+              <div>
+                <div className="kpi-label" style={{ marginBottom: 10 }}>
+                  Cuarteles / subsedes involucrados
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {byStation.map((row) => (
+                    <SimpleBarRow key={row.label} label={row.label} value={row.count} maxValue={byStation[0].count} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: reports.length > 0 ? 16 : 0 }}>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Todos los tipos</option>
+            {(Object.entries(DEPARTMENT_ACTIVITY_TYPE_LABEL) as [DepartmentActivityType, string][]).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Todos los cuarteles</option>
+            {stations.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <select value={subsedeFilter} onChange={(e) => setSubsedeFilter(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">Todas las subsedes</option>
+            {subsedes.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <input type="date" value={dateFromFilter} onChange={(e) => setDateFromFilter(e.target.value)} style={{ fontSize: 12 }} aria-label="Desde" />
+          <input type="date" value={dateToFilter} onChange={(e) => setDateToFilter(e.target.value)} style={{ fontSize: 12 }} aria-label="Hasta" />
+        </div>
+
+        {reports.length === 0 && <div className="empty-state">Sin informes de actividad cargados todavía.</div>}
+        {reports.length > 0 && filteredReports.length === 0 && <div className="empty-state">Ningún informe coincide con los filtros.</div>}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filteredReports.map((report) => {
+            // Editar: cualquiera con canLogActivity (coordinador, miembro, o
+            // rol regional/admin) puede editar CUALQUIER informe del
+            // departamento, coincide con la RLS de escritura (migración
+            // 0061) -- distinto del borrado, más restrictivo (ver
+            // canDeleteReport).
+            const canEditReport = canLogActivity
+            const canDeleteReport = isAdmin || report.created_by_profile_id === currentProfile?.id
+            return (
+              <div key={report.id} className="card-solid list-item">
+                <div className="list-item-body">
+                  <h3 className="list-item-title">{report.title}</h3>
+                  {report.description && <p className="list-item-subtitle">{report.description}</p>}
+                  <div className="list-item-meta">
+                    <span className="badge badge-info">{DEPARTMENT_ACTIVITY_TYPE_LABEL[report.activity_type]}</span>
+                    <span>{new Date(report.activity_date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'medium' })}</span>
+                    {report.attendees_count > 0 && <span>{report.attendees_count} asistentes</span>}
+                    {Number(report.hours_worked) > 0 && <span>{Number(report.hours_worked).toLocaleString('es-AR')} hs</span>}
+                    {(report.station_id || report.subsede_id) && (
+                      <span>{report.station_id ? stationName(report.station_id) : subsedeName(report.subsede_id)}</span>
+                    )}
+                  </div>
+                </div>
+                {(canEditReport || canDeleteReport) && (
+                  <div className="list-item-actions">
+                    {canEditReport && (
+                      <Link to={`/informes/${report.id}/editar`} className="btn btn-outlined btn-icon-sm" aria-label="Editar">
+                        <Icon name="edit" size={14} />
+                      </Link>
+                    )}
+                    {canDeleteReport && (
+                      <button
+                        type="button"
+                        className="btn btn-outlined btn-icon-sm"
+                        disabled={deletingReportId === report.id}
+                        onClick={() => handleDeleteReport(report)}
+                        aria-label="Eliminar"
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </AppShell>
   )

@@ -43,6 +43,7 @@ import { SolicitudPrestamoDetallePage } from './pages/SolicitudPrestamoDetallePa
 import { DepartamentosPage } from './pages/DepartamentosPage'
 import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
+import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
 
 export default function App() {
   return (
@@ -97,6 +98,8 @@ export default function App() {
         <Route path="/inventario/:id" element={<ProtectedRoute><InventarioDetallePage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
+        <Route path="/departamentos/:departmentId/informes/nuevo" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
+        <Route path="/informes/:id/editar" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />

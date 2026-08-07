@@ -412,6 +412,51 @@ img {
   font-weight: 600;
 }
 
+/* ---------- Barra simple (una sola serie, sin librería de gráficos) ---------- */
+/* Usado en estadísticas livianas (ej. actividad de Departamentos): una fila
+   por categoría, barra horizontal con "track" de fondo + relleno
+   proporcional al valor máximo del conjunto, más el valor en texto al
+   costado (nunca un número dentro de cada barra individual — se lee mejor
+   afuera, alineado). Un solo hue (--color-primary): es una sola serie, no
+   hace falta leyenda. Extremo redondeado del lado del dato, igual que
+   cualquier barra con datos reales (nunca ambos extremos cuadrados). */
+.simple-bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 140px) 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.simple-bar-track {
+  background: var(--color-border);
+  border-radius: var(--radius-full);
+  height: 8px;
+  overflow: hidden;
+}
+
+.simple-bar-fill {
+  background: var(--color-primary);
+  height: 100%;
+  border-radius: var(--radius-full);
+  min-width: 2px;
+}
+
+.simple-bar-label {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-bar-value {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+
 /* ---------- Buttons ---------- */
 
 .btn {

@@ -9,6 +9,7 @@ import { fetchStations } from '../lib/api/stations'
 import type { CalendarEventType, Region, Station, Subsede } from '../types/database'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 type ScopeTarget = 'region' | 'subsede' | 'station' | 'escuela'
 
@@ -43,7 +44,9 @@ export function EventoCalendarioFormPage() {
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [eventType, setEventType] = useState<CalendarEventType>(isStationRole && !isAdmin && !isRegionalRole && !isEscuelaRole ? 'cuartel' : 'regional')
+  const [eventType, setEventType] = useState<CalendarEventType>(
+    isEscuelaRole && !isAdmin && !isRegionalRole ? 'escuela' : isStationRole && !isAdmin && !isRegionalRole && !isEscuelaRole ? 'cuartel' : 'regional',
+  )
   const [startsAt, setStartsAt] = useState('')
   const [endsAt, setEndsAt] = useState('')
   const [allDay, setAllDay] = useState(false)
@@ -60,6 +63,25 @@ export function EventoCalendarioFormPage() {
 
   const stationLocked = isStationRole && !isAdmin && !isRegionalRole && !isEscuelaRole
   const isScopeless = SCOPELESS_TYPES.includes(eventType)
+  // El <select> de tipo solo debe ofrecer los tipos que la RLS realmente le
+  // va a aceptar a este rol (calendar_events_write_admin_regional_station_escuela,
+  // migración 0051) -- mostrar los 9 tipos a todos hacía que, por ejemplo, un
+  // director_escuela pudiera elegir "Regional" y que el insert se rechazara
+  // recién al guardar. is_escuela_role() (director_escuela/instructor) SOLO
+  // puede escribir escuela/capacitacion; el resto de los roles (regional o
+  // de cuartel) solo puede escribir los tipos NO-escuela.
+  // En edición, si el evento ya tenía un tipo fuera de lo que este rol puede
+  // elegir (ej. lo cargó un admin), se agrega igual como opción -- si no,
+  // el <select> quedaría sin ninguna opción seleccionada y guardar sin tocar
+  // el campo cambiaría el tipo del evento sin que el usuario lo haya elegido.
+  const roleAllowedEventTypes: CalendarEventType[] = isAdmin
+    ? (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[])
+    : isEscuelaRole
+      ? SCOPELESS_TYPES
+      : (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[]).filter((t) => !SCOPELESS_TYPES.includes(t))
+  const allowedEventTypes: CalendarEventType[] = roleAllowedEventTypes.includes(eventType)
+    ? roleAllowedEventTypes
+    : [eventType, ...roleAllowedEventTypes]
 
   useEffect(() => {
     if (!canCreate) return
@@ -152,7 +174,7 @@ export function EventoCalendarioFormPage() {
         navigate(`/calendario/${created.id}`)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No pudimos guardar el evento.')
+      setError(describeSupabaseError(err, 'No pudimos guardar el evento.'))
     } finally {
       setSubmitting(false)
     }
@@ -184,9 +206,9 @@ export function EventoCalendarioFormPage() {
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label htmlFor="eventType">Tipo</label>
               <select id="eventType" value={eventType} onChange={(e) => setEventType(e.target.value as CalendarEventType)}>
-                {Object.entries(EVENT_TYPE_LABEL).map(([value, label]) => (
+                {allowedEventTypes.map((value) => (
                   <option key={value} value={value}>
-                    {label}
+                    {EVENT_TYPE_LABEL[value]}
                   </option>
                 ))}
               </select>

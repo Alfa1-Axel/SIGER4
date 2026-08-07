@@ -8,6 +8,7 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { describeSupabaseError } from '../lib/api/errors'
 
 export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
   regional: 'Regional',
@@ -89,7 +90,7 @@ export function CalendarioPage() {
         setSubsedes(subsedesData)
         setStations(stationsData)
       })
-      .catch((err) => active && setError(err instanceof Error ? err.message : 'Error al cargar el calendario'))
+      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el calendario')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

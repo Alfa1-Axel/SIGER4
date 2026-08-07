@@ -2741,3 +2741,110 @@ pendientes (requieren un downgrade con breaking changes, fuera de alcance de est
 - Probar el flujo completo de Solicitudes de préstamo (crear → aprobar → retirar → devolver) en el
   celular/PC real, con las notificaciones y la auditoría a la vista — la corrección de la migración
   0060 (sección 24.1) no se había verificado todavía en producción real al momento de este ciclo.
+
+## 26. Estadísticas de Departamentos Regionales (2026-08) — migración 0061
+
+Primer ciclo funcional del módulo: registrar y visualizar actividad básica de cada departamento
+regional (reuniones, capacitaciones, prácticas, mantenimiento, gestión, informes, otro), con KPIs y
+gráficos livianos hand-rolled — sin librería de gráficos (no hay ninguna instalada en el proyecto,
+`recharts` se sacó en una limpieza anterior) y sin un sistema complejo de aprobación todavía, tal
+como se pidió explícitamente.
+
+### 26.1 Migración 0061 — tabla, RLS, auditoría
+
+Tabla `department_activity_reports`: `department_id` (FK `departments`, cascade), `title`,
+`description`, `activity_date`, `activity_type` (enum `department_activity_type`: `reunion`,
+`capacitacion`, `practica`, `mantenimiento`, `gestion`, `informe`, `otro`), `station_id`/`subsede_id`
+(ambos opcionales e **independientes**, sin exclusión mutua — confirmado explícitamente con el
+usuario, a diferencia del patrón "scope target" de Documentos/Calendario), `attendees_count`,
+`hours_worked` (`numeric(6,2)`), `created_by_profile_id`, `created_at`/`updated_at`. Checks
+`>= 0` en asistentes y horas.
+
+`audit_row_change()` se extiende con un branch para `department_activity_reports` que resuelve
+`station_id`/`subsede_id` directo del informe y `region_id` a partir de cualquiera de esos dos (a
+diferencia de `departments`/`department_members`, que no tienen territorio propio y quedan en la
+rama `else`). Trigger `after insert or update or delete` (a diferencia de
+`inventory_loan_requests`, que solo audita insert/update porque nunca se borra — ver 26.2).
+
+### 26.2 Permisos (confirmados explícitamente con el usuario)
+
+- **Lectura**: cualquier usuario autenticado (mismo criterio que el resto de los directorios del
+  sistema — incluye `secretario_regional`, `invitado`, etc.).
+- **Crear/editar**: `informatica_r4`, `secretario_regional` (`is_regional_role()`, que desde la
+  migración 0048 significa *solo* ese rol — `director_escuela` no comparte esta función), el
+  coordinador del departamento, o **cualquier miembro** del departamento. `department_members` no
+  distingue roles internos (es todo-o-nada a nivel membresía, ver 0042), así que cualquier miembro
+  puede editar cualquier informe del departamento, no solo los que cargó él mismo.
+- **Borrar**: más restrictivo que editar — `informatica_r4` o quien cargó el informe
+  (`created_by_profile_id = uno mismo`). Un miembro puede editar un informe ajeno del mismo
+  departamento, pero no borrarlo; ni siquiera el coordinador puede borrar el informe de otro miembro
+  (solo admin o el propio autor). Decisión explícita: a diferencia de las solicitudes de préstamo del
+  inventario (registro permanente, nunca se borra), un informe de actividad es un registro simple
+  donde tiene sentido poder corregir una carga por error.
+
+### 26.3 UI
+
+Todo integrado dentro de `DepartamentoDetallePage.tsx` (sin pantalla de detalle propia por informe,
+mismo criterio que `station_history_events`/`attendance_summaries` — es un registro simple, no un
+workflow como las solicitudes de préstamo), nueva sección "Actividad / Informes" después de
+"Miembros":
+- **KPI tiles** (`card-grid`/`kpi-card`, mismo patrón que `PanelPage.tsx`): cantidad de actividades,
+  horas acumuladas, asistentes acumulados — todos recalculados sobre el resultado filtrado, no sobre
+  el total.
+- **Gráficos livianos hand-rolled** (`SimpleBarRow`, nuevas clases `.simple-bar-*` en `styles.css`):
+  actividades por mes (últimos 6 meses), horas por mes, actividad por tipo, cuarteles/subsedes
+  involucrados. Una sola serie por gráfico → un solo hue (`--color-primary`), sin necesidad de
+  leyenda; barra con extremo redondeado, ancho proporcional al máximo del conjunto, valor en texto al
+  costado (nunca superpuesto a la barra). Sin SVG, sin librería — solo `div`s con `border-radius`.
+- **Filtros**: tipo, cuartel, subsede, rango de fechas — se aplican tanto a la lista como a los
+  KPIs/gráficos.
+- **Lista de informes**: `card-solid` por informe con tipo/fecha/asistentes/horas/ubicación, acciones
+  de editar (según `canLogActivity`, ver 26.2) y eliminar (según `canDeleteReport`, más restrictivo)
+  independientes entre sí.
+- **`InformeDepartamentoFormPage.tsx`** (nueva): formulario de creación/edición, mismo patrón que
+  `VehiculoFormPage.tsx` (selector de tipo con botones tipo "pill", campos numéricos opcionales,
+  dropdowns de cuartel/subsede poblados una vez). Rutas: `/departamentos/:departmentId/informes/nuevo`
+  (creación, patrón `/cuarteles/:stationId/vehiculos/nuevo`) y `/informes/:id/editar` (edición,
+  top-level, patrón `/vehiculos/:id/editar`).
+
+### 26.4 Auditoría (humanize.ts / AuditoriaPage.tsx)
+
+Se agregaron `departments`, `department_members` y `department_activity_reports` a `TABLE_LABELS` de
+`humanize.ts` (los dos primeros no tenían etiqueta todavía, quedaban con el nombre crudo de la tabla
+en `/auditoria`). Nuevas etiquetas de campo (`department_id`, `coordinator_profile_id`,
+`contact_info`, `activity_date`, `activity_type`, `hours_worked`) y una traducción de valor propia
+para `activity_type` (no comparte `STATUS_LABELS`: `department_activity_reports` no tiene columna
+`status`). `department_id`/`coordinator_profile_id` se agregaron a `NAME_RESOLVABLE_FIELDS`, y
+`AuditoriaPage.tsx` ahora también trae `fetchDepartments()` para poder resolver esos UUID a nombre
+real en los diffs, en vez de mostrarlos crudos.
+
+### 26.5 Fase futura
+
+- **Reportes/PDF**: no se generó ningún PDF nuevo (pedido explícito de dejarlo para más adelante) —
+  `jspdf`/`jspdf-autotable` ya están instalados y usados en otros módulos, así que el camino ya existe
+  si se retoma.
+- **Recordatorio de devolución** (no aplica a este módulo, pero sigue pendiente de otro ciclo — ver
+  sección 23.7).
+- El tipo de actividad `'otro'` no tiene un campo de texto libre tipo `category_other_label` (como sí
+  tiene `inventory_items` para su categoría "Otros") — no se pidió explícitamente, evaluar si hace
+  falta cuando haya uso real del módulo.
+
+### 26.6 Migraciones / Edge Functions / Vercel
+
+Una migración: `0061_department_activity_reports.sql`. Ninguna Edge Function. Redeploy normal del
+frontend.
+
+### 26.7 Cómo probar (checklist recomendado)
+
+1. Con un miembro (no coordinador) de un departamento: entrar al departamento, confirmar que aparece
+   "Nuevo informe" y que se puede cargar uno.
+2. Confirmar que ese mismo miembro puede editar un informe cargado por otro miembro del mismo
+   departamento, pero NO puede borrarlo (el botón de eliminar no debería aparecer).
+3. Con el autor de un informe (no coordinador, no admin): confirmar que sí puede borrar su propio
+   informe.
+4. Con `secretario_regional`: confirmar que puede ver y cargar informes de cualquier departamento.
+5. Cargar varios informes con distintos tipos/fechas/cuarteles y confirmar que los KPIs, los 4
+   gráficos y los filtros reflejan los datos correctamente (en particular, que los gráficos se
+   recalculan al aplicar un filtro).
+6. Confirmar en `/auditoria` que la creación/edición/borrado de un informe queda registrada con el
+   nombre del departamento resuelto (no un UUID crudo).

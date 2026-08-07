@@ -33,8 +33,13 @@ const NOTIF_SCOPE_OPTIONS: { value: NotifScopeTarget; label: string }[] = [
 
 export function NotificacionFormPage() {
   const navigate = useNavigate()
-  const { isAdmin, hasRole } = useAuth()
+  const { profile: currentProfile, isAdmin, hasRole } = useAuth()
   const canCreate = isAdmin || hasRole('secretario_regional', 'director_escuela', 'instructor')
+  // secretario_regional/director_escuela/instructor solo pueden notificar
+  // dentro de su propia región (RLS: notifications_write_regional_escuela_scoped,
+  // migración 0063) — antes no había ningún límite territorial. informatica_r4
+  // mantiene alcance total.
+  const scopeLockedToOwnRegion = !isAdmin
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -53,23 +58,43 @@ export function NotificacionFormPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const visibleScopeOptions = scopeLockedToOwnRegion
+    ? NOTIF_SCOPE_OPTIONS.filter((o) => o.value !== 'region' || currentProfile?.region_id)
+    : NOTIF_SCOPE_OPTIONS
+
   useEffect(() => {
     if (!canCreate) return
     let active = true
     Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchProfiles()]).then(
       ([regionsData, subsedesData, stationsData, profilesData]) => {
         if (!active) return
-        setRegions(regionsData)
-        setSubsedes(subsedesData)
-        setStations(stationsData)
+        const ownRegionId = currentProfile?.region_id ?? null
+        const ownStationId = currentProfile?.station_id ?? null
+        const ownStation = ownStationId ? stationsData.find((s) => s.id === ownStationId) ?? null : null
+        const ownSubsedeId = ownStation?.subsede_id ?? null
+
+        setRegions(scopeLockedToOwnRegion ? regionsData.filter((r) => r.id === ownRegionId) : regionsData)
+        setSubsedes(
+          scopeLockedToOwnRegion
+            ? subsedesData.filter((s) => s.id === ownSubsedeId || s.region_id === ownRegionId)
+            : subsedesData,
+        )
+        setStations(
+          scopeLockedToOwnRegion ? stationsData.filter((s) => s.region_id === ownRegionId || s.id === ownStationId) : stationsData,
+        )
         setProfiles(profilesData)
-        setRegionId((prev) => prev || regionsData[0]?.id || '')
+        setRegionId((prev) => prev || (scopeLockedToOwnRegion ? ownRegionId ?? '' : regionsData[0]?.id ?? ''))
+        if (scopeLockedToOwnRegion && !ownRegionId) {
+          // Sin región propia asignada: no puede armar un envío por región,
+          // el único alcance seguro que le queda es "usuario específico".
+          setScopeTarget('profile')
+        }
       },
     )
     return () => {
       active = false
     }
-  }, [canCreate])
+  }, [canCreate, scopeLockedToOwnRegion, currentProfile?.region_id, currentProfile?.station_id])
 
   if (!canCreate) {
     return (
@@ -155,7 +180,7 @@ export function NotificacionFormPage() {
         <div className="field">
           <label>Alcance</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-            {NOTIF_SCOPE_OPTIONS.map((option) => (
+            {visibleScopeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"

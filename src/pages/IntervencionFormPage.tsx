@@ -7,6 +7,7 @@ import {
   fetchInterventionSummaryById,
   updateInterventionSummary,
 } from '../lib/api/interventions'
+import { fetchStationById } from '../lib/api/stations'
 import type { InterventionTimeOfDay } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -21,10 +22,21 @@ export function IntervencionFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
-  const { isAdmin, hasRole } = useAuth()
-  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
+  const { profile, scopes, isAdmin, hasRole } = useAuth()
+  const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
+  const isRegionalRole = hasRole('secretario_regional')
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
+  const [targetStationRegionId, setTargetStationRegionId] = useState<string | null>(null)
+  // intervention_summaries_write_admin_regional_station (RLS): secretario_regional
+  // solo dentro de su propia región, roles de cuartel solo su propio cuartel —
+  // se revalida contra el cuartel real del registro, no solo el rol del actor.
+  const canEdit =
+    isAdmin ||
+    (isRegionalRole && Boolean(targetStationRegionId) && targetStationRegionId === myRegionId) ||
+    (isStationRole && Boolean(resolvedStationId) && resolvedStationId === myStationId)
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
   const [category, setCategory] = useState('')
@@ -60,6 +72,17 @@ export function IntervencionFormPage() {
       active = false
     }
   }, [id])
+
+  useEffect(() => {
+    if (!resolvedStationId) return
+    let active = true
+    fetchStationById(resolvedStationId).then((s) => {
+      if (active) setTargetStationRegionId(s?.region_id ?? null)
+    })
+    return () => {
+      active = false
+    }
+  }, [resolvedStationId])
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()

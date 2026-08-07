@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { createVehicle, fetchVehicleById, updateVehicle } from '../lib/api/vehicles'
+import { fetchStationById } from '../lib/api/stations'
 import type { VehicleStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -22,10 +23,21 @@ export function VehiculoFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
-  const { isAdmin, hasRole } = useAuth()
-  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
+  const { profile, scopes, isAdmin, hasRole } = useAuth()
+  const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
+  const isRegionalRole = hasRole('secretario_regional')
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
 
   const [resolvedStationId, setResolvedStationId] = useState(stationId ?? '')
+  const [targetStationRegionId, setTargetStationRegionId] = useState<string | null>(null)
+  // vehicles_write_admin_regional_station (RLS): secretario_regional solo
+  // dentro de su propia región, roles de cuartel solo su propio cuartel — se
+  // revalida contra el cuartel real del registro, no solo el rol del actor.
+  const canEdit =
+    isAdmin ||
+    (isRegionalRole && Boolean(targetStationRegionId) && targetStationRegionId === myRegionId) ||
+    (isStationRole && Boolean(resolvedStationId) && resolvedStationId === myStationId)
   const [internalCode, setInternalCode] = useState('')
   const [vehicleType, setVehicleType] = useState('')
   const [status, setStatus] = useState<VehicleStatus>('operativo')
@@ -59,6 +71,17 @@ export function VehiculoFormPage() {
       active = false
     }
   }, [id])
+
+  useEffect(() => {
+    if (!resolvedStationId) return
+    let active = true
+    fetchStationById(resolvedStationId).then((s) => {
+      if (active) setTargetStationRegionId(s?.region_id ?? null)
+    })
+    return () => {
+      active = false
+    }
+  }, [resolvedStationId])
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()

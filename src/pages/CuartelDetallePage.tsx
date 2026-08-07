@@ -110,14 +110,28 @@ function calculateSeniority(joinDate: string | null): string | null {
 
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
-  const { isAdmin, hasRole } = useAuth()
-  const canEdit = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_regional')
+  const { profile, scopes, isAdmin, hasRole } = useAuth()
+  const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
+  const isRegionalRole = hasRole('secretario_regional')
+  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
+  const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
+  const [station, setStation] = useState<Station | null>(null)
+  // personnel_write_admin_regional_station / vehicles_write_admin_regional_station
+  // (migración 0027): secretario_regional solo dentro de su propia región,
+  // roles de cuartel solo su propio cuartel. Antes canEdit era un chequeo de
+  // rol puro, sin comparar contra el cuartel realmente abierto: un
+  // jefe_cuerpo_activo/presidente_cuartel/usuario_carga_cuartel veía
+  // Editar/Eliminar en CUALQUIER cuartel de su misma subsede/región (visible
+  // por stations_select_scope) y el guardado se rechazaba recién al enviar.
+  const canEdit = isAdmin || (isRegionalRole && station?.region_id === myRegionId) || (isStationRole && station?.id === myStationId)
   // Historial institucional: mismo criterio de escritura que documentos/
   // carpetas (0050), que además incluye secretario_comision — distinto del
   // canEdit general de esta página (vehículos/personal/asistencia/
   // intervenciones no le dan escritura a ese rol).
-  const canEditHistory = isAdmin || hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision', 'secretario_regional')
-  const [station, setStation] = useState<Station | null>(null)
+  const canEditHistory =
+    isAdmin ||
+    (isRegionalRole && station?.region_id === myRegionId) ||
+    ((isStationRole || hasRole('secretario_comision')) && station?.id === myStationId)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [attendance, setAttendance] = useState<AttendanceSummary[]>([])
   const [interventions, setInterventions] = useState<InterventionSummary[]>([])

@@ -2848,3 +2848,273 @@ frontend.
    recalculan al aplicar un filtro).
 6. Confirmar en `/auditoria` que la creación/edición/borrado de un informe queda registrada con el
    nombre del departamento resuelto (no un UUID crudo).
+
+## 27. Auditoría profunda de permisos y accesos indebidos (2026-08) — migraciones 0062-0064
+
+Antes de seguir con nuevas funciones (recordatorio automático de devolución de préstamos), se pidió
+una auditoría completa de huecos funcionales, permisos y accesos indebidos en todo SIGER4: reportes,
+integrantes de departamentos sin usuario, y un barrido general de rutas/sidebar/filtros/RLS/botones
+en 15 módulos.
+
+### 27.1 Reportes — acceso demasiado abierto (sin migración, solo frontend)
+
+**Huecos encontrados:**
+
+- `/reportes` usaba `ProtectedRoute` (solo exige sesión) — **cualquier rol autenticado** podía entrar,
+  incluidos `presidente_cuartel`, `secretario_comision`, `instructor`, `invitado`, `administrativo`.
+- El link "Reportes" del sidebar (`navigation.ts`) no tenía `showForRoles` — visible para todos.
+- El botón "Nuevo Reporte" del Panel (`PanelPage.tsx`) era incondicional.
+- Los 3 selectores de alcance (Regional/Subsede/Cuartel) en `ReportesPage.tsx` no estaban acotados:
+  un `jefe_cuerpo_activo`/`usuario_carga_cuartel` veía y podía elegir **cualquier cuartel del
+  sistema**, no solo el propio (aunque la RLS de las tablas de datos igual lo bloqueaba al traer los
+  datos — no era fuga de datos, pero sí un selector engañoso).
+- Los 6 tipos de reporte se mostraban igual a todos los roles con acceso, sin distinguir alcance
+  institucional (ej. `director_escuela` veía "Reporte de Vehículos"/"Reporte de Intervenciones",
+  datos operativos de cuartel ajenos a Escuela/capacitación).
+
+**Corrección (solo frontend, la RLS de las tablas de datos — `attendance_summaries`,
+`intervention_summaries`, `vehicles`, `stations` — ya estaba bien acotada por cuartel/región desde
+antes):**
+
+- Nuevo `src/components/layout/ReportsRoute.tsx`: exige `isAdmin` o
+  `hasRole('director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')`.
+  El resto de roles no accede a `/reportes` (redirige a `/panel`).
+- `navigation.ts`: el item "Reportes" ahora usa `showForRoles` con esos mismos 4 roles.
+- `PanelPage.tsx`: el botón "Nuevo Reporte" solo se muestra si el rol tiene acceso.
+- `ReportesPage.tsx`:
+  - `jefe_cuerpo_activo`/`usuario_carga_cuartel` (alcance de solo cuartel): los selectores de
+    Regional/Subsede se ocultan, el selector de Cuartel queda fijo y deshabilitado en el propio
+    cuartel, y el tipo de reporte se limita a Asistencias/Intervenciones/Cursos/Vehículos/General por
+    Cuartel (sin "Regional Consolidado"). Además, `handleGenerate` fuerza `stationId` al cuartel
+    propio y `regionId`/`subsedeId` a `null` sin importar el estado de los selectores (defensa en
+    profundidad, por si el estado quedara inconsistente).
+  - `director_escuela`/`secretario_regional` (alcance regional/subsede/cuartel, confirmado con el
+    usuario que `secretario_regional` tiene el mismo alcance que `director_escuela` acá): los 4 tipos
+    de reporte se acotan a Asistencias, Cursos, General por Cuartel y Consolidado Regional (sin
+    Vehículos ni Intervenciones — datos operativos ajenos a Escuela/capacitación y visión regional,
+    confirmado con el usuario).
+  - `informatica_r4`/`integrante_informatica`: sin cambios, acceso total a los 6 tipos y cualquier
+    alcance.
+- Se dejaron sin tocar (decisión confirmada con el usuario) las RLS de `regions`/`subsedes`/`courses`/
+  `course_stations` (`auth.role() = 'authenticated'`, sin chequeo de rol/alcance): son tablas de
+  referencia usadas por otras pantallas fuera de Reportes, y acotarlas ahí hubiera sido un cambio de
+  alcance mayor con riesgo de romper otras pantallas.
+
+### 27.2 Integrantes manuales de Departamentos — migración 0062
+
+**Hueco encontrado:** `department_members` exige `profile_id not null` — la única forma de sumar un
+integrante a un departamento era que ya tuviera usuario en el sistema. No existía forma de cargar a
+alguien que solo debe figurar como integrante (nombre, cuartel, cargo/función), sin cuenta Auth ni rol.
+
+**Corrección:** nueva tabla `department_manual_members` (migración `0062_department_manual_members.sql`),
+hermana de `department_members`, sin tocarla:
+
+- Campos: `first_name`, `last_name`, `station_id` (opcional), `role_function` (cargo/función, opcional),
+  `contact_info` (opcional), `is_active`, `observations` (opcional), `linked_profile_id` (opcional,
+  asociación no obligatoria a un profile real si el integrante también tiene cuenta), más
+  `created_by_profile_id`/timestamps de auditoría.
+- No ocupa cuenta Auth ni requiere rol del sistema.
+- El coordinador del departamento sigue siendo obligatoriamente un profile/user real (sin cambios en
+  `departments.coordinator_profile_id`).
+- RLS: lectura para cualquier autenticado; escritura (alta/edición/desactivación) para
+  `informatica_r4`, `secretario_regional` (`is_regional_role()`), el coordinador del departamento, o
+  cualquier miembro real (`department_members`) — mismo criterio que `department_activity_reports`
+  (0061), por consistencia dentro del módulo. **No hay policy de borrado**: las bajas se hacen con
+  `is_active = false`, igual que el resto de "bajas" institucionales del sistema (perfiles,
+  departamentos, ítems de inventario) — no `DELETE` físico desde la app.
+- Auditoría: `audit_row_change()` redefinida con una rama nueva para `department_manual_members`
+  (resuelve `region_id`/`subsede_id` a partir de `station_id` si tiene cuartel cargado).
+- API: `src/lib/api/departments.ts` — `fetchDepartmentManualMembers`, `createDepartmentManualMember`,
+  `updateDepartmentManualMember` (sin `deleteDepartmentManualMember`, coherente con la RLS).
+- UI: nueva sección "Integrantes sin usuario" en `DepartamentoDetallePage.tsx`, entre "Miembros" y
+  "Actividad / Informes" — listado con nombre/cargo/cuartel, alta/edición inline con formulario propio,
+  desactivar/reactivar (ícono de tacho que alterna `is_active`), toggle para mostrar/ocultar inactivos.
+  Gateada por el mismo `canLogActivity` (coordinador, admin, o cualquier miembro) que ya regía la
+  sección de informes de actividad.
+- `humanize.ts`: nueva entrada en `TABLE_LABELS` (`department_manual_members: 'Integrantes manuales de
+  departamento'`); los campos (`first_name`, `last_name`, `role_function`, `contact_info`, `is_active`,
+  `observations`, `station_id`) ya tenían label en `FIELD_LABELS` de rondas anteriores, no hizo falta
+  agregar ninguno nuevo.
+
+### 27.3 Notificaciones — permiso de escritura sin ningún límite territorial (migración 0063)
+
+**Hueco encontrado (el más serio de la ronda — no era solo UI, era la RLS misma):**
+`notifications_write_admin_regional_escuela` (migración 0003) permitía a `secretario_regional`,
+`director_escuela` e `instructor` (`is_regional_role() or is_escuela_role()`) insertar una
+notificación masiva a **cualquier región/subsede/cuartel/usuario del sistema**, sin ninguna
+restricción de alcance — a diferencia de todas las demás tablas con escritura regional/escuela
+(`documents`, `calendar_events`, `vehicles`, `personnel`, `attendance_summaries`,
+`intervention_summaries`), que siempre acotan el destino al alcance propio del actor. `instructor` en
+particular es el rol institucionalmente más acotado de los tres (dicta cursos, sin alcance regional
+amplio) y podía igual difundir una notificación a toda la red regional. El frontend
+(`NotificacionFormPage.tsx`) reflejaba fielmente ese permiso: selectores de región/subsede/cuartel/
+usuario totalmente abiertos.
+
+**Corrección:**
+
+- Migración `0063_notifications_scope_write.sql`: reemplaza la policy por
+  `notifications_write_regional_escuela_scoped`. `informatica_r4` mantiene alcance total.
+  `secretario_regional`/`director_escuela`/`instructor` solo pueden escribir si el destino cae dentro
+  de su propia región/subsede/cuartel (`my_region_ids()`/`my_subsede_ids()`/`my_station_ids()`), o si
+  la notificación es a un usuario puntual (`profile_id` no nulo, que no necesita acotarse por
+  territorio porque ya es 1 a 1).
+- `NotificacionFormPage.tsx`: para estos 3 roles, los selectores de región/subsede/cuartel se filtran
+  a la propia región (y si no tiene región propia asignada, el único alcance que le queda disponible
+  es "Usuario específico"). `informatica_r4` sigue viendo todo sin restricción.
+
+### 27.4 Calendario — selector de alcance de `secretario_regional` sin acotar (dead-end UI)
+
+El fix anterior del `<select>` de tipo de evento (sección 25.1) seguía vigente y se confirmó
+funcionando. Hueco nuevo encontrado: en `EventoCalendarioFormPage.tsx`, el selector de
+región/subsede/cuartel no estaba acotado para `secretario_regional` — podía elegir cualquier región
+del sistema, aunque `calendar_events_write_admin_regional_station_escuela` (migración 0051) ya
+restringía la escritura real a `region_id in (select my_region_ids())`. Es decir, no era fuga de
+datos (la RLS ya bloqueaba el guardado), pero sí un selector que dejaba elegir algo que después se
+iba a rechazar. Se corrigió acotando `regions`/`subsedes`/`stations` a la región propia cuando el
+actor es `secretario_regional` (mismo patrón que ya existía para los roles de cuartel, `stationLocked`).
+
+También en `EventoCalendarioDetallePage.tsx`: los botones Editar/Cancelar/Eliminar se mostraban con
+un chequeo de rol puro (`canManage`), sin comparar el evento realmente abierto contra el alcance del
+actor — un `secretario_regional` o un rol de cuartel veía esos botones en cualquier evento visible
+por RLS de lectura, aunque el guardado se rechazara. Se corrigió recalculando `canManage` contra el
+`region_id`/`station_id`/`subsede_id`/`event_type` reales del evento, replicando exactamente la
+condición de la RLS de escritura.
+
+### 27.5 Cuarteles — `canEdit` sin comparar contra el cuartel realmente abierto (dead-end UI)
+
+`CuartelDetallePage.tsx` y sus 5 formularios hijos (`PersonalFormPage`, `VehiculoFormPage`,
+`AsistenciaFormPage`, `IntervencionFormPage`, `EventoHistoricoFormPage`) tenían un `canEdit`/
+`canEditHistory` de solo rol (`isAdmin || hasRole(...)`), sin chequear que el cuartel visto fuera el
+propio. Como `stations_select_scope` permite lectura de oversight más amplia que la escritura (ej.
+`secretario_regional` lee toda su región, pero solo puede escribir en `personnel`/`vehicles` de esa
+misma región — correcto —, y un rol de cuartel puede leer cuarteles de su misma subsede aunque solo
+pueda escribir en el propio), esto mostraba Editar/Eliminar/cambiar estado en cuarteles ajenos, con la
+RLS rechazando el guardado recién al enviar. Se corrigió agregando la comparación real: `secretario_regional`
+requiere que `station.region_id === myRegionId`; los roles de cuartel requieren `station.id ===
+myStationId`. No hubo cambios de RLS (ya estaba bien) — es una corrección de UX/UI únicamente.
+
+### 27.6 Documentos — selector de alcance y gestión de carpetas sin acotar (dead-end UI)
+
+Mismo patrón que Reportes y Calendario: en `DocumentoFormPage.tsx`, un rol de cuartel
+(`presidente_cuartel`/`usuario_carga_cuartel`/`secretario_comision`/`jefe_cuerpo_activo`) veía los 4
+alcances (Regional/Subsede/Cuartel/Usuario) y todos los cuarteles del sistema, aunque
+`documents_write_admin_regional_station` (migración 0047) solo les permite escribir con
+`station_id` = su propio cuartel (nunca región/subsede/usuario). Se corrigió: para estos roles el
+selector de alcance se oculta completamente (queda fijo en su propio cuartel), y para
+`secretario_regional` las listas de región/subsede/cuartel se acotan a su propia región.
+
+En `CarpetaDetallePage.tsx`, `canManageFolders` (que gatea Editar/Eliminar carpeta y Cargar/Editar/
+Eliminar documentos dentro de ella) era también un chequeo de rol puro — se mostraba en cualquier
+carpeta, incluida "General" (sin alcance propio, antes solo debería administrarla informática) y
+carpetas de otras regiones/cuarteles. Se corrigió comparando el `region_id`/`subsede_id`/`station_id`
+real de la carpeta abierta contra el alcance del actor, replicando la condición de
+`document_folders_write_admin_regional_station`.
+
+`PapeleraDocumentosPage.tsx` se revisó y **no tenía el mismo problema**: la lista de documentos en
+papelera ya viene acotada por RLS de lectura (`documents_select_scope`), así que un rol de cuartel
+solo ve ahí los documentos de su propio alcance — no hacía falta ningún cambio.
+
+### 27.7 Auditoría — `invitado` podía ver el historial completo de su cuartel (migración 0064)
+
+**Hueco encontrado:** `audit_logs_select_station`/`audit_logs_select_subsede` (migración 0020) no
+excluían ningún rol — cualquier usuario autenticado con alcance de cuartel/subsede podía leer el
+historial completo de auditoría de ese alcance, incluidos los diffs `old_value`/`new_value` de cada
+cambio. `invitado` está documentado explícitamente como *"Acceso de solo lectura limitado"* (ver
+`ROLE_DEFINITIONS`); el sidebar ya ocultaba el link de Auditoría para ese rol
+(`hideForRoles: ['invitado']`), pero ni la ruta ni la RLS lo excluían, así que igual podía entrar
+tipeando `/auditoria` directamente.
+
+**Corrección:** migración `0064_audit_logs_exclude_invitado.sql` agrega `not has_role('invitado')` a
+ambas policies. `AuditoriaPage.tsx` agrega además una guarda propia (`canAccess = !hasRole('invitado')`)
+que muestra un mensaje de "sin permisos" en vez de la bitácora — cierre en los tres niveles (sidebar,
+página, RLS).
+
+### 27.8 Revisado, sin huecos encontrados
+
+- **Panel**: todas las queries (KPIs, listas) dependen enteramente de RLS ya bien acotada por tabla;
+  nada destructivo ni de escritura en la página.
+- **Usuarios**: `UserManagerRoute`/`UserCreatorRoute` y el filtrado de `UsuariosPage.tsx` para
+  `jefe_cuerpo_activo` ya estaban bien construidos (rondas anteriores).
+- **Inventario**: `canEdit` (solo `informatica_r4`/`director_escuela`/`secretario_regional`) es
+  intencional — es un pool regional compartido por diseño, coherente con
+  `inventory_items_write_regional`. Los roles de cuartel solo pueden "Solicitar" (préstamo), gateado
+  aparte y correctamente.
+- **Solicitudes de Préstamo**: chequeo liviano confirmó que `requesting_station_id` nunca es un
+  `<select>` editable (se deriva de `profile.station_id`), coherente con la RLS de inserción.
+- **Semáforo** (`station_compliance`, vista SQL `security_invoker`): de solo lectura, sin camino de
+  escritura; hereda RLS real de las tablas subyacentes por viewer.
+- **Ajustes**: enteramente autoservicio (perfil propio, contraseña propia, notificaciones de prueba
+  siempre a uno mismo); la única sección admin-only ya estaba bien gateada.
+- **Papelera de Documentos**: ver 27.6.
+
+### 27.9 Matriz de permisos por rol y módulo
+
+`V` = puede ver, `C` = puede crear, `E` = puede editar, `X` = puede eliminar/desactivar. Alcance
+siempre "propio cuartel" salvo que se indique lo contrario. Roles no listados en una fila no tienen
+ningún acceso a ese módulo.
+
+| Módulo | informatica_r4 / integrante_informatica | director_escuela | secretario_regional | instructor | jefe_cuerpo_activo | usuario_carga_cuartel | presidente_cuartel | secretario_comision | invitado |
+|---|---|---|---|---|---|---|---|---|---|
+| Panel | V (todo) | V (su región) | V (su región) | V (su región) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) |
+| Cuarteles / Detalle | V/C/E/X (todo) | V (su región) | V/E (su región) | V (su región) | V (propio)/E | V (propio)/E | V (propio)/E | V (propio, solo historial) | V (propio) |
+| Usuarios | V/C/E/X (todo) | C (crear Escuela) | — | — | V/E (su cuartel) | — | — | — | — |
+| Reportes | V/C (todo alcance) | V/C (regional/subsede/cuartel, sin Vehículos/Intervenciones) | V/C (ídem director_escuela) | — | V/C (solo su cuartel) | V/C (solo su cuartel) | — | — | — |
+| Documentos | V/C/E/X (todo) | — | V/C/E (su región) | — | V/C/E (su cuartel) | V/C/E (su cuartel) | V/C/E (su cuartel) | V/C/E (su cuartel) | V (su alcance) |
+| Inventario | V/C/E/X (regional compartido) | V/C/E (regional compartido) | V/C/E (regional compartido) | — | V + Solicitar préstamo | V + Solicitar préstamo | V + Solicitar préstamo | — | V |
+| Solicitudes de Préstamo | V/C/E/X (todo) | V (su región) | V/E (su región) | — | V/C (su cuartel) | V/C (su cuartel) | V/C (su cuartel) | — | — |
+| Calendario | V/C/E/X (todo) | C/E (escuela/capacitación, sin territorio) | V/C/E (su región) | C/E (escuela/capacitación, sin territorio) | V/C/E (su cuartel) | V/C/E (su cuartel) | V/C/E (su cuartel) | V/C/E (su cuartel) | V |
+| Semáforo (compliance) | V (todo) | V (su región) | V (su región) | V (su región) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) |
+| Departamentos | V/C/E/X (todo) | V | V/C/E (coordinador o admin gestiona miembros) | V | V | V | V | V | V |
+| Estadísticas de Departamentos | V/C/E/X (todo) | V/C/E (si es miembro/coordinador) | V/C/E (todo, rol regional) | V | V (si es miembro) | V (si es miembro) | V (si es miembro) | V (si es miembro) | V |
+| Auditoría | V (todo) | V (su región) | V (su región) | V (su región) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) | — (excluido, 0064) |
+| Notificaciones | V (todo) + C (todo alcance) | V (su alcance) + C (su región) | V (su alcance) + C (su región) | V (su alcance) + C (su región) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) | V (su cuartel) |
+| Ajustes | V/E (propio) + admin-only (versión/caché) | V/E (propio) | V/E (propio) | V/E (propio) | V/E (propio) | V/E (propio) | V/E (propio) | V/E (propio) | V/E (propio) |
+
+Notas sobre la matriz:
+
+- "Departamentos" (miembros con usuario e integrantes manuales) y "Estadísticas de Departamentos"
+  (informes de actividad) usan un modelo de permisos por **membresía real**, no por rol: cualquier
+  miembro de un departamento (`department_members`) puede cargar/editar informes e integrantes
+  manuales de ESE departamento, sin importar su rol de sistema; el borrado de informes queda más
+  restringido (admin o el propio autor). La columna refleja el caso "es miembro de al menos un
+  departamento" — alguien sin membresía en ningún departamento solo tiene lectura.
+  `secretario_regional`/`is_regional_role()` tiene además escritura total en cualquier departamento
+  sin necesidad de ser miembro (ver 0061/0062).
+- `administrativo` (rol legado, ya no asignable desde la UI) no aparece en la matriz: sigue existiendo
+  como tipo válido para perfiles ya asignados en rondas previas del sistema, pero no se ofrece para
+  asignar a nadie nuevo; su alcance efectivo es el más bajo (equivalente a invitado) en todas las
+  tablas que no lo mencionan explícitamente en su RLS.
+
+### 27.10 Migraciones nuevas de esta ronda
+
+- `0062_department_manual_members.sql` — tabla `department_manual_members`, RLS, auditoría.
+- `0063_notifications_scope_write.sql` — acota `notifications_write_admin_regional_escuela` al
+  alcance propio del actor (reemplazada por `notifications_write_regional_escuela_scoped`).
+- `0064_audit_logs_exclude_invitado.sql` — excluye a `invitado` de
+  `audit_logs_select_station`/`audit_logs_select_subsede`.
+
+Ninguna Edge Function nueva ni tocada. Redeploy normal del frontend (Vercel); las 3 migraciones deben
+aplicarse en Supabase antes o junto con el deploy del frontend, en orden (0062 → 0063 → 0064).
+
+### 27.11 Cómo probar (checklist recomendado)
+
+1. Con `presidente_cuartel`/`secretario_comision`/`instructor`/`invitado`: confirmar que "Reportes" no
+   aparece en el sidebar y que `/reportes` redirige a `/panel` si se tipea directo.
+2. Con `jefe_cuerpo_activo`/`usuario_carga_cuartel`: confirmar en `/reportes` que no hay selector de
+   Regional/Subsede, que el selector de Cuartel está fijo en el propio y deshabilitado, y que el tipo
+   de reporte no ofrece "Consolidado Regional".
+3. Con `director_escuela`/`secretario_regional`: confirmar que en `/reportes` no aparecen los tipos
+   "Vehículos" ni "Intervenciones".
+4. En un departamento, como coordinador o miembro: cargar un integrante manual (sin usuario), editarlo,
+   desactivarlo, confirmar que reaparece al tocar "Mostrar inactivos", y que queda auditado en
+   `/auditoria`.
+5. Con `instructor`: confirmar en "Nueva Notificación" que los selectores de región/subsede/cuartel
+   quedan acotados a su propia región (o, si no tiene región asignada, que el único alcance ofrecido
+   es "Usuario específico").
+6. Con `secretario_regional`: confirmar en "Nuevo Evento" de Calendario que el selector de
+   región/subsede/cuartel está acotado a su propia región.
+7. Con un rol de cuartel: entrar al detalle de OTRO cuartel de su misma subsede/región (visible por
+   lectura) y confirmar que ya NO aparecen los botones de Editar/dar de baja en personal, vehículos,
+   asistencia, intervenciones ni historial.
+8. Con `invitado`: confirmar que "Auditoría" no aparece en el sidebar y que `/auditoria` muestra "sin
+   permisos" si se tipea directo.

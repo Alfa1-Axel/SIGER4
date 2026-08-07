@@ -22,6 +22,9 @@ export const TABLE_LABELS: Record<string, string> = {
   calendar_events: 'Calendario',
   inventory_items: 'Inventario Regional',
   inventory_loan_requests: 'Solicitudes de préstamo',
+  departments: 'Departamentos',
+  department_members: 'Miembros de departamento',
+  department_activity_reports: 'Informes de actividad de departamentos',
 }
 
 export function translateTable(tableName: string): string {
@@ -147,6 +150,12 @@ export const FIELD_LABELS: Record<string, string> = {
   returned_by_profile_id: 'Devuelto por',
   delivery_condition: 'Estado al retirar',
   return_condition: 'Estado al devolver',
+  department_id: 'Departamento',
+  coordinator_profile_id: 'Coordinador',
+  contact_info: 'Contacto',
+  activity_date: 'Fecha de la actividad',
+  activity_type: 'Tipo de actividad',
+  hours_worked: 'Horas trabajadas',
 }
 
 export function translateField(field: string): string {
@@ -186,6 +195,18 @@ const SCOPE_TYPE_LABELS: Record<string, string> = {
   escuela: 'Escuela',
 }
 
+// Campo propio (activity_type), no comparte STATUS_LABELS -- department_activity_reports
+// no tiene columna "status", así que no hay ambigüedad con otras tablas.
+const DEPARTMENT_ACTIVITY_TYPE_LABELS: Record<string, string> = {
+  reunion: 'Reunión',
+  capacitacion: 'Capacitación',
+  practica: 'Práctica',
+  mantenimiento: 'Mantenimiento',
+  gestion: 'Gestión',
+  informe: 'Informe',
+  otro: 'Otro',
+}
+
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   curso_nuevo: 'Curso nuevo',
   circular_nueva: 'Circular nueva',
@@ -212,6 +233,7 @@ export function translateValue(field: string, value: unknown): string {
   if (field === 'status' && typeof value === 'string') return STATUS_LABELS[value] ?? value
   if (field === 'scope_type' && typeof value === 'string') return SCOPE_TYPE_LABELS[value] ?? value
   if (field === 'type' && typeof value === 'string') return NOTIFICATION_TYPE_LABELS[value] ?? value
+  if (field === 'activity_type' && typeof value === 'string') return DEPARTMENT_ACTIVITY_TYPE_LABELS[value] ?? value
   if (typeof value === 'boolean') return BOOLEAN_LABELS[String(value)]
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
@@ -240,6 +262,8 @@ const NAME_RESOLVABLE_FIELDS = new Set([
   'rejected_by_profile_id',
   'delivered_by_profile_id',
   'returned_by_profile_id',
+  'department_id',
+  'coordinator_profile_id',
 ])
 
 export function resolveDisplayValue(field: string, value: unknown, lookup: EntityLookup): string {

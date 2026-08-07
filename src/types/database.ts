@@ -355,6 +355,24 @@ export interface DepartmentMember {
   created_at: string
 }
 
+export type DepartmentActivityType = 'reunion' | 'capacitacion' | 'practica' | 'mantenimiento' | 'gestion' | 'informe' | 'otro'
+
+export interface DepartmentActivityReport {
+  id: string
+  department_id: string
+  title: string
+  description: string | null
+  activity_date: string
+  activity_type: DepartmentActivityType
+  station_id: string | null
+  subsede_id: string | null
+  attendees_count: number
+  hours_worked: number
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type StationHistoryCategory =
   | 'institucional'
   | 'operativo'

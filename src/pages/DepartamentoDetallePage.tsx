@@ -10,13 +10,24 @@ import {
   fetchDepartmentMembers,
   addDepartmentMember,
   removeDepartmentMember,
+  fetchDepartmentManualMembers,
+  createDepartmentManualMember,
+  updateDepartmentManualMember,
   type DepartmentMemberWithProfile,
 } from '../lib/api/departments'
 import { fetchDepartmentActivityReports, deleteDepartmentActivityReport } from '../lib/api/departmentActivityReports'
 import { fetchProfiles } from '../lib/api/users'
 import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
-import type { Department, DepartmentActivityReport, DepartmentActivityType, Profile, Station, Subsede } from '../types/database'
+import type {
+  Department,
+  DepartmentActivityReport,
+  DepartmentActivityType,
+  DepartmentManualMember,
+  Profile,
+  Station,
+  Subsede,
+} from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -75,6 +86,20 @@ export function DepartamentoDetallePage() {
   const [newMemberProfileId, setNewMemberProfileId] = useState('')
   const [addingMember, setAddingMember] = useState(false)
 
+  const [manualMembers, setManualMembers] = useState<DepartmentManualMember[]>([])
+  const [manualMemberForm, setManualMemberForm] = useState<{
+    id: string | null
+    firstName: string
+    lastName: string
+    stationId: string
+    roleFunction: string
+    contactInfo: string
+    observations: string
+    isActive: boolean
+  } | null>(null)
+  const [savingManualMember, setSavingManualMember] = useState(false)
+  const [showInactiveManualMembers, setShowInactiveManualMembers] = useState(false)
+
   const [typeFilter, setTypeFilter] = useState('')
   const [stationFilter, setStationFilter] = useState('')
   const [subsedeFilter, setSubsedeFilter] = useState('')
@@ -92,9 +117,10 @@ export function DepartamentoDetallePage() {
 
   async function reload() {
     if (!id) return
-    const [departmentData, membersData, reportsData] = await Promise.all([
+    const [departmentData, membersData, manualMembersData, reportsData] = await Promise.all([
       fetchDepartmentById(id),
       fetchDepartmentMembers(id),
+      fetchDepartmentManualMembers(id),
       fetchDepartmentActivityReports(id),
     ])
     if (departmentData) {
@@ -106,6 +132,7 @@ export function DepartamentoDetallePage() {
       setIsActive(departmentData.is_active)
     }
     setMembers(membersData)
+    setManualMembers(manualMembersData)
     setReports(reportsData)
   }
 
@@ -115,12 +142,13 @@ export function DepartamentoDetallePage() {
     Promise.all([
       fetchDepartmentById(id),
       fetchDepartmentMembers(id),
+      fetchDepartmentManualMembers(id),
       fetchDepartmentActivityReports(id),
       fetchProfiles(),
       fetchStations(),
       fetchSubsedes(),
     ])
-      .then(([departmentData, membersData, reportsData, profilesData, stationsData, subsedesData]) => {
+      .then(([departmentData, membersData, manualMembersData, reportsData, profilesData, stationsData, subsedesData]) => {
         if (!active) return
         if (departmentData) {
           setDepartment(departmentData)
@@ -131,6 +159,7 @@ export function DepartamentoDetallePage() {
           setIsActive(departmentData.is_active)
         }
         setMembers(membersData)
+        setManualMembers(manualMembersData)
         setReports(reportsData)
         setProfiles(profilesData)
         setStations(stationsData)
@@ -280,6 +309,72 @@ export function DepartamentoDetallePage() {
     await reload()
   }
 
+  function startNewManualMember() {
+    setManualMemberForm({
+      id: null,
+      firstName: '',
+      lastName: '',
+      stationId: '',
+      roleFunction: '',
+      contactInfo: '',
+      observations: '',
+      isActive: true,
+    })
+  }
+
+  function startEditManualMember(member: DepartmentManualMember) {
+    setManualMemberForm({
+      id: member.id,
+      firstName: member.first_name,
+      lastName: member.last_name,
+      stationId: member.station_id ?? '',
+      roleFunction: member.role_function ?? '',
+      contactInfo: member.contact_info ?? '',
+      observations: member.observations ?? '',
+      isActive: member.is_active,
+    })
+  }
+
+  async function handleSaveManualMember(event: FormEvent) {
+    event.preventDefault()
+    if (!id || !manualMemberForm) return
+    setError(null)
+    setSavingManualMember(true)
+    try {
+      const input = {
+        department_id: id,
+        first_name: manualMemberForm.firstName,
+        last_name: manualMemberForm.lastName,
+        station_id: manualMemberForm.stationId || null,
+        role_function: manualMemberForm.roleFunction || null,
+        contact_info: manualMemberForm.contactInfo || null,
+        observations: manualMemberForm.observations || null,
+        is_active: manualMemberForm.isActive,
+      }
+      if (manualMemberForm.id) {
+        await updateDepartmentManualMember(manualMemberForm.id, input)
+      } else {
+        await createDepartmentManualMember({ ...input, created_by_profile_id: currentProfile?.id ?? null })
+      }
+      setManualMemberForm(null)
+      await reload()
+    } catch (err) {
+      setError(describeSupabaseError(err, 'No pudimos guardar el integrante.'))
+    } finally {
+      setSavingManualMember(false)
+    }
+  }
+
+  async function handleToggleManualMemberActive(member: DepartmentManualMember) {
+    setError(null)
+    try {
+      await updateDepartmentManualMember(member.id, { is_active: !member.is_active })
+      await reload()
+    } catch (err) {
+      setError(describeSupabaseError(err, 'No pudimos actualizar el integrante.'))
+    }
+  }
+
   if (loading) {
     return (
       <AppShell title="Departamento">
@@ -406,6 +501,170 @@ export function DepartamentoDetallePage() {
               {addingMember ? 'Agregando…' : 'Agregar'}
             </button>
           </div>
+        )}
+      </div>
+
+      <div className="section-header">
+        <h2 className="section-title">Integrantes sin usuario</h2>
+        {canLogActivity && !manualMemberForm && (
+          <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={startNewManualMember}>
+            <Icon name="plus" size={14} />
+            Nuevo integrante
+          </button>
+        )}
+      </div>
+      <p className="page-subtitle" style={{ marginTop: -8, marginBottom: 12 }}>
+        Personas que integran el departamento sin cuenta en el sistema (no ocupan usuario ni requieren rol).
+      </p>
+      <div className="card" style={{ marginBottom: 20 }}>
+        {manualMemberForm && (
+          <form
+            onSubmit={handleSaveManualMember}
+            className="card-solid"
+            style={{ marginBottom: 16, border: '1px solid var(--color-border)' }}
+          >
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div className="field" style={{ flex: 1, minWidth: 140 }}>
+                <label htmlFor="manualFirstName">Nombre</label>
+                <input
+                  id="manualFirstName"
+                  required
+                  value={manualMemberForm.firstName}
+                  onChange={(e) => setManualMemberForm({ ...manualMemberForm, firstName: e.target.value })}
+                />
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 140 }}>
+                <label htmlFor="manualLastName">Apellido</label>
+                <input
+                  id="manualLastName"
+                  required
+                  value={manualMemberForm.lastName}
+                  onChange={(e) => setManualMemberForm({ ...manualMemberForm, lastName: e.target.value })}
+                />
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="manualStation">Cuartel (opcional)</label>
+                <select
+                  id="manualStation"
+                  value={manualMemberForm.stationId}
+                  onChange={(e) => setManualMemberForm({ ...manualMemberForm, stationId: e.target.value })}
+                >
+                  <option value="">Sin asignar</option>
+                  {stations.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                <label htmlFor="manualRoleFunction">Cargo / función (opcional)</label>
+                <input
+                  id="manualRoleFunction"
+                  value={manualMemberForm.roleFunction}
+                  onChange={(e) => setManualMemberForm({ ...manualMemberForm, roleFunction: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="field">
+              <label htmlFor="manualContactInfo">Contacto (opcional)</label>
+              <input
+                id="manualContactInfo"
+                value={manualMemberForm.contactInfo}
+                onChange={(e) => setManualMemberForm({ ...manualMemberForm, contactInfo: e.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="manualObservations">Observaciones (opcional)</label>
+              <textarea
+                id="manualObservations"
+                rows={2}
+                value={manualMemberForm.observations}
+                onChange={(e) => setManualMemberForm({ ...manualMemberForm, observations: e.target.value })}
+              />
+            </div>
+            {manualMemberForm.id && (
+              <div className="field">
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={manualMemberForm.isActive}
+                    onChange={(e) => setManualMemberForm({ ...manualMemberForm, isActive: e.target.checked })}
+                    style={{ width: 'auto' }}
+                  />
+                  Integrante activo
+                </label>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn btn-primary" disabled={savingManualMember}>
+                {savingManualMember ? 'Guardando…' : 'Guardar'}
+              </button>
+              <button type="button" className="btn btn-outlined" onClick={() => setManualMemberForm(null)}>
+                Cancelar
+              </button>
+            </div>
+          </form>
+        )}
+
+        {manualMembers.filter((m) => m.is_active).length === 0 && !manualMemberForm && (
+          <div className="empty-state">Sin integrantes manuales cargados todavía.</div>
+        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {manualMembers
+            .filter((m) => showInactiveManualMembers || m.is_active)
+            .map((member) => (
+              <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: member.is_active ? 1 : 0.55 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    {member.first_name} {member.last_name}
+                    {!member.is_active && (
+                      <span className="badge badge-info" style={{ marginLeft: 6, fontSize: 10 }}>
+                        Inactivo
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    {[member.role_function, stationName(member.station_id)].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                {canLogActivity && (
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="btn btn-outlined"
+                      style={{ padding: '4px 8px' }}
+                      onClick={() => startEditManualMember(member)}
+                      aria-label="Editar integrante"
+                    >
+                      <Icon name="edit" size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outlined"
+                      style={{ padding: '4px 8px' }}
+                      onClick={() => handleToggleManualMemberActive(member)}
+                      aria-label={member.is_active ? 'Desactivar integrante' : 'Reactivar integrante'}
+                    >
+                      <Icon name={member.is_active ? 'trash' : 'check'} size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+
+        {manualMembers.some((m) => !m.is_active) && (
+          <button
+            type="button"
+            className="link-muted"
+            style={{ marginTop: 12, fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            onClick={() => setShowInactiveManualMembers((v) => !v)}
+          >
+            {showInactiveManualMembers ? 'Ocultar inactivos' : 'Mostrar inactivos'}
+          </button>
         )}
       </div>
 

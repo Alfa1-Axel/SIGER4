@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient'
-import type { Department, DepartmentMember, Profile } from '../../types/database'
+import type { Department, DepartmentManualMember, DepartmentMember, Profile } from '../../types/database'
 
 export async function fetchDepartments(): Promise<Department[]> {
   const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true })
@@ -65,4 +65,42 @@ export async function addDepartmentMember(departmentId: string, profileId: strin
 export async function removeDepartmentMember(memberRowId: string): Promise<void> {
   const { error } = await supabase.from('department_members').delete().eq('id', memberRowId)
   if (error) throw error
+}
+
+export interface DepartmentManualMemberInput {
+  department_id: string
+  first_name: string
+  last_name: string
+  station_id?: string | null
+  role_function?: string | null
+  contact_info?: string | null
+  is_active?: boolean
+  observations?: string | null
+  linked_profile_id?: string | null
+  created_by_profile_id?: string | null
+}
+
+export async function fetchDepartmentManualMembers(departmentId: string): Promise<DepartmentManualMember[]> {
+  const { data, error } = await supabase
+    .from('department_manual_members')
+    .select('*')
+    .eq('department_id', departmentId)
+    .order('last_name', { ascending: true })
+  if (error) throw error
+  return (data ?? []) as DepartmentManualMember[]
+}
+
+export async function createDepartmentManualMember(input: DepartmentManualMemberInput): Promise<DepartmentManualMember> {
+  const { data, error } = await supabase.from('department_manual_members').insert(input).select('*').single()
+  if (error) throw error
+  return data as DepartmentManualMember
+}
+
+export async function updateDepartmentManualMember(
+  id: string,
+  input: Partial<DepartmentManualMemberInput>,
+): Promise<DepartmentManualMember> {
+  const { data, error } = await supabase.from('department_manual_members').update(input).eq('id', id).select('*').single()
+  if (error) throw error
+  return data as DepartmentManualMember
 }

@@ -25,6 +25,7 @@ export const TABLE_LABELS: Record<string, string> = {
   departments: 'Departamentos',
   department_members: 'Miembros de departamento',
   department_activity_reports: 'Informes de actividad de departamentos',
+  department_manual_members: 'Integrantes manuales de departamento',
 }
 
 export function translateTable(tableName: string): string {

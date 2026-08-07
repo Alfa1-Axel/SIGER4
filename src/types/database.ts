@@ -355,6 +355,22 @@ export interface DepartmentMember {
   created_at: string
 }
 
+export interface DepartmentManualMember {
+  id: string
+  department_id: string
+  first_name: string
+  last_name: string
+  station_id: string | null
+  role_function: string | null
+  contact_info: string | null
+  is_active: boolean
+  observations: string | null
+  linked_profile_id: string | null
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type DepartmentActivityType = 'reunion' | 'capacitacion' | 'practica' | 'mantenimiento' | 'gestion' | 'informe' | 'otro'
 
 export interface DepartmentActivityReport {

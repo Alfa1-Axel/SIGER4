@@ -40,6 +40,9 @@ export function AjustesPage() {
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
 
+  const [savingWeeklyAdminSummary, setSavingWeeklyAdminSummary] = useState(false)
+  const [weeklyAdminSummaryError, setWeeklyAdminSummaryError] = useState<string | null>(null)
+
   async function handleSaveProfile(event: FormEvent) {
     event.preventDefault()
     if (!profile) return
@@ -79,6 +82,20 @@ export function AjustesPage() {
       setWeeklyReminderError(describeSupabaseError(err, 'No pudimos guardar el cambio.'))
     } finally {
       setSavingWeeklyReminder(false)
+    }
+  }
+
+  async function handleToggleWeeklyAdminSummary() {
+    if (!profile) return
+    setWeeklyAdminSummaryError(null)
+    setSavingWeeklyAdminSummary(true)
+    try {
+      await updateProfile(profile.id, { weekly_admin_summary_enabled: !profile.weekly_admin_summary_enabled })
+      await refreshProfile()
+    } catch (err) {
+      setWeeklyAdminSummaryError(describeSupabaseError(err, 'No pudimos guardar el cambio.'))
+    } finally {
+      setSavingWeeklyAdminSummary(false)
     }
   }
 
@@ -429,6 +446,31 @@ export function AjustesPage() {
       {isAdmin && (
         <>
           <div className="section-header">
+            <h2 className="section-title">Resumen semanal administrativo</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+              Todos los lunes, además del recordatorio institucional, Informática recibe un resumen
+              con cuarteles en rojo/amarillo del semáforo, cuarteles sin actividad reciente,
+              solicitudes de préstamo pendientes/vencidas, documentos nuevos y altas/bajas de
+              usuario de la semana. Podés desactivarlo si no lo querés recibir.
+            </p>
+            <button
+              type="button"
+              className={`btn btn-block ${profile?.weekly_admin_summary_enabled ? 'btn-outlined' : 'btn-primary'}`}
+              disabled={savingWeeklyAdminSummary || !profile}
+              onClick={handleToggleWeeklyAdminSummary}
+            >
+              {savingWeeklyAdminSummary
+                ? 'Guardando…'
+                : profile?.weekly_admin_summary_enabled
+                  ? 'Desactivar resumen semanal administrativo'
+                  : 'Activar resumen semanal administrativo'}
+            </button>
+            {weeklyAdminSummaryError && <p className="field-error" style={{ marginTop: 8 }}>{weeklyAdminSummaryError}</p>}
+          </div>
+
+          <div className="section-header">
             <h2 className="section-title">Versión / actualización de la app (informática)</h2>
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
@@ -439,9 +481,10 @@ export function AjustesPage() {
               Compilado: {new Date(__SIGER4_BUILD_TIME__).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}
             </p>
             <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
-              La app se actualiza sola apenas hay una versión nueva (recarga automática). Si un
-              dispositivo puntual parece estar corriendo una versión vieja (compará el build de
-              arriba con el último commit en el repositorio), usá este botón para forzar un reinicio
+              Cuando hay una versión nueva disponible, aparece un aviso arriba de la pantalla para
+              actualizar cuando quieras (ya no se recarga sola sin avisar). Si un dispositivo puntual
+              parece estar corriendo una versión vieja (compará el build de arriba con el último
+              commit en el repositorio) y no vio ese aviso, usá este botón para forzar un reinicio
               completo del service worker y la caché local.
             </p>
             <button type="button" className="btn btn-outlined btn-block" disabled={clearingCache} onClick={() => void handleClearCacheAndReload()}>

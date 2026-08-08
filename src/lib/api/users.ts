@@ -62,6 +62,7 @@ export interface ProfileInput {
   station_id?: string | null
   must_change_password?: boolean
   weekly_reminder_enabled?: boolean
+  weekly_admin_summary_enabled?: boolean
 }
 
 // Crea la cuenta de Auth, el perfil y sus roles/alcance en un solo paso

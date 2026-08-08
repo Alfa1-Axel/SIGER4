@@ -3267,3 +3267,194 @@ en vez de un mensaje genérico. Al confirmar con éxito, navega a `/usuarios`.
    confirmar el mensaje específico (no un error de FK crudo).
 9. Eliminar un usuario de prueba sin conflictos y confirmar en `/auditoria` que queda un evento
    `admin_delete_user` con el actor real (no null) y el nombre del usuario eliminado.
+
+## 29. Estabilidad global, Auditoría por rol/alcance y notificaciones inteligentes (2026-08) — migraciones 0066-0068
+
+### 29.1 Causa confirmada de las recargas / pérdida de ruta
+
+Con evidencia directa de código (no supuesta): `src/main.tsx` registraba el service worker con
+`registerSW({ immediate: true })` **sin pasar `onNeedReload`**. El código fuente real de
+`vite-plugin-pwa` (`registerType: 'autoUpdate'`) hace, en ese caso, `window.location.reload()`
+automático y sin aviso apenas el service worker nuevo termina de activarse. Como `src/sw.ts` además
+tenía `self.skipWaiting()` incondicional en `install` + `self.clients.claim()` en `activate`, un
+service worker nuevo tomaba control de las pestañas ya abiertas de inmediato. El disparador típico:
+si hubo un deploy nuevo mientras la PWA estaba en background (ej. el usuario cambió a WhatsApp), al
+volver el navegador revalida el service worker, detecta la versión nueva, la activa, y sin
+`onNeedReload` la librería recargaba todo sin preguntar — perdiendo cualquier dato/ruta en curso. No
+había ningún código propio (`location.reload()`, redirect a `/panel`) causando esto directamente; el
+`path="*"` → `/panel` de `App.tsx` solo entraba en juego si la URL en curso no coincidía con ninguna
+ruta definida en el momento del reload.
+
+Contribuyente secundario (percepción de "recarga", no una navegación real): en `useAuth.tsx`, el
+`useEffect` que carga el perfil dependía de `[session?.user]` — un objeto con referencia nueva en
+cada `TOKEN_REFRESHED` (disparado seguido al recuperar foco si el token estaba por vencer), aunque el
+usuario fuera el mismo. Eso ponía `loading=true` de nuevo en cada refresh, haciendo parpadear el
+spinner de `ProtectedRoute` sobre la pantalla actual.
+
+### 29.2 Qué se corrigió en PWA/Auth/Router
+
+- **`vite.config.ts`**: `registerType` cambiado de `'autoUpdate'` a `'prompt'` — la librería ya no
+  manda `skipWaiting()` sola ni recarga automáticamente.
+- **`src/sw.ts`**: se quitó `self.skipWaiting()` incondicional de `install`. Ahora el SW nuevo queda
+  en estado "esperando" hasta recibir `{type: 'SKIP_WAITING'}` por `postMessage` (nuevo listener de
+  `message`), que solo se envía cuando el usuario confirma la actualización.
+- **`src/main.tsx`**: `registerSW({ onNeedRefresh })` — cuando hay una versión nueva esperando, se
+  notifica al banner en vez de recargar. `updateServiceWorker()` (la función que devuelve `registerSW`)
+  solo se invoca cuando el usuario hace clic en "Actualizar ahora".
+- **`src/lib/swUpdate.ts`** (nuevo) + **`src/components/SwUpdateBanner.tsx`** (nuevo, montado en
+  `App.tsx` fuera de `AuthProvider` para que funcione incluso en `/login`): banner fino arriba de toda
+  la pantalla, no bloqueante, con "Actualizar ahora" y un botón para descartarlo. Reemplaza el
+  auto-reload silencioso — la actualización real se sigue aplicando (el service worker nuevo entra en
+  vigencia), pero solo cuando el usuario lo decide.
+- **`src/hooks/useAuth.tsx`**: el `useEffect` de carga de perfil ahora depende de `[session?.user?.id]`
+  (no del objeto `session?.user` completo), y solo pone `loading=true` si todavía no hay un perfil
+  cargado. Un `TOKEN_REFRESHED` con el mismo usuario ya no dispara un refetch completo ni un parpadeo
+  de spinner.
+- **`AjustesPage.tsx`**: se corrigió el texto sobre actualización de la app, que describía el
+  comportamiento viejo ("se actualiza sola... recarga automática") — ahora explica el banner nuevo.
+
+No se tocó nada de `AppUpdateBanner.tsx` (el modal de "novedades", mecanismo completamente distinto,
+basado en `localStorage`, sin relación con el service worker) ni la carga de documentos en mobile.
+
+### 29.3 Auditoría por rol y alcance
+
+`AuditoriaPage.tsx` ya tenía `buildEventSummary()` (frases institucionales en español, ej. "Juan Pérez
+modificó Vehículos: DEF-123") y un toggle "Ver datos técnicos" por fila (JSON crudo, colapsado por
+defecto) — gran parte de lo pedido en el punto 3 (UX institucional/técnica) ya existía. Lo que faltaba:
+
+- **Filtrado de tablas por rol** (`src/lib/api/auditLogs.ts`: nuevo parámetro `allowedTableNames` en
+  `AuditLogFilters`/`fetchAuditLogs`/`fetchDistinctAuditActions`/`fetchDistinctAuditTables`, vía
+  `.in('table_name', ...)`). RLS ya acota las FILAS por territorio (región/subsede/cuartel); esto acota
+  además qué MÓDULOS puede ver cada rol, independiente del territorio:
+  - `informatica_r4`/`integrante_informatica`: sin restricción, ven todo (allowlist `null`).
+  - `jefe_cuerpo_activo`: `stations`, `profiles`, `user_roles`, `user_scopes`, `vehicles`, `personnel`,
+    `documents`, `document_versions`, `attendance_summaries`, `intervention_summaries`,
+    `station_history_events`, `calendar_events` — nada de Departamentos ni Inventario Regional.
+  - `director_escuela`/`instructor`: `courses`, `course_stations`, `calendar_events`, `profiles`,
+    `user_roles`.
+  - `secretario_regional`: set amplio (territorio regional/subsede/cuartel + cursos + departamentos +
+    inventario), coherente con su rol administrativo regional.
+  - Coordinador o miembro de al menos un departamento (`fetchMyDepartmentIds`, nuevo en
+    `src/lib/api/departments.ts`: todos los `department_id` donde el perfil es coordinador o miembro,
+    ya que `department_members` no tiene columna de rol interno): `departments`, `department_members`,
+    `department_activity_reports`, `department_manual_members`, **acotado además a sus propios
+    department_id** — `department_activity_reports`/`department_manual_members` no tienen scope
+    territorial en RLS (lectura abierta a cualquier autenticado), así que ese recorte se hace
+    client-side en `AuditoriaPage.tsx` (`visibleLogs`), leyendo `department_id` desde
+    `old_value`/`new_value` de cada evento (no hay columna `department_id` en `audit_logs`).
+    `secretario_regional`/`informatica_r4` ven todos los departamentos, sin este recorte.
+  - Un rol que no calce en ningún set (ej. `presidente_cuartel`, `secretario_comision` — RLS igual los
+    deja pasar con alcance de cuartel) recibe el mismo set acotado que `jefe_cuerpo_activo`, el más
+    chico entre los definidos, en vez de quedar sin restricción por descarte.
+- **Vista institucional vs. técnica**: el toggle "Ver datos técnicos" (JSON crudo) ahora solo se
+  renderiza si `isAdmin` (`informatica_r4`/`integrante_informatica`) — `AuditLogDetail` recibe un nuevo
+  prop `showTechnical`. El resto de los roles ve únicamente la frase institucional y el diff de campos
+  ya traducido (`buildFieldDiff`), sin acceso al JSON crudo ni a los nombres técnicos de tabla en ese
+  nivel de detalle.
+
+### 29.4 Notificaciones sensibles inmediatas (migración 0066)
+
+Cuatro triggers nuevos, todos insertando vía `notify_informatica_staff()` (una notificación
+`profile_id`-puntual por cada `informatica_r4`/`integrante_informatica` **activo** — nunca una
+notificación masiva sin scope, para no violar `notifications_scope_not_ambiguous`):
+
+- `trg_notify_role_change` (`user_roles`, insert/delete): alta o baja de un rol a cualquier usuario.
+- `trg_notify_scope_change` (`user_scopes`, insert/delete): alta o baja de un alcance a cualquier
+  usuario.
+- `trg_notify_profile_lifecycle` (`profiles`, insert/update): creación de usuario, y desactivación/
+  reactivación (`is_active` cambia).
+- `notify_admin_delete_user()`: **no** es un trigger (el borrado real ocurre en `auth.users`, no hay
+  fila `new` de `profiles` para leer de forma confiable en ese punto) — se llama explícitamente desde
+  `admin-delete-user` (Edge Function) después de un borrado exitoso, con el cliente del actor real.
+
+Ninguno se auto-dispara cuando el propio afectado es quien ejecuta el cambio (evita que informática se
+auto-notifique en sesiones administrativas normales) — salvo que la operación corra con `service_role`
+(Edge Functions `admin-*`), donde no hay forma de resolver el actor real y se prefiere notificar de más
+antes que perder el aviso. Tipo de notificación nuevo: `alerta_admin` (agregado al enum
+`notification_type` y a `src/types/database.ts`/`humanize.ts`/`NotificacionesPage.tsx`).
+
+### 29.5 Resumen semanal enriquecido (migración 0067)
+
+`send_weekly_reminder()` (migración 0036, cron `siger4-weekly-reminder`, lunes 12:00 ART) **no se
+tocó**: sigue siendo el recordatorio genérico para todos los usuarios activos con
+`weekly_reminder_enabled=true`. Se agregó, aparte:
+
+- **`send_weekly_admin_summary()`** — función nueva, itera solo sobre `informatica_r4`/
+  `integrante_informatica` activos con `weekly_admin_summary_enabled=true` (columna nueva en
+  `profiles`, mismo patrón que `weekly_reminder_enabled`, default `true`). El resumen incluye:
+  cuarteles en rojo y en amarillo del semáforo (`station_compliance`) con su % de carga institucional
+  (ej. "BV Villa del Rosario (43% de carga institucional)"), cuarteles sin actividad relevante hace más
+  de 30 días (`last_relevant_update_at`), solicitudes de préstamo pendientes y vencidas, documentos
+  nuevos de la semana, usuarios creados/desactivados/eliminados de la semana (via `audit_logs`),
+  departamentos con al menos un informe de actividad en la semana.
+- **Cron nuevo**: `siger4-weekly-admin-summary`, lunes 15:30 UTC (12:30 ART, 30 minutos después del
+  recordatorio genérico, para no competir por la misma ventana de `pg_net`).
+- **Toggle en Ajustes** (solo visible para `isAdmin`): "Resumen semanal administrativo", mismo patrón
+  que el toggle de recordatorio genérico ya existente.
+- Push real: igual que `send_weekly_reminder()`, vía `net.http_post` → `send-push-system` (con
+  `x-cron-secret`), porque es un evento de cron sin usuario necesariamente conectado — no alcanza con
+  insertar en `notifications` y esperar a `NotificationPushBridge`.
+
+### 29.6 Recordatorio automático de devolución de préstamos (migración 0068)
+
+Mismo patrón que `send_calendar_event_reminders()` (0051): función + `pg_cron`, sin `pg_net` (inserta
+en `notifications`, `NotificationPushBridge` dispara el push si el destinatario tiene la app abierta) —
+excepto el aviso a informática de un préstamo vencido, que además usa `notify_informatica_staff()`.
+
+- **Columnas nuevas** en `inventory_loan_requests`: `reminder_sent_at`, `overdue_notified_at` — mismo
+  criterio que `calendar_events.reminder_sent_at`, para no reenviar el mismo aviso en cada corrida del
+  cron.
+- **Tipos de notificación nuevos**: `prestamo_por_vencer`, `prestamo_vencido`.
+- **`send_loan_return_reminders()`**: para solicitudes `status='retirada'` con `expected_return_at`
+  definido —
+  - 24hs antes del vencimiento (`expected_return_at` entre `now()` y `now() + 24h`, `reminder_sent_at`
+    null): notifica al cuartel solicitante (alcance) y al responsable del elemento (puntual, si existe)
+    — una sola vez, marca `reminder_sent_at`.
+  - Ya vencido (`expected_return_at <= now()`, `overdue_notified_at` null): notifica al cuartel
+    solicitante, al responsable, **y a informática** (vía `notify_informatica_staff`, solo en este
+    caso, no en el aviso "por vencer" — se escala solo cuando ya es un problema real) — una sola vez,
+    marca `overdue_notified_at`.
+- **Cron nuevo**: `siger4-loan-return-reminders`, cada hora en punto.
+
+### 29.7 Migraciones y despliegue de esta ronda
+
+- `0066_admin_sensitive_notifications.sql` — tipo `alerta_admin`, `notify_informatica_staff()`,
+  triggers de rol/scope/alta-baja de usuario, `notify_admin_delete_user()`.
+- `0067_weekly_admin_summary.sql` — columna `weekly_admin_summary_enabled`, `send_weekly_admin_summary()`,
+  cron `siger4-weekly-admin-summary`.
+- `0068_loan_return_reminders.sql` — tipos `prestamo_por_vencer`/`prestamo_vencido`, columnas
+  `reminder_sent_at`/`overdue_notified_at` en `inventory_loan_requests`, `send_loan_return_reminders()`,
+  cron `siger4-loan-return-reminders`.
+- **Edge Function modificada** (no nueva): `admin-delete-user` — llama a `notify_admin_delete_user`
+  después de un borrado exitoso. Redesplegar con `supabase functions deploy admin-delete-user`.
+- Las 3 migraciones reutilizan `pg_cron`/`pg_net` y la config `siger4.project_url`/
+  `siger4.cron_shared_secret` ya configurados desde la migración 0036 — no hace falta volver a
+  habilitar extensiones ni reconfigurar secretos si el proyecto ya tenía el recordatorio semanal
+  genérico funcionando.
+- Redeploy normal del frontend (Vercel).
+
+### 29.8 Cómo verificar
+
+1. **PWA**: hacer un deploy nuevo, abrir SIGER4 en un dispositivo con una pestaña/PWA ya abierta desde
+   antes, cambiar a otra app y volver — confirmar que aparece el banner "Hay una actualización
+   disponible" en vez de una recarga silenciosa, y que tocar "Actualizar ahora" sí aplica la
+   actualización (confirmar el build nuevo en Ajustes).
+2. **Auth**: dejar la pestaña en background el tiempo suficiente para que el token se refresque al
+   volver, y confirmar que no hay parpadeo de spinner ni pérdida de la ruta/formulario en curso.
+3. **Auditoría**: con `jefe_cuerpo_activo`, confirmar que el selector de "Tabla / módulo" no ofrece
+   Departamentos ni Inventario Regional, y que el toggle "Ver datos técnicos" no aparece en el detalle
+   de ningún evento. Con `informatica_r4`, confirmar que sí aparece.
+4. Con un usuario que coordina o es miembro de un departamento (y no es `secretario_regional`/admin):
+   cargar un informe de actividad en ESE departamento y en OTRO (con otro usuario), y confirmar en
+   Auditoría que solo ve el evento del departamento propio.
+5. Cambiarle un rol a un usuario de prueba y confirmar que llega una notificación `alerta_admin` a
+   informática (y no al usuario cuyo rol cambió, salvo que también sea de informática y no sea el
+   propio actor).
+6. Desactivar y reactivar un usuario de prueba, y confirmar las 2 notificaciones correspondientes.
+7. Correr manualmente `select send_weekly_admin_summary();` desde el SQL Editor de Supabase y
+   confirmar en `/notificaciones` (con un usuario `informatica_r4`) que el resumen trae datos reales
+   (no placeholders).
+8. Crear una solicitud de préstamo de prueba, marcarla `retirada` con `expected_return_at` en menos de
+   24hs, correr `select send_loan_return_reminders();` manualmente, y confirmar la notificación de
+   "por vencer" al cuartel solicitante. Repetir con `expected_return_at` ya vencido y confirmar el
+   aviso de "vencido" además de la notificación a informática.

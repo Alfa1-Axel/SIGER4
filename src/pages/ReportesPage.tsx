@@ -6,27 +6,42 @@ import { createNotification } from '../lib/api/notifications'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
+import { fetchDepartments } from '../lib/api/departments'
 import { REPORT_GENERATORS, type ReportKey } from '../lib/pdf/reportGenerators'
-import type { Region, Station, Subsede } from '../types/database'
+import type { Department, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
-const REPORT_TYPES: { key: ReportKey; label: string; needsStation?: boolean }[] = [
+const REPORT_TYPES: { key: ReportKey; label: string; needsStation?: boolean; needsDepartment?: boolean }[] = [
   { key: 'asistencias', label: 'Reporte de Asistencias' },
   { key: 'intervenciones', label: 'Reporte de Intervenciones' },
   { key: 'cursos', label: 'Reporte de Cursos / Escuela' },
   { key: 'vehiculos', label: 'Reporte de Vehículos' },
   { key: 'cuartel_general', label: 'Reporte General por Cuartel', needsStation: true },
   { key: 'regional_consolidado', label: 'Reporte Regional Consolidado' },
+  { key: 'departamentos_general', label: 'Departamentos Regionales — General' },
+  { key: 'departamento_especifico', label: 'Departamento específico', needsDepartment: true },
 ]
 
 // director_escuela y secretario_regional tienen visión regional/subsede/cuartel,
 // pero acotada a Escuela/capacitación y panorama general — no a datos
-// operativos de cuartel como Vehículos e Intervenciones.
-const ESCUELA_REGIONAL_REPORT_KEYS: ReportKey[] = ['asistencias', 'cursos', 'regional_consolidado', 'cuartel_general']
+// operativos de cuartel como Vehículos e Intervenciones. Sí tienen acceso a
+// los reportes de Departamentos (visión regional/escuela, confirmado con el
+// usuario).
+const ESCUELA_REGIONAL_REPORT_KEYS: ReportKey[] = [
+  'asistencias',
+  'cursos',
+  'regional_consolidado',
+  'cuartel_general',
+  'departamentos_general',
+  'departamento_especifico',
+]
 
 // jefe_cuerpo_activo y usuario_carga_cuartel solo ven reportes de su propio
-// cuartel: no tiene sentido mostrarles "Reporte Regional Consolidado".
+// cuartel: no tiene sentido mostrarles "Reporte Regional Consolidado" ni los
+// reportes globales de Departamentos (no son roles de cuartel, confirmado con
+// el usuario: "no permitir que roles de cuartel generen reportes globales de
+// departamentos salvo decisión explícita").
 const STATION_ONLY_REPORT_KEYS: ReportKey[] = ['asistencias', 'intervenciones', 'cursos', 'vehiculos', 'cuartel_general']
 
 function slugify(text: string): string {
@@ -56,6 +71,7 @@ export function ReportesPage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
 
   const [reportKey, setReportKey] = useState<ReportKey>(availableReportTypes[0]?.key ?? 'asistencias')
   const [periodStart, setPeriodStart] = useState('')
@@ -63,6 +79,7 @@ export function ReportesPage() {
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
   const [stationId, setStationId] = useState(isStationOnly ? (profile?.station_id ?? '') : '')
+  const [departmentId, setDepartmentId] = useState('')
 
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,23 +87,48 @@ export function ReportesPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()]).then(([regionsData, subsedesData, stationsData]) => {
-      if (!active) return
-      setRegions(regionsData)
-      setSubsedes(subsedesData)
-      // Un rol de solo-cuartel jamás debe ver otros cuarteles en el selector,
-      // ni siquiera de solo lectura: reduce la lista al propio.
-      setStations(isStationOnly ? stationsData.filter((s) => s.id === profile?.station_id) : stationsData)
-    })
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchDepartments()]).then(
+      ([regionsData, subsedesData, stationsData, departmentsData]) => {
+        if (!active) return
+        setRegions(regionsData)
+        setSubsedes(subsedesData)
+        // Un rol de solo-cuartel jamás debe ver otros cuarteles en el selector,
+        // ni siquiera de solo lectura: reduce la lista al propio.
+        setStations(isStationOnly ? stationsData.filter((s) => s.id === profile?.station_id) : stationsData)
+        // El reporte "Departamento específico" muestra todos los departamentos
+        // a informatica_r4/integrante_informatica/secretario_regional/
+        // director_escuela (visión regional/escuela); para el resto (que llega
+        // acá solo si coordina al menos uno, ver reportDef.needsDepartment más
+        // abajo) se acota a los departamentos que coordina.
+        setDepartments(
+          isAdmin || isEscuelaRegional
+            ? departmentsData
+            : departmentsData.filter((d) => d.coordinator_profile_id === profile?.id),
+        )
+      },
+    )
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const reportDef = availableReportTypes.find((r) => r.key === reportKey) ?? availableReportTypes[0] ?? REPORT_TYPES[0]
+  // El coordinador de un departamento no necesariamente tiene un rol de los
+  // que ya ven "Departamentos Regionales — General" (ese reporte sí queda
+  // reservado a admin/secretario_regional/director_escuela) — pero puede
+  // generar el reporte de SU propio departamento si coordina al menos uno.
+  const isDepartmentCoordinator = !isAdmin && !isEscuelaRegional && !isStationOnly && departments.length > 0
+  const availableReportTypesWithCoordinator = isDepartmentCoordinator
+    ? [...availableReportTypes, REPORT_TYPES.find((r) => r.key === 'departamento_especifico')!]
+    : availableReportTypes
+
+  const reportDef =
+    availableReportTypesWithCoordinator.find((r) => r.key === reportKey) ?? availableReportTypesWithCoordinator[0] ?? REPORT_TYPES[0]
 
   function scopeLabelFor(): string {
+    if (reportDef.needsDepartment) {
+      return departmentId ? departments.find((d) => d.id === departmentId)?.name ?? 'Departamento seleccionado' : 'Todos los departamentos'
+    }
     if (stationId) return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel seleccionado'
     if (subsedeId) return subsedes.find((s) => s.id === subsedeId)?.name ?? 'Subsede seleccionada'
     if (regionId) return regions.find((r) => r.id === regionId)?.name ?? 'Región seleccionada'
@@ -108,11 +150,19 @@ export function ReportesPage() {
       setError('Seleccioná un cuartel para este reporte.')
       return
     }
+    if (reportDef.needsDepartment && !departmentId) {
+      setError('Seleccioná un departamento para este reporte.')
+      return
+    }
 
     // Defensa en profundidad: un rol de solo-cuartel siempre genera acotado a
     // su propio cuartel, sin importar el estado de regionId/subsedeId/stationId
     // (RLS ya lo garantiza a nivel de datos; esto evita además cualquier
-    // filtro "todos" inconsistente en el PDF/label mostrado al usuario).
+    // filtro "todos" inconsistente en el PDF/label mostrado al usuario). Un
+    // coordinador de departamento (sin rol regional/escuela/admin) solo puede
+    // elegir entre los departamentos que coordina — ver filtrado de
+    // "departments" más arriba — así que effectiveDepartmentId ya viene
+    // acotado por construcción del <select>, no hace falta reforzarlo acá.
     const effectiveStationId = isStationOnly ? profile?.station_id ?? null : stationId || null
     const effectiveRegionId = isStationOnly ? null : regionId || null
     const effectiveSubsedeId = isStationOnly ? null : subsedeId || null
@@ -132,6 +182,7 @@ export function ReportesPage() {
         periodLabel: periodLabelFor(),
         generatedByLabel: profile?.full_name ?? 'Usuario SIGER4',
         profileId: profile?.id ?? null,
+        departmentId: reportDef.needsDepartment ? departmentId || null : null,
       })
 
       const fileName = `siger4-${slugify(reportDef.label)}-${new Date().toISOString().slice(0, 10)}.pdf`
@@ -173,7 +224,7 @@ export function ReportesPage() {
         <div className="field">
           <label htmlFor="reportType">Tipo de reporte</label>
           <select id="reportType" value={reportKey} onChange={(e) => setReportKey(e.target.value as ReportKey)}>
-            {availableReportTypes.map((r) => (
+            {availableReportTypesWithCoordinator.map((r) => (
               <option key={r.key} value={r.key}>
                 {r.label}
               </option>
@@ -192,67 +243,92 @@ export function ReportesPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {!isStationOnly && (
-            <>
-              <div className="field" style={{ flex: 1, minWidth: 160 }}>
-                <label htmlFor="regionFilter">Regional</label>
-                <select
-                  id="regionFilter"
-                  value={regionId}
-                  onChange={(e) => {
-                    setRegionId(e.target.value)
-                    setSubsedeId('')
-                    setStationId('')
-                  }}
-                >
-                  <option value="">Todas</option>
-                  {regions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="field" style={{ flex: 1, minWidth: 160 }}>
-                <label htmlFor="subsedeFilter">Subsede</label>
-                <select
-                  id="subsedeFilter"
-                  value={subsedeId}
-                  onChange={(e) => {
-                    setSubsedeId(e.target.value)
-                    setStationId('')
-                  }}
-                >
-                  <option value="">Todas</option>
-                  {subsedes.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-          <div className="field" style={{ flex: 1, minWidth: 160 }}>
-            <label htmlFor="stationFilter">
-              Cuartel {reportDef.needsStation && <span style={{ color: 'var(--color-primary)' }}>*</span>}
+        {reportDef.needsDepartment ? (
+          <div className="field">
+            <label htmlFor="departmentFilter">
+              Departamento <span style={{ color: 'var(--color-primary)' }}>*</span>
             </label>
-            <select id="stationFilter" value={stationId} onChange={(e) => setStationId(e.target.value)} disabled={isStationOnly}>
-              {!isStationOnly && <option value="">{reportDef.needsStation ? 'Seleccionar cuartel' : 'Todos'}</option>}
-              {stations.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
+            <select id="departmentFilter" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
+              <option value="">Seleccionar departamento</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
                 </option>
               ))}
             </select>
-            {isStationOnly && (
+            {isDepartmentCoordinator && (
               <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-                Solo podés generar reportes de tu propio cuartel.
+                Solo podés generar reportes de los departamentos que coordinás.
               </p>
             )}
           </div>
-        </div>
+        ) : reportKey === 'departamentos_general' ? (
+          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+            Este reporte incluye todos los departamentos regionales, sin filtro de región/subsede/cuartel.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {!isStationOnly && (
+              <>
+                <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                  <label htmlFor="regionFilter">Regional</label>
+                  <select
+                    id="regionFilter"
+                    value={regionId}
+                    onChange={(e) => {
+                      setRegionId(e.target.value)
+                      setSubsedeId('')
+                      setStationId('')
+                    }}
+                  >
+                    <option value="">Todas</option>
+                    {regions.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field" style={{ flex: 1, minWidth: 160 }}>
+                  <label htmlFor="subsedeFilter">Subsede</label>
+                  <select
+                    id="subsedeFilter"
+                    value={subsedeId}
+                    onChange={(e) => {
+                      setSubsedeId(e.target.value)
+                      setStationId('')
+                    }}
+                  >
+                    <option value="">Todas</option>
+                    {subsedes.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+            <div className="field" style={{ flex: 1, minWidth: 160 }}>
+              <label htmlFor="stationFilter">
+                Cuartel {reportDef.needsStation && <span style={{ color: 'var(--color-primary)' }}>*</span>}
+              </label>
+              <select id="stationFilter" value={stationId} onChange={(e) => setStationId(e.target.value)} disabled={isStationOnly}>
+                {!isStationOnly && <option value="">{reportDef.needsStation ? 'Seleccionar cuartel' : 'Todos'}</option>}
+                {stations.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              {isStationOnly && (
+                <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                  Solo podés generar reportes de tu propio cuartel.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {error && <p className="field-error">{error}</p>}
 
@@ -268,7 +344,7 @@ export function ReportesPage() {
       </div>
 
       <div className="card-grid" style={{ marginBottom: 24 }}>
-        {availableReportTypes.map((report) => (
+        {availableReportTypesWithCoordinator.map((report) => (
           <button
             key={report.key}
             type="button"

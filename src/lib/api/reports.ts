@@ -2,7 +2,12 @@ import { supabase } from '../supabaseClient'
 import type {
   AttendanceSummary,
   Course,
+  Department,
+  DepartmentActivityReport,
+  DepartmentManualMember,
+  DepartmentMember,
   InterventionSummary,
+  Profile,
   Station,
   Subsede,
   Vehicle,
@@ -158,4 +163,43 @@ export async function fetchRegionalConsolidatedData(filters: ReportFilters): Pro
     courses,
     vehicles,
   }
+}
+
+export interface DepartmentWithMembers extends Department {
+  members: (DepartmentMember & { profile: Profile | null })[]
+  manualMembers: DepartmentManualMember[]
+  reports: DepartmentActivityReport[]
+}
+
+// departments/department_members/department_manual_members/department_activity_reports
+// tienen lectura abierta a cualquier autenticado (auth.role() = 'authenticated',
+// sin scope territorial) — el control de quién puede generar este reporte vive
+// en ReportesPage.tsx (ReportsRoute + lógica de rol/coordinador), no en RLS.
+export async function fetchDepartmentsReportData(departmentId?: string | null): Promise<DepartmentWithMembers[]> {
+  let departmentsQuery = supabase.from('departments').select('*').order('name', { ascending: true })
+  if (departmentId) departmentsQuery = departmentsQuery.eq('id', departmentId)
+
+  const [departmentsRes, membersRes, manualMembersRes, reportsRes] = await Promise.all([
+    departmentsQuery,
+    supabase.from('department_members').select('*, profile:profiles(*)'),
+    supabase.from('department_manual_members').select('*'),
+    supabase.from('department_activity_reports').select('*').order('activity_date', { ascending: false }),
+  ])
+
+  if (departmentsRes.error) throw departmentsRes.error
+  if (membersRes.error) throw membersRes.error
+  if (manualMembersRes.error) throw manualMembersRes.error
+  if (reportsRes.error) throw reportsRes.error
+
+  const departments = (departmentsRes.data ?? []) as Department[]
+  const members = (membersRes.data ?? []) as unknown as (DepartmentMember & { profile: Profile | null })[]
+  const manualMembers = (manualMembersRes.data ?? []) as DepartmentManualMember[]
+  const reports = (reportsRes.data ?? []) as DepartmentActivityReport[]
+
+  return departments.map((department) => ({
+    ...department,
+    members: members.filter((m) => m.department_id === department.id),
+    manualMembers: manualMembers.filter((m) => m.department_id === department.id),
+    reports: reports.filter((r) => r.department_id === department.id),
+  }))
 }

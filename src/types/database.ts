@@ -55,6 +55,7 @@ export interface Profile {
   is_active: boolean
   must_change_password: boolean
   weekly_reminder_enabled: boolean
+  weekly_admin_summary_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -105,6 +106,9 @@ export type NotificationType =
   | 'prestamo_aprobado'
   | 'prestamo_rechazado'
   | 'prestamo_devuelto'
+  | 'alerta_admin'
+  | 'prestamo_por_vencer'
+  | 'prestamo_vencido'
 
 export interface Notification {
   id: string
@@ -332,6 +336,8 @@ export interface InventoryLoanRequest {
   delivery_condition: string | null
   return_condition: string | null
   notes: string | null
+  reminder_sent_at: string | null
+  overdue_notified_at: string | null
   created_at: string
   updated_at: string
 }

@@ -203,6 +203,15 @@ Deno.serve(async (req: Request) => {
       if (deleteProfileError) return logAndRespond('eliminar perfil sin cuenta de Auth', deleteProfileError, 'No se pudo eliminar el perfil del usuario.')
     }
 
+    // Notificación sensible inmediata a informatica_r4/integrante_informatica
+    // (migración 0066) — no bloquea la respuesta si falla, el usuario ya se
+    // borró correctamente y no debe verse como un error.
+    await supabaseAsUser
+      .rpc('notify_admin_delete_user', { p_deleted_full_name: targetProfile.full_name })
+      .then(({ error }) => {
+        if (error) console.error('[admin-delete-user] No se pudo notificar a informática:', error.message)
+      })
+
     return jsonResponse({ success: true })
   } catch (err) {
     return logAndRespond('excepción no controlada', err, 'Ocurrió un error inesperado eliminando el usuario.')

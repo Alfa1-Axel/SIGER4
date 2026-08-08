@@ -131,6 +131,7 @@ export const FIELD_LABELS: Record<string, string> = {
   notify_on_create: 'Notificar al crear',
   notify_before_minutes: 'Recordatorio previo (min)',
   reminder_sent_at: 'Recordatorio enviado el',
+  overdue_notified_at: 'Aviso de vencido enviado el',
   created_at: 'Creado el',
   updated_at: 'Actualizado el',
   inventory_item_id: 'Elemento del inventario',
@@ -221,6 +222,9 @@ const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   prestamo_aprobado: 'Préstamo aprobado',
   prestamo_rechazado: 'Préstamo rechazado',
   prestamo_devuelto: 'Préstamo devuelto',
+  alerta_admin: 'Alerta administrativa',
+  prestamo_por_vencer: 'Préstamo por vencer',
+  prestamo_vencido: 'Préstamo vencido',
 }
 
 const BOOLEAN_LABELS: Record<string, string> = { true: 'Sí', false: 'No' }

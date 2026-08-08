@@ -22,6 +22,9 @@ const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   prestamo_aprobado: 'Préstamo aprobado',
   prestamo_rechazado: 'Préstamo rechazado',
   prestamo_devuelto: 'Préstamo devuelto',
+  alerta_admin: 'Alerta administrativa',
+  prestamo_por_vencer: 'Préstamo por vencer',
+  prestamo_vencido: 'Préstamo vencido',
 }
 
 export function NotificacionesPage() {

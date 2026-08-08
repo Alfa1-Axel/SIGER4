@@ -3118,3 +3118,152 @@ aplicarse en Supabase antes o junto con el deploy del frontend, en orden (0062 �
    asistencia, intervenciones ni historial.
 8. Con `invitado`: confirmar que "Auditoría" no aparece en el sidebar y que `/auditoria` muestra "sin
    permisos" si se tipea directo.
+
+## 28. Reportes de Departamentos y borrado directo de usuarios (2026-08) — migración 0065, Edge Function admin-delete-user
+
+### 28.1 Reportes de Departamentos Regionales
+
+Dos tipos de reporte nuevos en `/reportes`, agregados a `REPORT_TYPES`/`ReportKey`/`REPORT_GENERATORS`
+sin tocar ninguno de los 6 existentes:
+
+- **"Departamentos Regionales — General"** (`departamentos_general`): resumen consolidado de todos los
+  departamentos. KPIs: cantidad de departamentos, activos, integrantes (con usuario + manuales),
+  actividades, horas y asistentes acumulados. Gráficos: actividades por tipo, actividades por mes
+  (últimos 6). Tabla: ranking de departamentos por cantidad de actividades (el que más actividad tiene,
+  primero).
+- **"Departamento específico"** (`departamento_especifico`, `needsDepartment: true`): mismo criterio que
+  `needsStation` para "Reporte General por Cuartel" — exige elegir un departamento del selector nuevo
+  antes de generar. Incluye: coordinador, integrantes con usuario (con su cuartel resuelto por nombre,
+  no UUID), integrantes manuales (con cargo/función y cuartel), evolución mensual (últimos 6 meses),
+  actividades por tipo, cuarteles involucrados en las actividades (tabla aparte, solo si hay datos), y
+  el detalle completo de informes de actividad.
+
+**Datos**: fetcher nuevo `fetchDepartmentsReportData(departmentId?)` en `src/lib/api/reports.ts` — trae
+`departments` (todos o uno solo), `department_members` (con `profile` embebido), `department_manual_members`
+y `department_activity_reports` en paralelo, y arma cada departamento con sus propios miembros/informes
+(`DepartmentWithMembers`). Las agregaciones (KPIs, por tipo, por mes) replican exactamente la lógica ya
+usada en `DepartamentoDetallePage.tsx` (mismos últimos-6-meses, mismo agrupamiento por
+`DepartmentActivityType`), factorizada en `activityByMonth()`/`activityByType()` dentro de
+`reportGenerators.ts` para no duplicarla en el propio generador. Como
+`departments`/`department_members`/`department_manual_members`/`department_activity_reports` tienen
+lectura abierta a cualquier autenticado (sin scope territorial, ver auditoría de permisos anterior), el
+control de acceso a estos 2 reportes vive enteramente en `ReportesPage.tsx`, no en RLS.
+
+**PDF**: usa el mismo `ReportBuilder` que el resto de los reportes — mismo encabezado institucional (logo
+Escuela + logo Informática), mismo pie `"Sistema creado por Dpto. Informática y Estadística R4"` en
+todas las páginas, mismas tablas (`jspdf-autotable`) y mismos gráficos de barras horizontales
+(`renderBarChartToDataUrl`, canvas → PNG incrustado — no hay librería de gráficos ni IA en ningún punto
+del pipeline de generación). No se modificó `reportBuilder.ts`.
+
+### 28.2 Permisos de Reportes de Departamentos
+
+- `informatica_r4`/`integrante_informatica`: acceso total a ambos reportes, cualquier departamento.
+- `director_escuela`/`secretario_regional`: acceso a ambos reportes (agregados a
+  `ESCUELA_REGIONAL_REPORT_KEYS`), cualquier departamento — visión regional/escuela, confirmado con el
+  usuario.
+- **Coordinador de departamento** (`departments.coordinator_profile_id === profile.id`, dato, no rol de
+  sistema): solo si además tiene uno de los roles que ya acceden a `/reportes`
+  (`director_escuela`/`secretario_regional`/`jefe_cuerpo_activo`/`usuario_carga_cuartel`) o es admin —
+  confirmado explícitamente con el usuario, en vez de ampliar `ReportsRoute.tsx` para dejar entrar a
+  cualquier coordinador sin importar su rol de sistema (departments.coordinator_profile_id es un dato,
+  no un `RoleKey`, así que ampliar la ruta hubiera requerido un fetch adicional ahí mismo). Cuando
+  corresponde, ve **solo** "Departamento específico" (nunca "General"), y el selector de departamento
+  se acota a los departamentos que coordina (`ReportesPage.tsx`: `isDepartmentCoordinator`).
+- `jefe_cuerpo_activo`/`usuario_carga_cuartel` (roles de cuartel): **sin acceso** a ninguno de los 2
+  reportes de Departamentos, salvo que además coordinen un departamento (caso anterior) — "no permitir
+  que roles de cuartel generen reportes globales de departamentos salvo decisión explícita", tal cual
+  pedido.
+- Resto de roles: sin acceso a `/reportes` (sin cambios respecto a la ronda de auditoría anterior).
+
+### 28.3 Borrado directo de usuarios — Edge Function `admin-delete-user`
+
+Nueva función en `supabase/functions/admin-delete-user/`, mismo patrón que `admin-update-user`/
+`admin-create-user` (sin `_shared/`, CORS y helpers inline, valida el JWT del caller antes que nada,
+usa `service_role` solo después de validar permisos con el cliente del usuario).
+
+**Autorización**: exclusivamente `informatica_r4` — ni siquiera `integrante_informatica` (que sí puede
+usar `admin-update-user`) tiene acceso a este borrado. Se revalida 100% server-side; el frontend
+también oculta el botón, pero la autorización real es la de la función.
+
+**Qué borra**: un solo `auth.admin.deleteUser()` sobre el `auth_user_id` del perfil objetivo. Como
+`profiles.auth_user_id references auth.users(id) on delete cascade`, esto dispara en cascada, dentro de
+la misma transacción de Postgres:
+- **Se borra** (dato propio del usuario): `profiles`, `user_roles`, `user_scopes`, `notifications`,
+  `push_subscriptions`, `department_members` (todas `on delete cascade` desde `profiles`), y
+  `documents`/`document_folders` cuando `profile_id` es el **destinatario** de un documento/carpeta
+  personal (también `cascade` — distinto de `uploaded_by_profile_id`, que es `set null`).
+- **Queda con referencia null** (registro institucional preservado): `audit_logs.actor_profile_id`,
+  `documents.uploaded_by_profile_id`, `document_versions.uploaded_by_profile_id`,
+  `document_folders.created_by_profile_id`, `courses.instructor_profile_id`,
+  `vehicle_status_history.changed_by_profile_id`, `personnel_status_history.changed_by_profile_id`,
+  `inventory_items.responsible_profile_id`/`created_by_profile_id`, `departments.coordinator_profile_id`/
+  `created_by_profile_id`, `calendar_events.created_by_profile_id`,
+  `station_history_events.created_by_profile_id`, `inventory_loan_requests.responsible_profile_id`/
+  `approved_by_profile_id`/`rejected_by_profile_id`/`delivered_by_profile_id`/`returned_by_profile_id`,
+  `department_activity_reports.created_by_profile_id`, `department_manual_members.linked_profile_id`/
+  `created_by_profile_id` — todas `on delete set null`, el registro nunca desaparece.
+- **Bloquea el borrado** (única excepción): `inventory_loan_requests.requested_by_profile_id` es
+  `on delete restrict` a propósito (migración 0057: "nunca se borra el rastro de quién solicitó un
+  préstamo"). `admin-delete-user` lo detecta ANTES de intentar el borrado (no deja que Postgres lo
+  rechace con un error de FK crudo) y responde con un mensaje explícito: *"Este usuario tiene
+  solicitudes de préstamo del inventario a su nombre; no se puede eliminar (se preserva el historial).
+  Podés desactivarlo en su lugar."* No se modificó esa FK — cambiarla a `set null` hubiera contradicho
+  la garantía explícita de esa migración.
+
+**Protecciones**:
+- Nadie puede eliminarse a sí mismo (`body.profile_id === actorProfile.id`), ni siquiera
+  `informatica_r4`.
+- No se puede eliminar al único `informatica_r4` **activo** del sistema (cuenta roles + estado de
+  `profiles.is_active`, no solo la fila de `user_roles`) — protección que **no existía en ningún punto
+  del sistema** antes de esta ronda (tampoco en `admin-update-user`, que queda fuera de este alcance por
+  decisión explícita).
+- Auditoría manual **antes** de ejecutar el borrado real, vía `record_manual_audit_event` (RPC, cliente
+  del actor — no `service_role`), acción nueva `admin_delete_user` agregada al allowlist en migración
+  `0065_admin_delete_user_audit.sql`. Necesario porque el borrado en cascada de `profiles` sí queda
+  auditado automáticamente por el trigger existente, pero con `actor_profile_id = null` (corre bajo
+  `service_role`, sin JWT de usuario) — el evento manual es el que deja constancia real de quién ejecutó
+  la acción.
+
+### 28.4 UI — botón "Eliminar usuario"
+
+Nueva sección "Zona de riesgo" al final de `UsuarioDetallePage.tsx`, visible únicamente si
+`isCurrentUserSuperAdmin` (rol `informatica_r4` real, ni siquiera `integrante_informatica` lo ve) y
+`!isEditingSelf` (nunca en el propio perfil). Abre `DeleteUserConfirmModal` (componente nuevo,
+`src/components/ui/DeleteUserConfirmModal.tsx`): a diferencia de `ReasonPromptModal` (motivo libre,
+usado para bajas reversibles como vehículos/personal), esta exige **tipear el nombre completo exacto**
+del usuario antes de habilitar el botón de confirmación — refuerzo mayor para una acción irreversible
+que borra la cuenta de acceso. Si `admin-delete-user` responde con error (permiso, último admin,
+solicitudes de préstamo, etc.), el modal lo muestra tal cual (vía `describeSupabaseError`) sin cerrarse,
+en vez de un mensaje genérico. Al confirmar con éxito, navega a `/usuarios`.
+
+### 28.5 Migraciones y despliegue de esta ronda
+
+- `0065_admin_delete_user_audit.sql` — amplía el allowlist de `record_manual_audit_event()` con
+  `table_name='auth_users'`/`action='admin_delete_user'` (mismo patrón que `admin_auth_update` de 0044).
+- Edge Function nueva: `admin-delete-user` — desplegar con `supabase functions deploy admin-delete-user`.
+- Sin cambios a `admin-update-user` ni a ninguna otra función existente.
+- Redeploy normal del frontend (Vercel).
+
+### 28.6 Cómo probar (checklist recomendado)
+
+1. Con `informatica_r4`/`integrante_informatica`/`secretario_regional`/`director_escuela`: generar
+   "Departamentos Regionales — General" y confirmar que el PDF trae el ranking de todos los
+   departamentos con datos reales.
+2. Con esos mismos roles: generar "Departamento específico" eligiendo uno del selector completo.
+3. Asignar a un usuario sin esos roles como coordinador de un departamento (y sin ninguno de los roles
+   de acceso a Reportes) y confirmar que NO ve "Reportes" en absoluto. Asignarle además
+   `jefe_cuerpo_activo` y confirmar que ahora sí ve "Departamento específico" (nunca "General"),
+   acotado únicamente al departamento que coordina.
+4. Con `jefe_cuerpo_activo`/`usuario_carga_cuartel` sin coordinar ningún departamento: confirmar que no
+   aparecen los reportes de Departamentos en absoluto.
+5. Como `informatica_r4`, abrir el detalle de otro usuario y confirmar que aparece "Zona de riesgo" con
+   el botón "Eliminar usuario"; confirmar que NO aparece en el propio perfil, ni para
+   `integrante_informatica`.
+6. Intentar eliminar sin escribir el nombre completo exacto: el botón de confirmación debe quedar
+   deshabilitado.
+7. Intentar eliminar al único `informatica_r4` activo del sistema (con otro usuario `informatica_r4`
+   activo) y confirmar el mensaje de bloqueo.
+8. Intentar eliminar un usuario que alguna vez cargó una solicitud de préstamo del inventario y
+   confirmar el mensaje específico (no un error de FK crudo).
+9. Eliminar un usuario de prueba sin conflictos y confirmar en `/auditoria` que queda un evento
+   `admin_delete_user` con el actor real (no null) y el nombre del usuario eliminado.

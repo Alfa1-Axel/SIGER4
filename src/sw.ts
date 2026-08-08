@@ -76,8 +76,18 @@ registerRoute(
   }),
 )
 
-self.addEventListener('install', () => {
-  self.skipWaiting()
+// Antes, install llamaba a self.skipWaiting() incondicionalmente: un SW
+// nuevo se activaba de inmediato (junto con clients.claim() en activate,
+// tomaba control de las pestañas ya abiertas al instante), y como
+// main.tsx no pasaba onNeedReload a registerSW, vite-plugin-pwa reaccionaba
+// a esa activación recargando la página sola y sin aviso — causa real de
+// recargas/pérdida de datos al volver de background si hubo un deploy
+// mientras la app estaba en segundo plano (ver DEPLOYMENT.md). Ahora el SW
+// nuevo se queda "esperando" (waiting) hasta que el cliente confirme
+// explícitamente vía postMessage — SwUpdateBanner.tsx es quien dispara ese
+// mensaje, solo cuando el usuario lo decide.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {

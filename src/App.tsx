@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { AppUpdateBanner } from './components/AppUpdateBanner'
+import { SwUpdateBanner } from './components/SwUpdateBanner'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
@@ -48,9 +49,11 @@ import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage
 
 export default function App() {
   return (
-    <AuthProvider>
-      <NotificationPushBridge />
-      <AppUpdateBanner />
+    <>
+      <SwUpdateBanner />
+      <AuthProvider>
+        <NotificationPushBridge />
+        <AppUpdateBanner />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
@@ -105,6 +108,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>
-    </AuthProvider>
+      </AuthProvider>
+    </>
   )
 }

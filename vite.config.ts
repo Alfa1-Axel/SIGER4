@@ -32,18 +32,22 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' (antes 'autoUpdate'): con autoUpdate, la librería manda
+      // skipWaiting() sola apenas detecta un SW nuevo instalado, y sin
+      // onNeedReload hace window.location.reload() apenas se activa — sin
+      // aviso, perdiendo cualquier dato/ruta en curso. Esa combinación era
+      // la causa real de recargas inesperadas al volver de background (ej.
+      // tras responder WhatsApp) cuando hubo un deploy mientras la app
+      // estaba en segundo plano. Con 'prompt', el SW nuevo queda esperando
+      // hasta que el cliente confirma explícitamente — ver main.tsx
+      // (onNeedRefresh) y src/components/SwUpdateBanner.tsx (el banner que
+      // deja elegir al usuario cuándo actualizar, en vez de recargar solo).
+      //
       // El plugin, por default, inyecta un <script> en index.html que solo
       // hace navigator.serviceWorker.register(...) a secas — sin ningún
-      // listener de actualización/recarga. En modo autoUpdate eso significa
-      // que un service worker nuevo puede terminar de instalarse y activarse
-      // en segundo plano sin que la página ya abierta se entere: sigue
-      // corriendo el JS viejo en memoria hasta que el usuario cierra y
-      // reabre la app de verdad — algo que en una PWA instalada en Android
-      // puede no pasar durante días (el sistema la mantine "tibia" entre
-      // cambios de app en vez de matarla). Se registra a mano en main.tsx
-      // usando `virtual:pwa-register`, que sí agrega el listener real de
-      // "se activó una versión nueva" -> location.reload() automático.
+      // listener de actualización/recarga. Se registra a mano en main.tsx
+      // usando `virtual:pwa-register`, que sí agrega esos listeners.
+      registerType: 'prompt',
       injectRegister: false,
       strategies: 'injectManifest',
       srcDir: 'src',

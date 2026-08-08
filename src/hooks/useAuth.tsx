@@ -66,7 +66,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true
     if (!session?.user) return
 
-    setLoading(true)
+    // Solo mostrar loading=true (spinner de pantalla completa en
+    // ProtectedRoute) si todavía no hay un perfil cargado — un
+    // TOKEN_REFRESHED (autoRefreshToken, disparado seguido al recuperar
+    // foco/visibilidad si el token estaba por vencer) entrega un objeto
+    // Session nuevo aunque sea el mismo usuario, y este efecto igual se
+    // re-ejecuta (session?.user.id no cambia, pero session?.user si es una
+    // referencia nueva). Antes eso ponía loading=true de nuevo cada vez,
+    // haciendo parpadear el spinner sobre la pantalla actual — no era una
+    // navegación real, pero contribuía a la sensación de "recarga" al
+    // volver de background.
+    if (!profile) setLoading(true)
     fetchCurrentUserContext(session.user.id).then((ctx) => {
       if (!active) return
       if (ctx) {
@@ -94,7 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false
     }
-  }, [session?.user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id])
 
   const roles = useMemo(() => userRoles.map((r) => r.role), [userRoles])
   const isAdmin = useMemo(() => roles.some((r) => ADMIN_ROLES.includes(r)), [roles])

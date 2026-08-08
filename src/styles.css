@@ -1002,3 +1002,46 @@ img {
 .app-update-actions {
   display: flex;
 }
+
+/* Banner fino, no bloqueante, para avisar que hay una versión nueva del
+   service worker esperando (ver SwUpdateBanner.tsx) — a diferencia de
+   .app-update-overlay (anuncio de feature, modal centrado abajo), este es
+   una barra angosta arriba de todo, con menor prioridad visual pero
+   siempre visible mientras no se descarte o se aplique la actualización. */
+.sw-update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--color-primary-dark, #9a1f1f);
+  color: #fff;
+  font-size: 12px;
+}
+
+.sw-update-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.sw-update-banner-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.sw-update-banner-dismiss:hover {
+  background: rgba(255, 255, 255, 0.15);
+}

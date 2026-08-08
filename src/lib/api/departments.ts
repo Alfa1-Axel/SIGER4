@@ -13,6 +13,24 @@ export async function fetchDepartmentById(id: string): Promise<Department | null
   return data as Department
 }
 
+// Todos los department_id donde el perfil es coordinador O miembro — usado
+// para acotar la Auditoría a "mis departamentos" (ver AuditoriaPage.tsx).
+// departments/department_members tienen lectura abierta a cualquier
+// autenticado (sin scope territorial), así que ambas consultas son directas.
+export async function fetchMyDepartmentIds(profileId: string): Promise<string[]> {
+  const [coordinatedRes, memberRes] = await Promise.all([
+    supabase.from('departments').select('id').eq('coordinator_profile_id', profileId),
+    supabase.from('department_members').select('department_id').eq('profile_id', profileId),
+  ])
+  if (coordinatedRes.error) throw coordinatedRes.error
+  if (memberRes.error) throw memberRes.error
+
+  const ids = new Set<string>()
+  for (const d of coordinatedRes.data ?? []) ids.add((d as { id: string }).id)
+  for (const m of memberRes.data ?? []) ids.add((m as { department_id: string }).department_id)
+  return [...ids]
+}
+
 export interface DepartmentInput {
   name: string
   description?: string | null

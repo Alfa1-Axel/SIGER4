@@ -131,6 +131,21 @@ export async function updateUserAccount(input: UpdateUserAccountInput): Promise<
   return data.profile
 }
 
+// Borrado directo (hard delete) de un usuario: cuenta de Auth + profile +
+// roles/scope/notificaciones/suscripciones push (todo lo que "es del propio
+// usuario", borrado en cascada) — preservando referencias institucionales
+// (auditoría, documentos, informes, etc., que quedan con la referencia en
+// null). Solo informatica_r4 puede invocar esta función (admin-delete-user,
+// service_role) — la propia Edge Function revalida el rol server-side, esto
+// no es solo un gate de UI.
+export async function deleteUserAccount(profileId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke<{ success?: boolean; error?: string }>('admin-delete-user', {
+    body: { profile_id: profileId },
+  })
+  if (error) throw new Error(await edgeFunctionErrorMessage(error, 'No se pudo eliminar el usuario.'))
+  if (!data?.success) throw new Error(data?.error ?? 'No se pudo eliminar el usuario.')
+}
+
 export async function setProfileActive(id: string, isActive: boolean): Promise<void> {
   const { error } = await supabase.from('profiles').update({ is_active: isActive }).eq('id', id)
   if (error) throw error

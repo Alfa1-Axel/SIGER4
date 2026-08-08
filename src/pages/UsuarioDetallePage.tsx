@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
@@ -7,6 +7,7 @@ import { fetchStations } from '../lib/api/stations'
 import {
   addRole,
   addScope,
+  deleteUserAccount,
   fetchProfileWithRoles,
   removeRole,
   removeScope,
@@ -14,6 +15,7 @@ import {
   updateProfile,
   updateUserAccount,
 } from '../lib/api/users'
+import { DeleteUserConfirmModal } from '../components/ui/DeleteUserConfirmModal'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
@@ -35,6 +37,7 @@ const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_inform
 
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { profile: currentProfile, hasRole: currentHasRole, isAdmin } = useAuth()
   const isCurrentUserSuperAdmin = currentHasRole('informatica_r4')
   // jefe_cuerpo_activo entra a esta pantalla (ver UserManagerRoute) pero con
@@ -72,6 +75,8 @@ export function UsuarioDetallePage() {
   const [savingEmail, setSavingEmail] = useState(false)
   const [emailSaved, setEmailSaved] = useState(false)
   const [resettingMustChangePassword, setResettingMustChangePassword] = useState(false)
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   async function reload() {
     if (!id) return
@@ -253,6 +258,13 @@ export function UsuarioDetallePage() {
     } finally {
       setResettingMustChangePassword(false)
     }
+  }
+
+  async function handleDeleteUser() {
+    if (!id) return
+    await deleteUserAccount(id)
+    setShowDeleteConfirm(false)
+    navigate('/usuarios')
   }
 
   if (loading) {
@@ -577,6 +589,32 @@ export function UsuarioDetallePage() {
       <button type="button" className={`btn ${profile.is_active ? 'btn-outlined' : 'btn-primary'} btn-block`} onClick={handleToggleActive}>
         {profile.is_active ? 'Desactivar usuario' : 'Reactivar usuario'}
       </button>
+
+      {isCurrentUserSuperAdmin && !isEditingSelf && (
+        <>
+          <div className="section-header" style={{ marginTop: 24 }}>
+            <h2 className="section-title">Zona de riesgo</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20, borderColor: 'var(--color-danger, #dc2626)' }}>
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+              Elimina la cuenta de acceso, el perfil, los roles y los alcances de este usuario. No se puede deshacer. Los
+              registros institucionales (auditoría, documentos, informes, etc.) que lo referencian se preservan, sin el
+              vínculo al usuario borrado.
+            </p>
+            <button type="button" className="btn btn-outlined btn-block" onClick={() => setShowDeleteConfirm(true)}>
+              Eliminar usuario
+            </button>
+          </div>
+        </>
+      )}
+
+      {showDeleteConfirm && (
+        <DeleteUserConfirmModal
+          fullName={profile.full_name}
+          onConfirm={handleDeleteUser}
+          onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
     </AppShell>
   )
 }

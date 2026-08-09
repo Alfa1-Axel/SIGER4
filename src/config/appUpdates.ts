@@ -36,6 +36,21 @@ export interface AppUpdate {
 // momento se agrega una pantalla de "novedades anteriores".
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-08-09-v1-0-beta',
+    date: '2026-08-09',
+    title: 'SIGER4 v1.0 beta',
+    description: 'Primera versión estable de SIGER4 para uso institucional. Se reforzaron permisos y auditoría en todo el sistema, y se agregaron notificaciones y reportes nuevos.',
+    changes: [
+      'Reportes de Departamentos Regionales (general y por departamento) en PDF.',
+      'Auditoría filtrada según el rol de cada usuario, sin detalles técnicos para roles institucionales.',
+      'Notificaciones automáticas a Informática ante cambios sensibles (altas, bajas, roles, alcances).',
+      'Resumen semanal enriquecido para Informática y recordatorios automáticos de devolución de préstamos.',
+      'Corrección de recargas inesperadas de la app al volver de segundo plano.',
+      'Revisión completa de permisos por rol en todos los módulos.',
+    ],
+    severity: 'important',
+  },
+  {
     id: '2026-08-06-documentos-desktop',
     date: '2026-08-06',
     title: 'SIGER4 actualizado',

@@ -221,6 +221,7 @@ export function AuditoriaPage() {
   const isSecretarioRegional = hasRole('secretario_regional')
   const isTechnicalViewer = isAdmin
   const [myDepartmentIds, setMyDepartmentIds] = useState<string[] | null>(null)
+  const [myDepartmentIdsError, setMyDepartmentIdsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (isAdmin || !profile?.id) {
@@ -228,9 +229,19 @@ export function AuditoriaPage() {
       return
     }
     let active = true
+    setMyDepartmentIdsError(null)
     fetchMyDepartmentIds(profile.id)
       .then((ids) => active && setMyDepartmentIds(ids))
-      .catch(() => active && setMyDepartmentIds([]))
+      .catch((err) => {
+        if (!active) return
+        // Sin esto, un fallo de red transitorio acá dejaba a un
+        // coordinador/miembro de departamento viendo cero eventos de
+        // Departamentos en la auditoría, indistinguible de "no tiene
+        // departamentos asignados" — no había ni log ni aviso visible.
+        console.warn('[SIGER4] No se pudieron cargar los departamentos del usuario para Auditoría:', err)
+        setMyDepartmentIds([])
+        setMyDepartmentIdsError('No pudimos verificar tus departamentos: puede que falten eventos de Departamentos en la lista de abajo. Reintentá recargando la página.')
+      })
     return () => {
       active = false
     }
@@ -349,6 +360,15 @@ export function AuditoriaPage() {
       return Boolean(deptId) && (myDepartmentIds ?? []).includes(deptId as string)
     })
   }, [logs, isAdmin, isSecretarioRegional, isDepartmentMember, myDepartmentIds])
+
+  // allowedTableNames puede cambiar de forma asíncrona después del primer
+  // render (mientras se resuelve fetchMyDepartmentIds, ver arriba) — si el
+  // usuario ya había avanzado de página antes de que eso termine, hay que
+  // volver a la primera página del resultado filtrado nuevo, o podría
+  // quedar en una página fuera de rango (vacía o salteando registros).
+  useEffect(() => {
+    setPage(0)
+  }, [allowedTableNames])
 
   useEffect(() => {
     let active = true
@@ -545,6 +565,12 @@ export function AuditoriaPage() {
       {error && (
         <div className="card" style={{ marginBottom: 20 }}>
           <p className="field-error">{error}</p>
+        </div>
+      )}
+
+      {myDepartmentIdsError && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <p className="field-error">{myDepartmentIdsError}</p>
         </div>
       )}
 

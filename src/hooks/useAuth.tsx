@@ -77,29 +77,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // navegación real, pero contribuía a la sensación de "recarga" al
     // volver de background.
     if (!profile) setLoading(true)
-    fetchCurrentUserContext(session.user.id).then((ctx) => {
-      if (!active) return
-      if (ctx) {
-        // is_active ya no es solo visual: el backend (current_profile_id())
-        // deja de reconocer a un perfil inactivo para casi toda escritura y
-        // lectura de scope, asi que si el frontend detecta is_active=false
-        // debe cerrar la sesion de inmediato en vez de dejar al usuario
-        // navegando con una app que le va a rechazar todo silenciosamente.
-        if (!ctx.profile.is_active) {
-          setDeactivated(true)
-          setProfile(null)
-          setUserRoles([])
-          setScopes([])
-          setLoading(false)
-          void supabase.auth.signOut()
-          return
+    fetchCurrentUserContext(session.user.id)
+      .then((ctx) => {
+        if (!active) return
+        if (ctx) {
+          // is_active ya no es solo visual: el backend (current_profile_id())
+          // deja de reconocer a un perfil inactivo para casi toda escritura y
+          // lectura de scope, asi que si el frontend detecta is_active=false
+          // debe cerrar la sesion de inmediato en vez de dejar al usuario
+          // navegando con una app que le va a rechazar todo silenciosamente.
+          if (!ctx.profile.is_active) {
+            setDeactivated(true)
+            setProfile(null)
+            setUserRoles([])
+            setScopes([])
+            setLoading(false)
+            void supabase.auth.signOut()
+            return
+          }
+          setProfile(ctx.profile)
+          setUserRoles(ctx.roles)
+          setScopes(ctx.scopes)
         }
-        setProfile(ctx.profile)
-        setUserRoles(ctx.roles)
-        setScopes(ctx.scopes)
-      }
-      setLoading(false)
-    })
+        setLoading(false)
+      })
+      .catch((err) => {
+        // Sin este catch, un error de red real (fetch falla, no un {error}
+        // de Postgrest) deja la promesa rechazada sin manejar: loading
+        // nunca vuelve a false y ProtectedRoute queda mostrando el spinner
+        // de pantalla completa para siempre, sin forma de recuperarse salvo
+        // recargar manualmente. Es justo el escenario que puede darse al
+        // volver de background con conectividad inestable — el mismo caso
+        // que este archivo ya intenta manejar mejor en otros puntos.
+        console.warn('[SIGER4] No se pudo cargar el perfil del usuario:', err)
+        if (active) setLoading(false)
+      })
 
     return () => {
       active = false

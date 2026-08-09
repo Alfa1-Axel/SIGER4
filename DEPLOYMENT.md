@@ -1,12 +1,19 @@
 # SIGER4 — Guía de despliegue (Supabase + Vercel)
 
+**→ Para preparar una puesta en marcha real (v1.0 beta), ver la sección 31 ("SIGER4 v1.0 beta — puesta
+en marcha") al final de este documento: checklist completo de configuración, datos mínimos a cargar,
+matriz de permisos final y checklist de prueba manual.**
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
-- [ ] **Migraciones**: las 24 migraciones de `supabase/migrations/` corridas en orden (`0001` a
-      `0024`) en el SQL Editor del proyecto de Supabase real. Ver sección 1.2 para la lista exacta.
+- [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
+      `0001` hasta la última numerada (`0070` al momento de escribir esto — la numeración solo
+      crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
+      Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
+      las secciones 16 en adelante, cada una con su propio número de migración en el título.
 - [ ] **RLS activo**: todas las tablas con el ícono de RLS en verde en **Table Editor** (sección 1.3).
 - [ ] **Variables de entorno del frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y
       `VITE_VAPID_PUBLIC_KEY` configuradas en Vercel (Production, Preview y Development) — nunca la
@@ -3682,3 +3689,452 @@ cron job — si aparece una fila persistente entre corridas, algo quedó mal).
    rápidamente desde dos pestañas del SQL Editor (simulando solapamiento) y confirmar que la segunda
    ejecución no genera notificaciones duplicadas (revisar `pg_locks`/logs de `cron.job_run_details` si
    hace falta diagnosticar).
+
+## 31. SIGER4 v1.0 beta — puesta en marcha (2026-08)
+
+Sin migraciones nuevas ni módulos nuevos — esta ronda preparó SIGER4 como primera versión estable
+usable en producción real (uso institucional controlado, no solo pruebas), consolidando todo lo
+construido en las rondas anteriores en un checklist único de puesta en marcha, la matriz de permisos
+final verificada contra el código real, y un checklist de prueba manual compacto.
+
+### 31.1 Versión del sistema
+
+- **Versión visible**: `SIGER4 v1.0.0-beta.1` (formato semver estándar para pre-release). Se lee de
+  `package.json` (`"version"`) y se inyecta en build vía `vite.config.ts` como
+  `__SIGER4_APP_VERSION__`, igual que ya se hacía con el hash de build (`__SIGER4_BUILD_VERSION__`).
+- **Dónde se muestra**:
+  - `/ajustes`, arriba de todo, visible a **cualquier usuario**: `SIGER4 v1.0.0-beta.1`.
+  - `/ajustes`, sección "Versión / actualización de la app (informática)" (solo `isAdmin`): versión +
+    hash de commit + fecha/hora de compilación, sin cambios en el resto de esa sección.
+- **Banner de novedades**: se agregó una entrada nueva en `src/config/appUpdates.ts`
+  (`id: '2026-08-09-v1-0-beta'`, `severity: 'important'`) resumiendo los cambios institucionales más
+  relevantes de esta serie de rondas (Reportes de Departamentos, Auditoría por rol, notificaciones
+  automáticas, resumen semanal, recordatorio de préstamos, fix de recargas de PWA). Se muestra una
+  sola vez por usuario la próxima vez que entre al sistema (mismo mecanismo ya existente, ver
+  sección 22).
+- **Para la próxima versión** (`1.0.0-beta.2`, `1.0.0`, etc.): actualizar `package.json` y agregar una
+  entrada nueva al principio de `APP_UPDATES` — no hace falta tocar nada más, ambos mecanismos ya
+  están conectados.
+
+### 31.2 Checklist de puesta en marcha
+
+Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar acceso a **usuarios
+reales** (no solo de prueba) confirmá cada uno de estos puntos:
+
+**Base de datos (Supabase)**
+- [ ] **Migraciones**: las 70 migraciones (`0001` a `0070`) corridas en orden en el SQL Editor del
+      proyecto real. Confirmar con:
+      ```sql
+      select count(*) from supabase_migrations.schema_migrations;
+      ```
+      (si el proyecto no usa el CLI de Supabase para versionar migraciones, alternativamente
+      confirmar a mano que las funciones/tablas de la última migración existen, ej.
+      `select proname from pg_proc where proname = 'send_loan_return_reminders';`).
+- [ ] **RLS activo en todas las tablas**: **Table Editor** → cada tabla con el ícono de RLS en verde
+      (ninguna tabla de negocio debe quedar sin RLS habilitado).
+- [ ] **`pg_cron`/`pg_net` habilitados**, con los 5 jobs activos y la config de
+      `project_url`/`cron_shared_secret` seteada — ver las queries de verificación completas en la
+      sección 30.4 (no se repiten acá para no duplicar).
+- [ ] **VAPID configurado** (push real, no solo notificaciones internas): `VAPID_PUBLIC_KEY`/
+      `VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` como secretos de `send-push`, `VITE_VAPID_PUBLIC_KEY` en
+      Vercel — ver sección 1.8 para el paso a paso completo. Sin esto, el sistema funciona igual, pero
+      sin push real (solo campanita).
+- [ ] **`CRON_SHARED_SECRET`** configurado como secreto de Supabase (usado por `send-push-system`,
+      `trigger_document_purge`, `send_weekly_reminder`, `send_weekly_admin_summary`) — ver sección 6.3.
+- [ ] **Buckets de Storage verificados**: `station-media` (público), `avatars` (público), `documents`
+      (privado) — existen solos al correr las migraciones correspondientes, pero confirmar en
+      **Storage** que están presentes con la visibilidad correcta.
+- [ ] **Al menos un usuario `informatica_r4` creado** — es el único rol que puede crear otros usuarios
+      sin restricción, gestionar roles/scopes, y hacer borrado directo de usuarios. Ver sección 1.5
+      para crearlo desde el SQL Editor si es el primero del sistema (antes de que exista ningún
+      usuario que pueda usar `admin-create-user`).
+- [ ] **Backup/export recomendado antes del primer uso real**: desde el Dashboard de Supabase,
+      **Database → Backups** (si el plan lo incluye) o un `pg_dump` manual del esquema + datos antes de
+      cargar información institucional real — no es parte del flujo automático de SIGER4, es una
+      precaución externa recomendada antes de empezar a cargar datos que importen.
+
+**Edge Functions**
+- [ ] Las 6 funciones activas desplegadas: `admin-create-user`, `admin-update-user`,
+      `admin-delete-user`, `purge-documents`, `send-push`, `send-push-system`. Confirmar con
+      `supabase functions list` o desde el Dashboard (**Edge Functions**).
+- [ ] `analyze-report` (Gemini) — **no forma parte del flujo activo del sistema** (ver sección 31.6),
+      podés dejarla desplegada sin uso o eliminarla; no bloquea nada si sigue ahí.
+
+**Frontend (Vercel)**
+- [ ] Variables de entorno seteadas en **Production** (y Preview/Development si corresponde):
+      `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_VAPID_PUBLIC_KEY` (si activaste push) —
+      nunca `service_role` ni la clave privada VAPID en el frontend.
+- [ ] Build Command `npm run build`, Output Directory `dist`, Framework Preset Vite.
+- [ ] Deploy de producción corrido y accesible en el dominio final.
+
+**PWA / dispositivos**
+- [ ] **PWA instalada y probada** en al menos un dispositivo Android real (no solo `localhost`) —
+      confirmar que el manifest/ícono/instalación funcionan en el dominio de producción.
+- [ ] **Push probado de punta a punta**: activar notificaciones push desde `/ajustes` en un
+      dispositivo real, usar el botón "Probar notificación", confirmar que llega tanto la
+      notificación interna como el push real del sistema operativo.
+- [ ] **Banner de actualización probado** al menos una vez: hacer un deploy nuevo con la PWA ya
+      abierta desde antes y confirmar que aparece el aviso (no una recarga silenciosa) — ver
+      checklist detallado en la sección 30.5, punto 1.
+
+**Roles y datos**
+- [ ] **Roles y alcances reales asignados** a cada usuario invitado — nunca dejar más cuentas
+      `informatica_r4` de las estrictamente necesarias (recomendado: 1-2 personas del Dpto.
+      Informática, no más), y ningún usuario operativo sin alcance (`region_id`/`station_id`) asignado.
+- [ ] **Datos mínimos iniciales cargados** — ver checklist completo en la sección 31.3.
+- [ ] **Datos de prueba limpiados** si se usó el sistema en modo de pruebas antes (ver sección 1.6bis
+      y `supabase/cleanup_test_data.sql`).
+- [ ] **Sesión de pruebas funcionales conjunta** hecha sobre el checklist de la sección 31.5, con al
+      menos un usuario de cada rol relevante para la institución (no hace falta cubrir los 10 roles si
+      alguno no se va a usar en la práctica, pero sí los que sí).
+
+### 31.3 Datos mínimos iniciales — orden recomendado de carga
+
+El sistema tiene dependencias jerárquicas reales (un cuartel necesita una región, un usuario necesita
+un rol y opcionalmente un alcance, etc.) — cargar en este orden evita quedarte con formularios que no
+tienen de dónde elegir una región/cuartel/departamento inexistente todavía:
+
+1. **Regional 4** — la región raíz. Se carga una sola fila en `regions` (nombre, código). Sin esto,
+   nada de lo que sigue tiene dónde colgar.
+2. **Subsedes** — las subsedes dentro de la Regional 4 (`/cuarteles`, o directo en Supabase si preferís
+   cargarlas antes de tener el primer usuario admin operando desde la UI).
+3. **Cuarteles** — cada cuartel, asociado a su región y (opcionalmente) subsede. Incluye datos de
+   contacto institucional (teléfono/email) — cargarlos desde el principio ayuda a que el Semáforo no
+   marque el cuartel en rojo por "falta contacto institucional" apenas se den de alta.
+4. **Usuario(s) `informatica_r4`** — al menos uno, creado directo en Supabase (sección 1.5) si es el
+   primero del sistema, ya que `admin-create-user` requiere ya estar autenticado como alguien con
+   permiso para crear usuarios.
+5. **Usuarios principales del resto de roles** — `secretario_regional`, `director_escuela`, y al menos
+   un `jefe_cuerpo_activo`/`presidente_cuartel`/`usuario_carga_cuartel` por cuartel activo, según la
+   estructura real de la institución. Crearlos desde `/usuarios/nuevo` una vez que ya hay un
+   `informatica_r4` operando.
+6. **Roles y alcances (scopes)** — se asignan en el mismo alta de usuario (`admin-create-user`) o
+   después desde `/usuarios/:id` (solo `informatica_r4`/`integrante_informatica`). Confirmar que cada
+   usuario con rol de cuartel tenga su `station_id` seteado, y los roles regionales su `region_id` —
+   sin esto, `my_station_ids()`/`my_region_ids()` no devuelven nada y el usuario no ve ni puede
+   escribir nada de su propio alcance.
+7. **Departamentos regionales** — si la institución los usa (comisión directiva, capacitación, etc.),
+   cargarlos desde `/departamentos` con su coordinador (debe ser ya un usuario real) y, si corresponde,
+   integrantes manuales (sin cuenta) o miembros con cuenta.
+8. **Inventario Regional inicial** — el catálogo compartido de elementos prestables (`/inventario`),
+   cargado por `informatica_r4`/`director_escuela`/`secretario_regional`. No hace falta cargarlo si la
+   institución todavía no va a usar el módulo de préstamos.
+9. **Calendario inicial** — eventos institucionales ya conocidos (reuniones fijas, vencimientos
+   recurrentes) para que el módulo no arranque vacío.
+10. **Documentos base** — circulares, actas, manuales institucionales ya existentes, cargados **desde
+    PC** (la carga está pausada en mobile, ver sección 31.6) en las carpetas correspondientes.
+11. **Personal y vehículos iniciales** — dotación y flota de cada cuartel, cargados por
+    `jefe_cuerpo_activo`/`presidente_cuartel`/`usuario_carga_cuartel` de cada uno (o por
+    `informatica_r4`/`secretario_regional` si se prefiere centralizarlo al principio).
+12. **Contactos institucionales mínimos para el Semáforo** — confirmar que cada cuartel tenga al menos
+    `phone` o `email` cargado (uno de los 3 criterios críticos de `station_compliance`, junto con tener
+    personal y vehículos cargados) — sin esto, todo cuartel nuevo arranca en rojo aunque tenga el resto
+    de los datos al día.
+
+No hace falta completar los 12 puntos antes de dar acceso a nadie — es el orden recomendado para que
+cada pantalla tenga de dónde elegir, no un requisito de "todo o nada". Los puntos 7-11 pueden ir
+cargándose de forma incremental una vez que el sistema ya está en uso.
+
+### 31.4 Matriz final de permisos por rol y módulo
+
+Matriz verificada línea por línea contra el código real (route guards, lógica de rol dentro de cada
+página, RLS policies) — no contra documentación de rondas anteriores, para reflejar el estado
+**final** vigente. `administrativo` (rol legado) no se incluye: sigue existiendo como tipo válido en la
+base por compatibilidad, pero ya no se ofrece para asignar a nadie nuevo desde ningún flujo de la UI
+(migración `0043`).
+
+**Convenciones**: is_informatica_r4() = `informatica_r4` + `integrante_informatica`. is_regional_role()
+= **solo** `secretario_regional` (desde la migración `0048`; `director_escuela` ya no comparte esa
+función). is_escuela_role() = `director_escuela` + `instructor`.
+
+#### Panel
+
+| Rol | Ver | Alcance |
+|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Todo el sistema |
+| director_escuela / instructor / secretario_regional | Sí | Su región |
+| jefe_cuerpo_activo / presidente_cuartel / secretario_comision / usuario_carga_cuartel | Sí | Su cuartel/subsede |
+| invitado | Sí | Solo su cuartel |
+
+Sin escritura — el botón "Nuevo Reporte" se muestra solo si el rol tiene acceso a Reportes (ver esa
+sección). El widget de Semáforo hereda el alcance real de `stations_select_scope`.
+
+#### Cuarteles (listado y datos generales)
+
+| Rol | Ver | Crear | Editar | Desactivar | Alcance |
+|---|---|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Sí | Sí (cambio de estado, sin borrado físico) | Todo el sistema |
+| secretario_regional | Sí | Sí | Sí | Sí | Su región |
+| director_escuela / instructor | Sí | No | No | No | Su región — solo lectura |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel | Sí | No | Sí, solo si es su propio cuartel | Sí, solo si es su propio cuartel | Su propio cuartel únicamente |
+| secretario_comision | Sí | No | No | No | Solo lectura |
+| invitado | Sí | No | No | No | Solo su cuartel, sin escritura |
+
+`canEdit` se revalida contra el `station.id`/`station.region_id` real del registro abierto, no solo el
+rol del usuario — evita que un rol de cuartel vea Editar/Desactivar en un cuartel ajeno visible por
+lectura regional/de subsede.
+
+#### Detalle de cuartel — Personal, Vehículos, Asistencia, Intervenciones
+
+| Rol | Ver | Crear/Editar/Desactivar | Alcance |
+|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Todo el sistema |
+| secretario_regional | Sí | Sí | Su región |
+| director_escuela / instructor | Sí | No | Su región — solo lectura |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel | Sí | Sí, solo su propio cuartel | Su propio cuartel |
+| secretario_comision | Sí | No | Solo lectura |
+| invitado | Sí | No | Solo su cuartel |
+
+#### Detalle de cuartel — Historial institucional
+
+| Rol | Ver | Crear/Editar/Eliminar | Alcance |
+|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Todo el sistema |
+| secretario_regional | Sí | Sí | Su región |
+| director_escuela / instructor | Sí | No | Su región — solo lectura |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel / secretario_comision | Sí | Sí, solo su propio cuartel | Su propio cuartel |
+| invitado | Sí | No | Solo su cuartel |
+
+A diferencia de Personal/Vehículos, acá `secretario_comision` sí tiene escritura (mismo criterio que
+Documentos/Carpetas).
+
+#### Usuarios
+
+| Rol | Ver listado | Crear | Editar | Eliminar (borrado directo) | Alcance |
+|---|---|---|---|---|---|
+| informatica_r4 | Sí | Sí, cualquier rol | Sí, cualquier usuario incl. otro informatica_r4 | **Sí — único rol habilitado** | Todo el sistema |
+| integrante_informatica | Sí | Sí, cualquier rol | Sí, cualquier usuario EXCEPTO otro informatica_r4 | No | Todo el sistema salvo informatica_r4 |
+| director_escuela | No (solo alta) | Sí, cualquier rol excepto informática | No | No | Solo alta de usuarios, sin gestión de existentes |
+| jefe_cuerpo_activo | Sí, filtrado a su cuartel | Sí, solo roles de cuartel, solo para su cuartel | Sí, solo usuarios de su cuartel, nunca roles informática/regional/escuela ni roles/scope | No | Estrictamente su propio cuartel |
+| resto de roles | No | No | No | No | Sin acceso |
+
+El borrado directo de usuarios (`admin-delete-user`) es exclusivo de `informatica_r4` — ni siquiera
+`integrante_informatica` puede ejecutarlo. Activar/desactivar (distinto del borrado físico) sí está
+disponible para los roles habilitados a editar, dentro de sus límites.
+
+#### Documentos (+ Carpetas, Papelera)
+
+| Rol | Ver | Crear/Editar/Eliminar (mover a papelera) | Purgar definitivo | Alcance |
+|---|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Sí | Todo el sistema |
+| secretario_regional | Sí | Sí | No | Su región |
+| director_escuela / instructor | Sí | No | No | Solo lectura |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel / secretario_comision | Sí | Sí, solo su cuartel | No | Su propio cuartel |
+| invitado | Sí (según su alcance de lectura) | No | No | Solo lectura |
+
+Cargar archivos requiere además estar en **escritorio** (bloqueado en mobile por decisión de producto,
+independientemente del rol — ver sección 31.6). La carpeta "General" (sin región/cuartel propio) solo
+la administra `informatica_r4`/`integrante_informatica`.
+
+#### Inventario Regional (catálogo)
+
+| Rol | Ver catálogo | Crear/Editar/Dar de baja ítem | Alcance |
+|---|---|---|---|
+| informatica_r4 / integrante_informatica / director_escuela / secretario_regional | Sí | Sí | Todo el sistema — pool regional único, sin partición por región (decisión de diseño confirmada) |
+| resto de roles | Sí | No, solo puede Solicitar | Solo lectura + solicitud de préstamo |
+
+#### Solicitudes de Préstamo
+
+| Rol | Ver todas las solicitudes | Crear solicitud | Aprobar/Rechazar/Retirar/Devolver/Cancelar |
+|---|---|---|---|
+| informatica_r4 | Sí | Sí | Sí, cualquiera |
+| integrante_informatica | Sí | No | No (solo lectura) |
+| director_escuela / secretario_regional | Sí | Solo secretario_regional | Sí, cualquier solicitud |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel | Sí | Sí, solo para su cuartel | Solo si es el solicitante, o responsable puntual del ítem |
+| instructor / secretario_comision / invitado | Sí | No | No |
+
+**Importante**: la lectura de solicitudes de préstamo es abierta a cualquier usuario autenticado, sin
+filtro territorial en RLS (decisión de diseño documentada: todo usuario necesita poder ver el estado
+del inventario prestado) — el filtro por cuartel que ve `jefe_cuerpo_activo` es solo una conveniencia
+de UI, no una restricción real de datos.
+
+#### Calendario
+
+| Rol | Ver | Crear evento | Editar/Cancelar/Eliminar | Alcance |
+|---|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Sí, cualquier evento | Todo el sistema |
+| director_escuela / instructor | Sí | Sí | Sí, solo eventos de Escuela/Capacitación | Sin restricción territorial (Escuela es regional por definición) |
+| secretario_regional | Sí | Sí | Sí, eventos dentro de su región | Su región — selector bloqueado a su propia región al crear |
+| jefe_cuerpo_activo / presidente_cuartel / usuario_carga_cuartel / secretario_comision | Sí | Sí | Sí, solo eventos de su cuartel | Su propio cuartel — selector bloqueado |
+| invitado | Sí | No | No | Solo lectura |
+
+#### Semáforo (Compliance)
+
+Widget de solo lectura dentro de Panel/Cuarteles, sin acciones propias — hereda exactamente el alcance
+de lectura de `stations_select_scope` para todos los roles (ver Panel).
+
+#### Departamentos
+
+| Rol | Ver | Crear departamento | Editar datos / gestionar miembros | Alcance |
+|---|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Sí, cualquier departamento | Todo el sistema |
+| Cualquier rol que sea coordinador de un departamento | Sí | No | Sí, ese departamento | Ese departamento |
+| Resto de roles | Sí | No | No | Solo lectura |
+
+**Integrantes manuales e Informes de actividad**: además de admin y coordinador, **cualquier miembro
+con cuenta** del departamento puede crear/editar (department_members no distingue roles internos —
+todo-o-nada a nivel membresía). Eliminar un informe de actividad es más restrictivo: solo admin o quien
+lo cargó (ni siquiera el coordinador puede borrar uno ajeno). El coordinador de un departamento siempre
+debe ser un usuario real con cuenta — nunca un integrante manual.
+
+*Nota conocida (no bloqueante para la beta):* el RLS permite a cualquier `secretario_regional` (sea o
+no coordinador/miembro) escribir integrantes manuales/informes de actividad de **cualquier**
+departamento (`is_regional_role()`), pero el frontend solo muestra esas acciones si además coordina o
+es miembro — es una restricción de UI más estricta que el backend, no un hueco de seguridad. Si en el
+futuro se decide que `secretario_regional` debe poder gestionar cualquier departamento desde la UI sin
+ser miembro, hay que sumar ese chequeo a `canLogActivity` en `DepartamentoDetallePage.tsx`.
+
+#### Reportes (incluye Reportes de Departamentos)
+
+| Rol | Acceso a /reportes | Tipos disponibles | Alcance |
+|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Todos | Todo el sistema, selector libre |
+| director_escuela / secretario_regional | Sí | Asistencias, Cursos, Consolidado Regional, General por Cuartel, Departamentos (general y específico) — **nunca Vehículos ni Intervenciones** | Regional/subsede/cuartel |
+| jefe_cuerpo_activo / usuario_carga_cuartel | Sí | Asistencias, Intervenciones, Cursos, Vehículos, General por Cuartel — **sin Consolidado Regional ni Departamentos** | Solo su propio cuartel, selector bloqueado |
+| Cualquier rol sin acceso que coordine un departamento | Solo el reporte "Departamento específico" | Solo ese tipo | Solo los departamentos que coordina |
+| instructor / presidente_cuartel / secretario_comision / invitado (sin coordinar departamento) | No | — | Sin acceso |
+
+*Nota conocida (no bloqueante):* los selectores de región/subsede/cuartel para `director_escuela`/
+`secretario_regional` no filtran las opciones a la región propia (sí lo hacen para los roles de solo-
+cuartel) — no es un hueco de RLS (los datos igual salen acotados), pero permite elegir una región ajena
+en el selector aunque el reporte resultante salga vacío/filtrado.
+
+#### Auditoría
+
+| Rol | Acceso | Módulos visibles | Ve datos técnicos (JSON) | Alcance |
+|---|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Todos | Sí | Todo el sistema |
+| director_escuela / instructor | Sí | Cursos, Calendario, Usuarios/roles de Escuela | No | Su región |
+| secretario_regional | Sí | Set amplio (cuarteles, personal, vehículos, documentos, asistencia/intervenciones, calendario, cursos, departamentos, inventario) | No | Su región |
+| jefe_cuerpo_activo / presidente_cuartel / secretario_comision / usuario_carga_cuartel | Sí | Set acotado (cuarteles, personal, vehículos, documentos, asistencia/intervenciones, calendario, roles/scope) | No | Su cuartel/subsede |
+| **invitado** | **No — sin acceso** | — | — | — |
+
+Cualquier rol que coordine o sea miembro de un departamento suma los módulos de Departamentos a su set
+visible, acotado a sus propios departamentos.
+
+#### Notificaciones
+
+| Rol | Ver propias | Crear notificación manual | Alcance de creación |
+|---|---|---|---|
+| informatica_r4 / integrante_informatica | Sí | Sí | Sin restricción — cualquier alcance, incluido broadcast total |
+| director_escuela / instructor / secretario_regional | Sí | Sí | Solo su propia región/subsede/cuartel, o un usuario puntual |
+| resto de roles | Sí | No | — |
+
+*Nota conocida (no bloqueante):* el código no distingue entre `informatica_r4` e
+`integrante_informatica` para este permiso — ambos comparten alcance total. Si institucionalmente se
+quiere que `integrante_informatica` tenga el mismo límite territorial que los roles regionales, no está
+implementado así hoy.
+
+#### Ajustes
+
+Pantalla 100% personal para todos los roles (perfil propio, contraseña propia, notificaciones push
+propias). La única sección condicionada por rol es la administrativa (resumen semanal, versión/caché de
+la app), exclusiva de `informatica_r4`/`integrante_informatica`.
+
+#### Guards de ruta (resumen técnico)
+
+| Ruta | Guard | Roles permitidos además de admin |
+|---|---|---|
+| Rutas de negocio generales | `ProtectedRoute` | Cualquier usuario autenticado con perfil activo (el resto vive en cada página/RLS) |
+| `/reportes` | `ReportsRoute` | director_escuela, secretario_regional, jefe_cuerpo_activo, usuario_carga_cuartel |
+| `/usuarios`, `/usuarios/:id` | `UserManagerRoute` | jefe_cuerpo_activo |
+| `/usuarios/nuevo` | `UserCreatorRoute` | director_escuela, jefe_cuerpo_activo |
+
+### 31.5 Checklist de prueba manual compacto (pre-producción)
+
+Pensado para una sola pasada antes de habilitar usuarios reales — no repite el detalle exhaustivo de
+otras secciones (30.5, 23.6, etc.), los referencia. Marcar con al menos un usuario de cada rol que la
+institución vaya a usar en la práctica.
+
+- [ ] **Login/logout**: iniciar sesión, cerrar sesión, volver a entrar. Confirmar que la sesión persiste
+      al recargar la página.
+- [ ] **Cambiar contraseña**: desde `/ajustes`, y el flujo forzado (`must_change_password`) para un
+      usuario recién creado.
+- [ ] **Crear usuario**: como `informatica_r4`, crear un usuario de prueba con rol y alcance.
+- [ ] **Eliminar usuario como `informatica_r4`**: confirmar el flujo completo (confirmación fuerte,
+      bloqueo si es el único `informatica_r4` activo, bloqueo si tiene solicitudes de préstamo propias)
+      — ver checklist detallado en sección 28.6.
+- [ ] **Cuarteles**: crear, editar, ver detalle, confirmar que un rol de cuartel no puede editar un
+      cuartel ajeno.
+- [ ] **Personal**: alta, edición, cambio de estado (licencia/baja/renuncia con motivo obligatorio).
+- [ ] **Vehículos**: alta, edición, cambio de estado (mantenimiento/fuera de servicio/baja con motivo).
+- [ ] **Documentos desde PC (escritorio)**: crear carpeta, cargar un archivo, editar, mover a papelera,
+      restaurar, purgar (solo admin).
+- [ ] **Documentos desde mobile**: confirmar que se pueden VER y DESCARGAR documentos, y que la opción
+      de cargar archivos está ausente (con el texto explicativo correspondiente, no solo oculta sin
+      aviso) — ver sección 31.6.
+- [ ] **Calendario**: crear evento de cada tipo relevante para el rol de prueba, confirmar que el
+      selector de tipo/alcance está acotado según el rol.
+- [ ] **Semáforo**: confirmar que el color/porcentaje de un cuartel de prueba cambia al completar los
+      criterios (contacto, personal, vehículos, asistencia/intervención/documentos recientes).
+- [ ] **Inventario**: como `director_escuela`/`secretario_regional`, cargar un ítem; como rol de
+      cuartel, confirmar que solo puede "Solicitar", no editar el catálogo.
+- [ ] **Solicitudes de préstamo**: ciclo completo pendiente → aprobada → retirada → devuelta, y
+      confirmar el recordatorio automático (sección 30.5, punto 6).
+- [ ] **Departamentos**: crear departamento, asignar coordinador, agregar un integrante manual (sin
+      cuenta) y un miembro con cuenta, cargar un informe de actividad.
+- [ ] **Reportes**: generar al menos un PDF de cada tipo disponible para el rol de prueba, confirmar
+      que el diseño institucional (logos, pie de página) se ve bien.
+- [ ] **Auditoría**: confirmar el filtrado por rol (sección 30.5, punto 3) y que `invitado` no tiene
+      acceso.
+- [ ] **Notificaciones**: confirmar que llegan las notificaciones automáticas esperadas (sección 30.5,
+      punto 4) y que no hay spam por acciones normales.
+- [ ] **PWA / banner de actualización**: instalar la PWA en un dispositivo real, hacer un deploy nuevo,
+      confirmar el banner (sección 30.5, punto 1) — nunca una recarga silenciosa.
+- [ ] **Resumen semanal**: confirmar el toggle en Ajustes y correr `send_weekly_admin_summary()`
+      manualmente al menos una vez (sección 30.5, punto 5).
+- [ ] **Recordatorios de préstamos**: ciclo completo por vencer → vencido → devuelto sin más avisos
+      (sección 30.5, punto 6).
+
+### 31.6 Estado de funcionalidades pausadas, futuras y limpieza aplicada
+
+**Pausadas (decisión de producto, no un bug):**
+- **Carga de documentos desde mobile**: pausada desde 2026-08 tras varias rondas de diagnóstico que no
+  lograron aislar la causa de un bug de touch/click no confiable en ciertos Android (ver sección 21).
+  Ver/descargar documentos SÍ funciona en mobile. Se agregó en esta ronda un texto explicativo también
+  en `DocumentosPage.tsx`/`CarpetaDetallePage.tsx` (antes el botón de carga simplemente desaparecía en
+  mobile sin explicación — solo `DocumentoFormPage.tsx`, la pantalla de destino, tenía el mensaje). No
+  hay planes de reactivarla hasta encontrar la causa real; si se retoma, es un diagnóstico nuevo, no un
+  fix rápido.
+
+**No implementadas / explícitamente descartadas:**
+- **IA**: no hay ningún botón, texto ni flujo de IA visible en el frontend — confirmado con un
+  relevamiento exhaustivo en esta ronda. Existe una Edge Function `analyze-report` (Gemini) desplegada
+  en el backend, escrita en una etapa temprana del proyecto, pero **no está conectada a ningún lugar
+  del frontend actual** — no se invoca desde `ReportesPage.tsx` ni desde ningún otro módulo. Queda
+  documentada acá como código huérfano conocido: se puede dejar desplegada sin uso (no afecta nada) o
+  eliminarse en una futura limpieza de infraestructura; no forma parte del flujo activo de SIGER4 y no
+  se planea conectarla salvo decisión explícita en el futuro. El único resto en el frontend es un label
+  de traducción de auditoría (`analisis_ia_reporte` en `humanize.ts`) inofensivo y no user-facing,
+  mantenido solo por si existiera auditoría histórica con ese valor.
+
+**Ya implementadas (para que quede claro que NO son "próximamente" en ningún texto del sistema):**
+- Reportes PDF de Departamentos Regionales (general y por departamento) — sección 28.
+- Auditoría filtrada por rol/alcance, con vista institucional/técnica — sección 29.3.
+- Notificaciones sensibles inmediatas a Informática — sección 29.4.
+- Resumen semanal enriquecido para Informática — sección 29.5.
+- Recordatorio automático de devolución de préstamos — sección 29.6.
+- Borrado directo de usuarios por `informatica_r4` — sección 28.3.
+- Banner de actualización de PWA (reemplaza el auto-reload silencioso) — sección 29.2.
+
+Un relevamiento exhaustivo de `src/pages/` en esta ronda confirmó que no queda ningún texto
+"próximamente"/"en construcción"/placeholder sobre estos módulos ni sobre ningún otro.
+
+**Limpieza aplicada en esta ronda:**
+- Comentario desactualizado en `AjustesPage.tsx` que todavía describía el auto-reload silencioso viejo
+  de la PWA (ya reemplazado por el banner en la ronda 29) — corregido para reflejar el comportamiento
+  actual.
+- Texto de la sección "Versión / actualización de la app" actualizado para mencionar el banner en vez
+  del reload automático.
+- Inconsistencia de UX en Documentos/mobile (ver arriba) — corregida agregando el texto explicativo
+  faltante.
+
+**Posibles mejoras futuras** (fuera de alcance de esta ronda, no implementadas):
+- Reactivar la carga de documentos en mobile si se logra aislar la causa real del bug de touch/click.
+- Conectar o eliminar definitivamente `analyze-report`.
+- Cerrar las 3 discrepancias frontend/RLS documentadas en la matriz de la sección 31.4 (integrantes
+  manuales de departamento para `secretario_regional` sin membresía, selectores de región en Reportes
+  para roles regionales, y distinción de alcance entre `informatica_r4`/`integrante_informatica` en
+  Notificaciones) si se decide que el comportamiento actual no es el deseado institucionalmente.
+- Pantalla de "novedades anteriores" que muestre el historial completo de `APP_UPDATES`, no solo la
+  última.

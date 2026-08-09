@@ -3552,6 +3552,34 @@ librerías de terceros y tipos de Postgres donde hizo falta.
 No se tocó ninguna Edge Function ni el frontend de PWA/Auth más allá del `.catch()` de `useAuth.tsx` y
 los 2 fixes menores de `AuditoriaPage.tsx`.
 
+#### 30.3.1 Corrección a `0069` (2026-08-09) — error `0A000` al aplicarla en Supabase
+
+El primer contenido de `0069` fallaba en Supabase con
+`ERROR: 0A000: transition tables cannot be specified for triggers with more than one event`: declaraba
+un único trigger por tabla con `after insert or delete ... referencing new table ... old table ... for
+each statement` — Postgres no permite `REFERENCING NEW TABLE`/`OLD TABLE` en un trigger que escucha más
+de un evento a la vez. Como el error abortó la transacción completa, **nada de `0069` llegó a aplicarse
+en la base** (ni las funciones ni los triggers nuevos, y los triggers viejos de `0066` siguieron
+intactos) — no quedó ningún estado a medias que limpiar.
+
+**Se corrigió el archivo `0069_fix_notification_spam.sql` in-place** (no se creó un `0071` aparte,
+justamente porque no había nada que reconciliar): ahora declara **cuatro** triggers en vez de dos, uno
+por tabla y por evento — `trg_notify_role_added`/`trg_notify_role_removed` sobre `user_roles`,
+`trg_notify_scope_added`/`trg_notify_scope_removed` sobre `user_scopes` — cada uno con su propia función
+y su propia transition table (`new_table` en los de INSERT, `old_table` en los de DELETE). El
+comportamiento observable es idéntico al diseño original: un `insert` multi-fila de roles (alta de
+usuario con varios roles) sigue generando **una sola** notificación agrupada; el patrón "borrar todo +
+insertar todo" de `admin-update-user` sigue generando **dos** notificaciones (una de "quitados", una de
+"agregados"), no una por fila. También se agregó `drop function if exists notify_role_change()`/
+`notify_scope_change()` al final, para no dejar las funciones combinadas de `0066` (ahora sin trigger
+que las use) como código muerto en la base.
+
+**Qué correr en Supabase**: si ya intentaste aplicar la versión anterior de `0069` y falló, no hace
+falta revertir nada — corré el archivo `0069_fix_notification_spam.sql` tal como está ahora (con su
+contenido corregido) desde cero; el `drop trigger if exists`/`drop function if exists` al principio y al
+final lo hacen seguro de re-ejecutar. Seguí aplicando `0070` después, sin cambios (ya se había aplicado
+correctamente en la ronda anterior y no depende de nada de este fix).
+
 ### 30.4 Queries de verificación de cron / pg_net (correr en el SQL Editor de Supabase)
 
 **Confirmar que los 5 jobs de `pg_cron` del sistema existen y están activos:**

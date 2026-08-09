@@ -76,7 +76,7 @@ export function ReportesPage() {
   const [reportKey, setReportKey] = useState<ReportKey>(availableReportTypes[0]?.key ?? 'asistencias')
   const [periodStart, setPeriodStart] = useState('')
   const [periodEnd, setPeriodEnd] = useState('')
-  const [regionId, setRegionId] = useState('')
+  const [regionId, setRegionId] = useState(isEscuelaRegional ? (profile?.region_id ?? '') : '')
   const [subsedeId, setSubsedeId] = useState('')
   const [stationId, setStationId] = useState(isStationOnly ? (profile?.station_id ?? '') : '')
   const [departmentId, setDepartmentId] = useState('')
@@ -90,11 +90,22 @@ export function ReportesPage() {
     Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchDepartments()]).then(
       ([regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
-        setRegions(regionsData)
-        setSubsedes(subsedesData)
+        // director_escuela/secretario_regional tienen alcance regional (no de
+        // cuartel único), pero igual acotado a SU región -- antes el selector
+        // dejaba elegir cualquier región/subsede/cuartel del sistema aunque el
+        // reporte resultante saliera vacío por RLS. Se acota acá igual que ya
+        // se hacía para isStationOnly.
+        setRegions(isEscuelaRegional ? regionsData.filter((r) => r.id === profile?.region_id) : regionsData)
+        setSubsedes(isEscuelaRegional ? subsedesData.filter((s) => s.region_id === profile?.region_id) : subsedesData)
         // Un rol de solo-cuartel jamás debe ver otros cuarteles en el selector,
         // ni siquiera de solo lectura: reduce la lista al propio.
-        setStations(isStationOnly ? stationsData.filter((s) => s.id === profile?.station_id) : stationsData)
+        setStations(
+          isStationOnly
+            ? stationsData.filter((s) => s.id === profile?.station_id)
+            : isEscuelaRegional
+              ? stationsData.filter((s) => s.region_id === profile?.region_id)
+              : stationsData,
+        )
         // El reporte "Departamento específico" muestra todos los departamentos
         // a informatica_r4/integrante_informatica/secretario_regional/
         // director_escuela (visión regional/escuela); para el resto (que llega
@@ -306,6 +317,11 @@ export function ReportesPage() {
                       </option>
                     ))}
                   </select>
+                  {isEscuelaRegional && (
+                    <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                      Solo podés generar reportes de tu propia región.
+                    </p>
+                  )}
                 </div>
               </>
             )}

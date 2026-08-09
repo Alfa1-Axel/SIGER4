@@ -65,7 +65,7 @@ function SimpleBarRow({ label, value, maxValue, formatValue }: { label: string; 
 export function DepartamentoDetallePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { profile: currentProfile, isAdmin } = useAuth()
+  const { profile: currentProfile, isAdmin, hasRole } = useAuth()
 
   const [department, setDepartment] = useState<Department | null>(null)
   const [members, setMembers] = useState<DepartmentMemberWithProfile[]>([])
@@ -113,7 +113,12 @@ export function DepartamentoDetallePage() {
   // departamento (department_members no distingue roles internos, ver
   // migración 0061) -- no solo el coordinador, a diferencia de canManage
   // (que rige los datos del departamento en sí y la lista de miembros).
-  const canLogActivity = canManage || isMember
+  // secretario_regional (is_regional_role()) tiene ese mismo permiso a nivel
+  // RLS para CUALQUIER departamento, sea o no miembro/coordinador (ver
+  // department_manual_members_write_member_or_admin, migración 0062, y la
+  // policy análoga de department_activity_reports) -- se suma acá para que
+  // la UI deje de ser más estricta que el backend.
+  const canLogActivity = canManage || isMember || hasRole('secretario_regional')
 
   async function reload() {
     if (!id) return

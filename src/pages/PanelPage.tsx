@@ -56,6 +56,10 @@ export function PanelPage() {
         className="card"
         style={{ background: 'var(--color-primary-dark)', border: 'none', color: '#fff', marginBottom: 16, padding: '16px 20px' }}
       >
+        {/* --color-primary-dark es rojo solido en los dos temas (#b71c1c
+            claro / #d32f2f oscuro) -- el blanco fijo sigue siendo correcto
+            en ambos, a diferencia de --color-secondary/.kpi-value que sí
+            dependían de un fondo que cambiaba de claro a oscuro. */}
         <span className="badge badge-danger" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
           ● Sistema en tiempo real
         </span>
@@ -113,19 +117,19 @@ export function PanelPage() {
         {!loading && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success, #16a34a)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success)' }}>
                 {summary?.complianceCounts.verde ?? 0}
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>AL DÍA</div>
             </div>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning, #d97706)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>
                 {summary?.complianceCounts.amarillo ?? 0}
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>PARCIAL</div>
             </div>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger, #dc2626)' }}>
+              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger)' }}>
                 {summary?.complianceCounts.rojo ?? 0}
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>

@@ -72,9 +72,17 @@
   --color-secondary-light: #cbd5e1;
   --color-secondary-lighter: #64748b;
 
+  /* En modo claro --color-bg-card (blanco puro) es MAS CLARO que
+     --color-bg-card-soft (rosado), asi que .card-solid/.kpi-card (que usan
+     bg-card) quedan "elevadas" y se distinguen tanto de .card como del fondo
+     de pagina. Los valores anteriores de dark mode invertian esa relacion
+     (bg-card mas oscura que bg-card-soft, 1.14:1 de contraste entre ambas y
+     1.17:1 contra bg-app -- practicamente indistinguibles), por eso las KPI
+     cards y demas .card-solid se veian "pegadas" al fondo. Restaurado el
+     mismo orden que el modo claro. */
   --color-bg-app: #0b1220;
-  --color-bg-card: #16213a;
-  --color-bg-card-soft: #1c2b4a;
+  --color-bg-card: #1e2c4d;
+  --color-bg-card-soft: #141d33;
   --color-border: #2c3e5e;
 
   --color-text-primary: #f1f5f9;
@@ -401,7 +409,13 @@ img {
   font-size: 26px;
   font-weight: 800;
   line-height: 1.15;
-  color: var(--color-secondary);
+  /* --color-text-primary, no --color-secondary: esa ultima esta pensada
+     como texto oscuro fijo (#0f172a) y nunca se redefine en dark mode (la
+     usan tambien .btn-inverted/.offline-banner como FONDO con texto blanco
+     fijo, asi que aclararla ahi habria roto esos dos). --color-text-primary
+     ya es el token correcto para texto legible sobre .kpi-card en ambos
+     temas. */
+  color: var(--color-text-primary);
 }
 
 .kpi-label {

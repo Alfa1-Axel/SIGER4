@@ -169,10 +169,16 @@ export function DocumentosPage() {
               <Link to="/documentos/carpetas/nueva" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
                 Crear carpeta
               </Link>
-              {canUploadFiles && (
+              {canUploadFiles ? (
                 <Link to="/documentos/nuevo" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
                   Cargar archivo
                 </Link>
+              ) : (
+                canManageFolders && isMobileUserAgent() && (
+                  <p style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: '4px 8px', margin: 0, maxWidth: 220 }}>
+                    Cargar archivos está disponible solo desde PC.
+                  </p>
+                )
               )}
             </div>
           )}

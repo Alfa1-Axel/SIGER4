@@ -269,6 +269,11 @@ export function CarpetaDetallePage() {
           <Icon name="plus" size={20} />
         </Link>
       )}
+      {canManageFolders && !canUploadFiles && isMobileUserAgent() && (
+        <p style={{ position: 'fixed', bottom: 24, right: 24, left: 24, textAlign: 'right', fontSize: 11, color: 'var(--color-text-muted)', margin: 0 }}>
+          Cargar archivos está disponible solo desde PC.
+        </p>
+      )}
     </AppShell>
   )
 }

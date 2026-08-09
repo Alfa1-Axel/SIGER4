@@ -35,11 +35,14 @@ export function NotificacionFormPage() {
   const navigate = useNavigate()
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
   const canCreate = isAdmin || hasRole('secretario_regional', 'director_escuela', 'instructor')
-  // secretario_regional/director_escuela/instructor solo pueden notificar
-  // dentro de su propia región (RLS: notifications_write_regional_escuela_scoped,
-  // migración 0063) — antes no había ningún límite territorial. informatica_r4
-  // mantiene alcance total.
-  const scopeLockedToOwnRegion = !isAdmin
+  // Alcance total: únicamente informatica_r4 (no isAdmin en general, que
+  // también incluye a integrante_informatica). secretario_regional/
+  // director_escuela/instructor/integrante_informatica solo pueden notificar
+  // dentro de su propia región (RLS: notifications_write_scoped, migración
+  // 0071 — antes, hasta la v1.0.0-beta.1, integrante_informatica compartía
+  // alcance total con informatica_r4 vía is_informatica_r4(), inconsistente
+  // con cómo se lo trata en el resto del sistema, ver DEPLOYMENT.md 31.4/31.6).
+  const scopeLockedToOwnRegion = !hasRole('informatica_r4')
 
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])

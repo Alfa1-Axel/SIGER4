@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0070` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0071` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -3722,14 +3722,14 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 70 migraciones (`0001` a `0070`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 71 migraciones (`0001` a `0071`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
       ```
       (si el proyecto no usa el CLI de Supabase para versionar migraciones, alternativamente
       confirmar a mano que las funciones/tablas de la última migración existen, ej.
-      `select proname from pg_proc where proname = 'send_loan_return_reminders';`).
+      `select policyname from pg_policies where tablename = 'notifications' and policyname = 'notifications_write_scoped';`).
 - [ ] **RLS activo en todas las tablas**: **Table Editor** → cada tabla con el ícono de RLS en verde
       (ninguna tabla de negocio debe quedar sin RLS habilitado).
 - [ ] **`pg_cron`/`pg_net` habilitados**, con los 5 jobs activos y la config de
@@ -3968,21 +3968,25 @@ de lectura de `stations_select_scope` para todos los roles (ver Panel).
 | Rol | Ver | Crear departamento | Editar datos / gestionar miembros | Alcance |
 |---|---|---|---|---|
 | informatica_r4 / integrante_informatica | Sí | Sí | Sí, cualquier departamento | Todo el sistema |
+| secretario_regional | Sí | No | Sí, integrantes manuales e informes de actividad de cualquier departamento | Todo el sistema (ver nota) |
 | Cualquier rol que sea coordinador de un departamento | Sí | No | Sí, ese departamento | Ese departamento |
 | Resto de roles | Sí | No | No | Solo lectura |
 
 **Integrantes manuales e Informes de actividad**: además de admin y coordinador, **cualquier miembro
 con cuenta** del departamento puede crear/editar (department_members no distingue roles internos —
-todo-o-nada a nivel membresía). Eliminar un informe de actividad es más restrictivo: solo admin o quien
-lo cargó (ni siquiera el coordinador puede borrar uno ajeno). El coordinador de un departamento siempre
-debe ser un usuario real con cuenta — nunca un integrante manual.
+todo-o-nada a nivel membresía), y también **cualquier `secretario_regional`**, sea o no coordinador/
+miembro de ese departamento puntual (`is_regional_role()` en RLS). Eliminar un informe de actividad es
+más restrictivo: solo `informatica_r4` o quien lo cargó (ni siquiera el coordinador ni `secretario_regional`
+pueden borrar uno ajeno). El coordinador de un departamento siempre debe ser un usuario real con cuenta
+— nunca un integrante manual.
 
-*Nota conocida (no bloqueante para la beta):* el RLS permite a cualquier `secretario_regional` (sea o
-no coordinador/miembro) escribir integrantes manuales/informes de actividad de **cualquier**
-departamento (`is_regional_role()`), pero el frontend solo muestra esas acciones si además coordina o
-es miembro — es una restricción de UI más estricta que el backend, no un hueco de seguridad. Si en el
-futuro se decide que `secretario_regional` debe poder gestionar cualquier departamento desde la UI sin
-ser miembro, hay que sumar ese chequeo a `canLogActivity` en `DepartamentoDetallePage.tsx`.
+*Resuelto (2026-08-09):* hasta la v1.0.0-beta.1, el frontend (`canLogActivity` en
+`DepartamentoDetallePage.tsx`) era más estricto que el RLS: no mostraba las acciones de
+integrantes manuales/informes de actividad a `secretario_regional` salvo que además coordinara o
+fuera miembro del departamento, aunque el backend ya lo permitía para cualquier departamento. Se
+alineó agregando `hasRole('secretario_regional')` a `canLogActivity`, sin tocar RLS (ya reflejaba
+el comportamiento institucional deseado). Nunca fue un hueco de seguridad — la UI solo ocultaba una
+acción que el backend ya autorizaba.
 
 #### Reportes (incluye Reportes de Departamentos)
 
@@ -3994,10 +3998,14 @@ ser miembro, hay que sumar ese chequeo a `canLogActivity` en `DepartamentoDetall
 | Cualquier rol sin acceso que coordine un departamento | Solo el reporte "Departamento específico" | Solo ese tipo | Solo los departamentos que coordina |
 | instructor / presidente_cuartel / secretario_comision / invitado (sin coordinar departamento) | No | — | Sin acceso |
 
-*Nota conocida (no bloqueante):* los selectores de región/subsede/cuartel para `director_escuela`/
-`secretario_regional` no filtran las opciones a la región propia (sí lo hacen para los roles de solo-
-cuartel) — no es un hueco de RLS (los datos igual salen acotados), pero permite elegir una región ajena
-en el selector aunque el reporte resultante salga vacío/filtrado.
+*Resuelto (2026-08-09):* hasta la v1.0.0-beta.1, los selectores de región/subsede/cuartel para
+`director_escuela`/`secretario_regional` no filtraban las opciones a la región propia (sí lo hacían
+para los roles de solo-cuartel) — nunca fue un hueco de RLS (los datos igual salían acotados), pero
+permitía elegir una región ajena en el selector aunque el reporte resultante saliera vacío/filtrado.
+Se acotó `ReportesPage.tsx` para que `regions`/`subsedes`/`stations` se filtren a la región propia
+(`profile.region_id`) cuando `isEscuelaRegional`, igual que ya se hacía para `isStationOnly`, con el
+selector de región preseleccionado y una nota explicativa ("Solo podés generar reportes de tu propia
+región").
 
 #### Auditoría
 
@@ -4016,14 +4024,18 @@ visible, acotado a sus propios departamentos.
 
 | Rol | Ver propias | Crear notificación manual | Alcance de creación |
 |---|---|---|---|
-| informatica_r4 / integrante_informatica | Sí | Sí | Sin restricción — cualquier alcance, incluido broadcast total |
-| director_escuela / instructor / secretario_regional | Sí | Sí | Solo su propia región/subsede/cuartel, o un usuario puntual |
+| informatica_r4 | Sí | Sí | Sin restricción — cualquier alcance, incluido broadcast total |
+| integrante_informatica / director_escuela / instructor / secretario_regional | Sí | Sí | Solo su propia región/subsede/cuartel, o un usuario puntual |
 | resto de roles | Sí | No | — |
 
-*Nota conocida (no bloqueante):* el código no distingue entre `informatica_r4` e
-`integrante_informatica` para este permiso — ambos comparten alcance total. Si institucionalmente se
-quiere que `integrante_informatica` tenga el mismo límite territorial que los roles regionales, no está
-implementado así hoy.
+*Resuelto (2026-08-09):* hasta la v1.0.0-beta.1, `integrante_informatica` compartía alcance total con
+`informatica_r4` (ambos usaban `is_informatica_r4()` en la policy de escritura de `notifications`),
+inconsistente con el resto del sistema, donde `integrante_informatica` sí es un nivel más acotado (ver
+Usuarios). Se agregó la migración `0071_notifications_scope_integrante_informatica.sql`, que reemplaza
+`notifications_write_regional_escuela_scoped` (0063) por `notifications_write_scoped`: ahora
+`integrante_informatica` tiene el mismo límite territorial que `secretario_regional`/
+`director_escuela`/`instructor`. Frontend actualizado en paralelo en `NotificacionFormPage.tsx`
+(`scopeLockedToOwnRegion` ahora depende de `hasRole('informatica_r4')`, no de `isAdmin`).
 
 #### Ajustes
 
@@ -4120,7 +4132,7 @@ institución vaya a usar en la práctica.
 Un relevamiento exhaustivo de `src/pages/` en esta ronda confirmó que no queda ningún texto
 "próximamente"/"en construcción"/placeholder sobre estos módulos ni sobre ningún otro.
 
-**Limpieza aplicada en esta ronda:**
+**Limpieza aplicada en la ronda de v1.0.0-beta.1:**
 - Comentario desactualizado en `AjustesPage.tsx` que todavía describía el auto-reload silencioso viejo
   de la PWA (ya reemplazado por el banner en la ronda 29) — corregido para reflejar el comportamiento
   actual.
@@ -4129,12 +4141,48 @@ Un relevamiento exhaustivo de `src/pages/` en esta ronda confirmó que no queda 
 - Inconsistencia de UX en Documentos/mobile (ver arriba) — corregida agregando el texto explicativo
   faltante.
 
+**Cerrado en esta ronda (2026-08-09) — las 3 discrepancias frontend/RLS de la sección 31.4:**
+- Departamentos: `secretario_regional` sin membresía/coordinación ahora ve las acciones de integrantes
+  manuales/informes de actividad de cualquier departamento en la UI, igual que ya permitía el RLS.
+- Reportes: los selectores de región/subsede/cuartel para `director_escuela`/`secretario_regional`
+  ahora se acotan a la región propia, igual que ya se hacía para los roles de solo-cuartel.
+- Notificaciones: `integrante_informatica` pasó a tener el mismo límite territorial que los roles
+  regionales (antes compartía alcance total con `informatica_r4`) — migración `0071`.
+
+Ver el detalle de cada fix en la nota "*Resuelto (2026-08-09)*" dentro de la sección de cada módulo en
+31.4.
+
+**Bug visual corregido en esta ronda (2026-08-09) — Dashboard en modo oscuro:**
+El valor numérico de cada KPI (`.kpi-value`, usado en Panel, `CuartelDetallePage.tsx` y
+`DepartamentoDetallePage.tsx`) tomaba su color de `--color-secondary`, una variable que nunca se
+redefinía dentro de `:root[data-theme='dark']` en `src/styles.css` — quedaba fija en `#0f172a` (casi
+negro) también en modo oscuro, sobre un fondo de KPI card (`--color-bg-card: #16213a`) también oscuro:
+contraste real ~1.2:1, prácticamente ilegible. Se cambió `.kpi-value` para usar `--color-text-primary`
+en su lugar (sí tiene override correcto en dark, `#f1f5f9`) — se descartó aclarar `--color-secondary`
+directamente porque esa variable también se usa como **fondo** en `.btn-inverted` y `.offline-banner`
+con texto blanco fijo; aclararla ahí habría roto esos dos componentes.
+
+Adicionalmente, `--color-bg-card`/`--color-bg-card-soft` en dark tenían la jerarquía de elevación
+invertida respecto al modo claro: `--color-bg-card` (fondo de `.kpi-card`/`.card-solid`, pensada para
+"destacar") era **más oscura** que `--color-bg-card-soft` (fondo de `.card`, pensada para "fondirse con
+la página") — 1.14:1 de contraste entre ambas y 1.17:1 contra `--color-bg-app`, así que las KPI cards
+se percibían "pegadas" al fondo en vez de elevadas. Se ajustaron los valores (`--color-bg-card:
+#1e2c4d`, `--color-bg-card-soft: #141d33`) para restaurar el mismo orden que el modo claro, sin tocar
+ningún valor del bloque `:root` (modo claro intacto). De paso mejora el contraste de
+`--color-text-muted` (usado en las etiquetas "AL DÍA"/"PARCIAL"/"DESACTUALIZADO" de "Estado de Carga
+por Cuartel") de 4.28:1 a 5.10:1.
+
+No se tocó ningún color del modo claro, ni las variables de badges/semáforo/rojo institucional en dark
+(ya estaban correctamente adaptadas). El resto de las páginas que usan `.card`/`.card-solid`/`.kpi-*`
+se benefician del mismo fix sin cambios adicionales, al ser tokens compartidos.
+
 **Posibles mejoras futuras** (fuera de alcance de esta ronda, no implementadas):
 - Reactivar la carga de documentos en mobile si se logra aislar la causa real del bug de touch/click.
 - Conectar o eliminar definitivamente `analyze-report`.
-- Cerrar las 3 discrepancias frontend/RLS documentadas en la matriz de la sección 31.4 (integrantes
-  manuales de departamento para `secretario_regional` sin membresía, selectores de región en Reportes
-  para roles regionales, y distinción de alcance entre `informatica_r4`/`integrante_informatica` en
-  Notificaciones) si se decide que el comportamiento actual no es el deseado institucionalmente.
 - Pantalla de "novedades anteriores" que muestre el historial completo de `APP_UPDATES`, no solo la
   última.
+- Limpiar los fallbacks hardcodeados inertes detectados en el audit de dark mode (`PanelPage.tsx`
+  usaba `var(--color-success, #16a34a)` etc. antes de esta ronda — ya se quitaron esos tres; queda
+  pendiente por consistencia el de `.sw-update-banner` en `styles.css:1021`,
+  `background: var(--color-primary-dark, #9a1f1f)`, que no coincide con el valor real de la variable
+  pero nunca se activa porque la variable siempre existe).

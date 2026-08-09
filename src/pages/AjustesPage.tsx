@@ -170,9 +170,9 @@ export function AjustesPage() {
   }
 
   // Reinicio manual completo del service worker/caché de la PWA — fallback
-  // explícito para informática cuando el auto-update (ver main.tsx,
-  // registerSW con reload automático al detectar una versión nueva) no
-  // alcanza, o para confirmar de una vez que un dispositivo puntual quedó
+  // explícito para informática cuando el banner de actualización (ver
+  // main.tsx/SwUpdateBanner.tsx) no llega a mostrarse o el usuario nunca lo
+  // confirma, o para confirmar de una vez que un dispositivo puntual quedó
   // con una versión vieja. Desregistra TODOS los service workers de este
   // origen y borra TODA la Cache Storage (no solo la de SIGER4 — en este
   // origen no hay otra app, así que no hay riesgo de borrar caché ajena),
@@ -200,6 +200,9 @@ export function AjustesPage() {
     <AppShell title="Mi Perfil">
       <h1 className="page-title">Mi Perfil</h1>
       <p className="page-subtitle">Tus datos personales, rol y alcance dentro del sistema.</p>
+      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
+        SIGER4 v{__SIGER4_APP_VERSION__}
+      </p>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -475,7 +478,8 @@ export function AjustesPage() {
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
-              Build: <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_BUILD_VERSION__}</code>
+              Versión: <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_APP_VERSION__}</code> · Build:{' '}
+              <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_BUILD_VERSION__}</code>
             </p>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>
               Compilado: {new Date(__SIGER4_BUILD_TIME__).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })}

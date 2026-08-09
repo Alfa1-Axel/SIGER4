@@ -1,7 +1,7 @@
 {
   "name": "siger4",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0-beta.1",
   "type": "module",
   "description": "SIGER4 - Sistema Integral de Gestion de la Regional 4 de Bomberos Voluntarios",
   "scripts": {

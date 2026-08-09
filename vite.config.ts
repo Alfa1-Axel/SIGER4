@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -23,11 +24,16 @@ function resolveBuildVersion(): string {
 
 const BUILD_VERSION = resolveBuildVersion()
 const BUILD_TIME = new Date().toISOString()
+// Versión "humana" del sistema (ej. "1.0.0-beta.1"), tomada de package.json —
+// es la que se muestra a TODOS los usuarios en Ajustes (a diferencia del hash
+// de build/commit, que sigue siendo solo para informática).
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version as string
 
 export default defineConfig({
   define: {
     __SIGER4_BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
     __SIGER4_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    __SIGER4_APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   plugins: [
     react(),

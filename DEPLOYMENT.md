@@ -3458,3 +3458,199 @@ excepto el aviso a informática de un préstamo vencido, que además usa `notify
    24hs, correr `select send_loan_return_reminders();` manualmente, y confirmar la notificación de
    "por vencer" al cuartel solicitante. Repetir con `expected_return_at` ya vencido y confirmar el
    aviso de "vencido" además de la notificación a informática.
+
+## 30. QA funcional de estabilidad/Auditoría/notificaciones (2026-08) — migraciones 0069-0070
+
+Pasada de QA sobre la sección 29 (sin agregar módulos nuevos). Se revisó cada punto con lectura
+adversarial del código real (no solo relectura de lo ya documentado), verificando código fuente de
+librerías de terceros y tipos de Postgres donde hizo falta.
+
+### 30.1 Bugs encontrados y corregidos
+
+1. **[Alto] `useAuth.tsx`: `loading` podía quedar pegado en `true` para siempre.** El `.then(...)` de
+   `fetchCurrentUserContext(...)` no tenía `.catch()`. Confirmado contra el código fuente de
+   `@supabase/postgrest-js` que un error de red real (no un `{error}` de Postgrest, sino que el propio
+   `fetch` falle — típico al recuperar conectividad inestable al volver de background) puede rechazar
+   la promesa en vez de resolver con un objeto de error. Sin `.catch()`, `setLoading(false)` nunca se
+   llamaba, y `ProtectedRoute` quedaba mostrando el spinner de pantalla completa indefinidamente — el
+   mismo escenario de "background con red inestable" que toda la sección 29 intentaba mejorar,
+   empeorado a un cuelgue total. **Corregido**: se agregó `.catch()` con `setLoading(false)`.
+2. **[Alto] Spam de notificaciones por alta/edición de usuario.** `trg_notify_role_change`/
+   `trg_notify_scope_change` (migración 0066) eran `for each row`: un `insert` de N filas en una sola
+   sentencia (ej. `admin-create-user` asignando 2 roles con un solo INSERT multi-fila) disparaba el
+   trigger N veces — N notificaciones separadas por una sola acción. Se agravaba con
+   `admin-update-user`, que reemplaza roles/scopes con el patrón "borrar todo lo previo + insertar todo
+   lo nuevo": editar 1 rol de una lista de 3 generaba hasta 7 notificaciones de "cambio de rol" para lo
+   que conceptualmente es "se agregó un rol". Contradecía directamente el objetivo explícito de "no
+   notificar cada acción normal". **Corregido** (migración `0069`): los triggers pasan a
+   `for each statement` con transition tables (`old_table`/`new_table`, Postgres 10+) — un solo aviso
+   por sentencia SQL, que resume todos los roles/scopes tocados en un único mensaje (ej. "Roles
+   asignados: Juan Pérez → jefe_cuerpo_activo, María Gómez → instructor").
+3. **[Medio] Sin protección contra solapamiento de `pg_cron` en el recordatorio de préstamos.** Si
+   `send_loan_return_reminders()` tardara más de una hora en correr (o se ejecutara manualmente
+   mientras el cron también corre), dos ejecuciones concurrentes podían leer la misma solicitud con
+   `overdue_notified_at is null` antes de que cualquiera la actualizara, generando el aviso de
+   "vencido" duplicado. **Corregido** (migración `0070`): `pg_try_advisory_xact_lock` al inicio de la
+   función — si otra ejecución ya tiene el lock, la corrida actual no hace nada y retorna de inmediato.
+4. **[Bajo] `AuditoriaPage.tsx`: error de `fetchMyDepartmentIds` tragado en silencio.** Un fallo de red
+   transitorio en esa llamada dejaba a un coordinador/miembro de departamento viendo cero eventos de
+   Departamentos, indistinguible de "no tiene departamentos asignados" — sin log ni aviso visible, a
+   diferencia del resto de errores de la página. **Corregido**: se agregó `console.warn` + mensaje de
+   error visible en la UI.
+5. **[Bajo] `AuditoriaPage.tsx`: `page` no se reseteaba cuando `allowedTableNames` cambiaba de forma
+   asíncrona.** `myDepartmentIds` se resuelve después del primer render; si el usuario ya había
+   avanzado de página antes de que resolviera, el refetch posterior (con un `allowedTableNames`
+   ampliado) podía dejarlo en una página fuera de rango del nuevo resultado filtrado. **Corregido**: un
+   `useEffect` nuevo resetea `page` a 0 cuando cambia `allowedTableNames`.
+
+### 30.2 Verificado explícitamente y confirmado SIN bugs (con evidencia, no solo relectura)
+
+- **PWA**: el flujo completo `onNeedRefresh → banner → click → updateServiceWorker → messageSkipWaiting
+  → SW ejecuta skipWaiting() → evento `controlling` → recién ahí `location.reload()`** se confirmó
+  contra el código fuente real de `vite-plugin-pwa` (`node_modules/vite-plugin-pwa/dist/client/build/register.js`).
+  El reload solo ocurre tras confirmación explícita del usuario, nunca antes. No quedó ningún
+  `location.reload()` propio del proyecto fuera de ese camino.
+- **`session?.user?.id` como dependencia** (en vez de `session?.user`): no se encontró ningún flujo
+  real de la app que dependa de reaccionar a un `session.user` con el mismo `id` pero distinta
+  metadata (verificación de email, etc.) — los lugares que necesitan refrescar el perfil ya llaman
+  explícitamente a `refreshProfile()`.
+- **Redirects durante `loading`**: `ProtectedRoute`/`ReportsRoute`/`UserManagerRoute`/
+  `UserCreatorRoute` siguen chequeando `loading` antes que cualquier otra condición: no hay ventana de
+  redirect indebido.
+- **"Al devolver deja de notificar" (el punto más crítico del pedido de préstamos)**: verificado
+  explícitamente que el `WHERE status = 'retirada'` de ambos loops de `send_loan_return_reminders()`
+  excluye automáticamente, en la corrida siguiente del cron, cualquier solicitud que ya haya pasado a
+  `devuelta` — sin importar si ya se le había enviado el aviso de "vencido" antes. No hace falta
+  resetear `reminder_sent_at`/`overdue_notified_at`: el filtro de `status` ya es suficiente y
+  determinante.
+- **`notifications_scope_not_ambiguous`**: los 6 `insert into notifications` de las migraciones 0066-0068
+  se verificaron uno por uno contra la lista exacta de columnas de cada sentencia — ninguno setea más
+  de un nivel territorial junto con `profile_id` null.
+- **Nombres de columna contra tablas reales** (`station_compliance.compliant_count`/`compliant_total`/
+  `compliance_status`/`last_relevant_update_at`, `inventory_items.responsible_profile_id`,
+  `audit_logs.old_value`/`new_value`): todos verificados contra las migraciones que definen cada
+  tabla/vista — sin discrepancias.
+- **`round(100.0 * compliant_count / nullif(compliant_total, 0))`**: se confirmó que no falla en
+  runtime — `100.0` es un literal `numeric` (no `double precision`), y con `compliant_count`/
+  `compliant_total` como `integer`, toda la cadena de operaciones queda en `numeric`, para el cual
+  `round()` de un solo argumento sí existe en Postgres.
+- **Filtro de Auditoría por rol**: unión de sets con múltiples roles simultáneos, cobertura de
+  `TABLE_LABELS` para las 4 constantes de tablas por rol, y fidelidad del código a la decisión de
+  `secretario_regional` (alcance regional amplio, sin recorte de "mis departamentos") — todo
+  verificado sin bugs.
+- **`send_weekly_admin_summary()` vs `send_weekly_reminder()`**: usan tipos de notificación distintos
+  (`alerta_admin` vs `recordatorio_semanal`); que un usuario de informática reciba ambas notificaciones
+  esa semana es la intención documentada, no una duplicación accidental.
+
+### 30.3 Migraciones nuevas de esta ronda
+
+- `0069_fix_notification_spam.sql` — `trg_notify_role_change`/`trg_notify_scope_change` pasan de
+  `for each row` a `for each statement` con transition tables.
+- `0070_loan_reminders_advisory_lock.sql` — `send_loan_return_reminders()` redefinida con
+  `pg_try_advisory_xact_lock` al inicio.
+
+No se tocó ninguna Edge Function ni el frontend de PWA/Auth más allá del `.catch()` de `useAuth.tsx` y
+los 2 fixes menores de `AuditoriaPage.tsx`.
+
+### 30.4 Queries de verificación de cron / pg_net (correr en el SQL Editor de Supabase)
+
+**Confirmar que los 5 jobs de `pg_cron` del sistema existen y están activos:**
+```sql
+select jobid, jobname, schedule, active
+from cron.job
+where jobname like 'siger4-%'
+order by jobname;
+```
+Se esperan exactamente estas 5 filas, todas con `active = true`:
+
+| jobname | schedule | qué hace |
+|---|---|---|
+| `siger4-calendar-reminders` | `*/5 * * * *` | Recordatorios de eventos de calendario (0051) |
+| `siger4-document-purge` | `0 6 * * *` | Purga diaria de documentos en papelera vencidos (0053) |
+| `siger4-loan-return-reminders` | `0 * * * *` | Recordatorio de devolución de préstamos (0068/0070) |
+| `siger4-weekly-admin-summary` | `30 15 * * 1` | Resumen semanal enriquecido, solo informática (0067) |
+| `siger4-weekly-reminder` | `0 15 * * 1` | Recordatorio semanal genérico, todos los usuarios (0036) |
+
+**Confirmar que `pg_net`/`pg_cron` están habilitados como extensión:**
+```sql
+select extname, extversion from pg_extension where extname in ('pg_cron', 'pg_net');
+```
+Deben aparecer ambas filas.
+
+**Confirmar que la config de `project_url`/`cron_shared_secret` está seteada** (necesaria para que
+`send_weekly_reminder()`, `send_weekly_admin_summary()` y `trigger_document_purge()` puedan disparar el
+push real vía `pg_net`; sin esto, las notificaciones internas igual se crean, pero sin push):
+```sql
+select current_setting('siger4.project_url', true) as project_url,
+       current_setting('siger4.cron_shared_secret', true) is not null as cron_secret_set;
+```
+`project_url` debe mostrar la URL real del proyecto; `cron_secret_set` debe ser `true`. Si alguno falta,
+ver sección 6.3 (configuración original del recordatorio semanal) para el `alter database ... set ...`.
+
+**Ver las últimas ejecuciones de cada job (éxito/error, duración):**
+```sql
+select j.jobname, r.status, r.return_message, r.start_time, r.end_time
+from cron.job_run_details r
+join cron.job j on j.jobid = r.jobid
+where j.jobname like 'siger4-%'
+order by r.start_time desc
+limit 30;
+```
+
+**Confirmar que el advisory lock nuevo (migración 0070) no deja el job de préstamos "colgado":**
+```sql
+select * from pg_locks where locktype = 'advisory';
+```
+Fuera de una ejecución en curso, esta consulta no debería devolver ninguna fila para el lock de
+`send_loan_return_reminders` (el lock es `xact`-scoped, se libera solo al terminar la transacción del
+cron job — si aparece una fila persistente entre corridas, algo quedó mal).
+
+### 30.5 Checklist de prueba manual real
+
+1. **PWA**: hacer un deploy nuevo a producción, abrir SIGER4 en un celular con la PWA instalada y ya
+   abierta desde antes del deploy, cambiar a otra app (ej. WhatsApp) por al menos 1 minuto, y volver.
+   Confirmar: (a) la app NO recargó sola ni volvió al Panel — sigue en la misma pantalla/ruta con
+   cualquier dato sin guardar intacto; (b) aparece el banner "Hay una actualización disponible" arriba
+   de la pantalla; (c) tocar "Actualizar ahora" sí aplica el cambio (confirmar el build nuevo en
+   Ajustes → Versión); (d) si se ignora el banner y se sigue usando la app normalmente, no vuelve a
+   recargar sola en ningún momento posterior.
+2. **Auth**: con la pestaña/PWA abierta, esperar a que el token se refresque solo (o forzarlo
+   revisando el tiempo de expiración en Ajustes/DevTools) y confirmar que no hay parpadeo de spinner
+   visible ni pérdida de un formulario a medio completar.
+3. **Auditoría — recorrido completo por rol** (usar usuarios de prueba con cada rol, o cambiar roles
+   temporalmente a un usuario de prueba):
+   - `informatica_r4`: ve todos los módulos en el selector de "Tabla/módulo", y el botón "Ver datos
+     técnicos" aparece en el detalle de cualquier evento.
+   - `integrante_informatica`: mismo comportamiento que `informatica_r4` (ambos son `isAdmin`).
+   - `jefe_cuerpo_activo`: el selector de tabla NO ofrece Departamentos ni Inventario Regional; los
+     eventos que ve son solo de su propio cuartel (RLS); no aparece "Ver datos técnicos".
+   - `director_escuela`/`instructor`: el selector de tabla ofrece Cursos/Calendario/Usuarios, no
+     Vehículos/Personal/Inventario/Departamentos.
+   - `secretario_regional`: ve un set amplio (incluye Departamentos, sin recorte de "mis
+     departamentos" — ve TODOS), acotado a su región por RLS.
+   - Un usuario miembro/coordinador de un departamento (sin otro rol calificante): solo ve las 4 tablas
+     de Departamentos, y dentro de esas, solo eventos de SUS departamentos (probar cargando un informe
+     de actividad en un departamento propio y en uno ajeno con otro usuario).
+   - `invitado`: `/auditoria` muestra "sin permisos", no aparece en el sidebar.
+4. **Notificaciones sensibles — verificar que NO hay spam**: crear un usuario de prueba con 2 roles
+   asignados de una vez. Confirmar en `/notificaciones` (con un usuario `informatica_r4`) que llega
+   **una sola** notificación de "Usuario creado" y **una sola** notificación de "Cambio de rol de
+   usuario" (con ambos roles listados en el cuerpo, no 2 notificaciones separadas). Repetir editando
+   ese usuario para reemplazar sus 2 roles por otros 2 desde `admin-update-user` y confirmar que sigue
+   siendo una notificación de "quitados" y una de "agregados" (no 4).
+5. **Resumen semanal**: confirmar el toggle en Ajustes (solo visible para `informatica_r4`/
+   `integrante_informatica`), correr `select send_weekly_admin_summary();` manualmente y confirmar en
+   `/notificaciones` que el cuerpo trae datos reales (no placeholders) de semáforo, préstamos,
+   documentos, usuarios y departamentos.
+6. **Recordatorio de préstamos — ciclo completo**: crear una solicitud de préstamo de prueba,
+   marcarla `retirada` con `expected_return_at` en menos de 24hs, correr
+   `select send_loan_return_reminders();` y confirmar el aviso "por vencer". Ajustar
+   `expected_return_at` a una fecha ya pasada (`update inventory_loan_requests set expected_return_at
+   = now() - interval '1 hour' where id = '...'`), correr la función de nuevo, y confirmar el aviso de
+   "vencido" (incluida la notificación a informática). Finalmente, marcar la solicitud como `devuelta`
+   y correr la función una vez más — confirmar que NO se genera ninguna notificación nueva para esa
+   solicitud.
+7. **Solapamiento de cron**: ejecutar `select send_loan_return_reminders();` dos veces seguidas
+   rápidamente desde dos pestañas del SQL Editor (simulando solapamiento) y confirmar que la segunda
+   ejecución no genera notificaciones duplicadas (revisar `pg_locks`/logs de `cron.job_run_details` si
+   hace falta diagnosticar).

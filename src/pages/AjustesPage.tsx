@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ImagePicker } from '../components/ui/ImagePicker'
+import { SystemSettingsSection } from '../components/SystemSettingsSection'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { ROLE_DEFINITIONS } from '../types/roles'
@@ -14,7 +15,7 @@ import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
 
 export function AjustesPage() {
-  const { profile, user, roles, isAdmin, signOut, refreshProfile } = useAuth()
+  const { profile, user, roles, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
   const push = usePushNotifications(profile?.id)
   const [clearingCache, setClearingCache] = useState(false)
   const [clearCacheError, setClearCacheError] = useState<string | null>(null)
@@ -500,6 +501,8 @@ export function AjustesPage() {
               recientes en Android, no solo minimizarla) y volvé a abrirla.
             </p>
           </div>
+
+          {hasRole('informatica_r4') && <SystemSettingsSection />}
         </>
       )}
 

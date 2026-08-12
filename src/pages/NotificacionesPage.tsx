@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { NotificationDetailModal } from '../components/ui/NotificationDetailModal'
 import { fetchNotificationsForProfile, markNotificationRead } from '../lib/api/notifications'
-import type { Notification, NotificationType } from '../types/database'
+import { fetchRegions } from '../lib/api/regions'
+import { fetchSubsedes } from '../lib/api/subsedes'
+import { fetchStations } from '../lib/api/stations'
+import type { Notification, NotificationType, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -33,6 +37,14 @@ export function NotificacionesPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [openNotification, setOpenNotification] = useState<Notification | null>(null)
+
+  // Solo para resolver los nombres de región/subsede/cuartel en el detalle
+  // (badge "Alcance: ...") — notifications guarda IDs, no nombres. No hace
+  // falta esperar a que carguen para mostrar el listado.
+  const [regions, setRegions] = useState<Region[]>([])
+  const [subsedes, setSubsedes] = useState<Subsede[]>([])
+  const [stations, setStations] = useState<Station[]>([])
 
   useEffect(() => {
     if (!profile) return
@@ -46,6 +58,21 @@ export function NotificacionesPage() {
     }
   }, [profile])
 
+  useEffect(() => {
+    let active = true
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()])
+      .then(([regionsData, subsedesData, stationsData]) => {
+        if (!active) return
+        setRegions(regionsData)
+        setSubsedes(subsedesData)
+        setStations(stationsData)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
+
   async function handleMarkRead(id: string) {
     setError(null)
     try {
@@ -54,6 +81,21 @@ export function NotificacionesPage() {
     } catch (err) {
       setError(describeSupabaseError(err, 'No pudimos marcar la notificación como leída.'))
     }
+  }
+
+  async function handleOpenNotification(notification: Notification) {
+    setOpenNotification(notification)
+    if (!notification.is_read) {
+      await handleMarkRead(notification.id)
+      setOpenNotification((prev) => (prev && prev.id === notification.id ? { ...prev, is_read: true } : prev))
+    }
+  }
+
+  function scopeLabelFor(n: Notification): string | null {
+    if (n.station_id) return stations.find((s) => s.id === n.station_id)?.name ?? null
+    if (n.subsede_id) return subsedes.find((s) => s.id === n.subsede_id)?.name ?? null
+    if (n.region_id) return regions.find((r) => r.id === n.region_id)?.name ?? null
+    return null
   }
 
   return (
@@ -74,7 +116,12 @@ export function NotificacionesPage() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {notifications.map((n) => (
-          <div key={n.id} className="card-solid list-item">
+          <div
+            key={n.id}
+            className="card-solid list-item"
+            style={{ cursor: 'pointer' }}
+            onClick={() => handleOpenNotification(n)}
+          >
             {!n.is_read && <span className="list-item-dot" />}
             <div className="list-item-body">
               <h3
@@ -94,7 +141,14 @@ export function NotificacionesPage() {
             </div>
             {!n.is_read && (
               <div className="list-item-actions">
-                <button type="button" className="btn btn-outlined" onClick={() => handleMarkRead(n.id)}>
+                <button
+                  type="button"
+                  className="btn btn-outlined"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleMarkRead(n.id)
+                  }}
+                >
                   Marcar leída
                 </button>
               </div>
@@ -111,6 +165,15 @@ export function NotificacionesPage() {
         >
           <Icon name="plus" size={20} />
         </Link>
+      )}
+
+      {openNotification && (
+        <NotificationDetailModal
+          notification={openNotification}
+          typeLabel={NOTIFICATION_TYPE_LABEL[openNotification.type]}
+          scopeLabel={scopeLabelFor(openNotification)}
+          onClose={() => setOpenNotification(null)}
+        />
       )}
     </AppShell>
   )

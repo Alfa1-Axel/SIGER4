@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0071` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0072` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -3632,13 +3632,124 @@ order by r.start_time desc
 limit 30;
 ```
 
-**Confirmar que el advisory lock nuevo (migración 0070) no deja el job de préstamos "colgado":**
+**Confirmar que los advisory locks (migraciones 0070/0072) no dejan ningún job "colgado":**
 ```sql
 select * from pg_locks where locktype = 'advisory';
 ```
-Fuera de una ejecución en curso, esta consulta no debería devolver ninguna fila para el lock de
-`send_loan_return_reminders` (el lock es `xact`-scoped, se libera solo al terminar la transacción del
-cron job — si aparece una fila persistente entre corridas, algo quedó mal).
+Fuera de una ejecución en curso, esta consulta no debería devolver ninguna fila para los locks de
+`send_loan_return_reminders`/`send_weekly_reminder`/`send_weekly_admin_summary` (los 3 son
+`xact`-scoped, se liberan solos al terminar la transacción del cron job — si aparece una fila
+persistente entre corridas, algo quedó mal).
+
+### 30.4.1 Diagnóstico paso a paso: "no llegó el recordatorio/resumen semanal"
+
+Playbook para cuando un recordatorio semanal (genérico o el resumen de informática) no llegó como push
+o ni siquiera se creó como notificación interna. Corré las queries EN ESTE ORDEN — cada una acota el
+punto exacto donde se cortó la cadena `cron → función SQL → notifications → net.http_post →
+send-push-system → push_send_log → push real`. Reemplazá las fechas por la semana que corresponda
+verificar (ejemplo: lunes 2026-08-10).
+
+1. **¿Está la config de push del sistema?** (causa más común — si falta, la notificación interna igual
+   se crea pero nunca se intenta el push real):
+   ```sql
+   select current_setting('siger4.project_url', true) as project_url,
+          current_setting('siger4.cron_shared_secret', true) is not null as cron_secret_set;
+   ```
+   Si `cron_secret_set` es `true`, además comparar a mano el valor real (`current_setting('siger4.cron_shared_secret', true)`)
+   contra el secreto `CRON_SHARED_SECRET` configurado en la Edge Function `send-push-system`
+   (Dashboard → Edge Functions → send-push-system → Secrets) — un desajuste entre ambos hace que
+   `send-push-system` responda 401 sin registrar nada en `push_send_log`.
+
+2. **¿Existen los jobs y están activos?**
+   ```sql
+   select jobid, jobname, schedule, active, username
+   from cron.job
+   where jobname in ('siger4-weekly-reminder', 'siger4-weekly-admin-summary');
+   ```
+   Se esperan 2 filas, `active = true`. Anotar `username` — si no es el rol dueño del proyecto
+   (típicamente `postgres`), puede afectar qué ve `station_compliance` en el resumen admin (la vista es
+   `security_invoker`, hereda RLS del rol que ejecuta la función).
+
+3. **¿Corrió el job, y falló?**
+   ```sql
+   select j.jobname, r.status, r.return_message, r.start_time, r.end_time
+   from cron.job_run_details r
+   join cron.job j on j.jobid = r.jobid
+   where j.jobname in ('siger4-weekly-reminder', 'siger4-weekly-admin-summary')
+     and r.start_time >= '2026-08-10 00:00:00-03'
+     and r.start_time <  '2026-08-11 00:00:00-03'
+   order by r.start_time desc;
+   ```
+   Sin filas: el job ni se disparó (ver punto 2). `status = 'failed'`: el `return_message` trae el
+   error real — para el resumen admin, reproducirlo sin esperar al lunes con
+   `select send_weekly_admin_summary();` (esto SÍ genera notificaciones/push reales, avisar antes de
+   correrlo en producción).
+
+4. **¿Se crearon las notificaciones internas?**
+   ```sql
+   select id, profile_id, type, title, created_at
+   from notifications
+   where type in ('recordatorio_semanal', 'alerta_admin')
+     and created_at >= '2026-08-10 00:00:00-03'
+     and created_at <  '2026-08-11 00:00:00-03'
+   order by created_at desc;
+   ```
+   Si no hay filas pero el job sí corrió sin error (paso 3), revisar el punto 6 (perfiles filtrados).
+
+5. **¿Llegó el intento de push hasta `send-push-system`?**
+   ```sql
+   select notification_id, profile_id, status, recipients_count, sent_count, error_message, created_at
+   from push_send_log
+   where created_at >= '2026-08-10 00:00:00-03'
+     and created_at <  '2026-08-11 00:00:00-03'
+   order by created_at desc;
+   ```
+   Notificación en el paso 4 sin fila acá → nunca se llamó a `net.http_post` (config faltante, paso 1)
+   o `pg_net` no procesó la request (ver punto 5 bis). `status='ok'` con `sent_count=0` →
+   no había `push_subscriptions` activas para ese perfil (paso 7). `sent_count > 0` → el push salió
+   del backend correctamente; si el usuario igual no lo vio, el problema está en su dispositivo/SO
+   (permisos revocados, Do Not Disturb, optimización de batería matando el service worker), no en
+   SIGER4.
+
+   **5 bis — ¿`pg_net` efectivamente ejecutó la llamada HTTP?**
+   ```sql
+   select id, url, status_code, created, error_msg
+   from net._http_response
+   where created >= '2026-08-10 14:50:00+00' and created <= '2026-08-10 15:45:00+00'
+   order by created desc;
+   ```
+   (nombre de tabla puede variar según versión de `pg_net`; si no existe con ese nombre,
+   `select * from net.http_request_queue;` muestra qué quedó encolado sin resolver). `status_code = 401`
+   confirma el desajuste de secreto del punto 1.
+
+6. **¿Los perfiles esperados cumplían los filtros?**
+   ```sql
+   -- Recordatorio general: quién quedó afuera y por qué
+   select id, full_name, is_active, weekly_reminder_enabled
+   from profiles
+   where is_active = true and weekly_reminder_enabled = false;
+
+   -- Resumen admin: rol + toggle correctos
+   select p.id, p.full_name, p.is_active, p.weekly_admin_summary_enabled, ur.role
+   from profiles p
+   join user_roles ur on ur.profile_id = p.id
+   where ur.role in ('informatica_r4', 'integrante_informatica');
+   ```
+
+7. **¿Había suscripción push activa para el dispositivo esperado?**
+   ```sql
+   select ps.profile_id, p.full_name, ps.endpoint, ps.user_agent, ps.created_at
+   from push_subscriptions ps
+   join profiles p on p.id = ps.profile_id
+   where p.full_name = '<nombre del usuario a revisar>';
+   ```
+   Sin filas: el usuario nunca activó (o perdió) el push en ese dispositivo — revisar el estado en
+   Ajustes → Notificaciones push (sección 31.7 más abajo cubre los 5 estados posibles).
+
+**Nota sobre zona horaria y día de la semana**: confirmado que no hay desfase — en la sintaxis estándar
+de `cron`/`pg_cron`, el campo día-de-semana usa `1` = lunes (`0`/`7` = domingo), así que `'0 15 * * 1'`
+y `'30 15 * * 1'` sí corresponden a lunes. Argentina es UTC-3 fijo (sin horario de verano desde 2009),
+así que 15:00/15:30 UTC = 12:00/12:30 ART, tal como documentan los propios comentarios de 0036/0067.
 
 ### 30.5 Checklist de prueba manual real
 
@@ -3722,7 +3833,7 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 71 migraciones (`0001` a `0071`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 72 migraciones (`0001` a `0072`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
@@ -4197,5 +4308,103 @@ menor, pero en archivos fuera del alcance pedido para esta pasada) fallbacks equ
 - Conectar o eliminar definitivamente `analyze-report`.
 - Pantalla de "novedades anteriores" que muestre el historial completo de `APP_UPDATES`, no solo la
   última.
-- Limpiar los fallbacks hardcodeados inertes restantes en `AjustesPage.tsx`, `PapeleraDocumentosPage.tsx`
-  y `UsuarioDetallePage.tsx` (mismo patrón que el ya corregido en `.sw-update-banner`).
+
+Los fallbacks hardcodeados restantes en `AjustesPage.tsx`, `PapeleraDocumentosPage.tsx` y
+`UsuarioDetallePage.tsx` mencionados arriba se limpiaron en la ronda siguiente — ver sección 32.
+
+## 32. Limpieza técnica + detalle de notificaciones + diagnóstico de recordatorios semanales (2026-08-12)
+
+Ronda de verificación y mejoras puntuales sobre lo cerrado en la sección 31, sin agregar módulos
+grandes: limpieza de fallbacks CSS restantes, detalle completo de notificaciones largas, protección
+contra solapamiento de cron en los recordatorios semanales, y una nota faltante en Ajustes.
+
+### 32.1 Limpieza de fallbacks CSS hardcodeados
+
+Mismo patrón que `.sw-update-banner` (sección 31.6): `var(--color-success, #16a34a)` y
+`var(--color-danger, #dc2626)` en `AjustesPage.tsx`, `PapeleraDocumentosPage.tsx` y
+`UsuarioDetallePage.tsx` — ambas variables siempre están definidas (`:root` y
+`:root[data-theme='dark']`), así que el fallback nunca se activaba, y el de `--color-danger`
+(`#dc2626`) ni siquiera coincidía con el valor real de la variable (`#d32f2f` claro / `#ef5350`
+oscuro). Se quitaron los 5 fallbacks (`grep -r "var(--color-[a-z-]\+, #" src/` confirma 0 ocurrencias
+restantes en todo `src/`). Sin cambio de comportamiento visual — el resultado renderizado es idéntico,
+la variable siempre existió.
+
+### 32.2 Detalle completo de notificaciones largas
+
+**Problema**: `.list-item-title`/`.list-item-subtitle` (usadas en el listado de `/notificaciones`)
+recortan a 2 líneas con `-webkit-line-clamp` — el resumen semanal admin, los recordatorios
+institucionales y cualquier notificación con cuerpo largo quedaban truncados sin forma de leer el
+resto.
+
+**Fix**: nuevo componente `src/components/ui/NotificationDetailModal.tsx`, modal siguiendo el mismo
+patrón ya usado por `ReasonPromptModal.tsx` (`createPortal`, cierre con Escape o click afuera). Al
+tocar una notificación en `/notificaciones` se abre el modal con: título completo, mensaje completo
+(`white-space: pre-wrap`, sin recorte), fecha/hora completa, badge de tipo, badge de
+leída/no leída, y el alcance (región/subsede/cuartel) resuelto a nombre real — `notifications` solo
+guarda IDs, así que `NotificacionesPage.tsx` ahora también trae `regions`/`subsedes`/`stations` (mismo
+patrón de resolución ya usado en `ReportesPage.tsx`/`NotificacionFormPage.tsx`) para mostrar el nombre,
+no el UUID crudo. Ningún dato técnico (JSON, IDs crudos) se muestra en el modal. Al abrir una
+notificación no leída, se marca como leída automáticamente (mismo `markNotificationRead` ya existente,
+sin duplicar lógica). El botón "Marcar leída" del listado se mantiene aparte (con
+`stopPropagation` para no abrir el modal al tocarlo). Mobile-friendly: mismo `max-width: 480px` +
+`padding: 24px` del contenedor que ya usa `ReasonPromptModal`, probado en el mismo breakpoint.
+
+### 32.3 Recordatorios semanales del lunes — diagnóstico y qué se corrigió
+
+**Causa exacta**: no se pudo determinar con certeza absoluta sin acceso directo al proyecto de
+Supabase real (fuera del alcance de este entorno) — el diagnóstico completo, con las causas más
+probables ordenadas y la query exacta para confirmar/descartar cada una, quedó documentado en la nueva
+sección **30.4.1** ("Diagnóstico paso a paso: no llegó el recordatorio/resumen semanal"). Resumen de
+las causas más probables, de mayor a menor probabilidad:
+1. Falta o está desincronizada la config `siger4.project_url`/`siger4.cron_shared_secret` (la función
+   SQL degrada en silencio: crea la notificación interna igual, pero nunca llama a `net.http_post` —
+   solo deja un `raise warning` en los logs de Postgres, invisible para un usuario).
+2. Los jobs de `pg_cron` no están activos, o no existen (confirmar con la query de la sección 30.4).
+3. El job corrió pero falló — para el resumen admin, un error en cualquiera de los cálculos agregados
+   (semáforo, préstamos, documentos, altas/bajas de usuario, departamentos) aborta toda la función
+   ANTES de insertar ninguna notificación, indistinguible de "no llegó nada" desde la UI.
+4. `pg_net` no está habilitado, o las requests quedaron encoladas sin completarse.
+5. Sin `push_subscriptions` activas para el perfil esperado (el dispositivo nunca activó, o perdió, el
+   push).
+
+**Confirmado explícitamente sin desfase**: el cron `'0 15 * * 1'`/`'30 15 * * 1'` corresponde a lunes
+(no hay error de día de semana en la sintaxis), y Argentina UTC-3 fijo confirma 15:00/15:30 UTC =
+12:00/12:30 ART — ninguno de los dos es la causa.
+
+**Bug real encontrado y corregido**: ni `send_weekly_reminder()` (0036) ni `send_weekly_admin_summary()`
+(0067) tenían protección contra dos ejecuciones solapadas del mismo job — el mismo riesgo teórico ya
+señalado (y corregido puntualmente solo para préstamos) en el propio comentario de cabecera de la
+migración 0070. No es la causa de "no llegó" (los jobs corren una sola vez por semana, nada que se
+solape en uso normal), pero sí sería causa de *duplicados* en un escenario de corrida colgada o disparo
+manual simultáneo al del cron. Migración **0072** agrega `pg_try_advisory_xact_lock` a ambas funciones,
+mismo patrón exacto que 0070 — sin cambiar ningún cálculo, filtro, ni el `cron.schedule` de ninguno de
+los 2 jobs (mismo nombre/horario/body).
+
+**Qué correr para confirmar la causa real en el proyecto de producción**: seguir el playbook de la
+sección 30.4.1 en orden — son 7 pasos, cada uno acota más el punto exacto de falla.
+
+### 32.4 Ajustes — nota agregada
+
+Se agregó, en la tarjeta "Institucional" (visible para todos los roles, no solo informática), una nota
+breve: *"La carga de documentos (Documentos → Cargar archivo) está disponible solo desde PC. Desde el
+celular podés ver y descargar documentos normalmente."* — antes esta aclaración solo vivía dentro del
+módulo Documentos; ahora también es visible desde el lugar donde un usuario revisaría su configuración
+general.
+
+El resto del checklist pedido para Ajustes (estado de push con sus 5 diagnósticos, botón "Probar
+notificación", botón "Reactivar notificaciones push", preferencias de recordatorio semanal/resumen
+admin, versión visible, botón de actualización de la app) **ya existía** de rondas anteriores — se
+verificó cada punto contra el código real (`usePushNotifications.ts`, `AjustesPage.tsx`) sin encontrar
+faltantes ni duplicados/confusos que limpiar.
+
+**Decisión confirmada — notificaciones sensibles sin opt-out**: las notificaciones sensibles
+(altas/bajas de usuario, cambios de rol/alcance, migración 0066) NO tienen ni tendrán un toggle de
+desactivación en Ajustes — es un mecanismo de supervisión institucional para todo el equipo de
+informática, no una preferencia individual; agregar un opt-out le restaría fuerza a ese control.
+
+### 32.5 Migraciones nuevas
+
+- `0072_weekly_reminders_advisory_lock.sql`: agrega `pg_try_advisory_xact_lock` a
+  `send_weekly_reminder()` y `send_weekly_admin_summary()` (ver 32.3). No agrega tablas, columnas, ni
+  cron jobs nuevos — sigue habiendo exactamente 5 jobs `siger4-*` (tabla de la sección 30.4 sin
+  cambios).

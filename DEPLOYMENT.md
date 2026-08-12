@@ -4176,13 +4176,26 @@ No se tocó ningún color del modo claro, ni las variables de badges/semáforo/r
 (ya estaban correctamente adaptadas). El resto de las páginas que usan `.card`/`.card-solid`/`.kpi-*`
 se benefician del mismo fix sin cambios adicionales, al ser tokens compartidos.
 
+**Verificación post-fix (2026-08-12):** se repasaron las 3 discrepancias y el fix de dark mode contra
+el código y las policies reales (no solo releídos) — confirmado sin hallazgos: `informatica_r4`
+mantiene alcance total en Notificaciones, `integrante_informatica` ya no puede enviar broadcast total
+y queda correctamente acotado a su región/subsede/cuartel (el formulario nunca ofrece ni envía un
+scope vacío para roles no-`informatica_r4`); en Reportes, `secretario_regional`/`director_escuela` ven
+solo su región/subsedes/cuarteles y los roles de cuartel siguen limitados al propio (selector
+deshabilitado); en Departamentos, `secretario_regional` ahora ve las acciones de integrantes
+manuales/informes de actividad de cualquier departamento (coincide con RLS), sin que se le hayan
+sumado por error botones de `canManage` (edición del departamento, alta/baja de miembros con cuenta,
+que siguen siendo exclusivos de coordinador/admin, tal como exige la policy `departments_write_coordinator_or_admin`).
+De paso se limpió el fallback hardcodeado inerte de `.sw-update-banner` en `styles.css`
+(`var(--color-primary-dark, #9a1f1f)` → `var(--color-primary-dark)`, la variable siempre existe y el
+valor de fallback no coincidía con ninguno de los dos temas). Quedan sin tocar (mismo tipo de deuda
+menor, pero en archivos fuera del alcance pedido para esta pasada) fallbacks equivalentes en
+`AjustesPage.tsx`, `PapeleraDocumentosPage.tsx` y `UsuarioDetallePage.tsx`.
+
 **Posibles mejoras futuras** (fuera de alcance de esta ronda, no implementadas):
 - Reactivar la carga de documentos en mobile si se logra aislar la causa real del bug de touch/click.
 - Conectar o eliminar definitivamente `analyze-report`.
 - Pantalla de "novedades anteriores" que muestre el historial completo de `APP_UPDATES`, no solo la
   última.
-- Limpiar los fallbacks hardcodeados inertes detectados en el audit de dark mode (`PanelPage.tsx`
-  usaba `var(--color-success, #16a34a)` etc. antes de esta ronda — ya se quitaron esos tres; queda
-  pendiente por consistencia el de `.sw-update-banner` en `styles.css:1021`,
-  `background: var(--color-primary-dark, #9a1f1f)`, que no coincide con el valor real de la variable
-  pero nunca se activa porque la variable siempre existe).
+- Limpiar los fallbacks hardcodeados inertes restantes en `AjustesPage.tsx`, `PapeleraDocumentosPage.tsx`
+  y `UsuarioDetallePage.tsx` (mismo patrón que el ya corregido en `.sw-update-banner`).

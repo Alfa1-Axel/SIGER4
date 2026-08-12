@@ -1032,7 +1032,7 @@ img {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  background: var(--color-primary-dark, #9a1f1f);
+  background: var(--color-primary-dark);
   color: #fff;
   font-size: 12px;
 }

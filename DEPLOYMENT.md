@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0072` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0073` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -618,20 +618,45 @@ corre sin esto, falla al crear el job de cron.
 1. Buscar `pg_cron` → Enable.
 2. Buscar `pg_net` → Enable.
 
-**Paso 2 — Configurar la URL del proyecto y el secreto compartido (SQL Editor, antes de 0036):**
+**Paso 2 — Configurar la URL del proyecto y el secreto compartido.**
 
-```sql
-alter database postgres set siger4.project_url = 'https://<tu-proyecto>.supabase.co';
-alter database postgres set siger4.cron_shared_secret = '<el-mismo-valor-que-CRON_SHARED_SECRET>';
-```
+> **⚠️ Desde 2026-08-12, esto YA NO se hace con `alter database ... set ...`.** Ese procedimiento
+> (documentado originalmente en esta sección) requiere privilegios de superusuario/owner sobre la
+> base de datos, que el rol del SQL Editor de Supabase no tiene — el intento falla con
+> `ERROR: 42501: permission denied to set parameter "siger4.project_url"`. No es un problema de este
+> proyecto puntual: ningún proyecto Supabase real permite `alter database`/`alter role ... set` de un
+> GUC custom desde el SQL Editor. Ver sección 32 (ronda 2026-08-12) para el detalle completo del
+> diagnóstico y la migración `0073_system_settings_config.sql` que reemplaza el mecanismo.
 
-Reemplazar `<tu-proyecto>` por el subdominio real de tu proyecto Supabase (Project Settings → API →
-Project URL), y `<el-mismo-valor-que-CRON_SHARED_SECRET>` por el mismo string que configuraste como
-secreto de `send-push-system` en el paso 6.2. **Deben ser exactamente el mismo valor** — si no
-coinciden, `send-push-system` responde 401 y el recordatorio se crea como notificación interna pero
-nunca llega como push.
+A partir de la migración `0073`, la config vive en una tabla (`system_settings`, protegida por RLS —
+solo `informatica_r4`), leída por las funciones de cron vía `get_system_setting(key)`. Configurarla
+así:
 
-**Paso 3 — Correr `0036_weekly_reminder_cron.sql`** (después de los pasos 1 y 2).
+1. `project_url` ya queda insertada por la propia migración `0073` (no es secreta, viaja en claro en
+   cada request de todos modos) — confirmá que el valor coincide con tu proyecto real:
+   ```sql
+   select value from system_settings where key = 'project_url';
+   ```
+   Si no coincide (por ejemplo, corriste la migración en un proyecto Supabase distinto al que
+   documenta el valor por defecto), corregilo con:
+   ```sql
+   select set_system_setting('project_url', 'https://<tu-proyecto>.supabase.co', false);
+   ```
+2. **`cron_shared_secret` sí es secreto — no viene precargado, hay que configurarlo a mano** (con una
+   sesión ya logueada como `informatica_r4` en el SQL Editor, o vía el cliente autenticado):
+   ```sql
+   select set_system_setting('cron_shared_secret', '<el-mismo-valor-que-CRON_SHARED_SECRET>', true);
+   ```
+   Reemplazar `<el-mismo-valor-que-CRON_SHARED_SECRET>` por el mismo string que configuraste como
+   secreto de `send-push-system` en el paso 6.2. **Deben ser exactamente el mismo valor** — si no
+   coinciden, `send-push-system` responde 401 y el recordatorio se crea como notificación interna
+   pero nunca llega como push. `set_system_setting()` nunca devuelve el valor guardado (no hay forma
+   de "leer de vuelta" el secreto desde el SQL Editor para confirmarlo visualmente — solo se puede
+   confirmar indirectamente, ver el playbook de la sección 30.4.1).
+
+**Paso 3 — Correr `0036_weekly_reminder_cron.sql`** (después de los pasos 1 y 2. Si tu proyecto ya
+tiene migraciones posteriores a `0073` aplicadas, `system_settings`/`get_system_setting` ya existen
+desde antes de este paso — el orden solo importa la primera vez que se configura un proyecto nuevo).
 
 **Paso 4 — Verificar que quedó funcionando:**
 
@@ -650,10 +675,10 @@ order by start_time desc limit 5;
 select send_weekly_reminder();
 ```
 
-Si `send_weekly_reminder()` no encuentra `siger4.project_url`/`siger4.cron_shared_secret`
-configurados, inserta las notificaciones igual pero loguea un `WARNING` (visible en Database → Logs)
-y no intenta el push — revisar ese warning si el push nunca llega pero la notificación interna sí
-aparece en `/notificaciones`.
+Si `send_weekly_reminder()` no encuentra `project_url`/`cron_shared_secret` configurados en
+`system_settings`, inserta las notificaciones igual pero loguea un `WARNING` (visible en Database →
+Logs) y no intenta el push — revisar ese warning si el push nunca llega pero la notificación interna
+sí aparece en `/notificaciones`.
 
 **Horario**: el job corre `0 15 * * 1` (lunes 15:00 UTC). Argentina es UTC-3 todo el año desde 2009
 (sin horario de verano), así que esto es siempre lunes 12:00 hora Argentina — no hace falta ajustar
@@ -1787,12 +1812,12 @@ función en sí (`purge-documents` no lo usa), pero **sí lo necesita el dispara
 `send_weekly_reminder()` de 0036) — si el proyecto ya tiene `pg_net` habilitado por el recordatorio
 semanal, no hace falta nada nuevo ahí.
 
-**Configuración de secretos**: reutiliza exactamente `CRON_SHARED_SECRET` y
-`siger4.project_url`/`siger4.cron_shared_secret` — **los mismos que ya configuraste para el
-recordatorio semanal (sección 6.3)**, no hace falta un secreto nuevo. Si el proyecto nunca configuró el
-recordatorio semanal, seguir los pasos exactos de la sección 6.3 (habilitar pg_cron/pg_net,
-`supabase secrets set CRON_SHARED_SECRET=...`, `alter database postgres set
-siger4.project_url = '...'` / `siger4.cron_shared_secret = '...'`) antes de correr `0053`.
+**Configuración de secretos**: reutiliza exactamente el secreto `CRON_SHARED_SECRET` de la Edge
+Function y las claves `project_url`/`cron_shared_secret` de `system_settings` (ver sección 6.3 y 32)
+— **los mismos que ya configuraste para el recordatorio semanal**, no hace falta nada nuevo. Si el
+proyecto nunca configuró el recordatorio semanal, seguir los pasos exactos de la sección 6.3
+(habilitar pg_cron/pg_net, `supabase secrets set CRON_SHARED_SECRET=...`, `select
+set_system_setting('cron_shared_secret', '...', true);`) antes de correr `0053`.
 
 Sin esta configuración, la purga automática diaria no hace nada (deja un `WARNING` en los logs de
 Postgres, visible en Database → Logs) — no rompe nada más del sistema, pero los documentos vencidos se
@@ -3434,10 +3459,10 @@ excepto el aviso a informática de un préstamo vencido, que además usa `notify
   cron `siger4-loan-return-reminders`.
 - **Edge Function modificada** (no nueva): `admin-delete-user` — llama a `notify_admin_delete_user`
   después de un borrado exitoso. Redesplegar con `supabase functions deploy admin-delete-user`.
-- Las 3 migraciones reutilizan `pg_cron`/`pg_net` y la config `siger4.project_url`/
-  `siger4.cron_shared_secret` ya configurados desde la migración 0036 — no hace falta volver a
-  habilitar extensiones ni reconfigurar secretos si el proyecto ya tenía el recordatorio semanal
-  genérico funcionando.
+- Las 3 migraciones reutilizan `pg_cron`/`pg_net` y la config de `project_url`/`cron_shared_secret`
+  ya configurada desde la migración 0036 (desde `0073`, en `system_settings` — ver sección 6.3/32) —
+  no hace falta volver a habilitar extensiones ni reconfigurar secretos si el proyecto ya tenía el
+  recordatorio semanal genérico funcionando.
 - Redeploy normal del frontend (Vercel).
 
 ### 29.8 Cómo verificar
@@ -3614,13 +3639,23 @@ Deben aparecer ambas filas.
 
 **Confirmar que la config de `project_url`/`cron_shared_secret` está seteada** (necesaria para que
 `send_weekly_reminder()`, `send_weekly_admin_summary()` y `trigger_document_purge()` puedan disparar el
-push real vía `pg_net`; sin esto, las notificaciones internas igual se crean, pero sin push):
+push real vía `pg_net`; sin esto, las notificaciones internas igual se crean, pero sin push). Desde la
+migración `0073` (ver sección 32), la config vive en la tabla `system_settings`, no en un GUC de
+sesión/base (`alter database ... set ...` no funciona en el SQL Editor de Supabase — ver sección 6.3):
 ```sql
-select current_setting('siger4.project_url', true) as project_url,
-       current_setting('siger4.cron_shared_secret', true) is not null as cron_secret_set;
+select key, value, is_secret, updated_at
+from system_settings
+where key in ('project_url', 'cron_shared_secret');
 ```
-`project_url` debe mostrar la URL real del proyecto; `cron_secret_set` debe ser `true`. Si alguno falta,
-ver sección 6.3 (configuración original del recordatorio semanal) para el `alter database ... set ...`.
+Deben aparecer 2 filas. Para `cron_shared_secret` (`is_secret = true`), esta query SÍ muestra el
+secreto en texto plano en el resultado — solo `informatica_r4` puede correrla (RLS de
+`system_settings`), y no debería pegarse ese resultado en ningún chat/documento. Si preferís no ver el
+valor, confirmar solo que la fila existe:
+```sql
+select key, is_secret, updated_at from system_settings where key in ('project_url', 'cron_shared_secret');
+```
+Si falta la fila de `cron_shared_secret`, ver sección 6.3 para el `select set_system_setting(...)` que
+la configura.
 
 **Ver las últimas ejecuciones de cada job (éxito/error, duración):**
 ```sql
@@ -3650,15 +3685,20 @@ send-push-system → push_send_log → push real`. Reemplazá las fechas por la 
 verificar (ejemplo: lunes 2026-08-10).
 
 1. **¿Está la config de push del sistema?** (causa más común — si falta, la notificación interna igual
-   se crea pero nunca se intenta el push real):
+   se crea pero nunca se intenta el push real). Desde la migración `0073`, la config vive en
+   `system_settings`, no en un GUC (`current_setting`/`alter database` no funciona en el SQL Editor de
+   Supabase — ver sección 6.3):
    ```sql
-   select current_setting('siger4.project_url', true) as project_url,
-          current_setting('siger4.cron_shared_secret', true) is not null as cron_secret_set;
+   select key, value, is_secret, updated_at
+   from system_settings
+   where key in ('project_url', 'cron_shared_secret');
    ```
-   Si `cron_secret_set` es `true`, además comparar a mano el valor real (`current_setting('siger4.cron_shared_secret', true)`)
-   contra el secreto `CRON_SHARED_SECRET` configurado en la Edge Function `send-push-system`
-   (Dashboard → Edge Functions → send-push-system → Secrets) — un desajuste entre ambos hace que
-   `send-push-system` responda 401 sin registrar nada en `push_send_log`.
+   Deben aparecer 2 filas (solo `informatica_r4` puede correr esta query, por RLS). Si falta
+   `cron_shared_secret`, configurarla con `select set_system_setting('cron_shared_secret', '...',
+   true);` (ver sección 6.3). Si aparece, comparar a mano el `value` mostrado contra el secreto
+   `CRON_SHARED_SECRET` configurado en la Edge Function `send-push-system` (Dashboard → Edge
+   Functions → send-push-system → Secrets) — un desajuste entre ambos hace que `send-push-system`
+   responda 401 sin registrar nada en `push_send_log`.
 
 2. **¿Existen los jobs y están activos?**
    ```sql
@@ -3833,7 +3873,7 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 72 migraciones (`0001` a `0072`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 73 migraciones (`0001` a `0073`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
@@ -4408,3 +4448,126 @@ informática, no una preferencia individual; agregar un opt-out le restaría fue
   `send_weekly_reminder()` y `send_weekly_admin_summary()` (ver 32.3). No agrega tablas, columnas, ni
   cron jobs nuevos — sigue habiendo exactamente 5 jobs `siger4-*` (tabla de la sección 30.4 sin
   cambios).
+
+## 33. Causa raíz real confirmada: `alter database` no funciona en Supabase — reemplazo por `system_settings` (2026-08-12) — migración 0073
+
+Seguimiento directo a la sección 32.3: intentar aplicar el `alter database postgres set
+siger4.project_url = ...` / `siger4.cron_shared_secret = ...` documentado desde la migración `0036`
+(sección 6.3) en el SQL Editor real de Supabase falla con:
+
+```
+ERROR: 42501: permission denied to set parameter "siger4.project_url"
+```
+
+### 33.1 Causa exacta
+
+`alter database ... set <guc> = ...` (y su equivalente `alter role ... set ...`) requiere el
+privilegio `SUPERUSER` o ser dueño de la base — el rol que usa el SQL Editor de Supabase (`postgres`
+en el contexto de una sesión de usuario, con permisos administrados por PostgREST/RLS, no el
+`postgres` real de un servidor autoadministrado) no lo tiene. Esto **no es específico de este
+proyecto**: es una limitación estructural de cualquier proyecto Supabase gestionado — no hay ningún
+paso de configuración que la esquive desde el SQL Editor. El procedimiento documentado desde 0036
+nunca pudo haber funcionado en un proyecto Supabase real siguiendo exactamente esos pasos; solo se
+detectó al intentar aplicarlo en producción.
+
+Consecuencia directa: `current_setting('siger4.project_url', true)`/
+`current_setting('siger4.cron_shared_secret', true)` siempre devolvían `null` en las 3 funciones que
+dependían de ellas (`send_weekly_reminder()`, `send_weekly_admin_summary()`, `trigger_document_purge()`)
+— las notificaciones internas se creaban igual (esas funciones degradan en silencio, ver sus propios
+`raise warning`), pero el push real y la purga automática de documentos nunca llegaron a dispararse en
+ningún proyecto que haya seguido la documentación tal como estaba. Esto también explica, con
+certeza ahora (no solo como hipótesis, a diferencia de la sección 32.3), por qué no llegó el
+recordatorio del lunes: la causa #1 de la lista priorizada de 30.4.1 era la causa real.
+
+### 33.2 Fix: `system_settings`, una tabla en vez de un GUC
+
+Migración `0073_system_settings_config.sql`:
+
+- **Tabla `system_settings`** (`key text primary key`, `value text`, `is_secret boolean`,
+  `updated_at`, `updated_by_profile_id`) — RLS: solo `is_super_admin()` (`informatica_r4`, **no**
+  `integrante_informatica` — mismo criterio ya usado para el borrado directo de usuarios, sección
+  28.3) puede leer/escribir directo.
+- **`get_system_setting(key)`** — `SECURITY DEFINER STABLE`, lee sin pasar por RLS (la llaman
+  funciones de cron que corren como `postgres`, sin sesión de usuario real — mismo motivo por el que
+  antes se usaba `current_setting(..., true)`). Deliberadamente **sin** `grant ... to authenticated`:
+  si lo tuviera, cualquier usuario logueado podría leer `cron_shared_secret` en texto plano llamándola
+  directo. Otra función `SECURITY DEFINER` puede invocarla igual sin ningún grant explícito (mismo
+  criterio que las funciones de trigger de `0031_security_definer_execute_grants.sql`).
+- **`set_system_setting(key, value, is_secret)`** — único camino soportado para escribir. Revalida
+  `is_super_admin()` server-side (no confía solo en la RLS de la tabla), y audita el cambio en
+  `audit_logs` — pero **nunca en texto plano si `is_secret = true`**: guarda `'[secreto: NN
+  caracteres]'` en vez del valor real. No se usó el trigger genérico `audit_row_change()` (el que ya
+  usa el resto de las tablas del sistema) a propósito: ese trigger hace `to_jsonb(new)`/`to_jsonb(old)`
+  de la fila completa, lo que habría insertado el secreto real en `audit_logs.new_value` — exactamente
+  lo que esta migración evita.
+- **`project_url` viene precargado** por la propia migración (no es secreto, viaja en claro en cada
+  request igual) con el valor real de este proyecto
+  (`https://tuhynszatghlfohugexn.supabase.co`) — confirmar que coincide con tu proyecto si aplicás esta
+  migración en un Supabase distinto.
+- **`cron_shared_secret` NO viene precargado** — es secreto, no se hardcodea en el repositorio. Hay
+  que configurarlo a mano después de correr la migración (ver 33.3).
+- Se actualizaron las 3 funciones (`send_weekly_reminder()`, `send_weekly_admin_summary()`,
+  `trigger_document_purge()`) para leer `get_system_setting('project_url')`/
+  `get_system_setting('cron_shared_secret')` en vez de `current_setting('siger4.*', true)` — sin
+  cambiar ningún otro cálculo, filtro, ni el `cron.schedule` de ninguno de los 3 jobs asociados. El
+  resto del cuerpo de cada función es copia exacta de su versión anterior (`0072` para las dos
+  semanales, `0053` para la purga).
+
+### 33.3 Qué correr en Supabase (en orden)
+
+1. **Correr la migración `0073_system_settings_config.sql`** en el SQL Editor — crea la tabla, los 2
+   helpers, precarga `project_url`, y redefine las 3 funciones.
+2. **Guardar el `cron_shared_secret` real** (logueado como `informatica_r4`, en el SQL Editor o desde
+   cualquier cliente autenticado):
+   ```sql
+   select set_system_setting('cron_shared_secret', '<el-mismo-valor-que-CRON_SHARED_SECRET>', true);
+   ```
+   Reemplazar `<el-mismo-valor-que-CRON_SHARED_SECRET>` por el secreto real — **debe ser exactamente
+   el mismo** que el configurado como secreto de la Edge Function `send-push-system` (paso 3). Si
+   nunca configuraste ese secreto, generá un valor nuevo (cualquier string largo y aleatorio) y usalo
+   en los dos lugares.
+3. **Confirmar (o volver a setear) el secreto de la Edge Function**, en una terminal con el CLI de
+   Supabase autenticado contra tu proyecto:
+   ```
+   npx supabase secrets set CRON_SHARED_SECRET="mismo-secreto"
+   ```
+   No hace falta redesplegar `send-push-system`/`trigger_document_purge` — ninguna Edge Function
+   cambió de código en esta ronda, y los secretos se leen en cada invocación, no en el momento del
+   deploy.
+4. **Probar manualmente** (genera notificaciones/push reales — avisar antes si se prueba en
+   producción):
+   ```sql
+   select send_weekly_reminder();
+   select send_weekly_admin_summary();
+   ```
+   Confirmar en `/notificaciones` que ambas insertaron el contenido esperado, y que llegó el push real
+   si hay `push_subscriptions` activas.
+
+### 33.4 Cómo verificar que quedó bien configurado
+
+```sql
+-- Confirmar que las 2 claves existen (solo informatica_r4 puede correr esto):
+select key, is_secret, updated_at from system_settings where key in ('project_url', 'cron_shared_secret');
+```
+Deben aparecer 2 filas. Si además querés ver el `value` real (por ejemplo para compararlo a mano
+contra el secreto de la Edge Function), usar `select key, value, ... from system_settings where key =
+'cron_shared_secret';` — recordar no pegar ese resultado en ningún chat/documento, es el secreto en
+texto plano.
+
+Ver también el playbook completo de la sección 30.4.1 (paso 1 ya actualizado a esta tabla) para
+diagnosticar cualquier otro punto de la cadena si el push sigue sin llegar después de este fix.
+
+### 33.5 Edge Functions / Vercel
+
+Ninguna Edge Function nueva ni con cambios de código — `send-push-system`/`purge-documents` no se
+tocaron, solo el secreto que ya usan (paso 3 de 33.3, si hace falta resetearlo). Vercel: no hace falta
+redeploy — este fix es 100% backend (una migración SQL nueva), sin cambios de frontend salvo el label
+de auditoría `system_settings` → "Configuración del sistema" en `humanize.ts` (cosmético, visible solo
+para `informatica_r4`/`integrante_informatica` en `/auditoria`).
+
+### 33.6 Nota para quien ya haya intentado el `alter database` sin éxito
+
+No hace falta deshacer nada: el `alter database`/`alter role` fallido no dejó ningún estado a medias
+(la sentencia entera se rechaza antes de aplicar cualquier cambio). Alcanza con seguir los pasos de
+33.3 — la migración `0073` reemplaza el mecanismo por completo, no depende de que el `alter database`
+haya llegado a aplicarse en algún momento.

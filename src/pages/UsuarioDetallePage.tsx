@@ -398,7 +398,7 @@ export function UsuarioDetallePage() {
               <label htmlFor="email">Email institucional</label>
               <input id="email" type="email" value={email} disabled={rolesScopesLocked} onChange={(e) => setEmail(e.target.value)} />
             </div>
-            {emailSaved && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginBottom: 8 }}>Email actualizado.</p>}
+            {emailSaved && <p style={{ fontSize: 12, color: 'var(--color-success)', marginBottom: 8 }}>Email actualizado.</p>}
             <button type="button" className="btn btn-primary" disabled={savingEmail || rolesScopesLocked} onClick={handleSaveEmail}>
               {savingEmail ? 'Guardando…' : 'Cambiar email'}
             </button>
@@ -428,7 +428,7 @@ export function UsuarioDetallePage() {
             <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
               El usuario deberá cambiar esta contraseña la próxima vez que ingrese.
             </p>
-            {passwordResetDone && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginBottom: 8 }}>Contraseña actualizada.</p>}
+            {passwordResetDone && <p style={{ fontSize: 12, color: 'var(--color-success)', marginBottom: 8 }}>Contraseña actualizada.</p>}
             <button type="button" className="btn btn-primary" disabled={resettingPassword || rolesScopesLocked || !newPassword} onClick={handleResetPassword}>
               {resettingPassword ? 'Guardando…' : 'Cambiar contraseña'}
             </button>
@@ -595,7 +595,7 @@ export function UsuarioDetallePage() {
           <div className="section-header" style={{ marginTop: 24 }}>
             <h2 className="section-title">Zona de riesgo</h2>
           </div>
-          <div className="card-solid" style={{ marginBottom: 20, borderColor: 'var(--color-danger, #dc2626)' }}>
+          <div className="card-solid" style={{ marginBottom: 20, borderColor: 'var(--color-danger)' }}>
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
               Elimina la cuenta de acceso, el perfil, los roles y los alcances de este usuario. No se puede deshacer. Los
               registros institucionales (auditoría, documentos, informes, etc.) que lo referencian se preservan, sin el

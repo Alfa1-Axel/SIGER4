@@ -271,7 +271,7 @@ export function AjustesPage() {
         )}
 
         {profileError && <p className="field-error">{profileError}</p>}
-        {profileSaved && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)' }}>Datos guardados correctamente.</p>}
+        {profileSaved && <p style={{ fontSize: 12, color: 'var(--color-success)' }}>Datos guardados correctamente.</p>}
 
         <button type="submit" className="btn btn-primary btn-block" disabled={savingProfile}>
           {savingProfile ? 'Guardando…' : 'Guardar cambios'}
@@ -292,7 +292,7 @@ export function AjustesPage() {
         </div>
 
         {passwordError && <p className="field-error">{passwordError}</p>}
-        {passwordSaved && <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)' }}>Contraseña actualizada correctamente.</p>}
+        {passwordSaved && <p style={{ fontSize: 12, color: 'var(--color-success)' }}>Contraseña actualizada correctamente.</p>}
 
         <button type="submit" className="btn btn-outlined btn-block" disabled={changingPassword}>
           {changingPassword ? 'Cambiando…' : 'Cambiar contraseña'}
@@ -391,7 +391,7 @@ export function AjustesPage() {
           {testingNotification ? 'Enviando…' : 'Probar notificación'}
         </button>
         {testNotificationResult === 'ok' && (
-          <p style={{ fontSize: 12, color: 'var(--color-success, #16a34a)', marginTop: 8 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-success)', marginTop: 8 }}>
             Notificación interna creada correctamente. Revisá /notificaciones.
           </p>
         )}
@@ -405,7 +405,7 @@ export function AjustesPage() {
             style={{
               fontSize: 12,
               marginTop: 4,
-              color: testPushResult.ok ? 'var(--color-success, #16a34a)' : 'var(--color-danger)',
+              color: testPushResult.ok ? 'var(--color-success)' : 'var(--color-danger)',
             }}
           >
             {testPushResult.ok && testPushResult.duplicate && 'Push ya enviado por otra pestaña/dispositivo activo (deduplicado).'}
@@ -507,10 +507,14 @@ export function AjustesPage() {
         <h2 className="section-title" style={{ marginBottom: 10 }}>
           Institucional
         </h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
           <img src="/logos/logo-escuela.png" alt="Escuela Regional" style={{ height: 40, borderRadius: 8 }} />
           <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 8 }} />
         </div>
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: 0 }}>
+          La carga de documentos (Documentos → Cargar archivo) está disponible solo desde PC. Desde el
+          celular podés ver y descargar documentos normalmente.
+        </p>
       </div>
 
       <button type="button" className="btn btn-outlined btn-block" onClick={() => signOut()}>

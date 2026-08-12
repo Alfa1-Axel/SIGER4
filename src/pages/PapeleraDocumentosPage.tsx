@@ -160,7 +160,7 @@ export function PapeleraDocumentosPage() {
       )}
       {info && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <p style={{ fontSize: 13, color: 'var(--color-success, #16a34a)', margin: 0 }}>{info}</p>
+          <p style={{ fontSize: 13, color: 'var(--color-success)', margin: 0 }}>{info}</p>
         </div>
       )}
 

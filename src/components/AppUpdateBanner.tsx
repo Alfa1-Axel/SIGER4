@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { APP_UPDATES } from '../config/appUpdates'
 import type { AppUpdate, AppUpdateSeverity } from '../config/appUpdates'
 import { hasSeenAppUpdate, markAppUpdateSeen } from '../lib/appUpdateSeen'
+import { subscribeForceShowAppUpdateBanner } from '../lib/appUpdateBannerControl'
+import { createAppUpdateNotification } from '../lib/api/notifications'
 import { useAuth } from '../hooks/useAuth'
 import { Icon } from './ui/Icon'
 
@@ -10,6 +12,10 @@ import { Icon } from './ui/Icon'
 // el código en vez de descartarse.
 function getLatestAppUpdate(): AppUpdate | null {
   return APP_UPDATES[0] ?? null
+}
+
+function findAppUpdateById(id: string): AppUpdate | null {
+  return APP_UPDATES.find((u) => u.id === id) ?? null
 }
 
 const SEVERITY_LABEL: Record<AppUpdateSeverity, string> = {
@@ -33,10 +39,36 @@ export function AppUpdateBanner() {
     if (!session || !profile) return
     const latest = getLatestAppUpdate()
     if (!latest) return
+    // La notificación interna (persistente en /notificaciones, "una vez por
+    // usuario" vía el índice único de la migración 0077) es independiente de
+    // "ya visto en este navegador" (localStorage, hasSeenAppUpdate) — se
+    // crea siempre que exista la novedad, aunque el banner ya no se muestre
+    // más en este dispositivo puntual, para que quede un rastro accesible
+    // desde cualquier sesión. createAppUpdateNotification ya deduplica sola
+    // (23505 se trata como éxito), así que no hace falta ningún chequeo
+    // previo acá — insertar de más nunca genera una fila de más.
+    void createAppUpdateNotification(
+      profile.id,
+      latest.id,
+      'Nueva actualización disponible. Ingresá para conocer las novedades.',
+    ).catch(() => undefined)
+
     if (hasSeenAppUpdate(latest.id)) return
     setUpdate(latest)
     setVisible(true)
   }, [session, profile])
+
+  // Reabrir el modal de una novedad puntual desde /notificaciones (tocar una
+  // notificación de tipo actualizacion_sistema) — no depende de si el
+  // usuario ya la "vio" en este navegador, es una apertura explícita.
+  useEffect(() => {
+    return subscribeForceShowAppUpdateBanner((updateId) => {
+      const target = findAppUpdateById(updateId)
+      if (!target) return
+      setUpdate(target)
+      setVisible(true)
+    })
+  }, [])
 
   function handleDismiss() {
     if (update) markAppUpdateSeen(update.id)

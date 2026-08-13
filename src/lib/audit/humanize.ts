@@ -91,6 +91,7 @@ export const FIELD_LABELS: Record<string, string> = {
   seniority_start_date: 'Antigüedad desde',
   is_active: 'Activo',
   is_read: 'Leído',
+  app_update_id: 'Novedad del sistema',
   role: 'Rol',
   scope_type: 'Alcance',
   type: 'Tipo',
@@ -226,6 +227,7 @@ const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   alerta_admin: 'Alerta administrativa',
   prestamo_por_vencer: 'Préstamo por vencer',
   prestamo_vencido: 'Préstamo vencido',
+  actualizacion_sistema: 'Novedad del sistema',
 }
 
 const BOOLEAN_LABELS: Record<string, string> = { true: 'Sí', false: 'No' }

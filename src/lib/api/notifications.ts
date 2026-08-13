@@ -45,3 +45,20 @@ export async function createNotification(input: NotificationInput): Promise<Noti
   if (error) throw error
   return data as Notification
 }
+
+// Notificación interna de "hay una novedad nueva" (ver AppUpdateBanner.tsx).
+// Deduplicación ATÓMICA a nivel de base (idx_notifications_app_update_dedup,
+// migración 0077): dos pestañas del mismo usuario detectando la misma
+// novedad al mismo tiempo nunca generan dos filas — la segunda inserción
+// viola el índice único (profile_id, app_update_id) y Postgres responde
+// 23505, que acá se trata como éxito silencioso (la notificación YA existe,
+// que es exactamente lo que se buscaba), no como un error a mostrar.
+export async function createAppUpdateNotification(profileId: string, appUpdateId: string, title: string): Promise<void> {
+  const { error } = await supabase.from('notifications').insert({
+    type: 'actualizacion_sistema',
+    title,
+    profile_id: profileId,
+    app_update_id: appUpdateId,
+  })
+  if (error && error.code !== '23505') throw error
+}

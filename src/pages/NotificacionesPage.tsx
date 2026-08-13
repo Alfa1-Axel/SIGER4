@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { NotificationDetailModal } from '../components/ui/NotificationDetailModal'
+import { forceShowAppUpdateBanner } from '../lib/appUpdateBannerControl'
 import { fetchNotificationsForProfile, markNotificationRead } from '../lib/api/notifications'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
@@ -29,6 +30,7 @@ const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   alerta_admin: 'Alerta administrativa',
   prestamo_por_vencer: 'Préstamo por vencer',
   prestamo_vencido: 'Préstamo vencido',
+  actualizacion_sistema: 'Novedad del sistema',
 }
 
 export function NotificacionesPage() {
@@ -84,11 +86,18 @@ export function NotificacionesPage() {
   }
 
   async function handleOpenNotification(notification: Notification) {
-    setOpenNotification(notification)
-    if (!notification.is_read) {
-      await handleMarkRead(notification.id)
-      setOpenNotification((prev) => (prev && prev.id === notification.id ? { ...prev, is_read: true } : prev))
+    if (!notification.is_read) await handleMarkRead(notification.id)
+
+    // Novedades del sistema abren el modal real de la novedad (mismo
+    // contenido que el banner de AppUpdateBanner.tsx), no el
+    // NotificationDetailModal genérico — ahí no hay ningún "cuerpo" técnico
+    // que mostrar, app_update_id es la clave real del contenido.
+    if (notification.type === 'actualizacion_sistema' && notification.app_update_id) {
+      forceShowAppUpdateBanner(notification.app_update_id)
+      return
     }
+
+    setOpenNotification(notification)
   }
 
   function scopeLabelFor(n: Notification): string | null {

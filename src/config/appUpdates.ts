@@ -10,10 +10,26 @@
 //   1. Agregar un nuevo objeto AL PRINCIPIO de APP_UPDATES (el más reciente
 //      primero — es el único que se muestra).
 //   2. "id" tiene que ser único y estable (nunca reutilizar un id ya usado):
-//      es la clave que decide si un usuario ya lo vio. Convención sugerida:
-//      "YYYY-MM-DD-slug-corto".
+//      es la clave que decide si un usuario ya lo vio, Y la clave de
+//      deduplicación de la notificación interna (ver más abajo). Convención
+//      sugerida: "YYYY-MM-DD-slug-corto".
 //   3. Con guardar y desplegar alcanza — no hace falta ninguna migración ni
-//      variable de entorno.
+//      variable de entorno nueva (la migración 0077, que agrega el tipo de
+//      notificación y la columna de deduplicación, ya está aplicada de una
+//      vez para siempre — no hay que tocarla por cada novedad nueva).
+//
+// Notificación interna automática (desde 2026-08-13, migración 0077): cada
+// vez que AppUpdateBanner.tsx detecta que APP_UPDATES[0] es una novedad que
+// el usuario todavía no vio (independiente de si el banner llega a
+// mostrarse o no en este dispositivo puntual), inserta una notificación
+// interna ("Nueva actualización disponible. Ingresá para conocer las
+// novedades.") en /notificaciones — persistente hasta que el usuario la
+// marque como leída, visible desde cualquier sesión/dispositivo (a
+// diferencia del banner, que es "una vez por navegador" vía localStorage).
+// Tocar esa notificación reabre el modal de esa novedad puntual (ver
+// forceShowAppUpdateBanner en src/lib/appUpdateBannerControl.ts). No hace
+// falta ningún paso manual para esto — se dispara solo con solo agregar la
+// entrada nueva acá arriba.
 export type AppUpdateSeverity = 'info' | 'improvement' | 'important'
 
 export interface AppUpdate {

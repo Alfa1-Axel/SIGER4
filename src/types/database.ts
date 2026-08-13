@@ -109,6 +109,7 @@ export type NotificationType =
   | 'alerta_admin'
   | 'prestamo_por_vencer'
   | 'prestamo_vencido'
+  | 'actualizacion_sistema'
 
 export interface Notification {
   id: string
@@ -121,6 +122,10 @@ export interface Notification {
   body: string | null
   is_read: boolean
   created_at: string
+  // Solo para type='actualizacion_sistema' -- id estable de la novedad en
+  // APP_UPDATES (src/config/appUpdates.ts) que originó esta notificación.
+  // Null para el resto de los tipos.
+  app_update_id: string | null
 }
 
 export interface AttendanceSummary {

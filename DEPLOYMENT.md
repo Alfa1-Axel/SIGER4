@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0074` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0075` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -3873,7 +3873,7 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 74 migraciones (`0001` a `0074`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 75 migraciones (`0001` a `0075`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
@@ -4617,3 +4617,139 @@ No hace falta deshacer nada en ninguno de los dos casos: ni el `alter database`/
 medias — ambos se rechazan antes de aplicar cualquier cambio. Alcanza con seguir los pasos de 33.4
 (correr `0073`+`0074`, configurar el secreto de la Edge Function, y guardarlo desde Ajustes con tu
 sesión real de `informatica_r4`).
+
+## 34. Panel de Pendientes por Rol (2026-08-12) — migración 0075
+
+### 34.1 Qué es y qué NO es
+
+Una sección nueva en el Dashboard ("Pendientes") que le muestra a cada usuario, según su rol y
+alcance, una lista corta de cosas concretas que conviene revisar o resolver — **no** es un sistema de
+tareas nuevo (sin asignación manual, sin checkbox de "completado", sin tabla propia de tareas). Cada
+pendiente se calcula en el momento a partir de datos que ya existen en otras tablas del sistema; no
+hay ningún dato inventado ni estimado. Tocar "resolver" en un pendiente es, en los hechos, ir a la
+pantalla real correspondiente (el detalle de un cuartel, una solicitud de préstamo, un evento) y
+actuar ahí — el panel es un índice, no un flujo propio.
+
+### 34.2 Fuente de datos: una sola función, `get_pending_items()`
+
+Migración `0075_pending_items_panel.sql`: una función `SECURITY DEFINER STABLE` que arma el resultado
+con `UNION ALL` de subqueries, una por tipo de pendiente. Cada subquery reutiliza los **mismos**
+helpers que ya usa el resto del sistema para RLS/alcance (`is_informatica_r4()`, `is_regional_role()`,
+`is_escuela_role()`, `my_station_ids()`, `my_region_ids()`, `current_profile_id()`) — el alcance de
+"qué pendientes ve cada quien" nunca puede desincronizarse de lo que esa persona ya puede ver/hacer en
+el resto de la app, porque no es una capa de permisos nueva y paralela, es la misma.
+
+Cada fila devuelta tiene: `item_key` (id estable, `"<tipo>_<uuid real>"`), `title`, `description`,
+`priority` (`alta`/`media`/`baja`), `module` (nombre de sección para agrupar visualmente), `link_path`
+(ruta real de la app — nunca una URL inventada, se verificaron las 8 rutas usadas contra `App.tsx`), y
+`sort_key` (fecha real usada para ordenar dentro de cada nivel de prioridad — nunca un valor
+arbitrario).
+
+### 34.3 Los 8 tipos de pendiente implementados
+
+| # | Pendiente | Fuente real | Prioridad | Quién lo ve |
+|---|---|---|---|---|
+| 1 | Cuartel en rojo/amarillo del semáforo | `station_compliance` (vista, migración 0052) | alta (rojo) / media (amarillo) | Heredado de la propia vista (`security_invoker`) — el alcance real de `stations_select_scope` |
+| 2 | Solicitud de préstamo pendiente de aprobar | `inventory_loan_requests` (`status='pendiente'`) | media | admin, `is_regional_role()`, responsable del ítem o de la solicitud |
+| 3 | Préstamo por vencer (≤48hs) o vencido | `inventory_loan_requests` (`status='retirada'`) | alta (vencido) / media (por vencer) | admin, `is_regional_role()`, el cuartel solicitante (`my_station_ids()`), responsable del ítem/solicitud |
+| 4 | Evento de calendario próximo (7 días) | `calendar_events` (`status='programado'`) | baja | admin ve todos; Escuela/capacitación visible para cualquiera (regional-wide por diseño); el resto según su región/cuartel |
+| 5 | Documento sin archivo subido (+24hs) | `documents` (`storage_path='pending'`) | baja | solo admin (es quien puede limpiarlos, `cleanup_pending_documents`) |
+| 6a | Usuario nuevo (últimos 7 días) | `profiles` | baja | solo admin |
+| 6b | Cuartel sin actividad relevante (+30 días) | `station_compliance.last_relevant_update_at` | media | solo admin (mismo criterio que el resumen semanal, migración 0067) |
+| 7 | Curso desactualizado (fecha pasada sin cambiar de estado) | `courses` | baja | admin + `is_escuela_role()` |
+| 8 | Departamento sin informes de actividad (+30 días) | `departments` + `department_activity_reports` | baja | admin, `is_regional_role()`, coordinador o miembro de ese departamento puntual |
+
+### 34.4 Cómo se calculan (criterios exactos)
+
+- **Semáforo (1)**: reutiliza `station_compliance` tal cual — no se reimplementa el cálculo de
+  rojo/amarillo/verde, se consulta la vista existente y se traduce cada motivo (`has_contact_info`,
+  `has_personnel`, `has_vehicles`, `attendance_recent`, `interventions_recent`, `has_documents`) al
+  primer motivo que falte, en el mismo orden de prioridad que ya usa la vista para decidir el color.
+- **Préstamos pendientes/por vencer (2, 3)**: mismos estados (`pendiente`, `retirada`) y mismo criterio
+  de destinatarios que ya usan `SolicitudPrestamoDetallePage.tsx`/`send_loan_return_reminders()`
+  (migración 0068) — la ventana de "por vencer" se amplía a 48hs (contra las 24hs del recordatorio
+  automático) porque este panel es una foto que alguien puede mirar en cualquier momento del día, no
+  un aviso puntual.
+- **Eventos próximos (4)**: ventana fija de 7 días, `status='programado'` (nunca eventos cancelados).
+- **Documentos pendientes (5)**: mismo umbral de 24hs que `cleanup_pending_documents()` (migración
+  0033) — evita mostrar como "pendiente" una carga que recién está en curso.
+- **Usuarios nuevos (6a)**: ventana fija de 7 días sobre `profiles.created_at`, solo activos.
+- **Cuarteles sin actividad (6b)**: mismo umbral de 30 días que ya usa `send_weekly_admin_summary()`
+  (migración 0067) — reutiliza `station_compliance.last_relevant_update_at` en vez de duplicar el
+  cálculo.
+- **Cursos desactualizados (7)**: `planificado` con `start_date` ya pasada, o `en_curso` con
+  `end_date` ya pasada — ambos son indicios de que falta actualizar el estado real del curso.
+- **Departamentos sin actividad (8)**: mismo umbral de 30 días, sobre `department_activity_reports`
+  filtrado por `department_id`.
+
+### 34.5 Permisos y alcance (verificado contra la matriz de la sección 31.4)
+
+| Rol | Qué ve en Pendientes |
+|---|---|
+| `informatica_r4` / `integrante_informatica` | Todos los tipos, sin restricción territorial — incluye los exclusivos de admin (documentos pendientes, usuarios nuevos, cuarteles sin actividad). |
+| `secretario_regional` | Semáforo/eventos/departamentos de su región; préstamos de su región; sin los tipos exclusivos de admin. |
+| `director_escuela` / `instructor` | Eventos de Escuela/capacitación (regional-wide) + cursos desactualizados; semáforo/eventos de su región (heredado de RLS); sin acceso a préstamos ni departamentos salvo que además sean miembro/coordinador. |
+| `jefe_cuerpo_activo` / `usuario_carga_cuartel` / `presidente_cuartel` / `secretario_comision` | Semáforo/eventos de su propio cuartel; préstamos de su propio cuartel (como solicitante) o si son responsables puntuales; departamentos solo si son miembro/coordinador. |
+| Miembro o coordinador de un departamento (cualquier rol) | Suma el pendiente de "departamento sin actividad" para sus propios departamentos, sin importar su rol de sistema. |
+| `invitado` | Solo lo que ya puede ver por lectura (semáforo y eventos de su propio cuartel) — nunca un pendiente de aprobación/gestión, coherente con que es un rol sin escritura en ningún módulo. |
+
+No se agregó ninguna policy de RLS nueva ni se tocó ninguna existente — `get_pending_items()` no lee
+ninguna tabla directo sin pasar por su propio filtro de alcance dentro de la función (aun siendo
+`SECURITY DEFINER`, que bypasea RLS, cada subquery reconstruye el mismo criterio de alcance a mano).
+
+### 34.6 UI
+
+Nuevo componente `src/components/PendingItemsSection.tsx`, montado en `PanelPage.tsx` (Dashboard)
+entre los KPIs y "Estado de Carga por Cuartel" — es la sección más accionable del panel, así que va
+arriba. Cada pendiente se muestra como una fila clickeable (mismo patrón visual que "Próximos
+Eventos"/"Estado de Cuarteles" ya existentes) con: título, descripción corta, badge de módulo, y badge
+de prioridad (`badge-danger`/`badge-warning`/`badge-info` para alta/media/baja, mismos colores que ya
+usa el resto del sistema para semáforo/vencimientos). Tocar la fila navega directo a la pantalla real
+del pendiente (`link_path`). Estado vacío: "No hay pendientes importantes." Estado de carga y de error
+siguen el mismo patrón que el resto del Dashboard.
+
+### 34.7 Notificaciones — explícitamente NO implementadas en esta ronda
+
+Pedido explícito: "no enviar notificaciones nuevas todavía, esto es solo panel visual". No se agregó
+ningún trigger, cron job, ni llamada a `notify_informatica_staff()`/`send-push` desde
+`get_pending_items()` ni desde el frontend nuevo. Queda preparado para una fase futura si algún tipo
+de pendiente amerita un recordatorio proactivo: como cada pendiente ya resuelve a una fila real con su
+propio `item_key`/`link_path`, un cron nuevo que quisiera notificar "tenés préstamos vencidos"
+reutilizaría exactamente la misma subquery del punto 3 sin duplicar el criterio — no hace falta ningún
+cambio de schema para eso, solo un trigger o función nueva el día que se pida explícitamente.
+
+### 34.8 Migración nueva y despliegue
+
+- `0075_pending_items_panel.sql` — crea `get_pending_items()`. No agrega tablas, columnas, ni cron
+  jobs. No requiere backfill (es una función derivada, sin estado propio).
+
+Ninguna Edge Function nueva ni modificada. Vercel: sí, redeploy — frontend nuevo
+(`PendingItemsSection.tsx`, `src/lib/api/pendingItems.ts`, cambio en `PanelPage.tsx`).
+
+### 34.9 Cómo probar
+
+1. Correr la migración `0075` y confirmar que `select * from get_pending_items();` no tira error
+   logueado como cualquier usuario real (no desde el SQL Editor sin sesión — ver sección 33.3, aplica
+   igual acá: sin `auth.uid()` real, `current_profile_id()` es null y ninguna condición de alcance
+   matchea, así que la función corre pero devuelve 0 filas para las categorías que dependen de
+   pertenencia — el semáforo y los eventos de Escuela sí pueden devolver filas igual, porque no
+   dependen de `current_profile_id()`).
+2. Como `informatica_r4`: entrar a `/panel`, confirmar que "Pendientes" muestra cuarteles en
+   rojo/amarillo, solicitudes de préstamo pendientes, préstamos vencidos/por vencer, documentos sin
+   subir, usuarios nuevos y cuarteles sin actividad — todos con badge de prioridad coherente y link
+   que lleva a la pantalla real.
+3. Como `jefe_cuerpo_activo`/`usuario_carga_cuartel`: confirmar que solo ve pendientes de su propio
+   cuartel (semáforo, préstamos donde es solicitante o responsable, eventos de su cuartel) — nunca los
+   tipos exclusivos de admin (documentos pendientes, usuarios nuevos).
+4. Como `director_escuela`/`instructor`: confirmar que ve cursos desactualizados y eventos de
+   Escuela/capacitación, pero no solicitudes de préstamo ni departamentos (salvo que además coordine
+   uno).
+5. Como miembro o coordinador de un departamento: confirmar que ve "Departamento sin actividad
+   reciente" solo para SUS departamentos, no para todos.
+6. Como `invitado`: confirmar que solo ve pendientes de solo-lectura (semáforo/eventos de su cuartel),
+   nunca préstamos ni nada con acción de gestión.
+7. Con un sistema sin ningún pendiente real (o filtrando manualmente los datos de prueba hasta que no
+   quede ninguno): confirmar que aparece "No hay pendientes importantes." en vez de una sección vacía
+   sin explicación.
+8. Tocar un pendiente de cada tipo y confirmar que el link lleva exactamente a la pantalla esperada
+   (no un 404 ni una pantalla "sin permisos").

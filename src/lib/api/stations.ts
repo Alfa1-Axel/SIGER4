@@ -28,6 +28,7 @@ export interface StationInput {
   subsede_id: string
   cover_image_url?: string | null
   logo_url?: string | null
+  founded_year?: number | null
 }
 
 export async function createStation(input: StationInput): Promise<Station> {

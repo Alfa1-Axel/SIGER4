@@ -41,6 +41,7 @@ export function CuartelFormPage() {
   const [instagram, setInstagram] = useState('')
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<StationStatus>('operativo')
+  const [foundedYear, setFoundedYear] = useState('')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -88,6 +89,7 @@ export function CuartelFormPage() {
       setInstagram(station.social_media?.instagram ?? '')
       setDescription(station.description ?? '')
       setStatus(station.status)
+      setFoundedYear(station.founded_year != null ? String(station.founded_year) : '')
       setRegionId(station.region_id)
       setSubsedeId(station.subsede_id ?? '')
       setExistingLogoUrl(station.logo_url)
@@ -102,6 +104,17 @@ export function CuartelFormPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+
+    const currentYear = new Date().getFullYear()
+    const trimmedFoundedYear = foundedYear.trim()
+    if (trimmedFoundedYear) {
+      const parsedYear = Number(trimmedFoundedYear)
+      if (!Number.isInteger(parsedYear) || parsedYear < 1800 || parsedYear > currentYear) {
+        setError(`El año de fundación debe ser un número entre 1800 y ${currentYear}.`)
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       const socialMedia =
@@ -119,6 +132,7 @@ export function CuartelFormPage() {
         social_media: socialMedia,
         description: description || null,
         status,
+        founded_year: trimmedFoundedYear ? Number(trimmedFoundedYear) : null,
         region_id: regionId,
         subsede_id: subsedeId,
       }
@@ -235,6 +249,20 @@ export function CuartelFormPage() {
           <div className="field">
             <label htmlFor="instagram">Instagram (opcional)</label>
             <input id="instagram" value={instagram} onChange={(e) => setInstagram(e.target.value)} placeholder="@cuartel" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="foundedYear">Año de fundación (opcional)</label>
+            <input
+              id="foundedYear"
+              type="number"
+              inputMode="numeric"
+              min={1800}
+              max={new Date().getFullYear()}
+              value={foundedYear}
+              onChange={(e) => setFoundedYear(e.target.value)}
+              placeholder="1998"
+            />
           </div>
 
           <div className="field">

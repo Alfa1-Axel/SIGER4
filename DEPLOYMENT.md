@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0075` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0077` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -3873,7 +3873,7 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 75 migraciones (`0001` a `0075`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 77 migraciones (`0001` a `0077`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
@@ -4170,6 +4170,19 @@ región").
 
 Cualquier rol que coordine o sea miembro de un departamento suma los módulos de Departamentos a su set
 visible, acotado a sus propios departamentos.
+
+*Resuelto (2026-08-13):* hasta antes de la migración `0076`, `director_escuela`/`instructor`
+compartían la policy RLS `audit_logs_select_regional` con `secretario_regional` vía
+`is_regional_role() OR is_escuela_role()`, con una condición de "`region_id is null` deja pasar"
+pensada originalmente solo para roles de autoridad regional amplia — esto le daba a cualquier
+`instructor` (el rol más acotado de los tres) acceso a auditoría de **cualquier tabla sin territorio
+resuelto**, incluidas acciones de informática, contradiciendo la fila de esta misma tabla ("Su
+región"). Corregido separando `is_escuela_role()` en su propia policy
+(`audit_logs_select_escuela`), acotada a las tablas reales de Escuela + región propia — ver sección
+35.1 para el detalle completo del diagnóstico y el fix. A diferencia de las otras 3 discrepancias
+frontend/RLS cerradas en la v1.0.0-beta.1 (sección 31.4, donde la UI era más estricta que el
+backend), este SÍ era un hueco de seguridad real del lado del backend — el frontend ya tenía el
+filtrado de módulos correcto desde antes.
 
 #### Notificaciones
 
@@ -4753,3 +4766,277 @@ Ninguna Edge Function nueva ni modificada. Vercel: sí, redeploy — frontend nu
    sin explicación.
 8. Tocar un pendiente de cada tipo y confirmar que el link lleva exactamente a la pantalla esperada
    (no un 404 ni una pantalla "sin permisos").
+
+## 35. Fix de seguridad en Auditoría + notificaciones de novedades + UX/demo (2026-08-13) — migraciones 0076-0077
+
+Ronda de correcciones reales previa a demo institucional/carga inicial: un bug de seguridad real en
+Auditoría (prioridad más alta), notificaciones internas para novedades del sistema, el scroll agresivo
+que arrastraba todo el shell, el tipo de vehículo como combobox, "Actividad Reciente" reemplazada por
+datos reales, y la preparación completa para demo/carga inicial.
+
+### 35.1 Auditoría — fix de seguridad real (migración 0076)
+
+**Reporte**: un usuario con roles `jefe_cuerpo_activo` + `instructor` podía ver auditoría de todo el
+sistema, incluidas acciones de informática.
+
+**Causa exacta**: `audit_logs_select_regional` (redefinida en la migración `0048`) combinaba
+`is_regional_role() OR is_escuela_role()` con la condición `region_id is null OR region_id in
+(my_region_ids())`. Esa condición "`is null` deja pasar" fue una decisión deliberada de la migración
+`0014` ("logs sin region_id resuelto... quedan visibles igual para no ocultar información por una
+limitación de datos"), pensada en su momento solo para `secretario_regional`/`director_escuela` — dos
+roles con autoridad regional amplia real. La migración `0048` separó `is_regional_role()` de
+`is_escuela_role()` (agregando `instructor` a este último) pero **nunca revalidó** si esa misma
+condición laxa seguía siendo correcta para el rol nuevo, mucho más acotado.
+
+`audit_row_change()` (el trigger genérico que resuelve `region_id`/`subsede_id`/`station_id` por
+tabla) solo cubre un subconjunto de tablas en su `case` — cualquier tabla que caiga en el `else`
+(`departments`, `department_members`, `system_settings`, y cualquier tabla futura que se audite sin
+agregar su propio `when`) queda con `region_id = null`. Con la policy vieja, **cualquier `instructor`
+veía esas filas completas, de cualquier tabla, sin importar el actor real** — exactamente "ve
+auditoría de acciones del admin". `jefe_cuerpo_activo` (vía `audit_logs_select_station`, `0064`) sí
+estaba correctamente acotado a su cuartel — el hueco era específicamente el lado `is_escuela_role()`
+de la policy combinada (las policies de un mismo `for select` se combinan con `OR` entre sí, así que
+bastaba con calificar para cualquiera de las dos condiciones).
+
+**Corrección**: `audit_logs_select_regional` vuelve a ser exclusiva de `is_regional_role()`
+(`secretario_regional`), sin cambios de comportamiento para ese rol. Nueva policy
+`audit_logs_select_escuela`, exclusiva de `is_escuela_role()` (`director_escuela`/`instructor`),
+acotada a **solo** las tablas reales de Escuela (`courses`, `course_stations`, `calendar_events`,
+`profiles`, `user_roles` — mismo set que ya usa `ESCUELA_TABLES` en `AuditoriaPage.tsx`) y a su propia
+región cuando la fila tiene territorio — nunca un `is null` genérico que se cuele a otras tablas. Los
+eventos de calendario de tipo `escuela`/`capacitacion` (sin `region_id`/`station_id` por diseño, ver
+`calendar_events_single_scope`) siguen visibles porque no tienen territorio que filtrar, no por una
+excepción especial. El frontend (`ESCUELA_TABLES`/`JEFE_CUERPO_ACTIVO_TABLES` en `AuditoriaPage.tsx`)
+**ya hacía la unión correcta de módulos por rol** — no tenía el bug, no se tocó; el problema era
+exclusivamente de RLS.
+
+**Migración**: `0076_fix_audit_logs_escuela_scope_leak.sql`.
+
+### 35.2 Notificación interna para novedades del sistema (migración 0077)
+
+Cuando se publica una novedad nueva en `APP_UPDATES` (`src/config/appUpdates.ts`), además del banner
+ya existente (`AppUpdateBanner.tsx`, "visto" vía `localStorage` por navegador), cada usuario recibe
+ahora una notificación interna persistente: **"Nueva actualización disponible. Ingresá para conocer
+las novedades."**
+
+**Cómo se evita que se repitan**: deduplicación **atómica** a nivel de base de datos — mismo patrón
+exacto que `idx_push_send_log_notification_dedup` (migración `0025`). Dos columnas nuevas en
+`notifications` (`type='actualizacion_sistema'`, `app_update_id text`) más un índice único parcial
+`(profile_id, app_update_id) WHERE app_update_id IS NOT NULL`. El insert usa el `id` estable de la
+novedad en `APP_UPDATES` — si dos pestañas del mismo usuario detectan la misma novedad al mismo
+tiempo, el segundo insert viola el índice único y se descarta en silencio (código `23505`, tratado
+como éxito, no como error) — nunca hay dos notificaciones de la misma novedad para el mismo usuario,
+sin depender de una lectura previa con riesgo de carrera.
+
+Se genera desde el **cliente** (`AppUpdateBanner.tsx`), no desde un trigger de Postgres: `APP_UPDATES`
+sigue viviendo solo en el frontend (decisión de diseño ya documentada — no hace falta una tabla
+server-side de novedades), así que no hay ninguna tabla que dispare un evento. Se dispara siempre que
+existe una novedad no vista (`hasSeenAppUpdate`), independientemente de si el banner llega a mostrarse
+en ese dispositivo puntual — así queda un rastro accesible desde `/notificaciones` en cualquier
+sesión, a diferencia del banner (una vez por navegador).
+
+**Al tocarla**: reabre el modal real de esa novedad puntual (no el `NotificationDetailModal`
+genérico) — nuevo módulo `src/lib/appUpdateBannerControl.ts` (pub/sub, mismo patrón que
+`src/lib/swUpdate.ts` para el banner de actualización de la PWA) conecta `NotificacionesPage.tsx` con
+`AppUpdateBanner.tsx` (montado globalmente en `App.tsx`), usando `app_update_id` para encontrar la
+novedad exacta en `APP_UPDATES` aunque ya no sea la más reciente.
+
+**Cómo agregar una novedad nueva**: sin cambios en el procedimiento ya documentado en
+`src/config/appUpdates.ts` (agregar un objeto al principio de `APP_UPDATES`, `id` único) — la
+notificación interna se dispara sola, no requiere ningún paso manual adicional ni nueva migración.
+
+**Migración**: `0077_app_update_notifications.sql`.
+
+### 35.3 Layout / scroll agresivo
+
+**Causa exacta**: `html`/`body` tenían `height: 100%` (una capacidad, no una restricción) sin
+`overflow: hidden` propio, y `#root` tenía `min-height: 100vh` (puede crecer de más). El shell interno
+(`.app-shell`, ya con `height: 100vh` + `overflow: hidden` desde una ronda anterior, sección 24.3) en
+teoría nunca debía desbordar — pero nada impedía que el **documento** (no `.app-content`, el `<body>`
+completo) generara su propio scroll por encima del shell, que es lo que se percibía como "header se
+oculta, footer se mueve, toda la pantalla scrollea" con un scroll fuerte/el bounce nativo de iOS.
+
+**Corrección**: `html`/`body`/`#root` ahora tienen `overflow: hidden` + `height` fijo (no `min-height`)
+explícitos, y `overscroll-behavior: none` en `html`/`body` para eliminar el rubber-band/bounce que
+"arrastraba" el documento — `overscroll-behavior: none` en un ancestro no bloquea el scroll normal de
+los descendientes, solo evita que el scroll se propague hacia arriba cuando un hijo llega a su límite,
+que es exactamente el comportamiento buscado. `.login-page` (la única pantalla que vivía fuera del
+shell autenticado, con su propio `min-height: 100vh`) pasa a `height: 100%` + `overflow-y: auto`
+propio, para no perder la capacidad de scrollear en pantallas chicas con contenido largo ahora que
+`#root` ya no puede crecer.
+
+Sin cambios en `.app-shell`/`.app-sidebar`/`.app-main-column`/`.app-content`/`.sidebar-nav` (ya
+correctos desde la sección 24.3) — el fix es exclusivamente en el nivel de `html`/`body`/`#root`, que
+antes dejaban una puerta abierta por encima de un shell interno que sí estaba bien construido.
+
+### 35.4 Vehículos — tipo con combobox + "Otros"
+
+`vehicles.vehicle_type` sigue siendo `text` libre en la base (sin enum, sin constraint) — el combobox
+es una capa de UI pura en `VehiculoFormPage.tsx`, sin ninguna migración. Opciones institucionales
+(Ambulancia, Ataque rápido, las 4 categorías de Autobomba por capacidad, Embarcaciones,
+Escalante/Hidroelevador, Mat-Pel, Unidad de Rescate, Unidad de Transporte, Otros) + "Seleccionar…"
+como placeholder obligatorio. Al elegir "Otros" aparece un campo de texto libre obligatorio; el valor
+real que se guarda es ese texto, nunca el string sentinel "Otros" en sí.
+
+**Compatibilidad con datos existentes**: al editar un vehículo, si el `vehicle_type` guardado coincide
+exacto con una opción institucional, se preselecciona esa opción; cualquier otro valor (incluidos
+todos los tipos libres cargados antes de este combo) se trata como "Otros" con el texto real
+precargado — nunca se pierde ni se fuerza a encajar en una categoría que no corresponde. Reportes/PDF
+(`reportGenerators.ts`) y el detalle de cuartel (`CuartelDetallePage.tsx`) solo **muestran**
+`vehicle_type` como texto, nunca comparan contra un enum ni agrupan por valores fijos — sin ningún
+impacto en reportes ni estadísticas existentes.
+
+### 35.5 Detalle de Cuartel — "Actividad Reciente" reemplazada
+
+Era un placeholder 100% estático ("Aún no hay actividad registrada... en Supabase") que nunca
+consultaba ninguna tabla, sin importar qué tan activo estuviera el cuartel. Reemplazada por un feed
+real combinado, sin ninguna tabla nueva:
+- Últimas cargas de asistencia e intervenciones (datos que la página ya cargaba).
+- Últimos eventos de Historial Institucional (idem).
+- Últimos documentos cargados específicamente para ese cuartel (fetch nuevo,
+  `fetchRecentDocumentsByStation`, filtra `documents.station_id`).
+- Próximos eventos de Calendario de ese cuartel (fetch nuevo,
+  `fetchUpcomingCalendarEventsByStation`, filtra `calendar_events.station_id`).
+
+Ordenado por `created_at` real (fecha de carga en el sistema, no fecha del evento en sí), últimos 6.
+Documentos y eventos linkean a su pantalla real (`/documentos`, `/calendario/:id`); asistencia/
+intervenciones/historial se muestran inline (ya están en la misma pantalla). Estado vacío real y
+específico si el cuartel genuinamente no tiene nada cargado todavía, sin mencionar "Supabase" ni
+ningún detalle técnico. Se aprovechó la misma pasada para corregir el mismo tipo de texto en
+`PanelPage.tsx` ("cuarteles cargados en Supabase") y `EscuelaPage.tsx` ("cursos cargados en
+Supabase").
+
+### 35.6 Preparar SIGER4 para demo / carga inicial real
+
+#### A. Datos mínimos de demo — orden recomendado
+
+Mismo orden ya documentado en la sección 31.3 (Regional → Subsedes → Cuarteles → usuario
+`informatica_r4` → resto de usuarios → roles/scopes → Departamentos → Inventario → Calendario →
+Documentos desde PC → Personal/Vehículos → contactos mínimos para el Semáforo) — sin cambios, sigue
+siendo la referencia vigente para carga real. Para una demo rápida sin cargar nada a mano, ver el
+punto C (script opcional).
+
+#### B. Estados vacíos — revisados en esta ronda
+
+Se revisaron explícitamente Panel, Cuarteles, Documentos, Inventario, Departamentos, Reportes,
+Calendario, Auditoría y Pendientes: todos tienen un estado vacío específico y en español institucional
+(nunca "Supabase" ni un mensaje genérico) para cuando no hay datos — confirmado sin hallazgos nuevos
+salvo los dos textos corregidos en 35.5. Reportes no tiene un estado vacío tradicional porque es un
+formulario de generación, no un listado — no aplica.
+
+#### C. Script opcional de datos de demo — `supabase/seed_example.sql` (actualizado)
+
+Ya existía un script con este propósito (de una etapa muy temprana del proyecto, cubría solo
+`stations`/`vehicles`/`attendance_summaries`/`intervention_summaries`/`courses`) — se actualizó en el
+mismo archivo (no se creó un tercero, para no dejar ambigüedad sobre cuál correr) para cubrir el
+sistema actual completo:
+
+- Crea **un cuartel de ejemplo completo** ("Cuartel Demo — Datos de Ejemplo", código `DEMO1`) dentro
+  de la Regional 4 real, con vehículos (usando las opciones reales del combo de 35.4), personal,
+  asistencia/intervenciones, Historial Institucional, un evento de Calendario próximo, un departamento
+  regional con un informe de actividad, y un ítem de Inventario Regional.
+- **No se ejecuta automáticamente** — es un script manual, con una Sección 0 de verificación previa
+  (queries `select` para confirmar el estado antes de insertar nada) documentada en su propio
+  encabezado.
+- **Nunca toca usuarios reales**: no crea, edita ni borra ningún `profile`/`auth.users`/`user_roles`/
+  `user_scopes`. Los campos "creado por"/"responsable" quedan en `null` donde la tabla lo permite.
+- **No carga documentos reales**: `documents` requiere un archivo real en Storage, que un script SQL
+  no puede generar — cargar un documento de ejemplo se sigue haciendo a mano desde la app.
+  Enteramente **aditivo**: nunca hace `DELETE`/`UPDATE` de datos existentes, y correrlo dos veces no
+  duplica nada (`where not exists`/`on conflict do nothing` en cada insert, con el constraint real
+  verificado — `stations(region_id, code)` es el único `on conflict` usado, confirmado que existe).
+- Incluye una **Sección 2 de limpieza** (comentada, para descomentar y correr a mano) que borra
+  únicamente lo que el propio script insertó, identificado por nombre exacto (`DEMO1` / "Departamento
+  Demo — Datos de Ejemplo") — no una limpieza general de "todo lo que parezca de prueba" (para eso
+  sigue existiendo `supabase/cleanup_test_data.sql`, que exige revisión manual antes de correrse).
+
+#### D. Checklist de presentación
+
+**Qué mostrar primero** (orden sugerido de un recorrido de demo):
+1. Login como `informatica_r4` → Dashboard: KPIs, Pendientes, Semáforo de carga, próximos eventos.
+2. Cuarteles → detalle de un cuartel con datos completos (real o el `DEMO1` del script opcional):
+   Personal, Vehículos, Asistencia/Intervenciones, Historial Institucional, Actividad Reciente.
+3. Reportes → generar un PDF real (ej. "Reporte General por Cuartel") para mostrar el resultado
+   institucional (logos, tablas, gráficos).
+4. Documentos → mostrar la organización por carpetas, y aclarar explícitamente que la carga de
+   archivos es solo desde PC (ver punto E).
+5. Calendario → vista de mes y próximos eventos.
+6. Departamentos → un departamento con miembros e informes de actividad.
+7. Notificaciones → mostrar el banner/notificación de novedades del sistema (sección 35.2) y el flujo
+   de préstamos si corresponde.
+8. Auditoría → con un usuario `informatica_r4`, mostrar el filtrado institucional (sin JSON crudo) y,
+   si hace sentido para la audiencia, activar "Ver datos técnicos" una vez para mostrar la
+   trazabilidad completa.
+9. Ajustes → versión visible, notificaciones push, preferencias.
+
+**Roles recomendados para presentar**: `informatica_r4` (panorama completo) + al menos un rol
+operativo real de la institución (`jefe_cuerpo_activo` o `secretario_regional`, según la audiencia)
+para mostrar que el sistema se ve distinto y acotado según quién entra — es un argumento de venta
+directo del diseño de permisos.
+
+**Pruebas rápidas antes de mostrar** (5 minutos, no reemplaza el checklist completo de la sección
+31.5):
+- [ ] Login/logout funciona sin errores en consola.
+- [ ] El Dashboard carga sin el mensaje "no pudimos cargar" (revisar RLS/conectividad si aparece).
+- [ ] Generar un PDF de Reportes funciona y se ve bien.
+- [ ] El banner de novedades (si hay una pendiente) se ve bien y se puede cerrar.
+- [ ] Probar el scroll agresivo en un dispositivo mobile real (sección 35.3) — confirmar que el header/
+      footer ya no se mueven.
+- [ ] Si se usó `seed_example.sql`, confirmar que el cuartel `DEMO1` se ve completo antes de arrancar.
+
+**Qué NO mostrar todavía**:
+- Carga de documentos desde mobile — sigue pausada (sección 21, sin cambios). Si alguien pregunta,
+  aclarar que ver/descargar sí funciona en mobile, solo cargar está limitado a PC por ahora.
+- `analyze-report` (IA) — no existe ningún flujo de IA visible ni se debe mencionar como feature
+  disponible (código huérfano, documentado en la sección 31.6, no forma parte del producto).
+- Cualquier dato cargado con `seed_example.sql` como si fuera real — el nombre "(demo)"/"Datos de
+  Ejemplo" en cada fila es intencional, dejarlo visible para que quede claro que es de ejemplo.
+
+#### E. Limpieza final aplicada en esta ronda
+
+- Corregidos los dos textos con "en Supabase" visibles al usuario (`PanelPage.tsx`,
+  `EscuelaPage.tsx`) — mismo tipo de problema que "Actividad Reciente" (35.5), lenguaje técnico
+  expuesto sin necesidad.
+- Confirmado sin resultados: sin menciones de IA/Gemini/ChatGPT visibles en ningún texto de
+  `src/pages/`/`src/components/` (fuera del label no-visible `analisis_ia_reporte`, ya documentado).
+- Confirmado sin resultados: sin links muertos (`href="#"`, `to="#"`) ni botones sin función
+  (`onClick={() => {}}`) en todo `src/pages/`/`src/components/`.
+- Confirmado sin resultados: sin texto "próximamente"/"en construcción" en ningún componente
+  user-facing (los únicos matches de `placeholder=` son atributos HTML normales de inputs vacíos, no
+  features sin implementar).
+
+### 35.7 Migraciones nuevas de esta ronda
+
+- `0076_fix_audit_logs_escuela_scope_leak.sql` — separa `audit_logs_select_regional` (solo
+  `secretario_regional`) de `audit_logs_select_escuela` (nueva, `director_escuela`/`instructor`,
+  acotada a tablas de Escuela + región propia).
+- `0077_app_update_notifications.sql` — agrega el valor `actualizacion_sistema` a `notification_type`,
+  la columna `notifications.app_update_id`, y el índice único parcial de deduplicación.
+
+### 35.8 Qué correr en Supabase
+
+1. Migraciones `0076` y `0077`, en orden.
+2. (Opcional, solo si se quiere datos de ejemplo para la demo) `supabase/seed_example.sql` — leer la
+   Sección 0 (verificación) antes de correr la Sección 1 (carga).
+
+Ninguna Edge Function nueva ni con cambios de código. Redeploy normal del frontend (Vercel) — hay
+cambios de frontend en varias pantallas.
+
+### 35.9 Cómo verificar el fix de Auditoría (el más crítico de esta ronda)
+
+1. Crear (o usar) un usuario de prueba con roles `jefe_cuerpo_activo` + `instructor` a la vez.
+2. Entrar a `/auditoria` con ese usuario. Confirmar que el selector de "Tabla/módulo" sigue ofreciendo
+   la unión correcta (cuarteles/personal/vehículos/documentos/asistencia/intervenciones/historial/
+   calendario de `jefe_cuerpo_activo`, más cursos/course_stations de Escuela) — sin cambios ahí, el
+   frontend ya era correcto.
+3. Sin filtrar por tabla (o filtrando por una tabla que NO esté en ninguno de los dos sets, si el
+   `<select>` lo permitiera): confirmar que NO aparecen eventos de `departments`,
+   `department_members`, `system_settings`, ni de ningún cuartel que no sea el propio.
+4. Como `informatica_r4`, generar una acción sin territorio resuelto (ej. cambiar un valor en
+   Ajustes → Configuración del sistema, sección 33) y confirmar en `/auditoria` que aparece para
+   `informatica_r4` pero NO para el usuario `jefe_cuerpo_activo` + `instructor` de la prueba.
+5. Confirmar que `jefe_cuerpo_activo` (sin `instructor`) sigue viendo exactamente lo mismo que antes
+   (su propio cuartel) — sin regresión para ese rol solo.
+6. Confirmar que `secretario_regional` sigue viendo exactamente lo mismo que antes (su región
+   completa, incluidas filas sin territorio) — sin regresión, es la policy que no se tocó en
+   comportamiento.

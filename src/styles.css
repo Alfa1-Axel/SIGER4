@@ -893,6 +893,58 @@ img {
   font-weight: 600;
 }
 
+/* Datos de contacto accionables (tel/mailto/wa.me/https/Maps). Institucional
+   y discreto -- ni el azul de navegador por defecto ni un botón grande;
+   ícono + texto con el color primario del tema, subrayado solo al pasar el
+   mouse. min-height 32px para que el touch target sea cómodo en mobile sin
+   verse como un botón. */
+.contact-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+}
+
+.contact-link:hover,
+.contact-link:focus-visible {
+  text-decoration: underline;
+}
+
+.contact-link:focus-visible {
+  outline: 2px solid var(--color-primary-light);
+  outline-offset: 2px;
+}
+
+.contact-link svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.contact-value {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* Variante para usar sobre fondos oscuros/imágenes (ej. banner de portada
+   de cuartel) donde --color-primary no tiene contraste suficiente. */
+.contact-link--inverted {
+  color: #fff;
+}
+
+.contact-link--inverted svg {
+  opacity: 1;
+}
+
+.contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .avatar {
   width: 36px;
   height: 36px;

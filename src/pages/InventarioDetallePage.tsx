@@ -91,9 +91,13 @@ export function InventarioDetallePage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <h1 className="page-title">{item.name}</h1>
-        <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`}>{INVENTORY_STATUS_LABEL[item.status]}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <h1 className="page-title" style={{ minWidth: 0 }}>
+          {item.name}
+        </h1>
+        <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`} style={{ flexShrink: 0 }}>
+          {INVENTORY_STATUS_LABEL[item.status]}
+        </span>
       </div>
       <p className="page-subtitle">
         {item.category === 'otros' ? item.category_other_label : INVENTORY_CATEGORY_LABEL[item.category]}

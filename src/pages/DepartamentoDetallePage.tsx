@@ -478,10 +478,12 @@ export function DepartamentoDetallePage() {
         {members.length === 0 && <div className="empty-state">Sin miembros cargados todavía.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {members.map((member) => (
-            <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{member.profile.full_name}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{stationName(member.profile.station_id)}</div>
+            <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>{member.profile.full_name}</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                  {stationName(member.profile.station_id)}
+                </div>
                 <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                   <ContactLink kind="email" value={member.profile.email} />
                   {member.profile.phone && <ContactLink kind="phone" value={member.profile.phone} />}
@@ -491,7 +493,7 @@ export function DepartamentoDetallePage() {
                 <button
                   type="button"
                   className="btn btn-outlined"
-                  style={{ padding: '4px 8px' }}
+                  style={{ padding: '4px 8px', flexShrink: 0 }}
                   onClick={() => handleRemoveMember(member.id)}
                   aria-label="Quitar miembro"
                 >
@@ -631,9 +633,12 @@ export function DepartamentoDetallePage() {
           {manualMembers
             .filter((m) => showInactiveManualMembers || m.is_active)
             .map((member) => (
-              <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: member.is_active ? 1 : 0.55 }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>
+              <div
+                key={member.id}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, opacity: member.is_active ? 1 : 0.55 }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>
                     {member.first_name} {member.last_name}
                     {!member.is_active && (
                       <span className="badge badge-info" style={{ marginLeft: 6, fontSize: 10 }}>
@@ -641,13 +646,13 @@ export function DepartamentoDetallePage() {
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
                     {[member.role_function, stationName(member.station_id)].filter(Boolean).join(' · ')}
                   </div>
                   {member.contact_info && <ContactLink kind="auto" value={member.contact_info} />}
                 </div>
                 {canLogActivity && (
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
                       className="btn btn-outlined"

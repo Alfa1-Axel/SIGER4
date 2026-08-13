@@ -211,9 +211,13 @@ export function SolicitudPrestamoDetallePage() {
         ← Volver a Solicitudes
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <h1 className="page-title">{item.name}</h1>
-        <span className={`badge ${LOAN_REQUEST_STATUS_BADGE[request.status]}`}>{LOAN_REQUEST_STATUS_LABEL[request.status]}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <h1 className="page-title" style={{ minWidth: 0 }}>
+          {item.name}
+        </h1>
+        <span className={`badge ${LOAN_REQUEST_STATUS_BADGE[request.status]}`} style={{ flexShrink: 0 }}>
+          {LOAN_REQUEST_STATUS_LABEL[request.status]}
+        </span>
       </div>
       <p className="page-subtitle">
         Solicitado por {profileName(request.requested_by_profile_id)} · {stationName(request.requesting_station_id)}

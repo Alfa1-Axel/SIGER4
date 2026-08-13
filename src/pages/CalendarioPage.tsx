@@ -280,17 +280,20 @@ export function CalendarioPage() {
                       borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
                       textDecoration: 'none',
                       color: 'inherit',
+                      gap: 12,
                     }}
                   >
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>{event.title}</div>
                       <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                         {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                         {' · '}
                         {EVENT_TYPE_LABEL[event.event_type]} · {scopeLabel(event)}
                       </div>
                     </div>
-                    <span className={`badge ${EVENT_STATUS_BADGE[event.status]}`}>{EVENT_STATUS_LABEL[event.status]}</span>
+                    <span className={`badge ${EVENT_STATUS_BADGE[event.status]}`} style={{ flexShrink: 0 }}>
+                      {EVENT_STATUS_LABEL[event.status]}
+                    </span>
                   </Link>
                 ))}
               </div>

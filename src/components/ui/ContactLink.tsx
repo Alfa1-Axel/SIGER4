@@ -61,6 +61,18 @@ const ICON_BY_KIND: Record<ResolvedKind, string> = {
 
 const EXTERNAL_KINDS: ResolvedKind[] = ['whatsapp', 'url', 'instagram', 'address']
 
+// Para los kinds donde el valor crudo tiende a ser largo (una URL completa,
+// un handle, una dirección) mostramos un label corto institucional por
+// defecto -- el href sigue apuntando al valor real, esto es solo lo que se
+// lee en pantalla. email/phone/whatsapp SÍ muestran el valor real (es corto
+// y es información útil ver el número/email exacto), no tienen default acá.
+const DEFAULT_LABEL_BY_KIND: Partial<Record<ResolvedKind, string>> = {
+  url: 'Sitio web',
+  instagram: 'Instagram',
+  address: 'Abrir mapa',
+  whatsapp: 'WhatsApp',
+}
+
 /**
  * Muestra un dato de contacto (email/teléfono/WhatsApp/web/dirección) como
  * link accionable cuando se puede normalizar con confianza; si no, cae a
@@ -70,9 +82,9 @@ export function ContactLink({ kind, value, label, mapsContext, className }: Cont
   const trimmed = value.trim()
   if (!trimmed) return null
 
-  const content = label ?? trimmed
   const resolvedKind = resolveKind(kind, trimmed)
   const href = resolvedKind ? resolveHref(resolvedKind, trimmed, mapsContext) : null
+  const content = label ?? (resolvedKind ? DEFAULT_LABEL_BY_KIND[resolvedKind] : undefined) ?? trimmed
 
   if (!resolvedKind || !href) {
     return <span className="contact-value">{content}</span>
@@ -88,6 +100,7 @@ export function ContactLink({ kind, value, label, mapsContext, className }: Cont
     >
       <Icon name={ICON_BY_KIND[resolvedKind]} size={14} />
       <span>{content}</span>
+      {isExternal && <Icon name="externalLink" size={11} />}
     </a>
   )
 }

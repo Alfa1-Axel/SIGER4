@@ -83,11 +83,11 @@ export function UsuariosPage() {
               color: 'inherit',
             }}
           >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{profile.full_name}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{profile.email}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, overflowWrap: 'anywhere' }}>{profile.full_name}</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>{profile.email}</div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               {!profile.auth_user_id && <span className="badge badge-warning">Pendiente de activación</span>}
               {!profile.is_active && <span className="badge badge-danger">Inactivo</span>}
               <Icon name="chevronRight" size={18} />

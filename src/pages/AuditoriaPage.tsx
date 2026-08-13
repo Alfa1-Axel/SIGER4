@@ -160,7 +160,7 @@ function AuditLogDetail({ log, lookup, showTechnical }: { log: AuditLogRow; look
           <strong>Cuartel:</strong> {log.station?.name ?? '—'}
         </span>
         {log.reason && (
-          <span>
+          <span style={{ overflowWrap: 'anywhere', minWidth: 0 }}>
             <strong>Motivo:</strong> {log.reason}
           </span>
         )}
@@ -595,7 +595,7 @@ export function AuditoriaPage() {
                 <Fragment key={log.id}>
                   <tr style={{ borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
                     <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{formatDateTime(log.created_at)}</td>
-                    <td style={{ padding: '10px 12px' }}>
+                    <td style={{ padding: '10px 12px', maxWidth: 320, overflowWrap: 'anywhere' }}>
                       {buildEventSummary(log.actor?.full_name ?? null, log.action, log.table_name, entityDisplayName(log))}
                     </td>
                     <td style={{ padding: '10px 12px' }}>

@@ -132,8 +132,8 @@ export function CuartelesPage() {
             className="card-solid"
             style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                   <span className={`badge ${STATUS_BADGE[station.status]}`}>{STATUS_LABEL[station.status]}</span>
                   {stationCompliance && (
@@ -142,8 +142,8 @@ export function CuartelesPage() {
                     </span>
                   )}
                 </div>
-                <h3 style={{ margin: '0 0 2px', fontSize: 16 }}>{station.name}</h3>
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                <h3 style={{ margin: '0 0 2px', fontSize: 16, overflowWrap: 'anywhere' }}>{station.name}</h3>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
                   {station.address ?? station.zone ?? 'Sin dirección registrada'}
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>

@@ -42,7 +42,11 @@ export function NotificationDetailModal({ notification, typeLabel, scopeLabel, o
         padding: 24,
       }}
     >
-      <div className="card-solid" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, width: '100%' }}>
+      <div
+        className="card-solid"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxWidth: 480, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
           <h2 style={{ margin: 0, fontSize: 16, lineHeight: 1.35 }}>{notification.title}</h2>
           <button type="button" className="btn btn-icon btn-outlined" style={{ padding: 4, flexShrink: 0 }} onClick={onClose} aria-label="Cerrar">

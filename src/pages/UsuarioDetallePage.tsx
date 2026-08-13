@@ -509,7 +509,7 @@ export function UsuarioDetallePage() {
                 key={scope.id}
                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--color-border)' }}
               >
-                <span style={{ fontSize: 13 }}>
+                <span style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>
                   {SCOPE_LABEL[scope.scope_type]}
                   {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? scope.station_id}`}
                   {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
@@ -518,7 +518,7 @@ export function UsuarioDetallePage() {
                 <button
                   type="button"
                   className="btn btn-outlined"
-                  style={{ padding: '4px 10px', fontSize: 12 }}
+                  style={{ padding: '4px 10px', fontSize: 12, flexShrink: 0 }}
                   disabled={rolesScopesLocked}
                   onClick={() => handleRemoveScope(scope.id)}
                 >

@@ -196,14 +196,15 @@ export function PanelPage() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  gap: 12,
                   padding: '12px 16px',
                   borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
                   textDecoration: 'none',
                   color: 'inherit',
                 }}
               >
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</span>
-                <span className="badge badge-warning">
+                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>{event.title}</span>
+                <span className="badge badge-warning" style={{ flexShrink: 0 }}>
                   {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </Link>
@@ -226,14 +227,17 @@ export function PanelPage() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  gap: 12,
                   padding: '12px 16px',
                   borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
                   textDecoration: 'none',
                   color: 'inherit',
                 }}
               >
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</span>
-                <span className="badge badge-danger">{new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}</span>
+                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>{event.title}</span>
+                <span className="badge badge-danger" style={{ flexShrink: 0 }}>
+                  {new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
+                </span>
               </Link>
             ))}
           </div>

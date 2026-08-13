@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { APP_UPDATES } from '../config/appUpdates'
 import type { AppUpdate, AppUpdateSeverity } from '../config/appUpdates'
 import { hasSeenAppUpdate, markAppUpdateSeen } from '../lib/appUpdateSeen'
@@ -34,21 +34,35 @@ export function AppUpdateBanner() {
   const { session, profile } = useAuth()
   const [visible, setVisible] = useState(false)
   const [update, setUpdate] = useState<AppUpdate | null>(null)
+  // Evita reintentar el insert (y reabrir el banner recién cerrado) en cada
+  // evento de onAuthStateChange (TOKEN_REFRESHED, reconexión, cambio de
+  // pestaña) — esos eventos generan un objeto `session` nuevo por
+  // referencia aunque sea la misma sesión, así que un useEffect con
+  // `session`/`profile` completos en las deps volvería a correr en cada
+  // uno. Acá dependemos solo de valores primitivos estables (session != null,
+  // profile.id) y de una ref para no repetir la petición de red una vez que
+  // ya se intentó en este montaje -- el upsert con ignoreDuplicates (ver
+  // notifications.ts) ya es seguro para reintentos igual, esto es además
+  // para no generar tráfico de red de sobra en cada refresh silencioso.
+  const attemptedForProfileId = useRef<string | null>(null)
+  const hasSession = session != null
+  const profileId = profile?.id ?? null
 
   useEffect(() => {
-    if (!session || !profile) return
+    if (!hasSession || !profileId) return
     const latest = getLatestAppUpdate()
     if (!latest) return
+    if (attemptedForProfileId.current === profileId) return
+    attemptedForProfileId.current = profileId
+
     // La notificación interna (persistente en /notificaciones, "una vez por
     // usuario" vía el índice único de la migración 0077) es independiente de
     // "ya visto en este navegador" (localStorage, hasSeenAppUpdate) — se
     // crea siempre que exista la novedad, aunque el banner ya no se muestre
     // más en este dispositivo puntual, para que quede un rastro accesible
-    // desde cualquier sesión. createAppUpdateNotification ya deduplica sola
-    // (23505 se trata como éxito), así que no hace falta ningún chequeo
-    // previo acá — insertar de más nunca genera una fila de más.
+    // desde cualquier sesión.
     void createAppUpdateNotification(
-      profile.id,
+      profileId,
       latest.id,
       'Nueva actualización disponible. Ingresá para conocer las novedades.',
     ).catch(() => undefined)
@@ -56,7 +70,7 @@ export function AppUpdateBanner() {
     if (hasSeenAppUpdate(latest.id)) return
     setUpdate(latest)
     setVisible(true)
-  }, [session, profile])
+  }, [hasSession, profileId])
 
   // Reabrir el modal de una novedad puntual desde /notificaciones (tocar una
   // notificación de tipo actualizacion_sistema) — no depende de si el

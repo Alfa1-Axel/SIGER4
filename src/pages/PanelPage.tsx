@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { PendingItemsSection } from '../components/PendingItemsSection'
 import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
 import type { DashboardSummary } from '../lib/api/dashboard'
@@ -108,6 +109,8 @@ export function PanelPage() {
           <div className="kpi-value">{loading ? '—' : summary?.vehiclesRegistered ?? 0}</div>
         </div>
       </div>
+
+      <PendingItemsSection />
 
       <div className="section-header">
         <h2 className="section-title">Estado de Carga por Cuartel</h2>

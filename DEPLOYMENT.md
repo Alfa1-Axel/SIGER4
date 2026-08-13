@@ -5040,3 +5040,164 @@ cambios de frontend en varias pantallas.
 6. Confirmar que `secretario_regional` sigue viendo exactamente lo mismo que antes (su región
    completa, incluidas filas sin territorio) — sin regresión, es la policy que no se tocó en
    comportamiento.
+
+## 36. Pulido: teléfono/WhatsApp separados, fix del 409 de notifications, y layout mobile (2026-08-13) — migración 0078
+
+Pase de correcciones puntuales encontradas al usar SIGER4 con datos reales, sobre lo agregado en las
+secciones 34-35 (Panel de Pendientes, contactos clicables). Ningún módulo nuevo — solo bugs concretos.
+
+### 36.1 Cuarteles — teléfono institucional y WhatsApp separados (migración 0078)
+
+Problema: `stations` solo tenía un campo `phone`, y el Detalle de Cuartel generaba un botón de
+WhatsApp a partir de ese mismo número. Muchos cuarteles tienen teléfono fijo (sin WhatsApp real), y
+en los que sí tienen celular el número de WhatsApp puede no coincidir con el teléfono institucional
+publicado — mostrar WhatsApp sobre un fijo, o asumir que ambos números son el mismo, era incorrecto.
+
+Corrección: columna nueva `stations.whatsapp_phone` (migración `0078_station_whatsapp_phone.sql`),
+independiente de `phone`. Ambas opcionales, ninguna reemplaza a la otra.
+
+- Formulario de cuartel (`CuartelFormPage.tsx`): "Teléfono institucional" y "WhatsApp" son ahora dos
+  campos separados, ambos opcionales, `type="tel"`. WhatsApp tiene una ayuda corta ("Puede ser
+  distinto al teléfono fijo. Dejalo vacío si el cuartel no tiene WhatsApp.") y validación básica de
+  formato reutilizando `isValidPhone` de `src/lib/contact.ts`.
+- Detalle de Cuartel: `ContactLink kind="phone"` usa `station.phone` (nunca genera wa.me);
+  `ContactLink kind="whatsapp"` usa `station.whatsapp_phone` y solo se renderiza si ese campo existe
+  — si un cuartel no cargó WhatsApp, no aparece la fila/botón, ya no se infiere del teléfono fijo.
+- Compatibilidad: `stations.phone` existente no se tocó ni se copió a `whatsapp_phone` — un teléfono
+  ya cargado sigue siendo el teléfono institucional (correcto, es lo que era). `whatsapp_phone`
+  arranca vacío para todos los cuarteles existentes a propósito — autocompletarlo con el teléfono
+  viejo asumiría sin base que ese número tiene WhatsApp real, que es exactamente el bug que se
+  corrige. Nadie pierde su teléfono cargado; WhatsApp queda pendiente de cargar solo donde corresponda.
+- Sin cambios de RLS: `whatsapp_phone` es una columna más de `stations`, ya cubierta por las policies
+  existentes de esa tabla (evalúan la fila completa, no columna por columna).
+- Auditoría: `stations` ya está cubierta por el trigger genérico `audit_row_change()` — el cambio de
+  `whatsapp_phone` queda auditado sin lógica adicional. Se agregó la traducción `whatsapp_phone:
+  'WhatsApp'` en `src/lib/audit/humanize.ts` para que el diff de auditoría se lea en español.
+
+### 36.2 Fix del 409 repetido en `POST /rest/v1/notifications` (notificaciones de novedades)
+
+Causa: `createAppUpdateNotification()` (la función que crea la notificación interna "Nueva
+actualización disponible") hacía un `insert` simple y capturaba el código de error Postgres `23505`
+(violación de constraint única) como éxito silencioso a nivel de JavaScript. Eso evitaba que el error
+se propagara como excepción, **pero la petición HTTP en sí seguía respondiendo 409 Conflict** —
+visible en la consola del navegador como error de red, aunque el código lo manejara bien. Como el
+`useEffect` de `AppUpdateBanner.tsx` (el componente que la dispara) dependía de los objetos `session`
+y `profile` completos, y `onAuthStateChange` de Supabase entrega un objeto `session` **nuevo por
+referencia** en cada evento (incluido `TOKEN_REFRESHED`, que ocurre solo, sin acción del usuario, cada
+vez que el token expira), el efecto volvía a correr — y a intentar el insert — en cada refresh de
+token, reconexión o cambio de pestaña, no solo en el login inicial. Con un usuario que ya tenía la
+notificación creada, cada una de esas re-ejecuciones generaba un 409 nuevo en consola.
+
+Corrección con dos partes:
+
+1. **`src/lib/api/notifications.ts`** — `createAppUpdateNotification()` pasó de `insert` +
+   catch(23505) a `upsert(..., { onConflict: 'profile_id,app_update_id', ignoreDuplicates: true })`.
+   Esto le pide a PostgREST un `insert ... on conflict (profile_id, app_update_id) do nothing`
+   (header `Prefer: resolution=ignore-duplicates`): cuando la notificación ya existe, PostgREST
+   responde **201 sin filas**, no 409 — el caso esperado de "ya existe" deja de generar cualquier
+   error en la consola del navegador. `ignoreDuplicates: true` significa que nunca se ejecuta un
+   `UPDATE` sobre la fila existente, así que **nunca pisa `is_read`** — si la notificación ya estaba
+   leída, sigue leída (no hay ninguna lógica de "revertir a no leída", ni falta hacerla).
+2. **`src/components/AppUpdateBanner.tsx`** — el `useEffect` pasó a depender de `session != null` y
+   `profile?.id` (valores primitivos estables) en vez de los objetos `session`/`profile` completos, y
+   se agregó una `ref` (`attemptedForProfileId`) que evita reintentar el insert más de una vez por
+   `profile.id` dentro del mismo montaje del componente. Con esto el efecto ya no vuelve a correr en
+   cada `TOKEN_REFRESHED`/reconexión — solo en un login/logout/cambio de usuario reales.
+
+Con ambas correcciones combinadas: la constraint única (índice `idx_notifications_app_update_dedup`,
+migración 0077) sigue siendo la única fuente de verdad para "un usuario nunca recibe la misma
+notificación de novedad dos veces" (nada cambió ahí, sigue siendo atómica a nivel de base) — lo que
+cambió es que ya no se dispara una petición HTTP redundante en cada refresh de sesión, y en los casos
+en que sí se dispara y la fila ya existe, la respuesta ya no es un error visible.
+
+Log esperable que **no** se corrigió porque no es un problema: "Launched external handler for
+tel:..." al tocar un teléfono es un mensaje normal del navegador/OS al abrir la app de teléfono, no
+un error de SIGER4.
+
+### 36.3 Layout mobile — texto largo no debe romper contenedores (solución sistémica)
+
+Problema visible: en Detalle de Cuartel mobile, un handle de Instagram o una URL larga se salía del
+ancho de la card, arrastrando el layout. El mismo riesgo existe en cualquier pantalla con texto libre
+del usuario (nombres, direcciones, observaciones, `contact_info`) o URLs.
+
+En vez de un parche puntual en Instagram, se aplicó una corrección a nivel de clases base en
+`src/styles.css`, para que cualquier pantalla (actual o futura) quede protegida sin tener que repetir
+la regla:
+
+- **`.card` / `.card-solid`**: `overflow-wrap: anywhere` a nivel de card — cualquier texto libre
+  dentro (aunque la pantalla específica no le haya puesto una clase de texto dedicada) queda contenido.
+- **`.page-title` / `.page-subtitle` / `.section-title`**: mismo `overflow-wrap: anywhere`.
+- **`.list-item-title` / `.list-item-subtitle`**: ya usaban `-webkit-line-clamp` (trunca a 2 líneas),
+  pero sin `overflow-wrap` una sola palabra larga sin espacios (una URL, un email) igual se salía del
+  contenedor aunque el clamp "cortara" por líneas — corregido agregando `overflow-wrap: anywhere` a
+  ambas.
+- **`.badge`**: `max-width: 100%` + `overflow-wrap: anywhere`.
+- **`.contact-link` / `.contact-value` / `.contact-list`**: `min-width: 0` + `max-width: 100%` +
+  `overflow-wrap: anywhere` en el link y en su `<span>` interno — antes un email/URL largo (el caso
+  `kind="auto"` con `contact_info` libre) podía desbordar su contenedor flex.
+- **`.section-header`**: `gap: 12px` + `flex-shrink: 0` en el último hijo (el botón "+ Agregar"), para
+  que un título largo nunca lo saque de la fila.
+- **Clases utilitarias nuevas**, para usar en cualquier pantalla nueva sin repetir las reglas:
+  - `.text-break` — `overflow-wrap: anywhere` + `word-break: break-word` + `min-width: 0`, para un
+    texto de una sola línea que puede no tener espacios (URL/email suelto).
+  - `.text-truncate` — trunca a una sola línea con "…" (`white-space: nowrap` + `text-overflow:
+    ellipsis`), para filas angostas donde ni el wrap es una opción.
+  - `.text-clamp-2` — mismo mecanismo que `.list-item-title`, reutilizable fuera de listas
+    (descripciones/observaciones en cards o detalle).
+  - `.safe-inline` — `display: inline-flex` + `max-width: 100%` + `min-width: 0`, para un link/ícono+
+    texto dentro de un contenedor flex/grid.
+  - `.safe-card-content` — `min-width: 0` + `max-width: 100%` + `overflow-wrap: anywhere`, para el
+    wrapper directo de un bloque de texto dinámico dentro de una card (no la card completa, para no
+    recortar sombras/badges que sobresalen a propósito).
+
+Además, se revisaron y corrigieron a mano los casos de `display:flex; justifyContent:'space-between'`
+donde un hijo de texto dinámico (nombre/email/dirección/título) no tenía `min-width: 0` — sin eso, un
+hijo flex nunca se angosta por debajo de su contenido intrínseco, así que el texto largo empuja al
+badge/botón vecino fuera de la fila en vez de truncarse/wrappear:
+
+- `UsuariosPage.tsx` (listado: nombre + email vs. badges de estado + chevron).
+- `DepartamentoDetallePage.tsx` (miembros con usuario, y integrantes manuales sin usuario, ambos vs.
+  sus botones de acción).
+- `CuartelesPage.tsx` (listado: nombre + dirección vs. chevron).
+- `UsuarioDetallePage.tsx` (fila de alcance/scope, nombres de cuartel/subsede/región concatenados vs.
+  botón "Quitar").
+- `CalendarioPage.tsx` (vista día: título de evento vs. badge de estado — la vista lista ya lo tenía
+  bien, ahora es consistente).
+- `PanelPage.tsx` (Eventos de Hoy y Vencimientos Próximos: título de evento vs. badge de hora/fecha).
+- `InventarioDetallePage.tsx` y `SolicitudPrestamoDetallePage.tsx` (header `<h1 className="page-title">`
+  con el nombre del ítem vs. badge de estado).
+- `AuditoriaPage.tsx` (celda "Evento" de la tabla: `max-width: 320px` + `overflow-wrap: anywhere`, y
+  el `<span>` de "Motivo" en el detalle expandido de un evento).
+- `NotificationDetailModal.tsx`: se agregó `maxHeight: '85vh'` + `overflowY: 'auto'` al modal, para
+  que un cuerpo de notificación muy largo scrollee dentro del modal en vez de desbordar la pantalla
+  (el modal ya tenía `maxWidth`/`width: 100%` correctos, faltaba la altura).
+
+Pantallas ya revisadas y confirmadas SIN cambios necesarios (ya seguían el patrón correcto de
+`min-width: 0` / `flex: 1` / clamp, o no tenían texto dinámico en riesgo): `InventarioPage.tsx`
+(listado), `DepartamentosPage.tsx` (listado), `CalendarioPage.tsx` (vista lista y vista mes),
+`DocumentosPage.tsx`, `NotificacionesPage.tsx`, `ReportesPage.tsx`. Las dos primeras tablas de
+`AuditoriaPage.tsx` (diff de campos y listado principal) ya estaban envueltas en un contenedor con
+`overflowX: 'auto'` propio — ese scroll horizontal queda contenido dentro de la tabla/card, nunca se
+propaga al documento, que es el patrón aceptado para tablas anchas en mobile (no es lo mismo que "el
+texto rompe la pantalla").
+
+No se encontraron casos donde hiciera falta truncar (`.text-truncate`) en lugar de envolver — todos
+los casos revisados tienen suficiente alto disponible para 1-2 líneas de wrap sin romper el layout de
+la card, así que se usó `overflow-wrap`/`line-clamp` en todos, nunca truncado agresivo de una sola línea.
+
+Confirmado por revisión de código (sin cambios de comportamiento pendientes de probar visualmente):
+ningún contenedor nuevo necesita `overflow-x` propio — el shell general (`.app-shell`/`.app-content`,
+sección 24.3) ya contiene el scroll horizontal del documento completo desde antes de esta ronda; esta
+sección corrige el desborde *dentro* de cards individuales, no el del documento.
+
+### 36.4 Migraciones nuevas de esta ronda
+
+- `0078_station_whatsapp_phone.sql` — agrega `stations.whatsapp_phone` (columna nueva, nullable, sin
+  copiar el valor de `phone`).
+
+### 36.5 Qué correr en Supabase
+
+1. Migración `0078`.
+
+Ninguna Edge Function nueva ni con cambios de código — el fix del 409 es enteramente frontend
+(`upsert` desde el cliente en vez de `insert`). Redeploy normal del frontend (Vercel).

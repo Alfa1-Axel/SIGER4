@@ -44,6 +44,23 @@ export async function fetchDocuments(): Promise<DocumentRecord[]> {
   return (data ?? []) as DocumentRecord[]
 }
 
+// Últimos documentos cargados PARA un cuartel puntual (station_id = ese
+// cuartel — no incluye documentos regionales/de subsede que ese cuartel
+// también puede ver, es específicamente "lo suyo") — usado en la sección
+// "Actividad Reciente" de CuartelDetallePage.tsx.
+export async function fetchRecentDocumentsByStation(stationId: string, limit = 3): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('station_id', stationId)
+    .is('deleted_at', null)
+    .neq('storage_path', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
 export async function fetchDocumentsByFolder(folderId: string | null): Promise<DocumentRecord[]> {
   let query = supabase.from('documents').select('*').is('deleted_at', null).neq('storage_path', 'pending').order('created_at', { ascending: false })
   query = folderId ? query.eq('folder_id', folderId) : query.is('folder_id', null)

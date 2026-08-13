@@ -27,6 +27,22 @@ export async function fetchUpcomingCalendarEvents(limit = 5): Promise<CalendarEv
   return (data ?? []) as CalendarEvent[]
 }
 
+// Próximos eventos de UN cuartel puntual, sin cancelados — usado en la
+// sección "Actividad Reciente" de CuartelDetallePage.tsx (reemplazo del
+// placeholder estático que había ahí antes).
+export async function fetchUpcomingCalendarEventsByStation(stationId: string, limit = 3): Promise<CalendarEvent[]> {
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .select('*')
+    .eq('station_id', stationId)
+    .neq('status', 'cancelado')
+    .gte('starts_at', new Date().toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as CalendarEvent[]
+}
+
 export interface CalendarEventInput {
   title: string
   description?: string | null

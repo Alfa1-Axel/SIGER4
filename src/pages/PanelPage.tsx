@@ -249,7 +249,7 @@ export function PanelPage() {
       <div className="card" style={{ marginBottom: 20, padding: 0 }}>
         {loading && <div className="empty-state">Cargando cuarteles…</div>}
         {!loading && stations.length === 0 && (
-          <div className="empty-state">Todavía no hay cuarteles cargados en Supabase.</div>
+          <div className="empty-state">Todavía no hay cuarteles cargados.</div>
         )}
         {stations.slice(0, 5).map((station, i) => (
           <Link

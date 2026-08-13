@@ -19,8 +19,13 @@ import {
 } from '../lib/api/personnel'
 import { fetchStationHistoryEvents, deleteStationHistoryEvent } from '../lib/api/stationHistory'
 import { fetchStationComplianceById, complianceReasons, COMPLIANCE_STATUS_BADGE, COMPLIANCE_STATUS_LABEL } from '../lib/api/compliance'
+import { fetchRecentDocumentsByStation } from '../lib/api/documents'
+import { fetchUpcomingCalendarEventsByStation } from '../lib/api/calendar'
+import { formatPercent } from '../lib/format'
 import type {
   AttendanceSummary,
+  CalendarEvent,
+  DocumentRecord,
   InterventionSummary,
   Personnel,
   PersonnelStatus,
@@ -139,6 +144,8 @@ export function CuartelDetallePage() {
   const [personnel, setPersonnel] = useState<Personnel[]>([])
   const [historyEvents, setHistoryEvents] = useState<StationHistoryEvent[]>([])
   const [compliance, setCompliance] = useState<StationCompliance | null>(null)
+  const [recentDocuments, setRecentDocuments] = useState<DocumentRecord[]>([])
+  const [upcomingEvents, setUpcomingEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [coverLightboxOpen, setCoverLightboxOpen] = useState(false)
 
@@ -219,19 +226,36 @@ export function CuartelDetallePage() {
       fetchPersonnelByStation(id),
       fetchStationHistoryEvents(id),
       fetchStationComplianceById(id),
-    ]).then(([stationData, vehiclesData, attendanceData, interventionsData, authoritiesData, personnelData, historyData, complianceData]) => {
-      if (active) {
-        setStation(stationData)
-        setVehicles(vehiclesData)
-        setAttendance(attendanceData)
-        setInterventions(interventionsData)
-        setAuthorities(authoritiesData)
-        setPersonnel(personnelData)
-        setHistoryEvents(historyData)
-        setCompliance(complianceData)
-        setLoading(false)
-      }
-    })
+      fetchRecentDocumentsByStation(id),
+      fetchUpcomingCalendarEventsByStation(id),
+    ]).then(
+      ([
+        stationData,
+        vehiclesData,
+        attendanceData,
+        interventionsData,
+        authoritiesData,
+        personnelData,
+        historyData,
+        complianceData,
+        recentDocumentsData,
+        upcomingEventsData,
+      ]) => {
+        if (active) {
+          setStation(stationData)
+          setVehicles(vehiclesData)
+          setAttendance(attendanceData)
+          setInterventions(interventionsData)
+          setAuthorities(authoritiesData)
+          setPersonnel(personnelData)
+          setHistoryEvents(historyData)
+          setCompliance(complianceData)
+          setRecentDocuments(recentDocumentsData)
+          setUpcomingEvents(upcomingEventsData)
+          setLoading(false)
+        }
+      },
+    )
     return () => {
       active = false
     }
@@ -256,6 +280,65 @@ export function CuartelDetallePage() {
     [personnel, personnelStatusFilter, personnelRankFilter, personnelDepartmentFilter],
   )
   const activePersonnelCount = useMemo(() => personnel.filter((p) => p.status === 'activo').length, [personnel])
+
+  // "Actividad Reciente": antes era un placeholder estático ("Aún no hay
+  // actividad registrada... en Supabase") que nunca reflejaba nada real.
+  // Reemplazado por un feed combinado de datos que YA se cargan en esta
+  // página (asistencia, intervenciones, historial institucional) más
+  // documentos/eventos de calendario propios del cuartel (fetch nuevo, sin
+  // tabla nueva) — ordenado por fecha de carga real (created_at), últimos
+  // 6. Cada item linkea a la sección correspondiente de esta misma pantalla
+  // o, para documentos/eventos, a su pantalla real.
+  const recentActivityItems = useMemo(() => {
+    type ActivityItem = {
+      key: string
+      icon: string
+      title: string
+      subtitle: string
+      createdAt: string
+      href?: string
+    }
+    const items: ActivityItem[] = [
+      ...attendance.map((a) => ({
+        key: `attendance_${a.id}`,
+        icon: 'chart',
+        title: 'Asistencia cargada',
+        subtitle: `${new Date(a.period_start).toLocaleDateString('es-AR')} – ${new Date(a.period_end).toLocaleDateString('es-AR')} · ${formatPercent(a.attendance_rate)}`,
+        createdAt: a.created_at,
+      })),
+      ...interventions.map((i) => ({
+        key: `intervention_${i.id}`,
+        icon: 'chart',
+        title: 'Intervención cargada',
+        subtitle: `${i.category} · ${i.total_count} intervencion${i.total_count === 1 ? '' : 'es'}`,
+        createdAt: i.created_at,
+      })),
+      ...historyEvents.map((h) => ({
+        key: `history_${h.id}`,
+        icon: 'tag',
+        title: 'Historial institucional: ' + h.title,
+        subtitle: new Date(h.event_date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'medium' }),
+        createdAt: h.created_at,
+      })),
+      ...recentDocuments.map((d) => ({
+        key: `document_${d.id}`,
+        icon: 'file',
+        title: 'Documento: ' + d.title,
+        subtitle: new Date(d.created_at).toLocaleDateString('es-AR', { dateStyle: 'medium' }),
+        createdAt: d.created_at,
+        href: '/documentos',
+      })),
+      ...upcomingEvents.map((e) => ({
+        key: `event_${e.id}`,
+        icon: 'calendar',
+        title: 'Próximo evento: ' + e.title,
+        subtitle: new Date(e.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' }),
+        createdAt: e.created_at,
+        href: `/calendario/${e.id}`,
+      })),
+    ]
+    return items.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 6)
+  }, [attendance, interventions, historyEvents, recentDocuments, upcomingEvents])
 
   const historyYears = useMemo(
     () => Array.from(new Set(historyEvents.map((e) => e.event_date.slice(0, 4)))).sort((a, b) => b.localeCompare(a)),
@@ -872,11 +955,41 @@ export function CuartelDetallePage() {
           <div className="section-header">
             <h2 className="section-title">Actividad Reciente</h2>
           </div>
-          <div className="card">
-            <div className="empty-state">
-              <Icon name="chart" size={20} />
-              <p>Aún no hay actividad registrada para este cuartel en Supabase.</p>
-            </div>
+          <div className="card" style={{ padding: recentActivityItems.length > 0 ? 0 : undefined }}>
+            {recentActivityItems.length === 0 && (
+              <div className="empty-state">
+                <Icon name="chart" size={20} />
+                <p>Todavía no hay asistencia, intervenciones, historial, documentos ni eventos cargados para este cuartel.</p>
+              </div>
+            )}
+            {recentActivityItems.map((item, i) => {
+              const row = (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '12px 16px',
+                    borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                  }}
+                >
+                  <Icon name={item.icon} size={16} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{item.title}</div>
+                    <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{item.subtitle}</div>
+                  </div>
+                </div>
+              )
+              return item.href ? (
+                <Link key={item.key} to={item.href}>
+                  {row}
+                </Link>
+              ) : (
+                <div key={item.key}>{row}</div>
+              )
+            })}
           </div>
         </>
       )}

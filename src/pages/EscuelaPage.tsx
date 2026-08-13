@@ -42,7 +42,7 @@ export function EscuelaPage() {
 
       {loading && <div className="empty-state">Cargando cursos…</div>}
       {!loading && courses.length === 0 && (
-        <div className="empty-state">Todavía no hay cursos cargados en Supabase.</div>
+        <div className="empty-state">Todavía no hay cursos cargados.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

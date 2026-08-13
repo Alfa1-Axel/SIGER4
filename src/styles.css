@@ -111,11 +111,25 @@
   box-sizing: border-box;
 }
 
+/* html/body/#root con overflow:hidden + overscroll-behavior:none, ademas
+   del overflow:hidden que ya tenia .app-shell (mas abajo): sin esto, un
+   scroll agresivo (rubber-band/bounce nativo de iOS, o simplemente el
+   redondeo de subpixeles del viewport) puede arrastrar el DOCUMENTO entero
+   -- no .app-content, el <body> -- aunque .app-shell en si nunca desborde,
+   porque nada les impedia moverse a ELLOS. Antes html/body solo tenian
+   height:100% (una capacidad, no una restriccion) y #root tenia
+   min-height:100vh (puede CRECER de mas si el contenido de algun hijo se
+   pasa), asi que el navegador quedaba libre de generar su propio scroll de
+   documento por encima del shell interno -- eso es lo que se percibia como
+   "header se oculta, footer se mueve, toda la pantalla scrollea" al hacer
+   scroll fuerte. */
 html,
 body {
   margin: 0;
   padding: 0;
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -126,9 +140,10 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 a {
@@ -781,8 +796,15 @@ img {
 
 /* ---------- Login ---------- */
 
+/* height:100% (no min-height) + overflow-y:auto propio: #root ahora tiene
+   overflow:hidden fijo (ver mas arriba, fix de scroll agresivo), asi que
+   esta pantalla necesita su PROPIO scroll interno para pantallas chicas con
+   contenido largo (ej. un mensaje de error largo) en vez de depender de que
+   el documento pueda crecer -- mismo criterio que .app-content en el shell
+   autenticado, aplicado aca para la pantalla de login. */
 .login-page {
-  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   align-items: center;

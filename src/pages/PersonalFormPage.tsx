@@ -182,7 +182,7 @@ export function PersonalFormPage() {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label htmlFor="phone">Teléfono (opcional)</label>
-              <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label htmlFor="email">Email (opcional)</label>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { ContactLink } from '../components/ui/ContactLink'
 import { ImagePicker } from '../components/ui/ImagePicker'
 import { SystemSettingsSection } from '../components/SystemSettingsSection'
 import { useAuth } from '../hooks/useAuth'
@@ -216,7 +217,7 @@ export function AjustesPage() {
           )}
           <div>
             <div style={{ fontWeight: 700 }}>{profile?.full_name ?? 'Usuario'}</div>
-            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{user?.email}</div>
+            {user?.email && <ContactLink kind="email" value={user.email} />}
           </div>
         </div>
 
@@ -250,7 +251,7 @@ export function AjustesPage() {
 
         <div className="field">
           <label htmlFor="phone">Teléfono (opcional)</label>
-          <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
+          <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
         </div>
 
         <div className="field">

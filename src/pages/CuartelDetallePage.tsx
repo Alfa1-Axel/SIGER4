@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { ContactLink } from '../components/ui/ContactLink'
 import { Lightbox } from '../components/ui/Lightbox'
 import { ZoomableImage } from '../components/ui/ZoomableImage'
 import { ReasonPromptModal } from '../components/ui/ReasonPromptModal'
@@ -444,7 +445,16 @@ export function CuartelDetallePage() {
               )}
               <h1 style={{ margin: 0, fontSize: 20 }}>{station.name}</h1>
             </div>
-            <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>{station.address ?? station.zone}</p>
+            {station.address ? (
+              <ContactLink
+                kind="address"
+                value={station.address}
+                mapsContext={station.zone ?? undefined}
+                className={station.cover_image_url ? 'contact-link--inverted' : undefined}
+              />
+            ) : (
+              <p style={{ margin: '4px 0 0', fontSize: 13, opacity: 0.9 }}>{station.zone}</p>
+            )}
           </div>
 
           {coverLightboxOpen && station.cover_image_url && (
@@ -498,20 +508,34 @@ export function CuartelDetallePage() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                 {authorities.map(({ profile, role }) => (
-                  <div key={`${profile.id}-${role}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.full_name}</span>
-                    <span className="badge badge-info">{ROLE_DEFINITIONS.find((r) => r.key === role)?.label ?? role}</span>
+                  <div key={`${profile.id}-${role}`} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.full_name}</span>
+                      <span className="badge badge-info">{ROLE_DEFINITIONS.find((r) => r.key === role)?.label ?? role}</span>
+                    </div>
+                    <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                      <ContactLink kind="email" value={profile.email} />
+                      {profile.phone && <ContactLink kind="phone" value={profile.phone} />}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
 
             {(station.phone || station.email || station.social_media) && (
-              <div style={{ borderTop: authorities.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: authorities.length > 0 ? 12 : 0 }}>
-                {station.phone && <p style={{ margin: '0 0 4px', fontSize: 13 }}>📞 {station.phone}</p>}
-                {station.email && <p style={{ margin: '0 0 4px', fontSize: 13 }}>✉️ {station.email}</p>}
-                {station.social_media?.facebook && <p style={{ margin: '0 0 4px', fontSize: 13 }}>Facebook: {station.social_media.facebook}</p>}
-                {station.social_media?.instagram && <p style={{ margin: 0, fontSize: 13 }}>Instagram: {station.social_media.instagram}</p>}
+              <div
+                className="contact-list"
+                style={{ borderTop: authorities.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: authorities.length > 0 ? 12 : 0 }}
+              >
+                {station.phone && <ContactLink kind="phone" value={station.phone} />}
+                {station.phone && <ContactLink kind="whatsapp" value={station.phone} label="WhatsApp" />}
+                {station.email && <ContactLink kind="email" value={station.email} />}
+                {station.social_media?.facebook && (
+                  <ContactLink kind="url" value={station.social_media.facebook} label={`Facebook: ${station.social_media.facebook}`} />
+                )}
+                {station.social_media?.instagram && (
+                  <ContactLink kind="instagram" value={station.social_media.instagram} label={`Instagram: ${station.social_media.instagram}`} />
+                )}
               </div>
             )}
 
@@ -587,6 +611,12 @@ export function CuartelDetallePage() {
                           {[person.rank, person.role_function, person.department].filter(Boolean).join(' · ') || 'Sin datos adicionales'}
                           {person.join_date && ` · Antigüedad: ${calculateSeniority(person.join_date)}`}
                         </div>
+                        {(person.phone || person.email) && (
+                          <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 }}>
+                            {person.phone && <ContactLink kind="phone" value={person.phone} />}
+                            {person.email && <ContactLink kind="email" value={person.email} />}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {canEdit ? (

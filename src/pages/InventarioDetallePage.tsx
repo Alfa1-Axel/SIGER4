@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { ContactLink } from '../components/ui/ContactLink'
 import { fetchInventoryItemById, fetchInventoryItemHistory } from '../lib/api/inventory'
 import { fetchLoanRequestsByItem } from '../lib/api/inventoryLoanRequests'
 import { fetchStations } from '../lib/api/stations'
@@ -110,8 +111,8 @@ export function InventarioDetallePage() {
             </div>
           )}
           {item.contact_info && (
-            <div>
-              <strong>Contacto:</strong> {item.contact_info}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <strong>Contacto:</strong> <ContactLink kind="auto" value={item.contact_info} />
             </div>
           )}
           {item.observations && <div style={{ color: 'var(--color-text-secondary)' }}>{item.observations}</div>}

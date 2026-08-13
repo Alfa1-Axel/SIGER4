@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { ContactLink } from '../components/ui/ContactLink'
 import {
   fetchDepartmentById,
   updateDepartment,
@@ -461,7 +462,12 @@ export function DepartamentoDetallePage() {
       ) : (
         <div className="card-solid" style={{ marginBottom: 20 }}>
           {department.description && <p style={{ fontSize: 13, marginBottom: 8 }}>{department.description}</p>}
-          {department.contact_info && <p style={{ fontSize: 13 }}>Contacto: {department.contact_info}</p>}
+          {department.contact_info && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <span>Contacto:</span>
+              <ContactLink kind="auto" value={department.contact_info} />
+            </div>
+          )}
         </div>
       )}
 
@@ -476,6 +482,10 @@ export function DepartamentoDetallePage() {
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{member.profile.full_name}</div>
                 <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{stationName(member.profile.station_id)}</div>
+                <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                  <ContactLink kind="email" value={member.profile.email} />
+                  {member.profile.phone && <ContactLink kind="phone" value={member.profile.phone} />}
+                </div>
               </div>
               {canManage && (
                 <button
@@ -634,6 +644,7 @@ export function DepartamentoDetallePage() {
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {[member.role_function, stationName(member.station_id)].filter(Boolean).join(' · ')}
                   </div>
+                  {member.contact_info && <ContactLink kind="auto" value={member.contact_info} />}
                 </div>
                 {canLogActivity && (
                   <div style={{ display: 'flex', gap: 6 }}>

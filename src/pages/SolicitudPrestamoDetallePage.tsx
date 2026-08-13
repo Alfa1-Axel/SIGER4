@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
+import { ContactLink } from '../components/ui/ContactLink'
 import {
   approveLoanRequest,
   cancelLoanRequest,
@@ -94,6 +95,11 @@ export function SolicitudPrestamoDetallePage() {
   function profileName(profileId: string | null): string {
     if (!profileId) return '—'
     return profiles.find((p) => p.id === profileId)?.full_name ?? '—'
+  }
+
+  function findProfile(profileId: string | null): Profile | null {
+    if (!profileId) return null
+    return profiles.find((p) => p.id === profileId) ?? null
   }
 
   async function handleApprove() {
@@ -196,6 +202,8 @@ export function SolicitudPrestamoDetallePage() {
   }
 
   const canCancel = (isManager || isRequester) && (request.status === 'pendiente' || request.status === 'aprobada')
+  const requesterProfile = findProfile(request.requested_by_profile_id)
+  const itemResponsibleProfile = findProfile(item.responsible_profile_id)
 
   return (
     <AppShell title="Solicitud de préstamo">
@@ -210,6 +218,19 @@ export function SolicitudPrestamoDetallePage() {
       <p className="page-subtitle">
         Solicitado por {profileName(request.requested_by_profile_id)} · {stationName(request.requesting_station_id)}
       </p>
+      {(requesterProfile || itemResponsibleProfile) && (
+        <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+          {requesterProfile && (
+            <>
+              <ContactLink kind="email" value={requesterProfile.email} />
+              {requesterProfile.phone && <ContactLink kind="phone" value={requesterProfile.phone} />}
+            </>
+          )}
+          {itemResponsibleProfile && itemResponsibleProfile.id !== requesterProfile?.id && (
+            <ContactLink kind="email" value={itemResponsibleProfile.email} label={`Responsable: ${itemResponsibleProfile.email}`} />
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="card" style={{ marginBottom: 16 }}>

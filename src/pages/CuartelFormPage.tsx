@@ -233,7 +233,7 @@ export function CuartelFormPage() {
 
           <div className="field">
             <label htmlFor="phone">Teléfono (opcional)</label>
-            <input id="phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
+            <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
           </div>
 
           <div className="field">

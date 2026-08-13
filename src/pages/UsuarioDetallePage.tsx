@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
+import { ContactLink } from '../components/ui/ContactLink'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
@@ -321,7 +322,10 @@ export function UsuarioDetallePage() {
       </Link>
 
       <h1 className="page-title">{profile.full_name}</h1>
-      <p className="page-subtitle">{profile.email}</p>
+      <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
+        <ContactLink kind="email" value={profile.email} />
+        {profile.phone && <ContactLink kind="phone" value={profile.phone} />}
+      </div>
 
       {!profile.auth_user_id && (
         <div className="card" style={{ marginBottom: 20 }}>

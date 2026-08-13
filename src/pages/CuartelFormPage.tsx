@@ -10,6 +10,7 @@ import { deleteStationMedia, uploadStationMedia } from '../lib/api/storage'
 import type { Region, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { isValidPhone } from '../lib/contact'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
   { value: 'operativo', label: 'Operativo' },
@@ -36,6 +37,7 @@ export function CuartelFormPage() {
   const [address, setAddress] = useState('')
   const [zone, setZone] = useState('')
   const [phone, setPhone] = useState('')
+  const [whatsappPhone, setWhatsappPhone] = useState('')
   const [email, setEmail] = useState('')
   const [facebook, setFacebook] = useState('')
   const [instagram, setInstagram] = useState('')
@@ -84,6 +86,7 @@ export function CuartelFormPage() {
       setAddress(station.address ?? '')
       setZone(station.zone ?? '')
       setPhone(station.phone ?? '')
+      setWhatsappPhone(station.whatsapp_phone ?? '')
       setEmail(station.email ?? '')
       setFacebook(station.social_media?.facebook ?? '')
       setInstagram(station.social_media?.instagram ?? '')
@@ -115,6 +118,12 @@ export function CuartelFormPage() {
       }
     }
 
+    const trimmedWhatsapp = whatsappPhone.trim()
+    if (trimmedWhatsapp && !isValidPhone(trimmedWhatsapp)) {
+      setError('El número de WhatsApp no parece válido. Revisá el formato.')
+      return
+    }
+
     setSubmitting(true)
     try {
       const socialMedia =
@@ -128,6 +137,7 @@ export function CuartelFormPage() {
         address: address || null,
         zone: zone || null,
         phone: phone || null,
+        whatsapp_phone: trimmedWhatsapp || null,
         email: email || null,
         social_media: socialMedia,
         description: description || null,
@@ -232,8 +242,22 @@ export function CuartelFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="phone">Teléfono (opcional)</label>
+            <label htmlFor="phone">Teléfono institucional (opcional)</label>
             <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0351 4123456" />
+          </div>
+
+          <div className="field">
+            <label htmlFor="whatsappPhone">WhatsApp (opcional)</label>
+            <input
+              id="whatsappPhone"
+              type="tel"
+              value={whatsappPhone}
+              onChange={(e) => setWhatsappPhone(e.target.value)}
+              placeholder="0351 4123456"
+            />
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              Puede ser distinto al teléfono fijo. Dejalo vacío si el cuartel no tiene WhatsApp.
+            </p>
           </div>
 
           <div className="field">

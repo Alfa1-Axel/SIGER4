@@ -20,6 +20,7 @@ export interface StationInput {
   address?: string | null
   zone?: string | null
   phone?: string | null
+  whatsapp_phone?: string | null
   email?: string | null
   social_media?: Record<string, string> | null
   description?: string | null

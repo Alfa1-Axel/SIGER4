@@ -75,6 +75,7 @@ export const FIELD_LABELS: Record<string, string> = {
   description: 'Descripción',
   status: 'Estado',
   phone: 'Teléfono',
+  whatsapp_phone: 'WhatsApp',
   email: 'Email',
   address: 'Dirección',
   zone: 'Zona',

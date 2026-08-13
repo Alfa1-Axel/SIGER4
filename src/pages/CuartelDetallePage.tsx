@@ -509,9 +509,11 @@ export function CuartelDetallePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 }}>
                 {authorities.map(({ profile, role }) => (
                   <div key={`${profile.id}-${role}`} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>{profile.full_name}</span>
-                      <span className="badge badge-info">{ROLE_DEFINITIONS.find((r) => r.key === role)?.label ?? role}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{profile.full_name}</span>
+                      <span className="badge badge-info" style={{ flexShrink: 0 }}>
+                        {ROLE_DEFINITIONS.find((r) => r.key === role)?.label ?? role}
+                      </span>
                     </div>
                     <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                       <ContactLink kind="email" value={profile.email} />
@@ -522,20 +524,16 @@ export function CuartelDetallePage() {
               </div>
             )}
 
-            {(station.phone || station.email || station.social_media) && (
+            {(station.phone || station.whatsapp_phone || station.email || station.social_media) && (
               <div
                 className="contact-list"
                 style={{ borderTop: authorities.length > 0 ? '1px solid var(--color-border)' : 'none', paddingTop: authorities.length > 0 ? 12 : 0 }}
               >
                 {station.phone && <ContactLink kind="phone" value={station.phone} />}
-                {station.phone && <ContactLink kind="whatsapp" value={station.phone} label="WhatsApp" />}
+                {station.whatsapp_phone && <ContactLink kind="whatsapp" value={station.whatsapp_phone} />}
                 {station.email && <ContactLink kind="email" value={station.email} />}
-                {station.social_media?.facebook && (
-                  <ContactLink kind="url" value={station.social_media.facebook} label={`Facebook: ${station.social_media.facebook}`} />
-                )}
-                {station.social_media?.instagram && (
-                  <ContactLink kind="instagram" value={station.social_media.instagram} label={`Instagram: ${station.social_media.instagram}`} />
-                )}
+                {station.social_media?.facebook && <ContactLink kind="url" value={station.social_media.facebook} label="Facebook" />}
+                {station.social_media?.instagram && <ContactLink kind="instagram" value={station.social_media.instagram} />}
               </div>
             )}
 

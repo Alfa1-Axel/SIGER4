@@ -19,6 +19,27 @@ const STATUS_OPTIONS: { value: VehicleStatus; label: string }[] = [
   { value: 'fuera_de_servicio', label: 'Fuera de servicio' },
 ]
 
+// vehicles.vehicle_type sigue siendo texto libre en la base (sin enum, sin
+// constraint) -- este combo es puramente una capa de UI para guiar la carga
+// hacia valores institucionales consistentes, sin romper compatibilidad con
+// lo que ya hay cargado. "OTROS_SENTINEL" nunca se guarda como tal: al
+// elegir "Otros" el valor real que se persiste es el texto libre del campo
+// que aparece al lado (ver handleTypeSelectChange/handleSubmit).
+const VEHICLE_TYPE_OPTIONS = [
+  'Ambulancia',
+  'Ataque rápido',
+  'Autobomba Cisterna > a 10000 lts',
+  'Autobomba Liviana <= a 1500 lts',
+  'Autobomba Mediana > a 1500 hasta 3000 lts',
+  'Autobomba Pesada > a 3000 hasta 10000 lts',
+  'Embarcaciones',
+  'Escalante/Hidroelevador',
+  'Mat-Pel (Materiales Peligrosos)',
+  'Unidad de Rescate',
+  'Unidad de Transporte Carga/Personal',
+]
+const OTHER_VEHICLE_TYPE = 'Otros'
+
 export function VehiculoFormPage() {
   const { stationId, id } = useParams<{ stationId?: string; id?: string }>()
   const isEditing = Boolean(id)
@@ -39,7 +60,12 @@ export function VehiculoFormPage() {
     (isRegionalRole && Boolean(targetStationRegionId) && targetStationRegionId === myRegionId) ||
     (isStationRole && Boolean(resolvedStationId) && resolvedStationId === myStationId)
   const [internalCode, setInternalCode] = useState('')
-  const [vehicleType, setVehicleType] = useState('')
+  // vehicleTypeSelect siempre es una de VEHICLE_TYPE_OPTIONS u
+  // OTHER_VEHICLE_TYPE (nunca un texto libre directo) -- el valor real a
+  // guardar se resuelve recién en handleSubmit (ver ahí). vehicleTypeOther
+  // solo importa cuando vehicleTypeSelect === OTHER_VEHICLE_TYPE.
+  const [vehicleTypeSelect, setVehicleTypeSelect] = useState('')
+  const [vehicleTypeOther, setVehicleTypeOther] = useState('')
   const [status, setStatus] = useState<VehicleStatus>('operativo')
   const [plate, setPlate] = useState('')
   const [waterCapacityLiters, setWaterCapacityLiters] = useState('')
@@ -58,7 +84,18 @@ export function VehiculoFormPage() {
       if (!active || !vehicle) return
       setResolvedStationId(vehicle.station_id)
       setInternalCode(vehicle.internal_code)
-      setVehicleType(vehicle.vehicle_type)
+      // Compatibilidad con datos existentes: si el tipo guardado coincide
+      // EXACTO con una opción institucional, se preselecciona esa opción.
+      // Cualquier otro valor (incluidos los tipos libres cargados antes de
+      // este combo) se trata como "Otros" con el texto real precargado en
+      // el campo de especificar -- nunca se pierde ni se fuerza a encajar
+      // en una opción que no corresponde.
+      if (VEHICLE_TYPE_OPTIONS.includes(vehicle.vehicle_type)) {
+        setVehicleTypeSelect(vehicle.vehicle_type)
+      } else {
+        setVehicleTypeSelect(OTHER_VEHICLE_TYPE)
+        setVehicleTypeOther(vehicle.vehicle_type)
+      }
       setStatus(vehicle.status)
       setPlate(vehicle.plate ?? '')
       setWaterCapacityLiters(vehicle.water_capacity_liters != null ? String(vehicle.water_capacity_liters) : '')
@@ -86,12 +123,23 @@ export function VehiculoFormPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+
+    if (!vehicleTypeSelect) {
+      setError('Seleccioná el tipo de vehículo.')
+      return
+    }
+    if (vehicleTypeSelect === OTHER_VEHICLE_TYPE && !vehicleTypeOther.trim()) {
+      setError('Especificá el tipo de vehículo.')
+      return
+    }
+    const resolvedVehicleType = vehicleTypeSelect === OTHER_VEHICLE_TYPE ? vehicleTypeOther.trim() : vehicleTypeSelect
+
     setSubmitting(true)
     try {
       const input = {
         station_id: resolvedStationId,
         internal_code: internalCode,
-        vehicle_type: vehicleType,
+        vehicle_type: resolvedVehicleType,
         status,
         plate: plate || null,
         water_capacity_liters: waterCapacityLiters ? Number(waterCapacityLiters) : null,
@@ -145,8 +193,37 @@ export function VehiculoFormPage() {
 
           <div className="field">
             <label htmlFor="vehicleType">Tipo de vehículo</label>
-            <input id="vehicleType" required value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} placeholder="Autobomba" />
+            <select
+              id="vehicleType"
+              required
+              value={vehicleTypeSelect}
+              onChange={(e) => {
+                setVehicleTypeSelect(e.target.value)
+                if (e.target.value !== OTHER_VEHICLE_TYPE) setVehicleTypeOther('')
+              }}
+            >
+              <option value="">Seleccionar…</option>
+              {VEHICLE_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+              <option value={OTHER_VEHICLE_TYPE}>{OTHER_VEHICLE_TYPE}</option>
+            </select>
           </div>
+
+          {vehicleTypeSelect === OTHER_VEHICLE_TYPE && (
+            <div className="field">
+              <label htmlFor="vehicleTypeOther">Especificar tipo de vehículo</label>
+              <input
+                id="vehicleTypeOther"
+                required
+                value={vehicleTypeOther}
+                onChange={(e) => setVehicleTypeOther(e.target.value)}
+                placeholder="Ej: Camión cisterna forestal"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="plate">Patente (opcional)</label>

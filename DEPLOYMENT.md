@@ -10,7 +10,7 @@ Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que es
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
 - [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
-      `0001` hasta la última numerada (`0077` al momento de escribir esto — la numeración solo
+      `0001` hasta la última numerada (`0079` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
       las secciones 16 en adelante, cada una con su propio número de migración en el título.
@@ -3873,7 +3873,7 @@ Además de la checklist rápida de la sección 0 (deploy técnico), antes de dar
 reales** (no solo de prueba) confirmá cada uno de estos puntos:
 
 **Base de datos (Supabase)**
-- [ ] **Migraciones**: las 77 migraciones (`0001` a `0077`) corridas en orden en el SQL Editor del
+- [ ] **Migraciones**: las 79 migraciones (`0001` a `0079`) corridas en orden en el SQL Editor del
       proyecto real. Confirmar con:
       ```sql
       select count(*) from supabase_migrations.schema_migrations;
@@ -5268,3 +5268,90 @@ QA verificado por revisión de código (los 6 casos pedidos):
    resuelve el nuevo usuario.
 6. Usuario sin perfil activo → `current_profile_id()` es `null`, la función devuelve `created=false`
    sin insertar ni lanzar excepción.
+
+## 37. Pulido final: mensajes de error, fallbacks humanos y limpieza chica (2026-08-13)
+
+Pasada de cierre sobre lo ya construido — sin módulos nuevos, sin migraciones. Buscada específicamente
+por el usuario tras confirmar que la consola ya no mostraba errores: textos técnicos residuales,
+UUIDs/ids crudos en fallbacks, y consistencia de mensajes de error.
+
+### 37.1 Mensajes de error crudos de Postgres (`describeSupabaseError`)
+
+`src/lib/api/errors.ts` traduce los códigos de error de Postgres a mensajes institucionales desde
+hace varias rondas, pero tenía dos puntos sin cubrir:
+
+- **`23502` (NOT NULL)**: extraía el nombre de columna de la base con una regex y lo mostraba crudo
+  (ej. "Falta completar un campo obligatorio: station_id."). Corregido para pasar ese nombre por
+  `FIELD_LABELS` (el mismo diccionario que ya traduce los diffs de Auditoría a español, ver
+  `src/lib/audit/humanize.ts`) — ahora dice "Falta completar un campo obligatorio: Cuartel.". Si el
+  campo no está en el diccionario (constraint nueva sin agregar), cae al mensaje genérico "Faltan
+  completar campos obligatorios." en vez de mostrar el nombre técnico.
+- **Fallback final** (código de Postgres no contemplado explícitamente): antes devolvía
+  `err.message`/`err.hint` crudo, en inglés y a veces con nombres de tabla/constraint. Ahora devuelve
+  siempre el `fallback` genérico institucional ("Ocurrió un error inesperado..." o el que pase cada
+  pantalla) — el error real sigue disponible en la consola del navegador (Supabase lo loguea aparte),
+  solo no se muestra crudo al usuario.
+- Se agregó el código **`23505`** (unique violation) explícitamente: "Ya existe un registro con esos
+  datos." — antes cualquier violación de constraint única no contemplada caía al fallback genérico o
+  al texto crudo.
+
+### 37.2 UUIDs / ids crudos en fallbacks de nombre
+
+Patrón corregido en varios lugares: `algo.find(x => x.id === id)?.name ?? id` mostraba el id crudo
+cuando la relación apunta a un registro borrado/inaccesible (scope huérfano, cuartel eliminado,
+usuario eliminado). Cambiado a texto humano en:
+
+- `UsuarioDetallePage.tsx` (alcances/scopes de usuario): "Cuartel no disponible" / "Subsede no
+  disponible" / "Regional no disponible" en vez del UUID.
+- `InventarioDetallePage.tsx`, `SolicitudPrestamoDetallePage.tsx`, `SolicitudesPrestamoPage.tsx`:
+  helpers `stationName()`/`profileName()` pasaron de `'—'` genérico a "Cuartel no disponible"/"Usuario
+  no disponible" — mismo criterio, mensaje más específico sobre qué faltó.
+- `DepartamentoDetallePage.tsx`: `stationName()`/`subsedeName()` idem, diferenciando "Sin cuartel
+  asignado" (el campo nunca se cargó) de "Cuartel no disponible" (se cargó y el registro ya no existe)
+  — son casos distintos que antes compartían el mismo texto.
+
+Revisión dirigida confirmó que **no había más casos** de este patrón en Auditoría, Notificaciones,
+Documentos, Inventario, Solicitudes de préstamo, Departamentos ni Reportes — el resto de los
+fallbacks ya usaba texto humano (`'—'`, `'Elemento eliminado'`, etc.), solo faltaba especificidad en
+los cinco casos de arriba.
+
+### 37.3 Texto técnico visible — confirmado, sin cambios necesarios
+
+Único lugar con jerga técnica visible ("Supabase", "Edge Function", `CRON_SHARED_SECRET`, "SQL
+Editor"): `SystemSettingsSection.tsx`, montado en Ajustes **solo para `informatica_r4`**
+(`{hasRole('informatica_r4') && <SystemSettingsSection />}`, `AjustesPage.tsx`). Es el panel de
+configuración técnica del sistema — la audiencia es explícitamente informática, coincide con la regla
+del pedido ("solo informatica_r4 puede ver datos técnicos, y únicamente donde tenga sentido"). No se
+tocó.
+
+No se encontraron placeholders de maqueta, estados vacíos con texto técnico, errores sin pasar por
+`describeSupabaseError`, ni botones de acción sin gate de permiso (`canEdit`/`isAdmin`/`canManage`/
+etc. ya cubren todos los casos revisados en Inventario, Solicitudes de préstamo, Departamentos y
+Documentos).
+
+### 37.4 Mobile / layout — confirmado sin bugs nuevos
+
+Revisión rápida de modales (`Lightbox.tsx` ya usa `maxWidth`/`maxHeight: 100%`, sin cambios
+necesarios) y de la variable de outline de foco (`--color-primary-light`, usada en `.contact-link` y
+en todos los `input`/`select`/`textarea` del sistema desde antes de esta ronda): en dark mode
+(`#7f1d1d`) tiene contraste bajo contra los fondos oscuros de card — **detectado pero no corregido**,
+porque es una decisión de diseño preexistente y consistente en toda la app (no un bug introducido en
+las rondas de contacto/layout), y tocar esa variable cambiaría el outline de foco de todos los
+formularios del sistema — fuera del alcance de "corregir bugs evidentes sin rediseñar" de esta pasada.
+Documentado acá para una futura revisión de accesibilidad dedicada.
+
+### 37.5 Código muerto
+
+Revisión de `src/lib/contact.ts` (helpers de contacto agregados en rondas anteriores) y de los
+archivos tocados en esta pasada: sin imports, funciones o componentes sin uso. `isValidEmail` y
+`normalizePhoneForWhatsApp` solo se llaman internamente dentro de `contact.ts` (por `buildMailto`,
+`buildWhatsAppUrl`, `detectContactKind`) pero siguen exportadas como utilidad pública reutilizable —
+no es código muerto, es una función auxiliar con un solo consumidor interno más los externos que ya
+la usan indirectamente.
+
+### 37.6 Sin migraciones nuevas
+
+Esta ronda es 100% frontend — ningún cambio de esquema, RLS ni RPC. Se corrigió el checklist de
+migraciones del inicio de este documento (sección 0 y 31.2), que había quedado desactualizado en "77
+migraciones" desde la ronda de la sección 36 — ahora dice 79 (`0001`-`0079`), sin migraciones nuevas
+de esta ronda en sí.

@@ -1,4 +1,5 @@
 import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
+import { shortSubsedeName, stationSummaryLine } from './reportText'
 import { truncateDecimals } from '../format'
 import {
   fetchAttendanceReportData,
@@ -84,7 +85,7 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
     ['Cuartel', 'Subsede', 'Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
     rows.map((r) => [
       r.station?.name ?? '—',
-      r.station?.subsede?.name ?? '—',
+      shortSubsedeName(r.station?.subsede?.name) ?? '—',
       `${r.period_start} a ${r.period_end}`,
       pct(r.attendance_rate),
       r.total_members,
@@ -140,7 +141,7 @@ export async function generateInterventionsReport(ctx: ReportRunContext) {
     ['Cuartel', 'Subsede', 'Tipo', 'Período', 'Horario', 'Cantidad', 'Personal', 'Móviles', 'Horas'],
     rows.map((r) => [
       r.station?.name ?? '—',
-      r.station?.subsede?.name ?? '—',
+      shortSubsedeName(r.station?.subsede?.name) ?? '—',
       r.category,
       `${r.period_start} a ${r.period_end}`,
       r.time_of_day ?? '—',
@@ -224,7 +225,7 @@ export async function generateVehiclesReport(ctx: ReportRunContext) {
     ['Cuartel', 'Subsede', 'Código', 'Tipo', 'Estado', 'Patente'],
     rows.map((v) => [
       v.station?.name ?? '—',
-      v.station?.subsede?.name ?? '—',
+      shortSubsedeName(v.station?.subsede?.name) ?? '—',
       v.internal_code,
       v.vehicle_type,
       v.status,
@@ -249,6 +250,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
     periodLabel: ctx.periodLabel,
     generatedByLabel: ctx.generatedByLabel,
     generatedAt: new Date(),
+    stationLogoUrl: data.station.logo_url,
   }).init()
 
   const avgAttendance = data.attendance.length
@@ -263,7 +265,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   ])
 
   builder.addExecutiveSummary([
-    `Cuartel ${data.station.name} (${data.station.code}), subsede ${data.station.subsede?.name ?? '—'}, estado ${data.station.status}.`,
+    stationSummaryLine(data.station),
     data.attendance.length
       ? `Asistencia promedio del período: ${pct(avgAttendance)}.`
       : 'Sin resúmenes de asistencia cargados en el período.',
@@ -350,7 +352,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
 
   builder.addTable(
     ['Cuartel', 'Subsede', 'Estado', 'Vehículos'],
-    data.stations.map((s) => [s.name, s.subsede?.name ?? '—', s.status, s.vehicles_count]),
+    data.stations.map((s) => [s.name, shortSubsedeName(s.subsede?.name) ?? '—', s.status, s.vehicles_count]),
     'Cuarteles',
     [65, 50, 45, 'auto'],
   )

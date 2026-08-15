@@ -8,6 +8,16 @@
   --color-primary-light: #ef9a9a;
   --color-primary-lighter: #ffcdd2;
 
+  /* Color dedicado del anillo de foco (outline), separado de
+     --color-primary-light: esa variable es un TINTE del primario (se
+     redefine oscuro en dark mode porque ahí se usa como fondo sutil de
+     elementos, ver --color-primary-lighter en badges) — no sirve como color
+     de foco, que necesita ser claro/vivo en ambos temas para contrastar
+     contra el fondo que tenga detrás. En claro coincide con el valor que ya
+     tenía --color-primary-light (mismo aspecto de siempre); en dark mode se
+     redefine más abajo. */
+  --color-focus-ring: #ef9a9a;
+
   --color-secondary: #0f172a;
   --color-secondary-light: #334155;
   --color-secondary-lighter: #94a3b8;
@@ -67,6 +77,13 @@
   --color-primary-dark: #d32f2f;
   --color-primary-darker: #ffcdd2;
   --color-primary-light: #7f1d1d;
+  /* --color-primary-light (#7f1d1d) es oscuro a propósito en dark mode --
+     ahí funciona como fondo sutil, no como color de foco. El anillo de foco
+     necesita ser claro para contrastar contra --color-bg-card (#1e2c4d)/
+     --color-bg-card-soft (#141d33): mismo rojo vivo que ya usa
+     --color-primary acá, que ya se prueba con buen contraste en toda la UI
+     de dark mode (texto, íconos, bordes). */
+  --color-focus-ring: #ef5350;
   --color-primary-lighter: #4c1d1d;
 
   --color-secondary-light: #cbd5e1;
@@ -351,6 +368,11 @@ img {
   background: var(--color-bg-card-soft);
 }
 
+.sidebar-link:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
 .sidebar-link.active {
   background: var(--color-primary-lighter);
   color: var(--color-primary-darker);
@@ -400,6 +422,16 @@ img {
   padding: 18px 20px;
   box-shadow: var(--shadow-card);
   overflow-wrap: anywhere;
+}
+
+/* Cuando .card/.card-solid se usan como <Link> (listados de Cuarteles,
+   Inventario, Documentos, etc.), sin esto dependían del outline nativo del
+   navegador -- inconsistente entre navegadores y sin relación con la
+   identidad visual del resto de los estados de foco de la app. */
+a.card:focus-visible,
+a.card-solid:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 @media (max-width: 599px) {
@@ -514,6 +546,11 @@ img {
   cursor: not-allowed;
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .btn-primary {
   background: var(--color-primary);
   color: var(--color-text-on-primary);
@@ -608,7 +645,7 @@ img {
 .field input:focus,
 .field select:focus,
 .field textarea:focus {
-  outline: 2px solid var(--color-primary-light);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 1px;
   border-color: var(--color-primary);
 }
@@ -918,6 +955,12 @@ img {
   font-weight: 600;
 }
 
+.link-muted:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- Utilidades genéricas para texto dinámico largo ----------
    Cualquier dato que venga del usuario o de afuera (URLs, emails,
    nombres, observaciones, direcciones) puede llegar sin espacios donde
@@ -1010,7 +1053,7 @@ img {
 }
 
 .contact-link:focus-visible {
-  outline: 2px solid var(--color-primary-light);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
 

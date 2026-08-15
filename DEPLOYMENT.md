@@ -5355,3 +5355,55 @@ Esta ronda es 100% frontend — ningún cambio de esquema, RLS ni RPC. Se corrig
 migraciones del inicio de este documento (sección 0 y 31.2), que había quedado desactualizado en "77
 migraciones" desde la ronda de la sección 36 — ahora dice 79 (`0001`-`0079`), sin migraciones nuevas
 de esta ronda en sí.
+
+## 38. Accesibilidad: contraste del foco en modo oscuro (2026-08-13)
+
+Pasada chica y específica sobre el hallazgo documentado en 37.4: el outline de foco de inputs y
+`ContactLink` usaba `--color-primary-light`, que en dark mode tiene contraste bajo. Solo CSS —
+ninguna lógica, RLS ni migración tocada.
+
+**Causa exacta:** `--color-primary-light` es un *tinte* del color primario, no un color de foco — su
+propósito real es servir de fondo sutil de elementos (junto con `--color-primary-lighter`, usada en
+badges/`.btn-secondary`). En modo claro ese tinte es `#ef9a9a` (rosa claro, contraste aceptable como
+outline por casualidad). En modo oscuro, la misma variable se redefine como `#7f1d1d` — correcto para
+su rol real de "fondo oscuro sutil sobre superficie oscura", pero inservible como color de foco: un
+outline de 2px en `#7f1d1d` sobre `--color-bg-card` (`#1e2c4d`) o `--color-bg-card-soft` (`#141d33`)
+es casi invisible, dos oscuros muy próximos en luminancia. La variable tenía dos roles incompatibles
+(fondo sutil vs. indicador de foco) y solo se le había dado un valor pensado para el primero.
+
+**Variable nueva:** `--color-focus-ring`, definida junto al resto de la paleta en `:root` y redefinida
+en `:root[data-theme='dark']` — mismo patrón que toda la paleta de colores del proyecto. En modo claro
+mantiene el valor que `--color-primary-light` ya tenía (`#ef9a9a`, sin cambio visual). En modo oscuro
+usa `#ef5350` — el mismo rojo vivo que ya es `--color-primary` en dark mode, ya probado con buen
+contraste en toda la UI (texto, íconos, bordes) — dentro de la paleta institucional, sin colores
+chillones ni ajenos a la identidad visual.
+
+**Estilos actualizados** (todos los `outline` que usaban `--color-primary-light` pasan a
+`--color-focus-ring`, y se agregó `:focus-visible` a los elementos interactivos que no tenían ninguno
+propio — dependían del outline nativo del navegador, inconsistente entre navegadores y sin relación
+con la identidad visual):
+- `.field input:focus` / `select:focus` / `textarea:focus` — ya existía, variable actualizada.
+- `.contact-link:focus-visible` — ya existía, variable actualizada.
+- `.btn:focus-visible` — nuevo, cubre todos los botones (`.btn-primary`, `.btn-outlined`,
+  `.btn-icon`, etc., incluidos los de todos los modales: `ReasonPromptModal`, `DeleteUserConfirmModal`,
+  `NotificationDetailModal`, ya que sus botones usan `.btn` sin overrides propios).
+- `.sidebar-link:focus-visible` — nuevo, navegación/drawer (offset negativo para no solaparse con el
+  ítem vecino en la lista vertical).
+- `.link-muted:focus-visible` — nuevo, cubre "Volver a...", "+ Agregar", "Ver todos" en headers de
+  sección.
+- `a.card:focus-visible` / `a.card-solid:focus-visible` — nuevo, cubre las cards de listado usadas
+  como `<Link>` (Cuarteles, Inventario, Documentos/Carpetas, Notificaciones — `.list-item` siempre se
+  combina con `.card-solid` en el código existente, así que queda cubierto por la misma regla).
+
+**No se tocó:** los `<Link>` de fila plana sin `className="card"`/`"list-item"` (algunos listados de
+`PanelPage.tsx`/`CalendarioPage.tsx` con `style={{}}` inline) siguen con el outline nativo del
+navegador — cubrirlos exigiría agregar clases en varias páginas, fuera del alcance de "pasada chica,
+sin rediseñar" de este pedido; el outline nativo ya es funcional, solo no coincide con la identidad
+visual. Tampoco se tocó `.search-input input { outline: none }` (input de búsqueda dentro de un
+contenedor con su propio feedback visual) ni ningún otro `outline: none` — no había ninguno que
+suprimiera el foco sin alternativa visual.
+
+**Modo claro:** sin cambios visuales — `--color-focus-ring` en `:root` tiene el mismo valor que
+`--color-primary-light` siempre tuvo ahí.
+
+**Migraciones:** ninguna. **Qué correr en Supabase:** nada — 100% CSS.

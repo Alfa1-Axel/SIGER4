@@ -5110,6 +5110,13 @@ notificación de novedad dos veces" (nada cambió ahí, sigue siendo atómica a 
 cambió es que ya no se dispara una petición HTTP redundante en cada refresh de sesión, y en los casos
 en que sí se dispara y la fila ya existe, la respuesta ya no es un error visible.
 
+**Actualización (mismo día, ver 36.6):** el `upsert` con `onConflict`/`ignoreDuplicates` descripto
+arriba generaba a su vez un **400 Bad Request** (no un 409) — PostgREST no puede resolver `on_conflict`
+contra un índice único *parcial* como `idx_notifications_app_update_dedup`. Se reemplazó por una RPC
+(`ensure_app_update_notification`, migración 0079) que arma el `insert ... on conflict ... where ...
+do nothing` en SQL plano server-side, donde el conflict target parcial sí es válido. El diagnóstico y
+la corrección del `TOKEN_REFRESHED` de este apartado (parte 2) siguen vigentes sin cambios.
+
 Log esperable que **no** se corrigió porque no es un problema: "Launched external handler for
 tel:..." al tocar un teléfono es un mensaje normal del navegador/OS al abrir la app de teléfono, no
 un error de SIGER4.
@@ -5194,10 +5201,70 @@ sección corrige el desborde *dentro* de cards individuales, no el del documento
 
 - `0078_station_whatsapp_phone.sql` — agrega `stations.whatsapp_phone` (columna nueva, nullable, sin
   copiar el valor de `phone`).
+- `0079_fix_app_update_notification_rpc.sql` — RPC `ensure_app_update_notification()`, ver 36.6.
 
 ### 36.5 Qué correr en Supabase
 
-1. Migración `0078`.
+1. Migraciones `0078` y `0079`, en orden.
 
-Ninguna Edge Function nueva ni con cambios de código — el fix del 409 es enteramente frontend
-(`upsert` desde el cliente en vez de `insert`). Redeploy normal del frontend (Vercel).
+Ninguna Edge Function nueva ni con cambios de código. Redeploy normal del frontend (Vercel).
+
+### 36.6 Fix del 400 Bad Request en el upsert de notificaciones (mismo día, tras 36.2)
+
+**Causa exacta:** el `upsert(..., { onConflict: 'profile_id,app_update_id', ignoreDuplicates: true })`
+descripto en 36.2 le pide a PostgREST que arme `insert ... on conflict (profile_id, app_update_id) do
+nothing`. Pero `idx_notifications_app_update_dedup` (migración 0077) es un **índice único parcial**
+(`where app_update_id is not null`) — PostgREST exige que el conjunto de columnas de `on_conflict`
+coincida con una constraint/índice único **sin condición `where`** para poder inferir el `ON CONFLICT`
+de forma automática; contra un índice parcial no puede, y devuelve **400 Bad Request** en vez de
+intentar algo potencialmente incorrecto. Esto es una limitación conocida de la capa REST de
+PostgREST, no de Postgres: en SQL plano, `insert ... on conflict (profile_id, app_update_id) where
+app_update_id is not null do nothing` es perfectamente válido — es exactamente lo que la RPC nueva
+ejecuta server-side, evitando que PostgREST tenga que inferir nada.
+
+**Por qué no se tocó el índice:** seguía siendo correcto y necesario para la atomicidad (dos pestañas
+del mismo usuario insertando al mismo tiempo nunca generan dos filas); el problema era exclusivamente
+que la capa REST no puede *usarlo* vía `on_conflict` en un `upsert` desde el cliente.
+
+**RPC nueva** (migración `0079_fix_app_update_notification_rpc.sql`):
+`ensure_app_update_notification(p_app_update_id text, p_title text, p_message text default null)`,
+`security definer`, `returns table (created boolean, notification_id uuid)`.
+
+- Resuelve `profile_id` **siempre** desde `current_profile_id()` (nunca un parámetro del cliente) —
+  misma garantía que daba la policy `notifications_write_self` (0023): imposible crear una
+  notificación a nombre de otro usuario.
+- Sin perfil activo (`current_profile_id()` devuelve `null` — sin `profile`, o `is_active = false`):
+  devuelve `created=false, notification_id=null` sin insertar **ni lanzar excepción**. El frontend
+  llama esto en cada carga de sesión; un usuario sin perfil activo no debería ver el banner de
+  novedades de todos modos, así que este caso no debe romper nada.
+- Hace `insert ... on conflict (profile_id, app_update_id) where app_update_id is not null do nothing
+  returning id` — si insertó, `created=true`; si no (ya existía), un `select` trae el `id` de la fila
+  existente y devuelve `created=false`. **Nunca ejecuta un `update`** sobre la fila existente, así que
+  **nunca pisa `is_read`/`read_at`** — si ya estaba leída, sigue leída.
+- `grant execute ... to authenticated`, mismo patrón que el resto de las RPC `security definer` del
+  proyecto (ver migración 0031).
+
+**Cambio en frontend** (`src/lib/api/notifications.ts`): `createAppUpdateNotification()` pasó de
+`supabase.from('notifications').upsert(...)` a `supabase.rpc('ensure_app_update_notification', {
+p_app_update_id, p_title })`. Cambió la firma (ya no recibe `profileId` — se resuelve en el servidor),
+único caller (`AppUpdateBanner.tsx`) actualizado. La `ref`/deps estables del `useEffect` de
+`AppUpdateBanner.tsx` (fix de 36.2, parte 2) no se tocaron — siguen evitando disparar la llamada de
+más en cada `TOKEN_REFRESHED`.
+
+**Por qué no se volvió al patrón `insert` + `catch(23505)`:** ya se había descartado una vez en 36.2
+precisamente porque, aunque el código JS trate el error como éxito, el navegador igual loguea la
+petición como 409 en la pestaña Network — el mismo síntoma que se estaba corrigiendo, solo que con
+otro código de estado. La RPC evita el problema de raíz: PostgREST nunca ve un conflicto, porque la
+resolución de "ya existe" ocurre dentro de la función, no en la petición HTTP hacia la tabla.
+
+QA verificado por revisión de código (los 6 casos pedidos):
+1. Primera vez para un usuario → `insert` inserta, `created=true`.
+2. Mismo usuario/update de nuevo → `do nothing` no inserta, cae al `select`, `created=false`, sin
+   excepción, sin petición con status de error.
+3. Notificación ya leída → `do nothing` nunca ejecuta `update`, `is_read`/`read_at` intactos.
+4. `TOKEN_REFRESHED` → ni siquiera dispara la llamada (fix de deps de 36.2 sigue vigente); si la
+   disparara, la RPC es idempotente sin error de todos modos.
+5. Cambio de usuario → `profileId` cambia, la `ref` no coincide, se llama de nuevo, `current_profile_id()`
+   resuelve el nuevo usuario.
+6. Usuario sin perfil activo → `current_profile_id()` es `null`, la función devuelve `created=false`
+   sin insertar ni lanzar excepción.

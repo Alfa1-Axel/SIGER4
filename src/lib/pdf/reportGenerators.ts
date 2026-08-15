@@ -166,6 +166,7 @@ export async function generateCoursesReport(ctx: ReportRunContext) {
     periodLabel: ctx.periodLabel,
     generatedByLabel: ctx.generatedByLabel,
     generatedAt: new Date(),
+    theme: 'escuela',
   }).init()
 
   const active = rows.filter((c) => c.status === 'en_curso').length

@@ -7,6 +7,18 @@ const PRIMARY_COLOR = '#D32F2F'
 const SECONDARY_COLOR = '#0F172A'
 const MUTED_COLOR = '#6B7280'
 
+// Qué par de logos institucionales corresponde según el tema del reporte --
+// mismo criterio que ya rige en el resto de la app: logo-informatica.png es
+// "la marca del sistema en general" (aparece solo, sin Escuela, en el header
+// global de toda la app — AppHeader.tsx) y logo-escuela.png es específico
+// del módulo Escuela (aparece solo, sin Informática, en Sidebar.tsx y
+// EscuelaPage.tsx). En Login/Ajustes ambos aparecen JUNTOS como crédito
+// institucional dual, que es el mismo criterio que se traslada acá: los dos
+// logos institucionales siempre están presentes en el encabezado del PDF,
+// pero cuál va a la posición principal (izquierda) depende de si el reporte
+// es temáticamente de Escuela o no.
+export type ReportTheme = 'default' | 'escuela'
+
 export interface ReportContext {
   title: string
   subtitle?: string
@@ -14,14 +26,22 @@ export interface ReportContext {
   periodLabel: string
   generatedByLabel: string
   generatedAt: Date
+  // 'escuela' SOLO para el Reporte de Cursos y Escuela (el único reporte
+  // cuyo tema es la Escuela Regional de Bomberos) -- ahí el logo de Escuela
+  // va a la izquierda (posición principal) e Informática a la derecha.
+  // Cualquier otro reporte (asistencias, intervenciones, vehículos, cuartel,
+  // regional, departamentos) usa 'default': Informática a la izquierda,
+  // Escuela a la derecha -- mismo par de logos, orden invertido.
+  theme?: ReportTheme
   // Logo del cuartel reportado (stations.logo_url), SOLO para reportes de un
   // cuartel específico (ej. Reporte General de cuartel). Reemplaza al logo
-  // institucional de la derecha (Informática) cuando existe y se puede
-  // cargar; si el cuartel no tiene logo cargado, o la carga/el formato
+  // institucional que le toque a la posición derecha (Escuela en tema
+  // 'default', que es el único caso en que se usa hoy) cuando existe y se
+  // puede cargar; si el cuartel no tiene logo cargado, o la carga/el formato
   // fallan, se usa el mismo fallback institucional de siempre -- nunca se
   // deja el reporte sin logo a la derecha. Reportes sin cuartel específico
   // (regional, subsede, departamentos, escuela) no pasan este campo y siguen
-  // usando los logos institucionales fijos, sin cambios.
+  // usando el par de logos institucionales fijo, sin cambios.
   stationLogoUrl?: string | null
 }
 
@@ -30,6 +50,9 @@ async function loadPdfImage(url: string): Promise<{ dataUrl: string; format: 'PN
   const format = detectImageFormatForPdf(dataUrl)
   return format ? { dataUrl, format } : null
 }
+
+const LOGO_ESCUELA_URL = '/logos/logo-escuela.png'
+const LOGO_INFORMATICA_URL = '/logos/logo-informatica.png'
 
 export class ReportBuilder {
   doc: jsPDF
@@ -44,34 +67,38 @@ export class ReportBuilder {
   }
 
   async init(): Promise<this> {
-    const [logoEscuela, logoDerecha] = await Promise.all([
-      loadPdfImage('/logos/logo-escuela.png').catch(() => null),
-      this.loadRightLogo(),
+    const isEscuela = this.context.theme === 'escuela'
+    const leftLogoUrl = isEscuela ? LOGO_ESCUELA_URL : LOGO_INFORMATICA_URL
+    const institutionalRightLogoUrl = isEscuela ? LOGO_INFORMATICA_URL : LOGO_ESCUELA_URL
+
+    const [logoIzquierda, logoDerecha] = await Promise.all([
+      loadPdfImage(leftLogoUrl).catch(() => null),
+      this.loadRightLogo(institutionalRightLogoUrl),
     ])
-    this.drawHeader(logoEscuela, logoDerecha)
+    this.drawHeader(logoIzquierda, logoDerecha)
     return this
   }
 
   // Logo de la derecha: el del cuartel reportado si existe y se puede cargar
   // (formato soportado por jsPDF -- ver detectImageFormatForPdf), o el
-  // institucional (Informática) como fallback en cualquier otro caso --
-  // cuartel sin logo, URL rota, formato no soportado (ej. WEBP), o reporte
-  // sin cuartel específico.
-  private async loadRightLogo(): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
+  // institucional que corresponda según el tema como fallback en cualquier
+  // otro caso -- cuartel sin logo, URL rota, formato no soportado (ej.
+  // WEBP), o reporte sin cuartel específico.
+  private async loadRightLogo(institutionalUrl: string): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
     if (this.context.stationLogoUrl) {
       const stationLogo = await loadPdfImage(this.context.stationLogoUrl).catch(() => null)
       if (stationLogo) return stationLogo
     }
-    return loadPdfImage('/logos/logo-informatica.png').catch(() => null)
+    return loadPdfImage(institutionalUrl).catch(() => null)
   }
 
   private drawHeader(
-    logoEscuela: { dataUrl: string; format: 'PNG' | 'JPEG' } | null,
+    logoIzquierda: { dataUrl: string; format: 'PNG' | 'JPEG' } | null,
     logoDerecha: { dataUrl: string; format: 'PNG' | 'JPEG' } | null,
   ) {
     const { title, subtitle, scopeLabel, periodLabel, generatedByLabel, generatedAt } = this.context
 
-    if (logoEscuela) this.doc.addImage(logoEscuela.dataUrl, logoEscuela.format, PAGE_MARGIN, this.cursorY, 18, 18)
+    if (logoIzquierda) this.doc.addImage(logoIzquierda.dataUrl, logoIzquierda.format, PAGE_MARGIN, this.cursorY, 18, 18)
     if (logoDerecha) this.doc.addImage(logoDerecha.dataUrl, logoDerecha.format, this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
 
     this.doc.setFont('helvetica', 'bold')

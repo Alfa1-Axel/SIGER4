@@ -5515,3 +5515,46 @@ Los 8 tipos de reporte (`REPORT_GENERATORS` en `reportGenerators.ts`) fueron rev
 
 Ninguna migración, ningún cambio de RLS, ninguna Edge Function tocada — 100% frontend
 (`src/lib/pdf/`). No hace falta correr nada en Supabase ni redesplegar funciones.
+
+### 39.7 Logo izquierdo del PDF era institucionalmente incorrecto (mismo día)
+
+Al pedido de 39.4 (logo de cuartel a la derecha) le seguía una duda: el logo izquierdo del PDF era
+**siempre** `logo-escuela.png`, fijo, en los 8 tipos de reporte — incluidos Regional Consolidado,
+Departamentos, Reporte General por Cuartel, que no tienen relación temática con la Escuela.
+
+**Investigación:** `public/logos/README.md` confirma que `logo-escuela.png` es específicamente el
+logo de la Escuela Regional de Bomberos y `logo-informatica.png` el del Dpto. Informática y
+Estadística R4 — no existe ningún logo genérico de "Regional 4" o "SIGER4" en el proyecto. Revisando
+dónde se usa cada uno en el resto de la app: `AppHeader.tsx` (header visible en TODA la app, no solo
+Escuela) usa únicamente `logo-informatica.png` — es el logo que ya actúa como marca del sistema en
+general. `Sidebar.tsx` y `EscuelaPage.tsx` usan únicamente `logo-escuela.png` — contextual a ese
+módulo. En Login/Ajustes/CambiarPassword aparecen los dos juntos, como crédito institucional dual.
+Esto confirma que usar Escuela fijo en todos los reportes no correspondía — debía ser Informática
+(salvo en el reporte que sí es de Escuela).
+
+**Criterio final** (confirmado con el usuario antes de aplicar, dos alternativas eran razonables):
+ambos logos institucionales siguen presentes siempre en el encabezado del PDF (como en Login/Ajustes),
+pero cuál va a la posición izquierda (principal) depende del tema del reporte:
+
+- **Reporte de Cursos y Escuela** (`generateCoursesReport`, el único cuyo tema es la Escuela): Escuela
+  a la izquierda, Informática a la derecha.
+- **Los otros 7 reportes** (Asistencias, Intervenciones, Vehículos, Reporte General por Cuartel,
+  Regional Consolidado, Departamentos General, Departamento específico): Informática a la izquierda,
+  Escuela a la derecha — mismo par de logos, orden invertido.
+- **Reporte General por Cuartel**: sin cambios respecto a 39.4 — el logo de cuartel sigue
+  reemplazando lo que le toque a la posición derecha (que con este cambio de criterio pasa a ser
+  Escuela institucionalmente, en vez de Informática) cuando existe y carga bien; mismo fallback si no.
+
+**Implementación:** `ReportContext` (`reportBuilder.ts`) gana un campo opcional `theme?: 'default' |
+'escuela'` (default: `'default'`). `init()` resuelve qué URL institucional va a la izquierda y cuál
+al fallback de la derecha según el tema, antes de intentar el logo de cuartel. Solo
+`generateCoursesReport` pasa `theme: 'escuela'`; los demás no necesitaron ningún cambio (heredan el
+default correcto).
+
+**No hace falta reemplazar nada en `public/logos/`** — ambos logos existentes ya son los correctos
+institucionalmente, solo estaban aplicados en la posición equivocada para 7 de los 8 reportes. No se
+creó ningún logo nuevo ni genérico de "Regional 4"/SIGER4: ese rol ya lo cumple `logo-informatica.png`
+en el resto del sistema, y se trasladó el mismo criterio a los PDF.
+
+Sin cambios en la app web, RLS ni migraciones — mismo alcance 100% frontend que el resto de la
+sección 39.

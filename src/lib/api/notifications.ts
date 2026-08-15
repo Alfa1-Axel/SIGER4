@@ -47,28 +47,30 @@ export async function createNotification(input: NotificationInput): Promise<Noti
 }
 
 // Notificación interna de "hay una novedad nueva" (ver AppUpdateBanner.tsx).
-// Deduplicación ATÓMICA a nivel de base (idx_notifications_app_update_dedup,
-// migración 0077) vía upsert + ignoreDuplicates: true, que le pide a
-// PostgREST "insert ... on conflict (profile_id, app_update_id) do nothing"
-// (header Prefer: resolution=ignore-duplicates). Esto es deliberadamente
-// distinto de un insert simple + catch(23505): un insert que choca con la
-// constraint única responde HTTP 409, visible como error en la consola del
-// navegador aunque el código lo trate bien -- con ignoreDuplicates,
-// PostgREST responde 201 (sin filas) cuando ya existe, así que nunca hay un
-// 409 que loguear en el caso esperado de "el usuario ya tiene esta
-// notificación" (que es el caso normal después de la primera vez que este
-// componente se monta, dado que corre en cada cambio de sesión/perfil).
-// "do nothing" también es la razón de que sea seguro: nunca pisa is_read/
-// read_at de una fila existente, porque si ya existe no la toca.
-export async function createAppUpdateNotification(profileId: string, appUpdateId: string, title: string): Promise<void> {
-  const { error } = await supabase.from('notifications').upsert(
-    {
-      type: 'actualizacion_sistema',
-      title,
-      profile_id: profileId,
-      app_update_id: appUpdateId,
-    },
-    { onConflict: 'profile_id,app_update_id', ignoreDuplicates: true },
-  )
+//
+// Historial de este helper (para no repetir los mismos dos intentos
+// fallidos): primero un insert simple + catch(23505) -- el navegador loguea
+// igual la petición como 409 en Network aunque el código trate el error
+// bien. Después un upsert con { onConflict: 'profile_id,app_update_id',
+// ignoreDuplicates: true } -- PostgREST responde 400 Bad Request, porque el
+// índice de deduplicación (idx_notifications_app_update_dedup, migración
+// 0077) es un índice único PARCIAL ("where app_update_id is not null"), y
+// PostgREST no puede traducir on_conflict a un índice parcial (limitación
+// de la capa REST, no de Postgres). Solución final: la lógica de insert +
+// "on conflict ... where ... do nothing" se mueve a una RPC de Postgres
+// (ensure_app_update_notification, migración 0079), que sí soporta el
+// conflict target parcial porque es SQL plano ejecutado server-side, no
+// algo que PostgREST tenga que inferir. profile_id se resuelve ahí adentro
+// desde current_profile_id() (nunca un parámetro), así que no hace falta
+// pasarlo acá.
+//
+// La RPC nunca pisa is_read/read_at de una notificación existente ("do
+// nothing" no ejecuta ningún update), y nunca lanza excepción si el usuario
+// no tiene perfil activo -- devuelve created=false sin insertar.
+export async function createAppUpdateNotification(appUpdateId: string, title: string): Promise<void> {
+  const { error } = await supabase.rpc('ensure_app_update_notification', {
+    p_app_update_id: appUpdateId,
+    p_title: title,
+  })
   if (error) throw error
 }

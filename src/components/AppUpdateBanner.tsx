@@ -34,14 +34,14 @@ export function AppUpdateBanner() {
   const { session, profile } = useAuth()
   const [visible, setVisible] = useState(false)
   const [update, setUpdate] = useState<AppUpdate | null>(null)
-  // Evita reintentar el insert (y reabrir el banner recién cerrado) en cada
+  // Evita reintentar la RPC (y reabrir el banner recién cerrado) en cada
   // evento de onAuthStateChange (TOKEN_REFRESHED, reconexión, cambio de
   // pestaña) — esos eventos generan un objeto `session` nuevo por
   // referencia aunque sea la misma sesión, así que un useEffect con
   // `session`/`profile` completos en las deps volvería a correr en cada
   // uno. Acá dependemos solo de valores primitivos estables (session != null,
   // profile.id) y de una ref para no repetir la petición de red una vez que
-  // ya se intentó en este montaje -- el upsert con ignoreDuplicates (ver
+  // ya se intentó en este montaje -- ensure_app_update_notification (ver
   // notifications.ts) ya es seguro para reintentos igual, esto es además
   // para no generar tráfico de red de sobra en cada refresh silencioso.
   const attemptedForProfileId = useRef<string | null>(null)
@@ -56,13 +56,13 @@ export function AppUpdateBanner() {
     attemptedForProfileId.current = profileId
 
     // La notificación interna (persistente en /notificaciones, "una vez por
-    // usuario" vía el índice único de la migración 0077) es independiente de
-    // "ya visto en este navegador" (localStorage, hasSeenAppUpdate) — se
+    // usuario" vía el índice único de la migración 0077, aplicado por la RPC
+    // ensure_app_update_notification de la migración 0079) es independiente
+    // de "ya visto en este navegador" (localStorage, hasSeenAppUpdate) — se
     // crea siempre que exista la novedad, aunque el banner ya no se muestre
     // más en este dispositivo puntual, para que quede un rastro accesible
     // desde cualquier sesión.
     void createAppUpdateNotification(
-      profileId,
       latest.id,
       'Nueva actualización disponible. Ingresá para conocer las novedades.',
     ).catch(() => undefined)

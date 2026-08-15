@@ -5407,3 +5407,111 @@ suprimiera el foco sin alternativa visual.
 `--color-primary-light` siempre tuvo ahí.
 
 **Migraciones:** ninguna. **Qué correr en Supabase:** nada — 100% CSS.
+
+## 39. Identidad visual y redacción de los reportes PDF (2026-08-13)
+
+Corrección de textos generados automáticamente en los PDF (`src/lib/pdf/`), footer, y logo del
+encabezado — sin tocar datos guardados, RLS ni IA.
+
+### 39.1 "Cuartel Asociación..." — redacción del resumen ejecutivo
+
+El título del PDF (`Reporte General — ${nombre}`, en `generateStationGeneralReport`) ya estaba
+correcto desde antes de esta ronda. El problema real estaba en el **resumen ejecutivo**: la primera
+línea armaba `` `Cuartel ${station.name} (${station.code}), subsede ${station.subsede?.name}, estado
+${station.status}.` `` — como `station.name` para este cuartel ya es "Asociación Bomberos Voluntarios
+Villa del Rosario" (nombre real, sin la palabra "Cuartel"), anteponer la palabra generaba "Cuartel
+Asociación Bomberos Voluntarios Villa del Rosario...", una frase que suena a que "Cuartel" fuera
+parte del nombre propio.
+
+Corregido con un helper nuevo, `stationSummaryLine()` (`src/lib/pdf/reportText.ts`), que arma la
+frase con etiquetas separadas por punto en vez de concatenar todo en una oración: "Cuartel: Asociación
+Bomberos Voluntarios Villa del Rosario (030). Subsede: Luque. Estado: operativo." — sin inventar
+datos, sin campos técnicos, y sin la ambigüedad de "Cuartel X" como si fuera un nombre compuesto.
+
+### 39.2 "subsede Subsede Luque" — duplicación del nombre de subsede
+
+Causa: `subsedes.name` en la base **ya incluye** la palabra "Subsede" como parte del nombre real (ej.
+"Subsede Luque", "Subsede Rio Primero" — así se cargaron desde las migraciones 0001/0007, es el
+nombre propio de la subsede, no se cambia). El texto del resumen anteponía otra vez la palabra
+"subsede" al armar la frase, generando "subsede Subsede Luque".
+
+Corregido con `shortSubsedeName()` (mismo archivo `reportText.ts`), que le saca el prefijo "Subsede "
+al nombre SOLO cuando ya lo trae (con una regex case-insensitive), para usarlo junto a una etiqueta
+que ya dice "Subsede:" — "Subsede: Luque" en vez de "Subsede: Subsede Luque". Si el nombre no trae el
+prefijo, se devuelve tal cual (no rompe si en el futuro se carga una subsede con nombre distinto).
+`stationSummaryLine()` ya lo usa internamente. Se aplicó además en las 4 tablas donde una columna
+"Subsede" mostraba el nombre completo con el prefijo repetido visualmente bajo su propio encabezado
+(reportes de Asistencias, Intervenciones, Vehículos, y el listado de cuarteles del Regional
+Consolidado) — antes decía "Subsede Luque" bajo la columna "Subsede" (redundante), ahora dice "Luque".
+
+**No se modificó ningún nombre guardado en la base** — ambos helpers son puramente de formato de
+texto en el momento de generar el PDF.
+
+### 39.3 Footer institucional del PDF
+
+`ReportBuilder.finalize()` (pie de página, se repite en cada hoja) cambió de "Sistema creado por Dpto.
+Informática y Estadística R4" a **"Datos extraídos de SIGER4"**, manteniendo el número de página
+("Página X de Y") y el estilo sobrio (misma línea separadora, mismo tamaño de fuente 7.5pt, mismo
+color muted). Es un cambio exclusivo de `reportBuilder.ts` — el footer institucional de la app web
+(`src/components/layout/Footer.tsx`, visible al pie de cada pantalla) usa el mismo texto de siempre y
+**no se tocó**, son dos componentes completamente separados.
+
+### 39.4 Logo del cuartel en el encabezado del PDF
+
+`ReportContext` (la config que recibe `ReportBuilder`) tiene un campo nuevo opcional
+`stationLogoUrl?: string | null`. Reglas de resolución del logo de la derecha del encabezado (el
+izquierdo, de Escuela, sigue fijo siempre):
+
+1. Si el reporte pasa `stationLogoUrl` (solo `generateStationGeneralReport`, el único generador cuyo
+   sujeto ES un cuartel específico) y esa URL carga correctamente con un formato soportado → logo del
+   cuartel.
+2. En cualquier otro caso — sin `stationLogoUrl` (reportes regional, de subsede, departamentos,
+   escuela, asistencias/intervenciones/cursos/vehículos incluso si están filtrados a un cuartel entre
+   varios), cuartel sin `logo_url` cargado, la carga falla (URL rota / Storage inaccesible), o el
+   formato de imagen no es soportado por jsPDF → **fallback al logo institucional de Informática**,
+   exactamente el comportamiento que ya existía antes de esta ronda.
+
+**Por qué solo `cuartel_general`:** es el único reporte cuya identidad completa es "este cuartel"
+(título dedicado, `needsStation: true` sin combinarse con otros alcances). Los reportes de
+Asistencias/Intervenciones/Cursos/Vehículos pueden filtrarse opcionalmente a un cuartel entre varios o
+incluir toda una subsede/región — no tienen un "sujeto" único al que asociarle un logo sin ambigüedad,
+así que siguen usando los logos institucionales fijos sin cambios (cumple "no romper reportes
+regionales, de subsede, departamentos, escuela ni inventario").
+
+**Tipo de imagen (`jsPDF` `addImage` type):** antes se forzaba `'PNG'` fijo para los logos cargados
+por URL, aunque un logo de cuartel puede subirse como PNG/JPEG/WEBP (`ImagePicker`/`storage.ts` no
+restringe el formato al subir). Se agregó `detectImageFormatForPdf()` (`src/lib/pdf/assets.ts`), que
+lee el prefijo real del dataURL (`data:image/png;base64,...` / `data:image/jpeg;base64,...`) en vez de
+asumir. **WEBP no es soportado por jsPDF** — se trata como "logo no usable" (la función devuelve
+`null`), lo que hace que el caller caiga automáticamente al fallback institucional en vez de romper el
+PDF o insertar una imagen corrupta. Los logos institucionales fijos (`/public/logos/*.png`, generados
+por el propio proyecto) siguen siendo siempre PNG, sin cambio de comportamiento ahí. Los gráficos de
+barra (`renderBarChartToDataUrl`, siempre generados internamente vía `canvas.toDataURL('image/png')`)
+no se tocaron — ahí `'PNG'` fijo sigue siendo correcto porque nunca vienen de una fuente externa.
+
+**Fallback de carga:** `loadImageAsDataUrl` (`assets.ts`) ahora lanza si el `fetch` responde con un
+status de error (antes un 404/403 de Storage silenciosamente producía un blob vacío/corrupto); el
+caller (`loadRightLogo()` en `reportBuilder.ts`) ya envuelve la carga del logo de cuartel en
+`.catch(() => null)`, así que cualquier falla (red, permiso de Storage, formato) resuelve al fallback
+institucional sin romper la generación del PDF.
+
+### 39.5 Reportes revisados
+
+Los 8 tipos de reporte (`REPORT_GENERATORS` en `reportGenerators.ts`) fueron revisados uno por uno:
+
+- **Asistencias, Intervenciones, Vehículos**: sin cambio de logo (no tienen un cuartel único como
+  sujeto); corregida la columna "Subsede" de sus tablas de detalle (39.2).
+- **Cursos (Escuela)**: sin cambios — no menciona cuartel/subsede en su resumen ni tablas.
+- **Reporte General por Cuartel**: título ya correcto; resumen ejecutivo corregido (39.1); logo de
+  cuartel conectado (39.4).
+- **Regional Consolidado**: sin cambio de logo; corregida la columna "Subsede" del listado de
+  cuarteles (39.2). Su resumen ejecutivo ("La regional cuenta con...") no tenía el patrón "Cuartel
+  X"/"subsede Y", no necesitó cambios de redacción.
+- **Departamentos — General** y **Departamento específico**: no mencionan cuartel/subsede en frases
+  propensas a este bug (usan `stationName()` como valor de celda de tabla, ya con fallback humano
+  desde una ronda anterior); sin cambios de logo, correcto (no son reportes de cuartel).
+
+### 39.6 Migraciones / Supabase / Edge Functions
+
+Ninguna migración, ningún cambio de RLS, ninguna Edge Function tocada — 100% frontend
+(`src/lib/pdf/`). No hace falta correr nada en Supabase ni redesplegar funciones.

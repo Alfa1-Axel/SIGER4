@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { loadImageAsDataUrl } from './assets'
+import { detectImageFormatForPdf, loadImageAsDataUrl } from './assets'
 
 const PAGE_MARGIN = 14
 const PRIMARY_COLOR = '#D32F2F'
@@ -14,6 +14,21 @@ export interface ReportContext {
   periodLabel: string
   generatedByLabel: string
   generatedAt: Date
+  // Logo del cuartel reportado (stations.logo_url), SOLO para reportes de un
+  // cuartel específico (ej. Reporte General de cuartel). Reemplaza al logo
+  // institucional de la derecha (Informática) cuando existe y se puede
+  // cargar; si el cuartel no tiene logo cargado, o la carga/el formato
+  // fallan, se usa el mismo fallback institucional de siempre -- nunca se
+  // deja el reporte sin logo a la derecha. Reportes sin cuartel específico
+  // (regional, subsede, departamentos, escuela) no pasan este campo y siguen
+  // usando los logos institucionales fijos, sin cambios.
+  stationLogoUrl?: string | null
+}
+
+async function loadPdfImage(url: string): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
+  const dataUrl = await loadImageAsDataUrl(url)
+  const format = detectImageFormatForPdf(dataUrl)
+  return format ? { dataUrl, format } : null
 }
 
 export class ReportBuilder {
@@ -29,19 +44,35 @@ export class ReportBuilder {
   }
 
   async init(): Promise<this> {
-    const [logoEscuela, logoInformatica] = await Promise.all([
-      loadImageAsDataUrl('/logos/logo-escuela.png').catch(() => null),
-      loadImageAsDataUrl('/logos/logo-informatica.png').catch(() => null),
+    const [logoEscuela, logoDerecha] = await Promise.all([
+      loadPdfImage('/logos/logo-escuela.png').catch(() => null),
+      this.loadRightLogo(),
     ])
-    this.drawHeader(logoEscuela, logoInformatica)
+    this.drawHeader(logoEscuela, logoDerecha)
     return this
   }
 
-  private drawHeader(logoEscuela: string | null, logoInformatica: string | null) {
+  // Logo de la derecha: el del cuartel reportado si existe y se puede cargar
+  // (formato soportado por jsPDF -- ver detectImageFormatForPdf), o el
+  // institucional (Informática) como fallback en cualquier otro caso --
+  // cuartel sin logo, URL rota, formato no soportado (ej. WEBP), o reporte
+  // sin cuartel específico.
+  private async loadRightLogo(): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
+    if (this.context.stationLogoUrl) {
+      const stationLogo = await loadPdfImage(this.context.stationLogoUrl).catch(() => null)
+      if (stationLogo) return stationLogo
+    }
+    return loadPdfImage('/logos/logo-informatica.png').catch(() => null)
+  }
+
+  private drawHeader(
+    logoEscuela: { dataUrl: string; format: 'PNG' | 'JPEG' } | null,
+    logoDerecha: { dataUrl: string; format: 'PNG' | 'JPEG' } | null,
+  ) {
     const { title, subtitle, scopeLabel, periodLabel, generatedByLabel, generatedAt } = this.context
 
-    if (logoEscuela) this.doc.addImage(logoEscuela, 'PNG', PAGE_MARGIN, this.cursorY, 18, 18)
-    if (logoInformatica) this.doc.addImage(logoInformatica, 'PNG', this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
+    if (logoEscuela) this.doc.addImage(logoEscuela.dataUrl, logoEscuela.format, PAGE_MARGIN, this.cursorY, 18, 18)
+    if (logoDerecha) this.doc.addImage(logoDerecha.dataUrl, logoDerecha.format, this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
 
     this.doc.setFont('helvetica', 'bold')
     this.doc.setFontSize(14)
@@ -195,7 +226,7 @@ export class ReportBuilder {
       this.doc.setFont('helvetica', 'normal')
       this.doc.setFontSize(7.5)
       this.doc.setTextColor(MUTED_COLOR)
-      this.doc.text('Sistema creado por Dpto. Informática y Estadística R4', this.pageWidth / 2, this.pageHeight - 11, {
+      this.doc.text('Datos extraídos de SIGER4', this.pageWidth / 2, this.pageHeight - 11, {
         align: 'center',
       })
       this.doc.text(`Página ${i} de ${pageCount}`, this.pageWidth - PAGE_MARGIN, this.pageHeight - 11, { align: 'right' })

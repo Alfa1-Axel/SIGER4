@@ -180,12 +180,12 @@ export function DepartamentoDetallePage() {
 
   function stationName(stationId: string | null): string {
     if (!stationId) return 'Sin cuartel asignado'
-    return stations.find((s) => s.id === stationId)?.name ?? 'Sin cuartel asignado'
+    return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel no disponible'
   }
 
   function subsedeName(subsedeId: string | null): string {
     if (!subsedeId) return '—'
-    return subsedes.find((s) => s.id === subsedeId)?.name ?? '—'
+    return subsedes.find((s) => s.id === subsedeId)?.name ?? 'Subsede no disponible'
   }
 
   const filteredReports = useMemo(() => {

@@ -1,4 +1,5 @@
 import { PostgrestError } from '@supabase/supabase-js'
+import { FIELD_LABELS } from '../audit/humanize'
 
 // Traduce un error real de Supabase/Postgres a un mensaje que un usuario
 // pueda entender, en vez de dejar pasar el texto crudo de Postgres (a veces
@@ -34,16 +35,25 @@ export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un erro
     }
     if (err.code === '23502') {
       const match = err.message.match(/column "([^"]+)"/)
-      return match ? `Falta completar un campo obligatorio: ${match[1]}.` : 'Falta completar un campo obligatorio.'
+      const columnName = match?.[1]
+      // FIELD_LABELS (mismo diccionario que traduce los diffs de Auditoría a
+      // español) ya cubre los campos obligatorios reales del esquema -- si
+      // el nombre de columna no está ahí (constraint nueva sin agregar al
+      // diccionario), mejor el mensaje genérico que el nombre técnico crudo.
+      const label = columnName ? FIELD_LABELS[columnName] : undefined
+      return label ? `Falta completar un campo obligatorio: ${label}.` : 'Faltan completar campos obligatorios.'
     }
-    if (err.code === '23503') return 'Uno de los datos hace referencia a un registro que no existe o fue eliminado.'
+    if (err.code === '23503') return 'El registro está vinculado a otros datos y no puede eliminarse, o hace referencia a algo que no existe.'
+    if (err.code === '23505') return 'Ya existe un registro con esos datos.'
     if (err.code === '23514') return 'El valor ingresado no es válido para el estado actual del registro.'
     // P0001: "raise exception" explícito de un trigger nuestro (ver
     // validate_inventory_loan_request_item_status en 0057) -- el mensaje ya
     // está pensado para mostrarse tal cual, en español, al usuario.
     if (err.code === 'P0001') return err.message
-    if (err.hint) return `${err.message} (${err.hint})`
-    return err.message
+    // Cualquier otro código de Postgres no contemplado explícitamente: nunca
+    // mostrar err.message/err.hint crudo (viene en inglés, a veces con
+    // nombres de tabla/columna/constraint) -- mensaje genérico institucional.
+    return fallback
   }
   if (err instanceof Error) return err.message || fallback
   return fallback

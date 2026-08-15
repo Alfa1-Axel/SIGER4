@@ -89,12 +89,12 @@ export function SolicitudPrestamoDetallePage() {
   const isRequester = Boolean(profile?.id) && request?.requested_by_profile_id === profile?.id
 
   function stationName(stationId: string): string {
-    return stations.find((s) => s.id === stationId)?.name ?? '—'
+    return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel no disponible'
   }
 
   function profileName(profileId: string | null): string {
     if (!profileId) return '—'
-    return profiles.find((p) => p.id === profileId)?.full_name ?? '—'
+    return profiles.find((p) => p.id === profileId)?.full_name ?? 'Usuario no disponible'
   }
 
   function findProfile(profileId: string | null): Profile | null {

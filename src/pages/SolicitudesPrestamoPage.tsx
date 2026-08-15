@@ -78,7 +78,7 @@ export function SolicitudesPrestamoPage() {
   }
 
   function stationName(stationId: string): string {
-    return stations.find((s) => s.id === stationId)?.name ?? '—'
+    return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel no disponible'
   }
 
   return (

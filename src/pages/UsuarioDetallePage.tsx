@@ -511,9 +511,9 @@ export function UsuarioDetallePage() {
               >
                 <span style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>
                   {SCOPE_LABEL[scope.scope_type]}
-                  {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? scope.station_id}`}
-                  {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? scope.subsede_id}`}
-                  {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? scope.region_id}`}
+                  {scope.station_id && ` · ${stations.find((s) => s.id === scope.station_id)?.name ?? 'Cuartel no disponible'}`}
+                  {scope.subsede_id && ` · ${subsedes.find((s) => s.id === scope.subsede_id)?.name ?? 'Subsede no disponible'}`}
+                  {scope.region_id && ` · ${regions.find((r) => r.id === scope.region_id)?.name ?? 'Regional no disponible'}`}
                 </span>
                 <button
                   type="button"

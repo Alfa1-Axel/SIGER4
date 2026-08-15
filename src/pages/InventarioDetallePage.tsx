@@ -54,11 +54,13 @@ export function InventarioDetallePage() {
   }, [id])
 
   function stationName(stationId: string | null): string {
-    return stations.find((s) => s.id === stationId)?.name ?? '—'
+    if (!stationId) return '—'
+    return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel no disponible'
   }
 
   function profileName(profileId: string | null): string {
-    return profiles.find((p) => p.id === profileId)?.full_name ?? '—'
+    if (!profileId) return '—'
+    return profiles.find((p) => p.id === profileId)?.full_name ?? 'Usuario no disponible'
   }
 
   if (loading) {

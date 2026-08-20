@@ -1299,7 +1299,8 @@ a.card-solid:focus-visible {
   z-index: 15;
 }
 
-.map-station-marker {
+.map-station-marker,
+.map-reference-marker {
   background: transparent;
   border: none;
 }

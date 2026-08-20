@@ -483,3 +483,21 @@ export interface StationCompliance {
   compliance_status: ComplianceStatus
 }
 
+export type MapReferencePointType = 'ruta' | 'parque_industrial' | 'rio' | 'zona_riesgo' | 'punto_estrategico' | 'otro'
+
+export interface MapReferencePoint {
+  id: string
+  name: string
+  type: MapReferencePointType
+  description: string | null
+  latitude: number
+  longitude: number
+  region_id: string | null
+  subsede_id: string | null
+  station_id: string | null
+  is_active: boolean
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+

@@ -4,10 +4,14 @@ import {
   fetchSystemSettingsStatus,
   setSystemSetting,
   fetchWeeklyPushDiagnostics,
+  fetchCronJobDiagnostics,
   type SystemSettingStatus,
   type WeeklyPushDiagnosticRow,
+  type CronJobDiagnosticRow,
 } from '../lib/api/systemSettings'
 import { describeSupabaseError } from '../lib/api/errors'
+
+const WEEKLY_JOB_NAME = 'siger4-weekly-reminder'
 
 // Solo informatica_r4 (no integrante_informatica) -- coincide exactamente
 // con is_super_admin() del lado del servidor (set_system_setting() lo exige
@@ -43,6 +47,7 @@ export function SystemSettingsSection() {
   const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null)
   const [reminderDiagnostics, setReminderDiagnostics] = useState<WeeklyPushDiagnosticRow[] | null>(null)
   const [adminSummaryDiagnostics, setAdminSummaryDiagnostics] = useState<WeeklyPushDiagnosticRow[] | null>(null)
+  const [cronDiagnostics, setCronDiagnostics] = useState<CronJobDiagnosticRow[] | null>(null)
 
   async function reload() {
     setLoadError(null)
@@ -103,17 +108,24 @@ export function SystemSettingsSection() {
     setCheckingDiagnostics(true)
     setDiagnosticsError(null)
     try {
-      const [reminder, adminSummary] = await Promise.all([
+      const [reminder, adminSummary, cronJob] = await Promise.all([
         fetchWeeklyPushDiagnostics('recordatorio_semanal'),
         fetchWeeklyPushDiagnostics('alerta_admin'),
+        fetchCronJobDiagnostics(WEEKLY_JOB_NAME),
       ])
       setReminderDiagnostics(reminder)
       setAdminSummaryDiagnostics(adminSummary)
+      setCronDiagnostics(cronJob)
     } catch (err) {
       setDiagnosticsError(describeSupabaseError(err, 'No pudimos consultar el diagnóstico de push.'))
     } finally {
       setCheckingDiagnostics(false)
     }
+  }
+
+  function formatDateTime(iso: string | null): string {
+    if (!iso) return '—'
+    return new Date(iso).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
   }
 
   function summarize(rows: WeeklyPushDiagnosticRow[] | null): string {
@@ -201,12 +213,40 @@ export function SystemSettingsSection() {
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
           Confirma, para el recordatorio semanal y el resumen administrativo de los últimos 7 días, si
-          cada notificación interna llegó a intentar el push real (no solo si se creó la notificación).
+          el job de cron corrió, si se creó la notificación interna, y si esa notificación llegó a
+          intentar el push real.
         </p>
         <button type="button" className="btn btn-outlined btn-block" disabled={checkingDiagnostics} onClick={() => void handleCheckDiagnostics()}>
           {checkingDiagnostics ? 'Consultando…' : 'Revisar últimos 7 días'}
         </button>
         {diagnosticsError && <p className="field-error" style={{ marginTop: 8 }}>{diagnosticsError}</p>}
+
+        {cronDiagnostics !== null && (
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+            <p style={{ marginBottom: 4 }}>
+              <strong>Job de cron ({WEEKLY_JOB_NAME}):</strong>{' '}
+              {!cronDiagnostics[0]?.jobExists
+                ? 'no está programado en pg_cron — la migración 0036 no llegó a crearlo, o fue eliminado.'
+                : `programado (${cronDiagnostics[0].schedule}), ${cronDiagnostics[0].active ? 'activo' : 'desactivado'}.`}
+            </p>
+            {cronDiagnostics[0]?.jobExists && cronDiagnostics[0]?.runStart === null && (
+              <p style={{ color: 'var(--color-warning)' }}>
+                El job existe pero no tiene ninguna corrida registrada todavía — puede ser normal si se
+                creó hace menos de una semana.
+              </p>
+            )}
+            {cronDiagnostics[0]?.jobExists && cronDiagnostics[0]?.runStart !== null && (
+              <p style={{ marginBottom: 4 }}>
+                Última corrida: {formatDateTime(cronDiagnostics[0].runStart)} —{' '}
+                <span style={{ color: cronDiagnostics[0].runStatus === 'succeeded' ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                  {cronDiagnostics[0].runStatus ?? '—'}
+                </span>
+                {cronDiagnostics[0].runStatus !== 'succeeded' && cronDiagnostics[0].runMessage && ` (${cronDiagnostics[0].runMessage})`}
+              </p>
+            )}
+          </div>
+        )}
+
         {reminderDiagnostics !== null && (
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--color-text-secondary)' }}>
             <p style={{ marginBottom: 4 }}>
@@ -215,15 +255,40 @@ export function SystemSettingsSection() {
             <p>
               <strong>Resumen semanal administrativo:</strong> {summarize(adminSummaryDiagnostics)}
             </p>
-            {(reminderDiagnostics.some((r) => !r.pushAttempted) || adminSummaryDiagnostics?.some((r) => !r.pushAttempted)) && (
-              <p style={{ marginTop: 8, color: 'var(--color-warning)' }}>
-                Hay notificaciones internas sin ningún intento de push registrado — revisá que
-                project_url/cron_shared_secret estén configurados arriba.
-              </p>
-            )}
+            <p style={{ marginTop: 8 }}>
+              <strong>Motivo probable:</strong> {probableCause()}
+            </p>
           </div>
         )}
       </div>
     </>
   )
+
+  // Combina las tres fuentes (job de cron, notificación interna, push) en un
+  // único diagnóstico legible -- el objetivo es que informática no tenga que
+  // interpretar las tres tablas a mano para saber qué falló.
+  function probableCause(): string {
+    if (cronDiagnostics && !cronDiagnostics[0]?.jobExists) {
+      return 'El job de cron no está programado — correr la migración 0036 (o confirmar que pg_cron/pg_net estén habilitados en el Dashboard de Supabase).'
+    }
+    if (cronDiagnostics?.[0]?.jobExists && cronDiagnostics[0].active === false) {
+      return 'El job de cron existe pero está desactivado — reactivarlo con cron.alter_job (jobid, active := true).'
+    }
+    if (cronDiagnostics?.[0]?.runStatus && cronDiagnostics[0].runStatus !== 'succeeded') {
+      return `La última corrida del job falló (${cronDiagnostics[0].runStatus}) — revisar ${cronDiagnostics[0].runMessage ?? 'los logs de Postgres'}.`
+    }
+    if (reminderDiagnostics?.length === 0) {
+      return 'El job corrió pero no se creó ninguna notificación interna — revisá si hay perfiles activos con weekly_reminder_enabled=true.'
+    }
+    if (reminderDiagnostics?.some((r) => !r.pushAttempted)) {
+      return 'La notificación interna se creó pero el push nunca se intentó — falta configurar project_url/cron_shared_secret arriba (revisá también si llegó una alerta "push no configurado" en Notificaciones).'
+    }
+    if (reminderDiagnostics?.some((r) => r.pushAttempted && r.pushStatus === 'error')) {
+      return 'El push se intentó pero la Edge Function respondió error — revisar push_error_message en la tabla o los logs de send-push-system.'
+    }
+    if (reminderDiagnostics?.every((r) => r.pushAttempted && (r.pushSentCount ?? 0) === 0)) {
+      return 'El push se intentó y la Edge Function respondió ok, pero no había suscripciones push activas para ese usuario (nunca aceptó permisos de notificación en el navegador) — la notificación interna sí debería estar visible en /notificaciones.'
+    }
+    return 'Sin problemas detectados en las últimas corridas — si igual no llegó, revisá manualmente el perfil puntual (weekly_reminder_enabled, push_subscriptions).'
+  }
 }

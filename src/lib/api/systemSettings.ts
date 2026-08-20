@@ -103,3 +103,46 @@ export async function fetchWeeklyPushDiagnostics(
     pushErrorMessage: row.push_error_message,
   }))
 }
+
+export interface CronJobDiagnosticRow {
+  jobExists: boolean
+  schedule: string | null
+  active: boolean | null
+  runStart: string | null
+  runEnd: string | null
+  runStatus: string | null
+  runMessage: string | null
+}
+
+interface CronJobDiagnosticApiRow {
+  job_exists: boolean
+  schedule: string | null
+  active: boolean | null
+  run_start: string | null
+  run_end: string | null
+  run_status: string | null
+  run_message: string | null
+}
+
+// Complementa a fetchWeeklyPushDiagnostics(): esa función solo puede
+// responder sobre lo que ya quedó en notifications/push_send_log -- si el
+// job de pg_cron nunca corrió (no está programado, o corrió pero
+// send_weekly_reminder() lanzó una excepción antes de insertar nada),
+// fetchWeeklyPushDiagnostics() devuelve 0 filas, indistinguible de "no había
+// nada que notificar esa semana". Esta consulta cron.job/cron.job_run_details
+// directamente (ver get_cron_job_diagnostics(), migración 0080) para
+// responder sin ambigüedad si el job existe, está activo, y cuándo/cómo
+// corrieron sus últimas ejecuciones reales.
+export async function fetchCronJobDiagnostics(jobName: string): Promise<CronJobDiagnosticRow[]> {
+  const { data, error } = await supabase.rpc('get_cron_job_diagnostics', { p_job_name: jobName })
+  if (error) throw error
+  return ((data ?? []) as CronJobDiagnosticApiRow[]).map((row) => ({
+    jobExists: row.job_exists,
+    schedule: row.schedule,
+    active: row.active,
+    runStart: row.run_start,
+    runEnd: row.run_end,
+    runStatus: row.run_status,
+    runMessage: row.run_message,
+  }))
+}

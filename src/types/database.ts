@@ -483,37 +483,3 @@ export interface StationCompliance {
   compliance_status: ComplianceStatus
 }
 
-export type ImportModule = 'personal' | 'vehiculos' | 'asistencias' | 'inventario'
-export type ImportBatchStatus = 'previsualizado' | 'confirmado' | 'completado' | 'cancelado'
-export type ImportRowStatus = 'pendiente' | 'creado' | 'actualizado' | 'omitido' | 'error'
-
-export interface ImportBatch {
-  id: string
-  module: ImportModule
-  status: ImportBatchStatus
-  file_name: string
-  total_rows: number
-  created_count: number
-  updated_count: number
-  skipped_count: number
-  error_count: number
-  column_mapping: Record<string, string> | null
-  created_by_profile_id: string | null
-  region_id: string | null
-  subsede_id: string | null
-  station_id: string | null
-  created_at: string
-  confirmed_at: string | null
-  completed_at: string | null
-}
-
-export interface ImportBatchRow {
-  id: string
-  batch_id: string
-  row_number: number
-  status: ImportRowStatus
-  raw_data: Record<string, unknown>
-  target_record_id: string | null
-  error_message: string | null
-  created_at: string
-}

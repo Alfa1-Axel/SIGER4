@@ -14,13 +14,11 @@ import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
 import { CuartelDetallePage } from './pages/CuartelDetallePage'
 import { CuartelFormPage } from './pages/CuartelFormPage'
-// Lazy: Leaflet (mapa) y exceljs (importación) son librerías pesadas usadas
-// solo en estas dos pantallas -- cargarlas en el bundle principal infla el
-// chunk inicial para todos los usuarios aunque nunca visiten ninguna de las
-// dos. React.lazy + Suspense las separa en su propio chunk, descargado solo
-// al navegar a /mapa o /importar.
+// Lazy: Leaflet (mapa) es una librería pesada usada solo en esta pantalla --
+// cargarla en el bundle principal infla el chunk inicial para todos los
+// usuarios aunque nunca visiten /mapa. React.lazy + Suspense la separa en su
+// propio chunk, descargado solo al navegar ahí.
 const MapaRegionalPage = lazy(() => import('./pages/MapaRegionalPage').then((m) => ({ default: m.MapaRegionalPage })))
-const ImportarDatosPage = lazy(() => import('./pages/ImportarDatosPage').then((m) => ({ default: m.ImportarDatosPage })))
 import { VehiculoFormPage } from './pages/VehiculoFormPage'
 import { AsistenciaFormPage } from './pages/AsistenciaFormPage'
 import { IntervencionFormPage } from './pages/IntervencionFormPage'
@@ -76,16 +74,6 @@ export default function App() {
             <ProtectedRoute>
               <Suspense fallback={<div className="empty-state">Cargando mapa…</div>}>
                 <MapaRegionalPage />
-              </Suspense>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/importar"
-          element={
-            <ProtectedRoute>
-              <Suspense fallback={<div className="empty-state">Cargando…</div>}>
-                <ImportarDatosPage />
               </Suspense>
             </ProtectedRoute>
           }

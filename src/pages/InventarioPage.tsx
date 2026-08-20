@@ -71,16 +71,9 @@ export function InventarioPage() {
             y material de práctica.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {canEdit && (
-            <Link to="/importar" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
-              Importar
-            </Link>
-          )}
-          <Link to="/inventario/solicitudes" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
-            Solicitudes
-          </Link>
-        </div>
+        <Link to="/inventario/solicitudes" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+          Solicitudes
+        </Link>
       </div>
 
       {error && (

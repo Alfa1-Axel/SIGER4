@@ -25,7 +25,7 @@ const STATUS_OPTIONS: { value: VehicleStatus; label: string }[] = [
 // lo que ya hay cargado. "OTROS_SENTINEL" nunca se guarda como tal: al
 // elegir "Otros" el valor real que se persiste es el texto libre del campo
 // que aparece al lado (ver handleTypeSelectChange/handleSubmit).
-const VEHICLE_TYPE_OPTIONS = [
+export const VEHICLE_TYPE_OPTIONS = [
   'Ambulancia',
   'Ataque rápido',
   'Autobomba Cisterna > a 10000 lts',

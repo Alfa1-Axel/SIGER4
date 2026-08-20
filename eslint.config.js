@@ -41,6 +41,7 @@ export default [
         PageTransitionEvent: 'readonly',
         HTMLInputElement: 'readonly',
         caches: 'readonly',
+        Blob: 'readonly',
         __SIGER4_BUILD_VERSION__: 'readonly',
         __SIGER4_BUILD_TIME__: 'readonly',
         __SIGER4_APP_VERSION__: 'readonly',

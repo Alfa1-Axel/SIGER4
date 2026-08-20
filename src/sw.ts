@@ -66,10 +66,35 @@ registerRoute(
   new NetworkOnly(),
 )
 
-// Imagenes que no vienen de Supabase (assets propios de /public, ej. logos
-// estaticos) siguen cacheables sin restriccion.
+// Teselas del Mapa Regional (OpenStreetMap, Leaflet) -- ruta propia, ANTES
+// de la regla genérica de "imagen no-Supabase" de abajo (Workbox usa la
+// primera ruta que matchea, así que el orden importa). Sin esto caían en
+// esa regla genérica igual (mismo CacheFirst), pero: 1) su
+// maxEntries:60/30 días está pensado para un puñado de logos propios, no
+// para el volumen de tiles que se piden al navegar/hacer zoom un mapa real
+// -- acá se sube el límite y se acorta el vencimiento para no ensuciar el
+// cache indefinidamente; 2) tenerla separada documenta explícitamente que
+// este dominio cross-origin (tile.openstreetmap.org) está permitido a
+// propósito, en vez de colar silenciosamente por "cualquier imagen
+// externa". El bloqueo real que causaba "no-response" era el CSP
+// (connect-src, ver vercel.json) -- un fetch() de Workbox corre en el
+// contexto del Service Worker y se chequea contra connect-src, no img-src
+// (que solo aplica a un <img> cargado directo por el navegador). Sin
+// connect-src permitiendo este dominio, CacheFirst nunca llegaba a
+// cachear nada: el fetch fallaba antes.
 registerRoute(
-  ({ request, url }) => request.destination === 'image' && !url.hostname.endsWith('supabase.co'),
+  ({ url }) => url.hostname.endsWith('.tile.openstreetmap.org'),
+  new CacheFirst({
+    cacheName: 'siger4-osm-tile-cache',
+    plugins: [new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 14, purgeOnQuotaError: true })],
+  }),
+)
+
+// Imagenes que no vienen de Supabase ni de OpenStreetMap (assets propios de
+// /public, ej. logos estaticos) siguen cacheables sin restriccion.
+registerRoute(
+  ({ request, url }) =>
+    request.destination === 'image' && !url.hostname.endsWith('supabase.co') && !url.hostname.endsWith('.tile.openstreetmap.org'),
   new CacheFirst({
     cacheName: 'siger4-image-cache',
     plugins: [new ExpirationPlugin({ maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 })],

@@ -5966,3 +5966,109 @@ documentada acá para que la tome con conocimiento de causa.
 Frontend (Vercel): sí, normal — hay un cambio en `vercel.json` (CSP) que necesita un deploy nuevo
 para tomar efecto, además de la eliminación de `exceljs` (bundle más liviano) y los assets de logo
 reemplazados. Edge Functions: ninguna tocada, sin redeploy necesario.
+
+## 42. Mapa Regional seguía gris: connect-src del CSP, no solo img-src (2026-08-20)
+
+El fix de la sección 41.2 (agregar OpenStreetMap a `img-src`) no alcanzó — el mapa seguía sin cargar
+las teselas, con este error real de consola:
+
+```
+Connecting to 'https://a.tile.openstreetmap.org/...' violates the following Content Security Policy
+directive: connect-src 'self' https://*.supabase.co wss://*.supabase.co
+fetch @ sw.js
+Fetch API cannot load ... Refused to connect because it violates the document's Content Security Policy
+Uncaught (in promise) no-response
+```
+
+### 42.1 Causa exacta confirmada
+
+`src/sw.ts` (Service Worker, generado por injectManifest/Workbox) tenía una regla de runtime caching
+que capturaba "cualquier imagen que no sea de Supabase" (`request.destination === 'image' &&
+!url.hostname.endsWith('supabase.co')`) con estrategia `CacheFirst` — eso incluía, sin querer, las
+teselas de OpenStreetMap. Cuando Workbox aplica esa estrategia, es el **propio Service Worker** quien
+ejecuta `fetch()` de la URL de la tesela, en su propio contexto de ejecución — y ese `fetch()` se
+valida contra **`connect-src`**, no `img-src`. `img-src` solo aplica cuando el *navegador* carga un
+`<img>` directamente, sin pasar por el Service Worker. Como `connect-src` no incluía el dominio de
+OSM, ese `fetch()` interno de Workbox fallaba por CSP antes de llegar a la red — Workbox interpreta
+un fetch que nunca completó como `no-response`, y de ahí el error en consola y el mapa gris/blanco.
+
+### 42.2 `connect-src` en `vercel.json`
+
+Se agregó `https://*.tile.openstreetmap.org` también a `connect-src` (además de `img-src`, que ya lo
+tenía desde la sección 41.2). Ambas directivas ahora incluyen el mismo dominio.
+
+**Sobre el wildcard**: `https://*.tile.openstreetmap.org` es válido y matchea correctamente
+`a.tile.openstreetmap.org`, `b.tile.openstreetmap.org` y `c.tile.openstreetmap.org` (el `*` en CSP
+matchea un único nivel de subdominio, no es recursivo — no hacía falta declarar los tres dominios
+explícitos por separado). El wildcard nunca fue la causa del bug: ya funcionaba correctamente en
+`img-src` desde la sección 41.2 (por eso el pin/popup ya cargaban bien, solo fallaban las teselas en
+sí, que son las que pasan por el Service Worker). Se mantuvo el wildcard por ser más simple de
+mantener sin perder precisión.
+
+### 42.3 Service Worker / Workbox — regla dedicada para tiles
+
+Aunque arreglar `connect-src` ya soluciona el bloqueo (el `fetch()` de Workbox deja de fallar), se
+agregó además una ruta de Workbox **dedicada** para `*.tile.openstreetmap.org` en `src/sw.ts`,
+insertada ANTES de la regla genérica de "imagen no-Supabase" (Workbox evalúa las rutas registradas en
+orden y usa la primera que matchea):
+
+```ts
+registerRoute(
+  ({ url }) => url.hostname.endsWith('.tile.openstreetmap.org'),
+  new CacheFirst({
+    cacheName: 'siger4-osm-tile-cache',
+    plugins: [new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 14, purgeOnQuotaError: true })],
+  }),
+)
+```
+
+Por qué una ruta separada en vez de dejar que las tiles cayeran en la regla genérica existente (que
+ya las hubiera cacheado igual, una vez arreglado el CSP): la regla genérica tiene
+`maxEntries: 60`/30 días, pensada para un puñado de logos institucionales propios — insuficiente y
+mal calibrada para el volumen real de teselas que se piden al navegar/hacer zoom sobre un mapa
+(fácilmente cientos en una sesión de uso normal). La ruta nueva usa `maxEntries: 400` y expira a los
+14 días (el mapa base cambia poco, pero tampoco conviene cachearlo indefinidamente), y
+`purgeOnQuotaError: true` para que, si el cache de tiles se queda sin cuota de storage del navegador,
+Workbox lo purgue automáticamente en vez de romper — **no precachea nada por adelantado** (sigue
+siendo `CacheFirst` bajo demanda, cada tesela se cachea recién la primera vez que se pide), no ensucia
+el cache de imágenes propias, y no interfiere con las rutas de Supabase (que siguen intactas: el
+`hostname.endsWith('supabase.co')` de la regla de Supabase nunca matchea `tile.openstreetmap.org`, y
+viceversa).
+
+### 42.4 Resultado esperado tras el deploy
+
+Con `connect-src` corregido, el mapa debería cargar el fondo/calles de OpenStreetMap correctamente
+(no confirmable al 100% desde este entorno sin navegador real — pendiente de verificación visual del
+usuario). El resto del checklist ya estaba correcto desde la sección 40.2/41.2 y no se tocó en esta
+ronda: pines visibles, popup con contacto funcionando, filtro por subsede, lista de "cuarteles sin
+ubicación cargada" para los que no tienen coordenadas, z-index acotado (sidebar/drawer no se ven
+afectados), dark mode (el popup de Leaflet mantiene su fondo blanco por diseño de la librería —igual
+que Google/Apple Maps sobre mapas oscuros— pero el contenido interno del popup usa las variables CSS
+del tema, así que el texto es legible en ambos modos).
+
+### 42.5 Actualización de PWA — pasos manuales si aplica
+
+Como este fix toca `sw.ts` (el Service Worker en sí, no solo assets), el navegador/PWA del usuario
+puede seguir sirviendo la versión vieja del Service Worker hasta que se actualice explícitamente —
+mismo mecanismo ya documentado en el proyecto (`SwUpdateBanner.tsx`, sección 24 y siguientes: el SW
+nuevo queda "esperando" hasta que el usuario confirma la actualización, nunca se auto-activa a mitad
+de una sesión). Después de este deploy, si el mapa sigue sin cargar tiles:
+
+1. Esperar a que Vercel termine el redeploy.
+2. Si aparece el banner de actualización de la app (ícono de descarga en el header, o notificación de
+   "Nueva versión disponible"), aceptarlo — eso fuerza al Service Worker nuevo a tomar control.
+3. Si no aparece solo, recargar la página (F5 / pull-to-refresh) una o dos veces.
+4. Si sigue sirviendo la versión vieja (mapa gris pese a los pasos anteriores): en el navegador,
+   herramientas de desarrollador → Application → Service Workers → "Unregister", y recargar; o en un
+   celular con la PWA instalada, cerrar la app completamente (no solo minimizar) y volver a abrirla —
+   en último caso, desinstalar y reinstalar la PWA.
+
+### 42.6 Sin cambios en lo que no correspondía tocar
+
+No se reactivó el Importador de Excel (sigue eliminado, sección 41.1). No se tocó la carga mobile de
+documentos, IA, ni RLS. No se agregaron los "puntos de inflexión" del mapa (siguen solo diseñados,
+sección 40.2). Ninguna migración nueva — 100% frontend (`vercel.json` + `src/sw.ts`).
+
+### 42.7 Qué correr en Supabase / Edge Functions
+
+Nada — sin migraciones ni cambios de backend en esta ronda.

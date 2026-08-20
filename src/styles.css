@@ -1299,6 +1299,13 @@ a.card-solid:focus-visible {
   z-index: 15;
 }
 
+/* Nombres/descripciones cargados por el usuario (cuarteles y puntos de
+   referencia) no tienen límite de longitud en el form -- sin esto, una
+   palabra larga sin espacios puede desbordar el popup en vez de cortarse. */
+.leaflet-popup-content {
+  overflow-wrap: anywhere;
+}
+
 .map-station-marker,
 .map-reference-marker {
   background: transparent;

@@ -6186,3 +6186,103 @@ para poder revisar/reactivar puntos desactivados.
 1. Migración `0084`.
 
 Ninguna Edge Function nueva ni tocada. Redeploy normal del frontend (Vercel).
+
+## 44. QA por código del Mapa Regional post-puntos de referencia (2026-08-20)
+
+Pasada de QA solo por código (sin acceso a producción/roles reales desde la
+IDE) sobre `MapaRegionalPage.tsx` y lo agregado en la sección 43. Sin
+migraciones nuevas -- los 4 bugs encontrados eran todos de frontend, la RLS
+de 0084 ya estaba bien diseñada.
+
+### 44.1 Bugs encontrados y corregidos
+
+1. **Edición/creación bloqueada de más para `secretario_regional`.** El
+   `<select>` de alcance (`scopeKind`) tenía `disabled={!isAdmin}`, así que
+   un secretario regional nunca podía elegir "Una subsede" o "Un cuartel" --
+   quedaba forzado a "Una región" siempre, aunque la RLS
+   (`map_reference_points_insert_scoped`/`update_scoped`, 0084) solo exige
+   que `region_id` coincida con su región, sin prohibir además acotar a
+   subsede/cuartel. Se habilitó el `<select>` y se ajustó `handleSubmitForm`
+   para que `region_id` se mande siempre que haya algún alcance elegido (no
+   solo cuando `scopeKind === 'region'`), fijado a la región propia del
+   usuario si no es admin.
+2. **Botón "Eliminar" visible para roles que la RLS rechaza.** El popup de
+   un punto de referencia mostraba "Eliminar" (borrado físico) a cualquiera
+   con `canManagePoints` (incluye `secretario_regional`), pero
+   `map_reference_points_delete_admin` solo permite el DELETE a
+   informatica_r4/integrante_informatica. Un DELETE bloqueado por RLS no
+   lanza error, afecta 0 filas en silencio -- el punto reaparecía tras
+   recargar sin ninguna explicación. Se agregó un prop `canDelete={isAdmin}`
+   a `ReferencePopupContent` y el botón ahora solo se muestra si
+   corresponde.
+3. **Filtro de subsede no resolvía cuarteles.** `filteredPoints` filtraba
+   por `p.subsede_id === subsedeFilter`, pero un punto con alcance de
+   cuartel (`station_id`) nunca tiene `subsede_id` propio seteado (son
+   campos mutuamente excluyentes) -- pasaba el filtro sin importar a qué
+   subsede pertenecía el cuartel. Ahora resuelve la subsede real del
+   cuartel vía el array `stations` ya cargado en la página.
+4. **Sin `overflow-wrap` en popups de Leaflet.** Nombre/descripción de
+   puntos de referencia (y `map_notes` de cuarteles) no tienen límite de
+   longitud en el form -- una palabra larga sin espacios podía desbordar el
+   popup. Se agregó `overflow-wrap: anywhere` a `.leaflet-popup-content` en
+   `styles.css`.
+
+También se corrigió un comentario inexacto en `mapReferencePoints.ts` que
+afirmaba que un DELETE bloqueado por RLS "lanza" error (es al revés: no
+lanza, afecta 0 filas silenciosamente -- por eso el fix del punto 2 de
+arriba era necesario).
+
+### 44.2 Revisado sin encontrar problema
+
+- CSP (`vercel.json`) y Workbox/Service Worker (`src/sw.ts`): la ruta
+  dedicada para tiles de OpenStreetMap sigue registrada antes que la
+  genérica, y el dominio de tiles sigue en `img-src` y `connect-src` -- sin
+  cambios necesarios (fix de una ronda anterior, sección 40).
+- Cobertura de roles: `canManagePoints = isAdmin || hasRole('secretario_regional')`
+  y `isAdmin` (de `ADMIN_ROLES`) ya cubren `informatica_r4` +
+  `integrante_informatica` + `secretario_regional` correctamente.
+- RLS de `map_reference_points` (0084): políticas de select/insert/update/
+  delete revisadas contra el pedido original -- correctas, incluye el
+  `with check` en `update` (agregado en la ronda de la migración) que evita
+  que un secretario regional reasigne `region_id` a null/otra región en el
+  mismo UPDATE.
+- Cuarteles sin coordenadas: `withoutCoordinates` ya los separa y lista
+  aparte del mapa (no se intenta plotear lat/lng null).
+
+### 44.3 No se pudo verificar sin producción
+
+- Carga real de tiles en el navegador (gris/OK), dark mode real, y
+  comportamiento visual en mobile -- todo esto requiere abrir la app
+  desplegada.
+- Comportamiento real de cada rol logueado (`secretario_regional`, roles de
+  cuartel, invitado) -- la revisión fue por código/RLS, no con sesiones
+  reales.
+- Que el fix de "Eliminar" oculto no rompa ningún flujo E2E ya en uso.
+
+### 44.4 Checklist manual para Axel (producción)
+
+1. Abrir `/mapa` y confirmar que las tiles cargan (no queda gris).
+2. Crear un punto de referencia nuevo (cualquier tipo) y confirmar que
+   aparece en el mapa.
+3. Editar ese punto (cambiar nombre/descripción/alcance) y confirmar que
+   se guarda.
+4. Desactivar el punto y confirmar que desaparece del mapa por defecto,
+   pero reaparece con el filtro "ver inactivos" activado.
+5. Probar el filtro "Referencias territoriales" (mostrar/ocultar la capa).
+6. Probar el filtro por subsede con un punto de alcance "cuartel" cargado
+   en un cuartel de esa subsede -- confirmar que aparece/desaparece según
+   corresponda.
+7. Con un usuario `secretario_regional`: crear/editar un punto eligiendo
+   alcance "Una subsede" o "Un cuartel" (antes solo se podía "Una región")
+   y confirmar que no puede ver el botón "Eliminar" en el popup (solo
+   "Editar"/"Desactivar").
+8. Con un usuario de rol de cuartel (solo lectura): confirmar que no ve
+   ningún botón de gestión en los popups.
+9. Probar en mobile: que el mapa tenga alto usable, que el popup con texto
+   largo no desborde horizontalmente, y que el formulario de alta/edición
+   sea usable en pantalla chica.
+
+### 44.5 Qué correr en Supabase
+
+Nada -- sin migraciones nuevas en esta ronda. Redeploy normal del frontend
+(Vercel).

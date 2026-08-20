@@ -120,6 +120,7 @@ function ReferencePopupContent({
   point,
   scopeLabel,
   canManage,
+  canDelete,
   onEdit,
   onToggleActive,
   onDelete,
@@ -127,6 +128,7 @@ function ReferencePopupContent({
   point: MapReferencePoint
   scopeLabel: string
   canManage: boolean
+  canDelete: boolean
   onEdit: () => void
   onToggleActive: () => void
   onDelete: () => void
@@ -151,9 +153,17 @@ function ReferencePopupContent({
           <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onToggleActive}>
             {point.is_active ? 'Desactivar' : 'Reactivar'}
           </button>
-          <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onDelete}>
-            Eliminar
-          </button>
+          {/* Borrado físico: solo informatica_r4/integrante_informatica -- la
+              RLS (map_reference_points_delete_admin) lo restringe igual, esto
+              es para no mostrarle el botón a secretario_regional y que le
+              falle silenciosamente (un DELETE que RLS bloquea no lanza
+              error, simplemente no borra nada -- el punto reaparecería tras
+              recargar sin ninguna explicación). */}
+          {canDelete && (
+            <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onDelete}>
+              Eliminar
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -225,9 +235,20 @@ export function MapaRegionalPage() {
   const filteredPoints = useMemo(() => {
     let list = points
     if (!showInactivePoints) list = list.filter((p) => p.is_active)
-    if (subsedeFilter) list = list.filter((p) => !p.subsede_id || p.subsede_id === subsedeFilter)
+    if (subsedeFilter) {
+      // Un punto con station_id nunca tiene subsede_id propio seteado (son
+      // alcances mutuamente excluyentes en el form) -- para saber si ese
+      // cuartel pertenece a la subsede filtrada hay que resolverlo vía el
+      // cuartel real, si no todo punto con alcance de cuartel pasaba el
+      // filtro sin importar a qué subsede pertenecía.
+      list = list.filter((p) => {
+        if (p.subsede_id) return p.subsede_id === subsedeFilter
+        if (p.station_id) return stations.find((s) => s.id === p.station_id)?.subsede_id === subsedeFilter
+        return true
+      })
+    }
     return list
-  }, [points, subsedeFilter, showInactivePoints])
+  }, [points, subsedeFilter, showInactivePoints, stations])
 
   const withCoordinates = filteredStations.filter((s) => s.latitude != null && s.longitude != null)
   const withoutCoordinates = filteredStations.filter((s) => s.latitude == null || s.longitude == null)
@@ -291,7 +312,13 @@ export function MapaRegionalPage() {
       setFormError('La longitud debe ser un número entre -180 y 180.')
       return
     }
-    if (!isAdmin && form.scopeKind !== 'region') {
+    // secretario_regional (is_regional_role() en la RLS) solo puede escribir
+    // si region_id coincide con su propia región -- sin importar si además
+    // eligió acotar el punto a una subsede o cuartel puntual (la RLS de
+    // 0084 no exige que subsede_id/station_id sean null, solo que region_id
+    // sea la suya). No puede dejar el punto "sin alcance" (scopeKind
+    // 'ninguno'), porque eso lo haría visible a toda la app.
+    if (!isAdmin && form.scopeKind === 'ninguno') {
       setFormError('Como secretario regional, el punto tiene que tener alcance de tu región.')
       return
     }
@@ -306,7 +333,11 @@ export function MapaRegionalPage() {
       description: form.description.trim() || null,
       latitude: lat,
       longitude: lng,
-      region_id: form.scopeKind === 'region' ? form.regionId || null : null,
+      // region_id se manda siempre que haya alcance (no solo cuando
+      // scopeKind === 'region'): un punto acotado a subsede o cuartel igual
+      // pertenece a una región, y para secretario_regional tiene que ser la
+      // suya para que la RLS lo acepte.
+      region_id: form.scopeKind !== 'ninguno' ? form.regionId || null : null,
       subsede_id: form.scopeKind === 'subsede' ? form.subsedeId || null : null,
       station_id: form.scopeKind === 'station' ? form.stationId || null : null,
     }
@@ -432,6 +463,7 @@ export function MapaRegionalPage() {
                         point={point}
                         scopeLabel={scopeLabelFor(point)}
                         canManage={canManagePoints}
+                        canDelete={isAdmin}
                         onEdit={() => openEditForm(point)}
                         onToggleActive={() => void handleToggleActive(point)}
                         onDelete={() => void handleDelete(point)}
@@ -520,10 +552,20 @@ export function MapaRegionalPage() {
                   <select
                     id="pointScopeKind"
                     value={form.scopeKind}
-                    disabled={!isAdmin}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, scopeKind: e.target.value as typeof f.scopeKind, subsedeId: '', stationId: '' }))
-                    }
+                    onChange={(e) => {
+                      const nextScopeKind = e.target.value as typeof form.scopeKind
+                      setForm((f) => ({
+                        ...f,
+                        scopeKind: nextScopeKind,
+                        // Un secretario_regional siempre escribe dentro de su
+                        // propia región, elija o no acotar además a subsede/
+                        // cuartel -- si el campo todavía no tiene regionId
+                        // (ej. venía de 'ninguno'), se lo completamos acá.
+                        regionId: !isAdmin && nextScopeKind !== 'ninguno' ? profile?.region_id ?? f.regionId : f.regionId,
+                        subsedeId: '',
+                        stationId: '',
+                      }))
+                    }}
                   >
                     {isAdmin && <option value="ninguno">Toda la Regional (sin restricción)</option>}
                     <option value="region">Una región</option>
@@ -532,7 +574,7 @@ export function MapaRegionalPage() {
                   </select>
                   {!isAdmin && (
                     <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                      Como secretario regional, solo podés cargar puntos dentro de tu propia región.
+                      Como secretario regional, solo podés cargar puntos dentro de tu propia región (podés acotarlos además a una subsede o cuartel puntual).
                     </p>
                   )}
                 </div>

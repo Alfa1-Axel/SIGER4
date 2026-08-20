@@ -42,8 +42,10 @@ export async function updateMapReferencePoint(id: string, input: Partial<MapRefe
 }
 
 // Borrado físico: la RLS (map_reference_points_delete_admin) ya lo
-// restringe a informatica_r4 -- si otro rol lo intenta, Postgres rechaza el
-// delete y esto lanza. El resto de los roles con permiso de escritura usa
+// restringe a informatica_r4 -- si otro rol lo intenta, el delete no lanza
+// error (un DELETE bloqueado por RLS afecta 0 filas silenciosamente, no
+// levanta excepción), por eso el botón "Eliminar" en MapaRegionalPage solo
+// se muestra si isAdmin. El resto de los roles con permiso de escritura usa
 // updateMapReferencePoint(id, { is_active: false }) para "sacar de
 // circulación" un punto sin perder el historial.
 export async function deleteMapReferencePoint(id: string): Promise<void> {

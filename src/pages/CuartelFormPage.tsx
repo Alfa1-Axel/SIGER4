@@ -44,6 +44,9 @@ export function CuartelFormPage() {
   const [description, setDescription] = useState('')
   const [status, setStatus] = useState<StationStatus>('operativo')
   const [foundedYear, setFoundedYear] = useState('')
+  const [latitude, setLatitude] = useState('')
+  const [longitude, setLongitude] = useState('')
+  const [mapNotes, setMapNotes] = useState('')
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -93,6 +96,9 @@ export function CuartelFormPage() {
       setDescription(station.description ?? '')
       setStatus(station.status)
       setFoundedYear(station.founded_year != null ? String(station.founded_year) : '')
+      setLatitude(station.latitude != null ? String(station.latitude) : '')
+      setLongitude(station.longitude != null ? String(station.longitude) : '')
+      setMapNotes(station.map_notes ?? '')
       setRegionId(station.region_id)
       setSubsedeId(station.subsede_id ?? '')
       setExistingLogoUrl(station.logo_url)
@@ -124,6 +130,30 @@ export function CuartelFormPage() {
       return
     }
 
+    const trimmedLatitude = latitude.trim()
+    const trimmedLongitude = longitude.trim()
+    // Ambas o ninguna: una coordenada sin la otra no ubica nada en el mapa,
+    // y guardar una sola sería un dato a medias sin forma de detectarlo
+    // después (no hay "coordenada parcial" en el mapa, solo par o nada).
+    if (Boolean(trimmedLatitude) !== Boolean(trimmedLongitude)) {
+      setError('Cargá latitud y longitud juntas, o dejá ambas vacías.')
+      return
+    }
+    let parsedLatitude: number | null = null
+    let parsedLongitude: number | null = null
+    if (trimmedLatitude && trimmedLongitude) {
+      parsedLatitude = Number(trimmedLatitude)
+      parsedLongitude = Number(trimmedLongitude)
+      if (Number.isNaN(parsedLatitude) || parsedLatitude < -90 || parsedLatitude > 90) {
+        setError('La latitud debe ser un número entre -90 y 90.')
+        return
+      }
+      if (Number.isNaN(parsedLongitude) || parsedLongitude < -180 || parsedLongitude > 180) {
+        setError('La longitud debe ser un número entre -180 y 180.')
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       const socialMedia =
@@ -143,6 +173,9 @@ export function CuartelFormPage() {
         description: description || null,
         status,
         founded_year: trimmedFoundedYear ? Number(trimmedFoundedYear) : null,
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
+        map_notes: mapNotes.trim() || null,
         region_id: regionId,
         subsede_id: subsedeId,
       }
@@ -240,6 +273,52 @@ export function CuartelFormPage() {
             <label htmlFor="zone">Zona</label>
             <input id="zone" value={zone} onChange={(e) => setZone(e.target.value)} placeholder="Zona Norte" />
           </div>
+
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="latitude">Latitud (opcional)</label>
+              <input
+                id="latitude"
+                type="number"
+                step="any"
+                min={-90}
+                max={90}
+                value={latitude}
+                onChange={(e) => setLatitude(e.target.value)}
+                placeholder="-31.420083"
+              />
+            </div>
+            <div className="field" style={{ flex: 1, minWidth: 140 }}>
+              <label htmlFor="longitude">Longitud (opcional)</label>
+              <input
+                id="longitude"
+                type="number"
+                step="any"
+                min={-180}
+                max={180}
+                value={longitude}
+                onChange={(e) => setLongitude(e.target.value)}
+                placeholder="-64.188776"
+              />
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+            Para el Mapa Regional. Cargá ambas juntas, o dejalas vacías si no tenés la ubicación exacta
+            — el cuartel va a seguir apareciendo en el resto del sistema igual, solo no se va a poder
+            ubicar en el mapa.
+          </p>
+
+          {(latitude.trim() || longitude.trim()) && (
+            <div className="field">
+              <label htmlFor="mapNotes">Nota de ubicación (opcional)</label>
+              <input
+                id="mapNotes"
+                value={mapNotes}
+                onChange={(e) => setMapNotes(e.target.value)}
+                placeholder="Ej. acceso por calle lateral, sin cartel visible desde la ruta"
+              />
+            </div>
+          )}
 
           <div className="field">
             <label htmlFor="phone">Teléfono institucional (opcional)</label>

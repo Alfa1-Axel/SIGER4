@@ -30,6 +30,9 @@ export interface StationInput {
   cover_image_url?: string | null
   logo_url?: string | null
   founded_year?: number | null
+  latitude?: number | null
+  longitude?: number | null
+  map_notes?: string | null
 }
 
 export async function createStation(input: StationInput): Promise<Station> {

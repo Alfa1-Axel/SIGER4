@@ -1280,3 +1280,26 @@ a.card-solid:focus-visible {
 .sw-update-banner-dismiss:hover {
   background: rgba(255, 255, 255, 0.15);
 }
+
+/* ---------- Mapa Regional (Leaflet) ----------
+   Leaflet usa z-index internos altos (~400-1000) para sus paneles de
+   controles/popups, pensados para ocupar toda la pantalla -- acá el mapa
+   vive dentro de un .card con overflow:hidden (contenedor acotado, no
+   pantalla completa), así que se topean esos z-index para que nunca
+   compitan con el sidebar (z-index 50) ni el drawer mobile (z-index 40) si
+   algún navegador no respeta el overflow:hidden del contenedor padre en
+   algún caso límite. */
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 10;
+}
+
+.leaflet-popup {
+  z-index: 15;
+}
+
+.map-station-marker {
+  background: transparent;
+  border: none;
+}

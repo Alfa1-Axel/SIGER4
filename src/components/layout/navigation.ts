@@ -14,6 +14,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/panel', label: 'Panel', icon: 'grid' },
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building' },
+  { to: '/mapa', label: 'Mapa Regional', icon: 'mapPin' },
   { to: '/calendario', label: 'Calendario', icon: 'calendar' },
   { to: '/escuela', label: 'Escuela', icon: 'school' },
   // Acceso total: informatica_r4/integrante_informatica (isAdmin). Alcance
@@ -29,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/documentos', label: 'Documentos', icon: 'file' },
   { to: '/inventario', label: 'Inventario', icon: 'tag' },
   { to: '/departamentos', label: 'Departamentos', icon: 'building' },
+  { to: '/importar', label: 'Importar datos', icon: 'file', hideForRoles: ['invitado'] },
   { to: '/auditoria', label: 'Auditoría', icon: 'clipboardList', hideForRoles: ['invitado'] },
   // /usuarios ya no es adminOnly: jefe_cuerpo_activo también entra, pero ve
   // el listado filtrado a su propio cuartel (ver UsuariosPage/UserManagerRoute).

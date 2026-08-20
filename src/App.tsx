@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { Suspense, lazy } from 'react'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { AppUpdateBanner } from './components/AppUpdateBanner'
@@ -13,6 +14,13 @@ import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
 import { CuartelDetallePage } from './pages/CuartelDetallePage'
 import { CuartelFormPage } from './pages/CuartelFormPage'
+// Lazy: Leaflet (mapa) y exceljs (importación) son librerías pesadas usadas
+// solo en estas dos pantallas -- cargarlas en el bundle principal infla el
+// chunk inicial para todos los usuarios aunque nunca visiten ninguna de las
+// dos. React.lazy + Suspense las separa en su propio chunk, descargado solo
+// al navegar a /mapa o /importar.
+const MapaRegionalPage = lazy(() => import('./pages/MapaRegionalPage').then((m) => ({ default: m.MapaRegionalPage })))
+const ImportarDatosPage = lazy(() => import('./pages/ImportarDatosPage').then((m) => ({ default: m.ImportarDatosPage })))
 import { VehiculoFormPage } from './pages/VehiculoFormPage'
 import { AsistenciaFormPage } from './pages/AsistenciaFormPage'
 import { IntervencionFormPage } from './pages/IntervencionFormPage'
@@ -62,6 +70,26 @@ export default function App() {
         <Route path="/cuarteles/nuevo" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:id/editar" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:id" element={<ProtectedRoute><CuartelDetallePage /></ProtectedRoute>} />
+        <Route
+          path="/mapa"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<div className="empty-state">Cargando mapa…</div>}>
+                <MapaRegionalPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/importar"
+          element={
+            <ProtectedRoute>
+              <Suspense fallback={<div className="empty-state">Cargando…</div>}>
+                <ImportarDatosPage />
+              </Suspense>
+            </ProtectedRoute>
+          }
+        />
         <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
         <Route path="/vehiculos/:id/editar" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ProtectedRoute><AsistenciaFormPage /></ProtectedRoute>} />

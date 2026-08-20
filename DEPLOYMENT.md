@@ -6072,3 +6072,117 @@ sección 40.2). Ninguna migración nueva — 100% frontend (`vercel.json` + `src
 ### 42.7 Qué correr en Supabase / Edge Functions
 
 Nada — sin migraciones ni cambios de backend en esta ronda.
+
+## 43. Puntos de inflexión / referencia territorial v1 (2026-08-20) — migración 0084
+
+Primera versión simple de "puntos de inflexión" (rutas importantes, parques industriales, ríos,
+zonas de riesgo, puntos estratégicos, referencias operativas) sobre el Mapa Regional, ya documentada
+como fase futura en la sección 40.2. **Solo puntos individuales georreferenciados** — sin líneas,
+polígonos, capas complejas, importación masiva ni mapas offline (ver 43.5 para el detalle de qué
+queda para después).
+
+### 43.1 Migración `0084_map_reference_points.sql`
+
+Tabla `map_reference_points`:
+
+```
+id                     uuid primary key
+name                   text not null
+type                   map_reference_point_type not null  -- enum: ruta/parque_industrial/rio/zona_riesgo/punto_estrategico/otro
+description            text
+latitude               numeric(9,6) not null  -- obligatoria: a diferencia de stations.latitude
+longitude              numeric(9,6) not null  -- (nullable), un punto de referencia sin ubicación no tiene sentido
+region_id              uuid references regions      -- alcance opcional, los 3 nullable
+subsede_id             uuid references subsedes
+station_id             uuid references stations
+is_active              boolean not null default true  -- soft-delete
+created_by_profile_id  uuid references profiles
+created_at / updated_at
+```
+
+Constraints de rango de coordenadas (`-90/90`, `-180/180`) como garantía real de base, mismo criterio
+que `stations.latitude`/`longitude` (sección 40.2). Índices en los 3 campos de alcance. Trigger
+`trg_map_reference_points_updated_at` (reutiliza `set_updated_at()`, ya existente desde 0001).
+
+**Alcance opcional, mismo criterio que `notifications`** (0015, "alcance opcional coincidente"): si
+`region_id`/`subsede_id`/`station_id` son los tres `null`, el punto es una referencia general de toda
+la Regional 4, visible para cualquier autenticado. Si alguno está seteado, solo lo ven los usuarios
+cuyo alcance real coincide.
+
+### 43.2 RLS
+
+- **Lectura** (`map_reference_points_select_scope`): `informatica_r4` ve todo; un punto sin alcance
+  definido es visible para cualquier autenticado (incluido `invitado` — no tiene un helper que lo
+  excluya acá, a diferencia de Auditoría, por ser un dato mucho menos sensible); un punto con alcance
+  definido solo es visible para quien tenga ese mismo alcance real (`my_region_ids()`/
+  `my_subsede_ids()`/`my_station_ids()`, mismos helpers que ya usa el resto del sistema) — nunca se
+  muestra fuera del alcance real del usuario, tal como pedía el punto 2 del pedido.
+- **Escritura** (`insert`/`update`): `informatica_r4` sin restricción. `secretario_regional` (única
+  membresía real de `is_regional_role()` desde la migración 0048) solo puede crear/editar puntos
+  **dentro de su propia región** — `region_id` obligatorio y coincidente con `my_region_ids()`; no
+  puede dejar un punto sin alcance (eso lo haría visible a toda la app, escalando su propio alcance) ni
+  tocar uno de otra región. El `update` tiene `with check` además de `using` — sin eso, un
+  `secretario_regional` podría editar un punto ya dentro de su región y, en el mismo `UPDATE`,
+  cambiarle `region_id` a `null` o a una región ajena (`using` solo valida la fila *antes* del cambio).
+  Roles de cuartel: **sin escritura** — el pedido pedía explícitamente "lectura según alcance" para
+  ellos, sin mencionar gestión.
+- **Borrado físico** (`delete`): solo `informatica_r4`, mismo criterio que el resto del sistema
+  (ej. borrado de usuarios) — el resto de los roles con permiso de escritura usa `is_active=false`
+  (soft-delete) para sacar un punto de circulación sin perder el historial de quién lo cargó.
+
+### 43.3 Cómo se cargan puntos
+
+Desde `/mapa`, un botón "+ Punto de referencia" (visible solo para `informatica_r4`/
+`integrante_informatica`/`secretario_regional`) abre un formulario inline en la misma pantalla — sin
+pantalla/ruta nueva, coherente con "v1 simple". Campos: nombre, tipo (`<select>` con las 6 categorías),
+descripción (opcional), latitud/longitud (validadas en rango -90/90 y -180/180, mismo criterio que el
+formulario de coordenadas de cuartel), y alcance (`<select>`: "Toda la Regional" / región / subsede /
+cuartel, con los `<select>` de región/subsede/cuartel dependientes en cascada, mismo patrón que
+`CuartelFormPage.tsx`). Para `secretario_regional`, el `<select>` de alcance queda fijo en "región" y
+el de región queda deshabilitado y prellenado con su propia región (`profile.region_id`) — no puede
+tocarlo desde la UI, y aunque lo forzara, `handleSubmitForm` valida `regionId === profile.region_id`
+antes de enviar, con la RLS como última línea de defensa real (triple capa: UI deshabilitada,
+validación de frontend, RLS server-side).
+
+Editar reutiliza el mismo formulario (botón "Editar" en el popup del punto). "Desactivar"/"Reactivar"
+alterna `is_active` sin abrir el formulario. "Eliminar" (solo visible para quien tiene permiso de
+escritura, pero rechazado por RLS si no es `informatica_r4`) pide confirmación (`window.confirm`) antes
+del borrado físico — mismo patrón de confirmación ya usado en el resto del sistema para acciones
+irreversibles.
+
+### 43.4 Cómo se ven en el mapa
+
+Marcador con forma **distinta** a los cuarteles (rombo en vez de gota) y **color por tipo** (`ruta`
+ámbar, `parque_industrial` violeta, `rio` celeste, `zona_riesgo` rojo, `punto_estrategico` verde,
+`otro` gris) — en vez de agregar 6 íconos SVG nuevos al set de la app (`Icon.tsx`) para una sola
+pantalla, se diferencia con color/forma sobre el mismo mecanismo de `L.divIcon` ya usado para los
+cuarteles. El popup muestra nombre, tipo, alcance (resuelto a nombre real — "Regional 4"/"Subsede
+Luque"/"Cuartel Central N°1"/"Toda la Regional" según corresponda, nunca un UUID crudo) y descripción
+si existe, más las acciones de gestión si el usuario tiene permiso.
+
+**Filtro/capa "Referencias territoriales"**: checkbox arriba del mapa que muestra/oculta la capa
+completa de puntos sin afectar a los cuarteles. El filtro por subsede ya existente (sección 40.2)
+ahora también acota los puntos con alcance de subsede (los puntos sin alcance de subsede definido —
+region-wide o sin alcance— siguen visibles bajo cualquier filtro, ya que no aplica un alcance más
+angosto que no tienen). Checkbox adicional "Ver inactivos" (solo para quien puede gestionar puntos)
+para poder revisar/reactivar puntos desactivados.
+
+### 43.5 Fase futura — documentado, NO implementado en esta ronda
+
+- Líneas de rutas y polígonos (zonas de cobertura, límites operativos como área, no solo un punto).
+  Necesitaría extender el esquema con una tabla de vértices ordenados o adoptar PostGIS.
+- Importación desde GeoJSON/KML — necesitaría un parser dedicado, no cubierto por ninguna dependencia
+  actual del proyecto.
+- Importación masiva de puntos (batch) — mismo criterio que se aplicó al Importador de Excel: no se
+  reactiva ese módulo (permanece eliminado, sección 41.1) ni se construye un mecanismo equivalente
+  específico para puntos de referencia.
+- Zonas de cobertura por cuartel (radio de respuesta, polígonos de jurisdicción).
+- Mapas offline / tiles precacheados para uso sin conexión — el cache de tiles agregado en la sección
+  42.3 es solo una optimización de rendimiento de navegación normal (14 días, 400 entradas), no un
+  mecanismo de "descargar el mapa para usar sin señal".
+
+### 43.6 Qué correr en Supabase
+
+1. Migración `0084`.
+
+Ninguna Edge Function nueva ni tocada. Redeploy normal del frontend (Vercel).

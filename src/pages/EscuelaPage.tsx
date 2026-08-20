@@ -27,7 +27,7 @@ export function EscuelaPage() {
       <div className="card" style={{ marginBottom: 20 }}>
         <img
           src="/logos/logo-escuela.png"
-          alt="Escuela Regional de Bomberos"
+          alt="SIGER4"
           style={{ height: 56, width: 56, borderRadius: 12, objectFit: 'cover', marginBottom: 12 }}
         />
         <h1 style={{ margin: 0, fontSize: 18 }}>Escuela Regional de Bomberos</h1>

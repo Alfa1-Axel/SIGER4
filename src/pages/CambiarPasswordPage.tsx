@@ -65,7 +65,7 @@ export function CambiarPasswordPage() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-logos">
-          <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
+          <img src="/logos/logo-escuela.png" alt="SIGER4" />
           <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" />
         </div>
         <h1 className="login-title">Cambiar contraseña</h1>

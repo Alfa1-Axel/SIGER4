@@ -34,7 +34,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     <aside className={`app-sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-brand-row">
         <div className="sidebar-brand">
-          <img src="/logos/logo-escuela.png" alt="Escuela Regional de Bomberos" />
+          <img src="/logos/logo-escuela.png" alt="SIGER4" />
           <span>SIGER4</span>
         </div>
         <button type="button" className="btn btn-icon btn-outlined sidebar-close-button" onClick={onClose} aria-label="Cerrar menú">

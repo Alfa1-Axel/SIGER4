@@ -512,7 +512,7 @@ export function AjustesPage() {
           Institucional
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-          <img src="/logos/logo-escuela.png" alt="Escuela Regional" style={{ height: 40, borderRadius: 8 }} />
+          <img src="/logos/logo-escuela.png" alt="SIGER4" style={{ height: 40, borderRadius: 8 }} />
           <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 8 }} />
         </div>
         <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: 0 }}>

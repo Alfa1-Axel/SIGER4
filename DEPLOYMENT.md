@@ -5558,3 +5558,245 @@ en el resto del sistema, y se trasladó el mismo criterio a los PDF.
 
 Sin cambios en la app web, RLS ni migraciones — mismo alcance 100% frontend que el resto de la
 sección 39.
+
+## 40. Diagnóstico del cron semanal, Mapa Regional v1, Importador Excel v1, logo SIGER4 (2026-08-20) — migraciones 0080-0082
+
+Tanda grande en 4 frentes independientes: diagnóstico de por qué no llegó la notificación semanal,
+primera versión del Mapa Regional (cuarteles georreferenciados), primera versión del importador de
+datos desde Excel/CSV, y reemplazo del logo de Escuela por el sello general de SIGER4.
+
+### 40.1 Diagnóstico de la notificación semanal que no llegó
+
+**No se encontró ningún bug de código en el pipeline** (`send_weekly_reminder()`/
+`send_weekly_admin_summary()`, migraciones 0036→0073→0074): el advisory lock (0070/0072) está
+correctamente diseñado con scope de transacción, se libera solo, y su propio autor ya documentó que
+no era la causa; la zona horaria del cron (`0 15 * * 1` = lunes 15:00 UTC = lunes 12:00 ART) es
+correcta y no hay corrimiento de día; la notificación interna y el push real están intencionalmente
+desacoplados (el fallo de uno nunca bloquea al otro); y desde 0074, si falta `project_url`/
+`cron_shared_secret` en `system_settings`, además del `raise warning` en logs de Postgres (invisible
+en la práctica) se dispara una `alerta_admin` **visible dentro de la app** a `informatica_r4`/
+`integrante_informatica` — con el título exacto "Recordatorio semanal: push no configurado".
+
+**Causa más probable** (no se pudo confirmar contra la base real, no hay acceso a ella desde este
+entorno): `system_settings.cron_shared_secret` nunca se terminó de configurar tras el pase de
+0073/0074 a producción — es el único paso manual documentado (sección 33.4) que ninguna migración
+automatiza. Sin él, `send_weekly_reminder()` crea la notificación interna igual (así que **debería
+estar visible entrando a `/notificaciones`**, aunque no haya llegado como push del sistema
+operativo), pero nunca dispara el `net.http_post` hacia `send-push-system` — el push real nunca sale.
+Otras causas posibles, en orden de probabilidad: el job de pg_cron nunca llegó a crearse (extensiones
+`pg_cron`/`pg_net` no habilitadas antes de correr 0036), el usuario puntual tiene
+`weekly_reminder_enabled=false` o nunca aceptó permisos de push en el navegador (`push_subscriptions`
+vacía para su perfil), o un error puntual en `send-push-system` (revisar sus secretos:
+`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`SUPABASE_SERVICE_ROLE_KEY`/`CRON_SHARED_SECRET`).
+
+**Mejora de diagnóstico agregada** (migración `0080_cron_job_diagnostics.sql`): `get_weekly_push_diagnostics()`
+(0074) ya podía responder "¿la notificación interna disparó el push?", pero daba por sentado que el
+job de cron efectivamente había corrido — si no había filas, era indistinguible de "no había nada que
+notificar esa semana". Nueva RPC `get_cron_job_diagnostics(p_job_name)`, `security definer`, restringida
+a `is_informatica_r4()`, que lee `cron.job`/`cron.job_run_details` (schema de la extensión pg_cron,
+solo legible por su dueño) y responde sin ambigüedad: si el job existe, si está activo, y el
+resultado de sus últimas 10 corridas reales (fecha, éxito/error, mensaje).
+
+El panel de Ajustes → Configuración del sistema (`SystemSettingsSection.tsx`) ahora muestra, al tocar
+"Revisar últimos 7 días": estado del job de cron (`siger4-weekly-reminder`) primero, después el
+resumen de notificaciones internas vs. push intentado/enviado (ya existía), y un **motivo probable**
+calculado combinando las tres fuentes (job no programado → job desactivado → última corrida con error
+→ notificación no se creó → push nunca se intentó → push intentado con error → push intentado sin
+suscripciones activas → sin problemas detectados). `src/lib/api/systemSettings.ts` ganó
+`fetchCronJobDiagnostics()`.
+
+**No se duplicó nada, no se generó spam**: no se tocó la lógica de envío en sí, solo se agregó una
+consulta de solo-lectura nueva. El guard `not exists (... created_at >= now() - interval '24 hours')`
+que ya evitaba spamear la alerta de "push no configurado" (0074) sigue igual, sin cambios.
+
+### 40.2 Mapa Regional v1
+
+Pantalla nueva en `/mapa` (`src/pages/MapaRegionalPage.tsx`), enlazada en el nav como "Mapa Regional".
+Muestra los cuarteles como pines sobre un mapa de OpenStreetMap (sin costo, sin API key). Cada pin,
+al tocarlo, abre un popup con: nombre, código, subsede (nombre completo, no acortado — formato pedido
+`030 · Subsede Luque` se usa en la lista de "sin ubicación" más abajo, no en el popup del pin), dirección
+si existe, teléfono/WhatsApp/email clicables (reutiliza `ContactLink`, sin duplicar lógica de contacto),
+y un link a "Ver detalle del cuartel". Filtro por subsede arriba del mapa. Los cuarteles sin
+coordenadas cargadas **nunca aparecen en el mapa** (no se inventa ni estima ninguna ubicación) — se
+listan aparte, debajo del mapa, en una sección "Cuarteles sin ubicación cargada", cada uno con link a
+su detalle para poder cargarla.
+
+**Librería**: `leaflet` + `react-leaflet@^4` (la v5 exige React 19; el proyecto usa React 18, así que
+se fijó la v4, compatible). Sin Google Maps ni ninguna librería con costo/API key. Los pines usan un
+ícono SVG propio (rojo institucional, mismo mecanismo que el resto de los íconos de la app) en vez de
+los PNG por defecto de Leaflet, que requieren configurar rutas de assets a mano con Vite.
+
+**Campos nuevos en `stations`** (migración `0081_station_coordinates.sql`): `latitude numeric(9,6)`,
+`longitude numeric(9,6)`, `map_notes text` — los tres opcionales, ningún cuartel existente pierde
+datos ni queda inválido. Constraints de base (`stations_latitude_range`/`stations_longitude_range`)
+validan el rango (-90/90, -180/180) como garantía real, no solo del lado del formulario. Sin cambios
+de RLS (columnas más de una tabla ya cubierta por sus policies existentes).
+
+**Carga de coordenadas**: `CuartelFormPage.tsx` ganó dos campos numéricos (Latitud/Longitud) + un campo
+de texto libre (Nota de ubicación, solo visible si hay coordenadas cargadas). Ambas coordenadas se
+piden juntas o ninguna (una sola no ubica nada en el mapa) — si se carga solo una, el formulario
+rechaza el guardado antes de llegar a la base. Sin obligar coordenadas para crear un cuartel nuevo.
+
+**Preparado para la fase futura (puntos de inflexión / referencia territorial) — solo diseño, sin
+implementar**: rutas por jurisdicción de cuartel, parques industriales, ríos, zonas de riesgo, límites
+o sectores operativos, referencias estratégicas regionales. Diseño propuesto para cuando se decida
+implementarlo:
+
+- Tabla nueva `map_reference_points` (no creada en esta ronda): `id`, `type` (enum: `ruta`,
+  `parque_industrial`, `rio`, `zona_riesgo`, `limite_operativo`, `referencia_estrategica`, `otro`),
+  `name`, `description`, `geometry` (punto: `latitude`/`longitude`; para líneas/polígonos —rutas,
+  límites— evaluar `geometry` con PostGIS si se habilita esa extensión, o una tabla de puntos
+  ordenados `map_reference_point_vertices(point_id, sequence, latitude, longitude)` si no se quiere
+  agregar PostGIS todavía), `region_id`/`subsede_id`/`station_id` (todos opcionales, un punto puede no
+  estar asociado a ningún cuartel puntual — ej. un río que cruza varias jurisdicciones), `is_active`,
+  `created_by_profile_id`, timestamps. RLS: lectura abierta a autenticados (mismo criterio que
+  `stations`), escritura solo `informatica_r4`/`secretario_regional` (carga manual desde un panel
+  dedicado, mencionada explícitamente en el pedido).
+- Capas por tipo: en el frontend, un control de capas de Leaflet (`LayersControl` de react-leaflet)
+  con un checkbox por `type`, cada una con su propio ícono/color — nunca todas visibles a la vez por
+  defecto, para no saturar el mapa.
+- Filtros por subsede: mismo `<select>` que ya existe en el Mapa Regional v1, extendido para filtrar
+  también los puntos de referencia, no solo los cuarteles.
+- Importación futura desde Excel/GeoJSON/KML: una vez que exista la tabla, el Importador Excel v1
+  (sección 40.3) podría extenderse con un módulo `puntos_referencia` reutilizando el mismo motor de
+  mapeo/validación — GeoJSON/KML necesitarían un parser aparte (no cubierto por `exceljs`), mencionado
+  como sugerencia en el pedido, no implementado.
+
+### 40.3 Importador de datos desde Excel/CSV v1
+
+Pantalla nueva en `/importar` (`src/pages/ImportarDatosPage.tsx`), enlazada en el nav como "Importar
+datos" (oculta solo para `invitado`, que no tiene permiso de escritura en ninguna tabla destino) y con
+un acceso directo adicional desde Inventario Regional (junto al botón "Solicitudes"). Flujo completo:
+elegir módulo → subir archivo → revisar/corregir mapeo de columnas → vista previa con validación fila
+por fila → confirmar → resumen (creados/omitidos/errores). **El archivo nunca se guarda ni queda como
+dato final** — solo se usa como fuente para completar los inserts reales; nada se toca en la base
+hasta que el usuario confirma explícitamente después de ver la vista previa completa.
+
+**Módulos soportados**: Personal, Vehículos, Asistencias, Inventario Regional — exactamente los
+pedidos, sin Cursos ni Intervenciones (excluidos explícitamente).
+
+**Librería de parseo**: se evaluó `xlsx` (SheetJS), pero tiene 2 vulnerabilidades de severidad **alta**
+sin fix disponible (Prototype Pollution + ReDoS) — incompatible con el requisito de
+`npm audit --audit-level=high` limpio del propio pedido. Se usó **`exceljs`** en su lugar (2
+vulnerabilidades moderadas de una dependencia transitiva —`uuid`—, no bloquean `--audit-level=high`).
+CSV se parsea con una función propia (sin librería extra), con detección automática de separador
+(`,` vs `;`, para exportaciones de Excel en configuración regional es-AR) y soporte de comillas para
+valores con el separador adentro.
+
+**Mapeo automático de columnas** (`src/lib/import/columnMapping.ts`): normaliza cada encabezado del
+archivo (minúsculas, sin tildes, espacios colapsados) y lo compara contra un diccionario de alias por
+campo y por módulo — cubre exactamente los sinónimos pedidos (móvil/código/número, cuartel/station/
+sede, subsede, teléfono/celular, dominio/patente, tipo/categoría, observaciones/obs, período/mes) más
+variantes adicionales del mismo estilo. Primero busca coincidencia exacta normalizada; si no hay,
+busca coincidencia parcial (contención de substring) como segundo intento. **El resultado del mapeo
+automático siempre se muestra al usuario para revisión manual antes de poder avanzar** — nunca se
+importa con un mapeo sin confirmar, y el usuario puede reasignar cualquier columna a cualquier campo
+(o descartarla) desde un `<select>` por columna.
+
+**Validación fila por fila** (`src/lib/import/validateRow.ts`): campos obligatorios por módulo, fechas
+(acepta `AAAA-MM-DD` o `DD/MM/AAAA`), números, porcentajes de asistencia **sin redondear** (mismo
+criterio `truncateDecimals` que el resto del sistema), categorías/estados válidos, tipo de vehículo
+validado contra `VEHICLE_TYPE_OPTIONS` (la misma lista del combobox de `VehiculoFormPage.tsx`,
+exportada para reutilizarla acá en vez de duplicarla), y resolución de cuartel por nombre o código
+exacto (case-insensitive) contra los cuarteles que el usuario puede ver — si el archivo menciona un
+cuartel fuera de su alcance, `fetchStations()` (que ya respeta RLS) ni siquiera lo trae, así que la
+fila queda con "no se encontró el cuartel" en vez de filtrar datos de otro alcance. Ninguna fila
+inválida se inserta — queda registrada como "omitida" con el motivo exacto.
+
+**No hay detección de duplicados/actualización en v1**: ninguna de las 4 tablas destino
+(`personnel`/`vehicles`/`attendance_summaries`/`inventory_items`) tiene una constraint única natural
+para decidir "esto ya existe, actualizar en vez de crear" sin arriesgar inventar un criterio — se
+documenta como limitación conocida. El enum `import_row_status` ya incluye `'actualizado'` para
+cuando se defina esa clave a futuro; en v1 esa categoría siempre queda en 0.
+
+**Permisos**: el importador **no reimplementa ninguna lógica de alcance propia** — cada fila válida
+se inserta con el cliente autenticado normal (nunca `service_role`), así que la RLS ya existente de
+cada tabla destino decide sola qué puede crear cada usuario según su rol/alcance real (confirmado
+leyendo las policies: `attendance_write_admin_regional_station`/`personnel_write_admin_regional_station`/
+`vehicles_write_admin_regional_station` ya distinguen informática/rol regional/rol de cuartel;
+`inventory_items_write_regional` ya excluye a los roles de cuartel del todo). Si RLS rechaza una fila
+(usuario intentando importar fuera de su alcance), queda registrada como error de esa fila puntual,
+con el mensaje ya traducido por `describeSupabaseError` — nunca se "salta" el control de permisos de
+ninguna forma.
+
+**Historial por lote** (migración `0082_import_batches.sql`): tablas `import_batches` (metadatos del
+lote: módulo, estado, archivo, contadores creados/actualizados/omitidos/errores, mapeo de columnas
+usado, quién y cuándo) e `import_batch_rows` (resultado fila por fila, con los datos crudos originales
+y el motivo si falló). RLS: cada usuario ve solo sus propios lotes (un lote es una acción personal de
+carga, no un dato institucional compartido), `informatica_r4` ve todos. Cada fila creada en las tablas
+destino **ya queda auditada automáticamente** por el trigger genérico `audit_row_change()` existente
+(sin ningún cambio ahí) — no hace falta lógica de auditoría adicional para el importador en sí.
+**No se implementó rollback/reversión de lote** (mencionado como demasiado grande para esta ronda,
+documentado como fase futura junto con el resto de las sugerencias en 40.5).
+
+**Plantillas**: sí, implementadas — un botón "Descargar plantilla de ejemplo (.csv)" por módulo,
+generado en el cliente (sin librería extra) con los encabezados exactos que el mapeo automático
+reconoce, para minimizar corrección manual al momento de mapear.
+
+**Rendimiento del bundle**: `exceljs` es una dependencia pesada (~950 KB minificado) usada solo en
+esta pantalla — se aplicó `React.lazy`+`Suspense` tanto a `ImportarDatosPage` como a
+`MapaRegionalPage` (Leaflet también es pesada) para que ninguna de las dos infle el bundle principal
+que descargan todos los usuarios en cada carga de la app.
+
+### 40.4 Logo: `logo-escuela.png` reemplazado por el sello SIGER4
+
+El usuario agregó `SIGER4.png` (sello general "SIGER4 · Bomberos Voluntarios", no específico de
+Escuela) en la raíz del repo, con instrucción de que reemplace el logo llamado `logo-escuela.png` en
+todos lados. Se confirmó explícitamente con el usuario antes de aplicar (el archivo nuevo no es
+temáticamente "Escuela", y reemplazarlo debilitaba la distinción visual entre el logo de Escuela y el
+de Informática que se había corregido en la sección 39.7 de reportes PDF) — se confirmó proceder de
+forma literal.
+
+Aplicado: `public/logos/logo-escuela.png` reemplazado por el contenido de `SIGER4.png` (mismo nombre
+de archivo, así que **ninguna referencia en el código necesitó tocarse** — reportes PDF, Login,
+Sidebar, Ajustes, CambiarPassword, EscuelaPage, favicon y manifest de la PWA ya apuntan a ese path).
+Se actualizaron los textos `alt` de `<img>` que decían literalmente "Escuela Regional de Bomberos" (ya
+no exacto) a "SIGER4", en `Sidebar.tsx`, `CambiarPasswordPage.tsx`, `LoginPage.tsx`, `EscuelaPage.tsx`
+y `AjustesPage.tsx` — el `<h1>Escuela Regional de Bomberos</h1>` de `EscuelaPage.tsx` no se tocó
+(describe el módulo Escuela en sí, no la imagen). `public/logos/README.md` actualizado con el
+historial del reemplazo y una nota explícita: el `theme: 'escuela'` de `reportBuilder.ts` (sección
+39.7) sigue funcionando igual a nivel de código (decide cuál logo va a la izquierda/derecha), pero la
+distinción *visual* entre "logo de Escuela" y "logo de Informática" quedó debilitada hasta que se
+cargue un logo específico de Escuela de nuevo bajo otro nombre de archivo, si se decide mantenerla.
+`SIGER4.png` de la raíz se eliminó tras copiarlo a su ubicación final (evita el archivo duplicado en
+el repo). El archivo es grande para un logo web (1.3 MB vs. los 24 KB que tenía el anterior) — no se
+optimizó/comprimió en esta ronda (no hay herramienta de procesamiento de imágenes en el proyecto),
+queda como mejora sugerida.
+
+### 40.5 Sugerencias adicionales — NO implementadas, solo propuestas
+
+Tal como pidió el usuario, quedan solo como propuesta, sin código:
+
+- Mapa con capas territoriales completas y puntos de inflexión regionales — diseño ya en 40.2.
+- Importación desde GeoJSON/KML — necesitaría un parser dedicado (no cubierto por `exceljs`).
+- Exportación a Excel de datos ya existentes en el sistema (dirección inversa a la de esta ronda).
+- Detección de datos faltantes / calidad de datos por cuartel (ej. extender `station_compliance` con
+  un score de completitud de contacto/coordenadas/personal).
+- Historial completo de importaciones con filtros (UI dedicada sobre `import_batches`, más allá del
+  resumen inmediato post-importación que ya tiene `ImportarDatosPage.tsx`).
+- Reversión de importación por lote (borrar en cascada lo creado por un `import_batch_id` puntual) —
+  mencionado en el pedido como "no implementar si es mucho, dejar preparado": el esquema
+  (`target_record_id` en `import_batch_rows`) ya deja la trazabilidad necesaria para poder construir
+  esto después sin cambiar el modelo de datos, pero la función de reversión en sí no se escribió.
+- Carga masiva de coordenadas (ej. un modo del Importador Excel dedicado a actualizar
+  `latitude`/`longitude`/`map_notes` de cuarteles existentes en lote).
+- Dashboard territorial (vista agregada combinando mapa + semáforo de cumplimiento + indicadores por
+  zona).
+
+### 40.6 Migraciones nuevas de esta ronda
+
+- `0080_cron_job_diagnostics.sql` — RPC `get_cron_job_diagnostics()`.
+- `0081_station_coordinates.sql` — `stations.latitude`/`longitude`/`map_notes` + constraints de rango.
+- `0082_import_batches.sql` — tablas `import_batches`/`import_batch_rows`, tipos enum, RLS.
+
+### 40.7 Qué correr en Supabase
+
+1. Migraciones `0080`, `0081`, `0082`, en orden.
+2. Confirmar (no es un paso nuevo, es el diagnóstico de 40.1) que `system_settings` tenga
+   `project_url` y `cron_shared_secret` configurados desde Ajustes → Configuración del sistema, y
+   correr "Revisar últimos 7 días" para confirmar con certeza la causa real de la notificación que no
+   llegó — este documento no pudo confirmarla contra la base real.
+
+Ninguna Edge Function nueva ni con cambios de código. Redeploy normal del frontend (Vercel) — hay
+dependencias nuevas (`leaflet`, `react-leaflet`, `exceljs`, `@types/leaflet`), así que el build de
+Vercel va a instalar paquetes nuevos en este deploy.

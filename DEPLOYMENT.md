@@ -5798,5 +5798,171 @@ Tal como pidió el usuario, quedan solo como propuesta, sin código:
    llegó — este documento no pudo confirmarla contra la base real.
 
 Ninguna Edge Function nueva ni con cambios de código. Redeploy normal del frontend (Vercel) — hay
-dependencias nuevas (`leaflet`, `react-leaflet`, `exceljs`, `@types/leaflet`), así que el build de
-Vercel va a instalar paquetes nuevos en este deploy.
+dependencias nuevas (`leaflet`, `react-leaflet`, `@types/leaflet`), así que el build de Vercel va a
+instalar paquetes nuevos en este deploy.
+
+**Actualización (2026-08-20, ver sección 41):** el Importador de Excel/CSV descripto en 40.3/40.5 se
+eliminó por decisión de producto (no se iba a usar todavía) — `exceljs` ya NO es una dependencia del
+proyecto. El resto de esta sección 40 (diagnóstico de cron, Mapa Regional v1, logo SIGER4) sigue
+vigente sin cambios de fondo, con las correcciones de la sección 41 (CSP del mapa, optimización del
+logo).
+
+## 41. Revertir el Importador de Excel, corregir el Mapa (CSP de tiles), optimizar el logo, limpieza de seguridad del repo público (2026-08-20) — migración 0083
+
+Pasada de corrección sobre la ronda anterior (sección 40): se decidió no usar el Importador de Excel
+por ahora, el Mapa Regional cargaba sin las teselas de OpenStreetMap (CSP), el logo nuevo pesaba
+demasiado, y se hizo una revisión de seguridad del repo público (es público en GitHub).
+
+### 41.1 Importador de Excel/CSV — eliminado completamente
+
+Decisión de producto: no sumar la complejidad del importador todavía. Se eliminó de punta a punta:
+
+- **Frontend**: `src/pages/ImportarDatosPage.tsx` y todo `src/lib/import/` (`parseFile.ts`,
+  `columnMapping.ts`, `validateRow.ts`, `runImport.ts`) borrados. Ruta `/importar` sacada de
+  `App.tsx` (junto con el `lazy()`/`Suspense` que la cargaba). Ítem de nav "Importar datos" sacado de
+  `navigation.ts`. Acceso directo desde Inventario Regional (botón "Importar" junto a "Solicitudes")
+  sacado de `InventarioPage.tsx`. `VEHICLE_TYPE_OPTIONS` (`VehiculoFormPage.tsx`) volvió a ser privado
+  del archivo — se había exportado solo para que el importador la reutilizara.
+- **Tipos**: `ImportModule`/`ImportBatchStatus`/`ImportRowStatus`/`ImportBatch`/`ImportBatchRow`
+  sacados de `src/types/database.ts`.
+- **Dependencia**: `exceljs` desinstalado (`npm uninstall exceljs`) — ya no está en `package.json`
+  ni en `package-lock.json`. Esto también hizo desaparecer las 2 vulnerabilidades moderadas que traía
+  como dependencia transitiva (`uuid`): `npm audit` vuelve a estar en 0 vulnerabilidades totales, no
+  solo por debajo del umbral `--audit-level=high`.
+- **CSS**: no había ningún estilo específico del importador en `styles.css` (usaba solo clases
+  genéricas ya existentes: `.card-solid`, `.field`, `.btn`), así que no hubo nada que limpiar ahí.
+
+**Base de datos — SÍ se eliminaron las tablas** (el usuario confirmó que la migración 0082 ya se
+había corrido en producción): migración nueva `0083_drop_import_batches.sql` hace `drop table if
+exists import_batch_rows`/`import_batches` y elimina los 3 tipos enum que 0082 había creado
+(`import_module`, `import_batch_status`, `import_row_status`). **No se tocó ningún dato real**:
+`personnel`/`vehicles`/`attendance_summaries`/`inventory_items` (las tablas destino a las que el
+importador insertaba, si llegó a usarse) no se tocan — solo se borra el historial de metadatos de
+lotes en sí, que deja de tener sentido sin la función que lo generaba. El archivo `0082_import_batches.sql`
+original **no se borró ni se editó** — queda en el historial de migraciones como registro de que esa
+tabla existió y por qué se creó; `0083` es la reversión explícita, siguiendo el mismo criterio que el
+resto de las migraciones del proyecto (nunca editar una migración ya aplicada, siempre agregar una
+nueva que corrija).
+
+### 41.2 Mapa Regional — corregido el CSP que bloqueaba las teselas de OpenStreetMap
+
+**Causa exacta**: el CSP de `vercel.json` (`img-src 'self' data: blob: https://*.supabase.co`) no
+incluía el dominio de las teselas de OpenStreetMap (`https://{s}.tile.openstreetmap.org/...`, donde
+`{s}` es un subdominio dinámico `a`/`b`/`c`) — el navegador bloqueaba silenciosamente esas imágenes
+por política de seguridad, dejando el mapa gris/blanco con solo el pin (SVG inline, no bloqueado) y
+el popup (DOM/texto, no bloqueado) visibles. El CSS de Leaflet (`leaflet/dist/leaflet.css`) y el
+`MapContainer` en sí NO eran el problema: Vite empaqueta ese CSS dentro del propio chunk de
+`MapaRegionalPage` (servido desde `'self'`, confirmado en el build:
+`MapaRegionalPage-*.css`), así que nunca violó `style-src`.
+
+**Corrección**: `img-src` en `vercel.json` ahora incluye `https://*.tile.openstreetmap.org`. Sin
+cambiar de proveedor de tiles (se evaluó y se descartó — OpenStreetMap sigue siendo la opción
+correcta: libre, sin costo, sin API key, con atribución ya presente en el código desde la sección
+40.2 y sin cambios acá). No se necesitó cambiar `connect-src` (Leaflet carga los tiles como `<img>`,
+no via `fetch`/XHR).
+
+**Resto del checklist revisado, sin encontrar más problemas**: altura/contenedor del mapa (`.card`
+con `height: min(70vh, 560px)` y `overflow: hidden`) ya estaba bien desde la sección 40.2; z-index de
+Leaflet ya estaba acotado (`.leaflet-pane`/`.leaflet-top`/`.leaflet-bottom`/`.leaflet-popup` en
+`styles.css`) para no competir con sidebar/drawer; dark mode no tiene un bug real — el popup de
+Leaflet mantiene su fondo blanco por diseño (igual que Google/Apple Maps sobre mapas oscuros), pero
+el contenido interno del popup (`StationPopupContent`) usa las mismas variables CSS del tema, así que
+el texto siempre es legible; `react-leaflet@4.2.1` maneja correctamente el ciclo de montaje de
+StrictMode (mejora conocida sobre v3), y no se encontró ningún patrón de manejo manual de refs en
+`MapaRegionalPage.tsx` que pudiera causar un remount indebido — no confirmable al 100% sin probarlo
+en un navegador real, pendiente de verificación visual.
+
+### 41.3 Logo SIGER4 — optimizado
+
+`public/logos/logo-escuela.png`: **1.3 MB → 61 KB** (1254×1254px → 400×400px). El archivo original no
+tenía canal alfa (fondo blanco sólido, confirmado con `sharp` antes de procesar) — no había
+transparencia que preservar en este caso. 400×400px es más que suficiente para el uso real más
+grande del archivo (18mm en reportes PDF ≈ 212px a 300dpi de impresión); en pantalla nunca se muestra
+a más de 56px.
+
+De paso, también se optimizó `public/logos/logo-informatica.png` (confirmado con el usuario antes de
+tocarlo, no estaba en el pedido original pero mismo problema): **338 KB → 47 KB** (1254×1254px →
+400×400px). Este sí tenía canal alfa real — se preservó la transparencia en el archivo optimizado
+(verificado antes y después con `sharp`, y confirmado visualmente).
+
+**Herramienta usada**: `sharp`, instalado temporalmente con `npm install --no-save sharp` (nunca
+quedó en `package.json`/`package-lock.json`) solo para generar los dos archivos, y desinstalado
+apenas terminó (`npm uninstall sharp`) — no hay ninguna herramienta de procesamiento de imágenes
+como dependencia permanente del proyecto ni en el sistema (no había ImageMagick/`cwebp` disponibles).
+
+**Ninguna referencia en el código necesitó cambiar** — ambos archivos mantuvieron el mismo nombre. El
+favicon y el manifest de PWA usan un set de archivos completamente aparte (`public/icons/manifest-icon-*.png`),
+no se tocaron. `public/logos/README.md` actualizado con los tamaños/pesos finales y una nota para la
+próxima vez que se reemplace un logo (redimensionar a ~400×400px antes de subirlo).
+
+### 41.4 Seguridad del repositorio público
+
+**`.claude/`**: estaba trackeado (`.claude/settings.json`, con permisos de comandos y algunos
+fragmentos de rutas/comandos específicos de la máquina local — nada que sea una credencial, pero es
+configuración puramente local sin valor para el repo público). Sacado del tracking con
+`git rm --cached .claude/settings.json` (el archivo sigue existiendo en el disco local, solo deja de
+subirse) y agregado `.claude/` al `.gitignore` para que no vuelva a trackearse.
+
+**`.env`**: nunca estuvo trackeado — ya lo cubría el `.gitignore` desde antes. `.env.example` (sí
+trackeado, correcto) revisado: solo tiene placeholders (`tu-proyecto.supabase.co`, `tu-anon-key-publica`,
+`tu-clave-publica-vapid`), ningún valor real.
+
+**`supabase/` — se decidió CONSERVARLO en el repo**, analizado punto por punto:
+- `supabase/migrations/*.sql`: solo esquema, RLS, funciones y datos de referencia (regiones/subsedes
+  base) — nunca secretos. Necesario para que cualquiera pueda reconstruir la base desde cero
+  (documentado en DEPLOYMENT.md desde el inicio del proyecto).
+- `supabase/functions/*/index.ts`: revisado archivo por archivo — **todos** los secretos
+  (`SUPABASE_SERVICE_ROLE_KEY`, `CRON_SHARED_SECRET`, `GEMINI_API_KEY`, claves VAPID) se leen
+  exclusivamente vía `Deno.env.get(...)`, nunca hardcodeados en el código fuente. Es exactamente la
+  práctica correcta — el código de una Edge Function siendo público no expone ningún secreto, porque
+  los secretos viven solo como variables de entorno configuradas en Supabase (`supabase secrets set`),
+  nunca en el repo. Eliminar `supabase/functions/` del repo no aportaría seguridad real (no hay nada
+  sensible ahí) y sí complicaría el deploy/mantenimiento futuro de las funciones, así que no se hizo.
+- **Dos scripts SQL tenían datos personales reales hardcodeados** (no credenciales, pero sí
+  identificables): `supabase/create_admin_user_example.sql` tenía un UUID real de `auth.users`,
+  nombre completo y email real del administrador del sistema, en vez de placeholders — a pesar de
+  llamarse "example". `supabase/reset_functional_db.sql` tenía el mismo email real hardcodeado en 6
+  lugares (SQL + comentarios explicativos). Ambos corregidos: reemplazados por los mismos placeholders
+  que ya usaba correctamente `supabase/cleanup_test_data.sql` (`admin@tudominio.com`,
+  `UUID-DEL-USUARIO-AUTH`, `Nombre Apellido`). Un UUID de `auth_user_id` y un email no son, por sí
+  solos, una credencial explotable (no permiten iniciar sesión ni actuar en nombre de ese usuario sin
+  la contraseña/sesión real) — pero no correspondía tenerlos hardcodeados en un repo público bajo la
+  etiqueta "ejemplo".
+- Sin otros archivos de backup/dump/log/captura trackeados — el `.gitignore` ya los cubre
+  (`*.pdf`/`*.bak`/`*.dump`/`*.sql.gz`/`/screenshots/`/`/exports/`/`*.log`) y una búsqueda completa
+  de `git ls-files` no encontró ninguno colado.
+
+**Búsqueda de secretos reales en TODO el historial de git** (no solo el estado actual): se buscaron
+patrones de JWT (`eyJ...`), asignaciones de `SUPABASE_SERVICE_ROLE_KEY`/`CRON_SHARED_SECRET`/
+`VAPID_PRIVATE_KEY` con valores reales, y nombres de archivo típicos de secretos (`.pem`, `.key`,
+`credentials`) en `git log --all -p` completo — **sin ningún resultado**. No se encontró ninguna clave
+real commiteada en ningún momento de la historia del repo.
+
+**No hace falta rotar ninguna clave** — la única exposición real encontrada (email/UUID de
+`create_admin_user_example.sql`/`reset_functional_db.sql`) no es una credencial de acceso, así que no
+hay nada que "revocar" en el sentido de una API key comprometida. **Importante**: como esos dos
+archivos ya se pushearon a `main` en rondas anteriores de este mismo repo, el email/UUID reales siguen
+visibles en el **historial** de git de GitHub (commits viejos) aunque el archivo actual ya esté
+saneado — corregir el archivo en un commit nuevo no reescribe el pasado. Si esto importa (dato
+personal identificable de quien administra el sistema, visible en un repo público), la única forma de
+sacarlo del historial es reescribirlo con `git filter-repo` (recomendado sobre BFG, más mantenido) y
+forzar el push — **no se hizo en esta ronda** porque es una operación destructiva e irreversible sobre
+el historial compartido que requiere coordinación explícita (invalida cualquier fork/clone existente,
+requiere que todos los colaboradores vuelvan a clonar). Queda como decisión pendiente del usuario,
+documentada acá para que la tome con conocimiento de causa.
+
+### 41.5 Migraciones nuevas de esta ronda
+
+- `0083_drop_import_batches.sql` — elimina `import_batches`/`import_batch_rows` y sus 3 tipos enum.
+
+### 41.6 Qué correr en Supabase
+
+1. Migración `0083` (revierte 0082 — el importador ya no se usa).
+2. Nada relacionado a los puntos 41.2/41.3/41.4 — son cambios de frontend/config/repo, sin tocar la
+   base de datos.
+
+### 41.7 Redeploy
+
+Frontend (Vercel): sí, normal — hay un cambio en `vercel.json` (CSP) que necesita un deploy nuevo
+para tomar efecto, además de la eliminación de `exceljs` (bundle más liviano) y los assets de logo
+reemplazados. Edge Functions: ninguna tocada, sin redeploy necesario.

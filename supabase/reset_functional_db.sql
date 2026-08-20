@@ -48,7 +48,7 @@
 -- Lo que SÍ hace el script es buscar tu auth.users existente por email y
 -- crear/reconectar profiles.auth_user_id apuntando a ese id.
 --
--- Si tu cuenta de Auth con el email serviciosdigitalesaxel@gmail.com YA
+-- Si tu cuenta de Auth con el email admin@tudominio.com YA
 -- EXISTE (ya iniciaste sesión alguna vez con ese email): la sección 0 lo va a
 -- confirmar, y la sección 2 va a poder recrear tu perfil sin problema.
 --
@@ -84,7 +84,7 @@
 -- el dashboard antes de seguir.
 select id as auth_user_id, email, created_at
 from auth.users
-where email = 'serviciosdigitalesaxel@gmail.com';
+where email = 'admin@tudominio.com';
 
 -- 0.2 — pantallazo de lo que hay actualmente (para comparar contra la
 -- verificación final de la sección 3).
@@ -173,20 +173,20 @@ select
   (select id from regions where code = 'R4'),
   true
 from auth.users au
-where au.email = 'serviciosdigitalesaxel@gmail.com';
+where au.email = 'admin@tudominio.com';
 
 -- 1.9 — rol informatica_r4 (superadmin real).
 insert into user_roles (profile_id, role)
 select p.id, 'informatica_r4'
 from profiles p
-where p.email = 'serviciosdigitalesaxel@gmail.com';
+where p.email = 'admin@tudominio.com';
 
 -- 1.10 — scope de sistema completo (acceso total, no limitado a una
 -- region/subsede/cuartel puntual — coherente con ser informatica_r4).
 insert into user_scopes (profile_id, scope_type)
 select p.id, 'system'
 from profiles p
-where p.email = 'serviciosdigitalesaxel@gmail.com';
+where p.email = 'admin@tudominio.com';
 
 -- 1.11 — reactivar triggers de usuario: NUNCA dejar esto desactivado más
 -- allá de esta transacción.
@@ -242,7 +242,7 @@ select
 from profiles p
 left join user_roles ur on ur.profile_id = p.id
 left join user_scopes us on us.profile_id = p.id
-where p.email = 'serviciosdigitalesaxel@gmail.com';
+where p.email = 'admin@tudominio.com';
 -- ^ Debe devolver exactamente 1 fila, con role = 'informatica_r4' y
 --   scope_type = 'system'. Si no devuelve nada, tu auth.users no existía
 --   (ver la nota de la sección 1.8) — hacé ROLLBACK, creá el usuario, y

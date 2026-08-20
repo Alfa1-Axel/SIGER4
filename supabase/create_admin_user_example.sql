@@ -7,14 +7,14 @@
 
 insert into profiles (auth_user_id, full_name, email, region_id)
 values (
-  '9c63ee9a-b99c-4f4b-a77c-609fe74da03e',
-  'Axel Alex Lisoni',
-  'serviciosdigitalesaxel@gmail.com',
+  'UUID-DEL-USUARIO-AUTH',
+  'Nombre Apellido',
+  'admin@tudominio.com',
   (select id from regions where code = 'R4')
 );
 
 insert into user_roles (profile_id, role)
 values (
-  (select id from profiles where email = 'serviciosdigitalesaxel@gmail.com'),
+  (select id from profiles where email = 'admin@tudominio.com'),
   'informatica_r4'
 );

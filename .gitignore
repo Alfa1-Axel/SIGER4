@@ -15,6 +15,14 @@ yarn-error.log*
 !.vscode/extensions.json
 .idea
 
+# Configuración local del asistente (Claude Code) -- permisos y ajustes
+# específicos de la máquina/sesión de quien lo usa, sin ningún valor para el
+# resto del equipo ni para el repo público (y potencialmente revela rutas
+# absolutas/detalles del entorno local de quien la generó). Nunca debe
+# versionarse -- si estaba trackeado, se sacó del índice con
+# `git rm --cached .claude/settings.json` sin borrar el archivo local.
+.claude/
+
 *.suo
 *.ntvs*
 *.njsproj

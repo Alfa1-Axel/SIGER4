@@ -11,9 +11,18 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
-import { triggerPushDiagnostic } from '../lib/api/pushSubscriptions'
+import { fetchOwnPushDiagnostics, fetchOwnPushSubscriptionCount } from '../lib/api/pushSubscriptions'
+import type { OwnPushDiagnosticRow } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
+
+// Cuanto esperar entre reintentos de lectura de push_send_log al probar el
+// push server-side: pg_net (dispatch_notification_push, migracion 0085) es
+// fire-and-forget desde el trigger -- el insert en notifications ya volvió
+// antes de que el push real termine de enviarse, así que hay que darle un
+// margen real antes de leer el resultado, no asumir que ya está listo
+// apenas createNotification() devuelve.
+const PUSH_DIAGNOSTIC_POLL_DELAYS_MS = [800, 1200, 2000]
 
 export function AjustesPage() {
   const { profile, user, roles, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
@@ -37,7 +46,15 @@ export function AjustesPage() {
 
   const [testingNotification, setTestingNotification] = useState(false)
   const [testNotificationResult, setTestNotificationResult] = useState<'ok' | 'error' | null>(null)
-  const [testPushResult, setTestPushResult] = useState<{ ok: boolean; sent: number; duplicate: boolean; error?: string } | null>(null)
+  const [testPushResult, setTestPushResult] = useState<
+    { ok: boolean; attempted: boolean; sent: number; recipients: number; error?: string } | null
+  >(null)
+
+  const [pushDiagnosticsOpen, setPushDiagnosticsOpen] = useState(false)
+  const [loadingPushDiagnostics, setLoadingPushDiagnostics] = useState(false)
+  const [pushDiagnosticsError, setPushDiagnosticsError] = useState<string | null>(null)
+  const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number | null>(null)
+  const [pushDiagnosticsRows, setPushDiagnosticsRows] = useState<OwnPushDiagnosticRow[]>([])
 
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
@@ -111,13 +128,12 @@ export function AjustesPage() {
       // su propio trigger de auditoria automatico (audit_row_change, ver
       // 0004_audit_triggers.sql), asi que esto ya queda registrado en
       // audit_logs sin ensuciar nada extra. profile_id = uno mismo: nunca es
-      // un broadcast. NotificationPushBridge también va a intentar disparar
-      // el push al detectar este insert por Realtime, pero ese camino es
-      // fire-and-forget (no informa resultado) — para el diagnóstico de esta
-      // pantalla se llama a triggerPushDiagnostic directo abajo, que sí
-      // devuelve si el push se envió realmente y a cuántos dispositivos, para
-      // poder distinguir "la notificación interna funciona pero el push real
-      // no llega" de "todo funciona".
+      // un broadcast. Desde la migracion 0085, el push real lo dispara
+      // trg_dispatch_notification_push server-side (pg_net -> send-push-
+      // system) con este mismo insert -- este boton YA NO llama a send-push
+      // desde el cliente: prueba EXACTAMENTE el mismo camino que usaría
+      // cualquier notificación con la PWA cerrada, no un atajo client-side
+      // que podría funcionar aunque el trigger estuviera roto.
       const notification = await createNotification({
         type: 'prueba',
         title: 'Notificación de prueba',
@@ -126,21 +142,52 @@ export function AjustesPage() {
       })
       setTestNotificationResult('ok')
 
-      if (push.status === 'ready' && push.subscribed) {
-        const result = await triggerPushDiagnostic({
-          title: 'Notificación de prueba',
-          body: 'Si ves esto como notificación push, todo el circuito funciona correctamente.',
-          url: '/notificaciones',
-          profileId: profile.id,
-          notificationId: notification.id,
-        })
-        setTestPushResult(result)
+      for (const delayMs of PUSH_DIAGNOSTIC_POLL_DELAYS_MS) {
+        await new Promise((resolve) => window.setTimeout(resolve, delayMs))
+        const rows = await fetchOwnPushDiagnostics(5)
+        const row = rows.find((r) => r.notification_id === notification.id)
+        if (row?.push_attempted) {
+          setTestPushResult({
+            ok: row.push_status !== 'error',
+            attempted: true,
+            sent: row.push_sent_count ?? 0,
+            recipients: row.push_recipients_count ?? 0,
+            error: row.push_error_message ?? undefined,
+          })
+          break
+        }
+        setTestPushResult({ ok: false, attempted: false, sent: 0, recipients: 0 })
       }
+
+      // Refresca el panel de diagnóstico (si está abierto) para que la
+      // prueba recién hecha aparezca sin tener que cerrarlo y reabrirlo.
+      if (pushDiagnosticsOpen) void handleLoadPushDiagnostics()
     } catch {
       setTestNotificationResult('error')
     } finally {
       setTestingNotification(false)
     }
+  }
+
+  async function handleLoadPushDiagnostics() {
+    if (!profile) return
+    setLoadingPushDiagnostics(true)
+    setPushDiagnosticsError(null)
+    try {
+      const [count, rows] = await Promise.all([fetchOwnPushSubscriptionCount(), fetchOwnPushDiagnostics(10)])
+      setPushSubscriptionCount(count)
+      setPushDiagnosticsRows(rows)
+    } catch (err) {
+      setPushDiagnosticsError(describeSupabaseError(err, 'No pudimos cargar el diagnóstico de push.'))
+    } finally {
+      setLoadingPushDiagnostics(false)
+    }
+  }
+
+  function handleTogglePushDiagnostics() {
+    const willOpen = !pushDiagnosticsOpen
+    setPushDiagnosticsOpen(willOpen)
+    if (willOpen) void handleLoadPushDiagnostics()
   }
 
   async function handleChangePassword(event: FormEvent) {
@@ -390,8 +437,12 @@ export function AjustesPage() {
           disabled={testingNotification}
           onClick={handleTestNotification}
         >
-          {testingNotification ? 'Enviando…' : 'Probar notificación'}
+          {testingNotification ? 'Probando push server-side…' : 'Probar push server-side'}
         </button>
+        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          Crea una notificación real y espera a que el dispatcher server-side (no el navegador) confirme el envío del push —
+          prueba lo mismo que recibirías con la app cerrada.
+        </p>
         {testNotificationResult === 'ok' && (
           <p style={{ fontSize: 12, color: 'var(--color-success)', marginTop: 8 }}>
             Notificación interna creada correctamente. Revisá /notificaciones.
@@ -407,21 +458,64 @@ export function AjustesPage() {
             style={{
               fontSize: 12,
               marginTop: 4,
-              color: testPushResult.ok ? 'var(--color-success)' : 'var(--color-danger)',
+              color: testPushResult.attempted && testPushResult.ok ? 'var(--color-success)' : 'var(--color-danger)',
             }}
           >
-            {testPushResult.ok && testPushResult.duplicate && 'Push ya enviado por otra pestaña/dispositivo activo (deduplicado).'}
-            {testPushResult.ok && !testPushResult.duplicate && testPushResult.sent > 0 &&
-              `Push real enviado a ${testPushResult.sent} dispositivo${testPushResult.sent === 1 ? '' : 's'}. Si no te llegó, revisá los permisos de notificaciones del navegador/SO.`}
-            {testPushResult.ok && !testPushResult.duplicate && testPushResult.sent === 0 &&
-              'La notificación interna se creó, pero no había ninguna suscripción push activa para enviar el push real (revisá el estado de arriba).'}
-            {!testPushResult.ok && `No se pudo enviar el push real: ${testPushResult.error}`}
+            {!testPushResult.attempted &&
+              'El servidor todavía no intentó el push (project_url/cron_shared_secret sin configurar, o pg_net no respondió a tiempo). Revisá el diagnóstico de arriba.'}
+            {testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0 &&
+              `Push server-side enviado a ${testPushResult.sent} de ${testPushResult.recipients} dispositivo(s). Si no te llegó, revisá los permisos de notificaciones del navegador/SO.`}
+            {testPushResult.attempted && testPushResult.ok && testPushResult.sent === 0 &&
+              'El servidor intentó el push, pero no había ninguna suscripción activa para este perfil (revisá el estado de arriba).'}
+            {testPushResult.attempted && !testPushResult.ok && `El servidor intentó el push y falló: ${testPushResult.error}`}
           </p>
         )}
         {testNotificationResult === 'ok' && push.status === 'ready' && !push.subscribed && (
           <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-            Notificaciones push desactivadas en este dispositivo: solo se probó la notificación interna.
+            Notificaciones push desactivadas en este dispositivo: no vas a recibir el push aunque el servidor lo envíe.
           </p>
+        )}
+
+        <button
+          type="button"
+          className="btn btn-outlined btn-block"
+          style={{ marginTop: 12 }}
+          onClick={handleTogglePushDiagnostics}
+        >
+          {pushDiagnosticsOpen ? 'Ocultar diagnóstico de push' : 'Ver diagnóstico de push'}
+        </button>
+        {pushDiagnosticsOpen && (
+          <div style={{ marginTop: 8 }}>
+            {loadingPushDiagnostics && <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Cargando…</p>}
+            {pushDiagnosticsError && <p className="field-error">{pushDiagnosticsError}</p>}
+            {!loadingPushDiagnostics && !pushDiagnosticsError && (
+              <>
+                <p style={{ fontSize: 12, marginBottom: 8 }}>
+                  Suscripciones activas (todos tus dispositivos):{' '}
+                  <strong>{pushSubscriptionCount ?? 0}</strong>
+                </p>
+                {pushDiagnosticsRows.length === 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Todavía no tenés notificaciones propias.</p>
+                )}
+                {pushDiagnosticsRows.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {pushDiagnosticsRows.map((row) => (
+                      <div key={row.notification_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
+                        <div style={{ fontWeight: 600 }}>{row.notification_title}</div>
+                        <div style={{ color: 'var(--color-text-muted)' }}>
+                          {new Date(row.notification_created_at).toLocaleString('es-AR')} —{' '}
+                          {!row.push_attempted && 'push no intentado (¿project_url/cron_shared_secret sin configurar?)'}
+                          {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
+                          {row.push_attempted && row.push_status !== 'error' &&
+                            `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         )}
       </div>
 

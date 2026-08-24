@@ -6497,3 +6497,185 @@ internamente, el drawer vive en otra rama del árbol.
 
 Nada -- sin migraciones, sin cambios de RLS, sin Edge Functions tocadas.
 Redeploy normal del frontend (Vercel).
+
+## 47. Push server-side para TODA notificación, no solo el recordatorio semanal (2026-08-24)
+
+Bug real reportado: la notificación interna se crea siempre (la campanita la
+muestra), pero si nadie tiene la PWA abierta en el momento exacto del
+insert, el push real (Web Push, el que llega con la app cerrada) nunca
+sale. Causa exacta, fix, y qué quedó de la arquitectura vieja.
+
+### 47.1 Causa exacta
+
+El único disparador de push real para CUALQUIER notificación que no fuera
+el recordatorio/resumen semanal era `NotificationPushBridge`
+(`src/components/NotificationPushBridge.tsx`): un listener de Realtime que
+vive en el navegador, escucha `INSERT` en `notifications`, y llama a la
+Edge Function `send-push`. Si no hay ninguna pestaña con sesión abierta
+escuchando ese canal en el instante del insert, nadie llama a `send-push`,
+y el push real jamás sale -- aunque la fila en `notifications` exista
+perfectamente y la campanita la muestre la próxima vez que alguien abra la
+app. Esto afectaba a TODO lo que no fuera el cron semanal: cursos nuevos,
+documentos nuevos, cambios de estado (cuartel/vehículo/personal),
+asistencia/intervención cargada, préstamos (solicitud/aprobación/
+vencimiento), eventos de calendario (creación y recordatorio previo),
+alertas administrativas (cambio de rol/scope, alta/baja de usuario), y
+cualquier notificación manual/de prueba creada desde el frontend.
+
+`send_weekly_reminder()`/`send_weekly_admin_summary()` (0036/0067/0073) ya
+eran la excepción correcta: llamaban a `pg_net` → `send-push-system`
+directamente desde SQL, sin depender del frontend -- por eso eran (y
+siguen siendo) el único camino que sí funcionaba con la app cerrada antes
+de esta ronda.
+
+### 47.2 Qué cambió en la arquitectura
+
+**Migración `0085_server_side_push_dispatch.sql`**: agrega
+`dispatch_notification_push()`, un trigger `AFTER INSERT ON notifications`
+(security definer) que dispara `net.http_post` → `send-push-system` para
+**cada notificación nueva**, sin importar su origen (trigger de Postgres,
+cron, o insert directo del frontend). Lee `project_url`/`cron_shared_secret`
+de `system_settings` (0073); si faltan, no bloquea el insert (la
+notificación interna queda guardada igual), solo no dispara el push --
+mismo criterio "fire-and-forget, nunca romper el flujo" que ya usaban
+`send_weekly_reminder`/`send_weekly_admin_summary`.
+
+`send_weekly_reminder()`/`send_weekly_admin_summary()` se simplificaron:
+ya no llaman a `pg_net` manualmente (el trigger nuevo las cubre
+automáticamente, porque siguen insertando en `notifications` igual que
+siempre) -- evita disparar el push dos veces por el mismo insert.
+
+**`send-push-system`** (Edge Function) se generalizó: antes solo aceptaba
+`profileId` puntual (pensada nada más para el recordatorio semanal, siempre
+self-scope); ahora acepta el mismo alcance completo que `send-push`
+(`profileId`, o `regionId`/`subsedeId`/`stationId`), porque cualquier
+notificación del sistema puede tener cualquiera de esos alcances. Sigue
+autenticándose por secreto (`x-cron-secret` == `CRON_SHARED_SECRET`), nunca
+por JWT de usuario -- el trigger de Postgres no tiene una sesión real que
+pasar.
+
+**`NotificationPushBridge`** (frontend) ya NO llama a `send-push`: se
+redujo a lo que le corresponde a un componente que solo existe mientras hay
+una pestaña abierta -- sonido interno (un beep corto) cuando llega una
+notificación propia por Realtime. El filtro de Realtime ahora es
+`profile_id=eq.<perfil actual>` (antes escuchaba TODO insert en
+`notifications` y decidía adentro si tenía permiso de alcance masivo para
+llamar a `send-push` -- ya no hace falta esa lógica, así que se sacó por
+completo `PUSH_SCOPE_ROLES`/`can_send_push_scope` del lado cliente).
+
+**`send-push`** (la función autenticada por JWT de usuario) se conserva sin
+cambios funcionales, pero ya no tiene ningún llamador activo en el
+frontend -- queda como infraestructura para un eventual envío push manual
+iniciado por un usuario real (ej. un futuro "enviar aviso ahora" a un
+alcance elegido a mano), no como parte del camino automático.
+
+### 47.3 Deduplicación
+
+`push_send_log` YA tenía (migración 0025, sin cambios en esta ronda) un
+índice único parcial sobre `notification_id where status='ok'` -- el
+primer intento que logra insertar su fila `'ok'` es el que efectivamente
+envía; cualquier otro intento posterior por la misma notificación (un
+reintento de `pg_net`, o si en el futuro volviera a existir también un
+camino client-side) recibe `duplicate: true` y no reenvía nada. No hizo
+falta un constraint nuevo -- ya cubría exactamente este caso.
+
+### 47.4 Diagnóstico (migración `0086_push_diagnostics_own_user.sql`)
+
+Se agregaron dos funciones para que CUALQUIER usuario (no solo
+`informatica_r4`, a diferencia de `get_weekly_push_diagnostics` de 0074)
+pueda ver el estado de sus propias notificaciones/push:
+
+- `get_own_push_diagnostics(p_limit)`: últimas notificaciones propias
+  cruzadas contra `push_send_log` -- si el push se intentó, con qué
+  resultado, a cuántos dispositivos.
+- `get_own_push_subscription_count()`: cantidad de dispositivos/
+  navegadores con suscripción push activa del perfil actual.
+
+En Ajustes → Notificaciones push se agregó:
+- Botón **"Probar push server-side"** (reemplaza al viejo "Probar
+  notificación"): crea una notificación real y hace polling (3 reintentos,
+  800/1200/2000ms) sobre `get_own_push_diagnostics()` hasta ver que el
+  trigger server-side efectivamente intentó el envío -- prueba EXACTAMENTE
+  el mismo camino que usaría cualquier notificación con la PWA cerrada, no
+  un atajo client-side que podría funcionar aunque el trigger estuviera
+  roto (el botón viejo llamaba a `send-push` directo desde el navegador,
+  lo cual no probaba nada sobre el camino server-side).
+- Panel **"Ver diagnóstico de push"**: suscripciones activas + últimas
+  notificaciones propias con su resultado de envío (intentado/no
+  intentado, enviado a cuántos dispositivos, o el error si falló).
+
+### 47.5 Qué revisé sin encontrar problema / no pude verificar
+
+- RLS de `notifications`/`push_subscriptions`/`push_send_log`: sin
+  cambios, todo lo de lectura normal sigue igual.
+- `can_send_push_scope()`/`push_send_rate_check()`: sin cambios, siguen
+  siendo la autorización de `send-push` (el camino JWT-based, hoy sin
+  llamador activo pero conservado).
+- No pude verificar en producción real que el push efectivamente llega al
+  dispositivo con la PWA cerrada -- eso requiere una prueba manual real
+  (ver checklist abajo). El diagnóstico nuevo confirma que el SERVIDOR
+  intentó/logró el envío, no que el sistema operativo/navegador del
+  destinatario efectivamente lo mostró (eso depende de permisos del SO,
+  Do Not Disturb, etc., fuera del control de la app).
+
+### 47.6 Qué correr en Supabase
+
+1. Migración `0085_server_side_push_dispatch.sql`.
+2. Migración `0086_push_diagnostics_own_user.sql`.
+
+### 47.7 Edge Functions a redesplegar
+
+- `send-push-system` (cambio de código: ahora acepta alcance completo, no
+  solo `profileId`): `supabase functions deploy send-push-system`.
+- `send-push`: sin cambios de código funcional (solo el comentario de
+  cabecera), redeploy opcional.
+
+### 47.8 Secrets que deben estar configurados
+
+Los mismos de siempre para que el push real funcione (sin cambios, ya
+documentados en la sección "Notificaciones push" más arriba):
+- `system_settings.project_url` y `system_settings.cron_shared_secret`
+  (configurables desde Ajustes → Configuración del sistema, solo
+  `informatica_r4`).
+- Secretos de la Edge Function `send-push-system`: `CRON_SHARED_SECRET`
+  (mismo valor que `system_settings.cron_shared_secret`),
+  `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`.
+- Sin estos, `dispatch_notification_push()` no bloquea nada (la
+  notificación interna se crea igual) pero tampoco puede disparar el push
+  real -- el panel de diagnóstico de Ajustes lo va a mostrar como "push no
+  intentado".
+
+### 47.9 Checklist manual para Axel
+
+1. **App cerrada (el caso que estaba roto)**: cerrar completamente la PWA/
+   pestaña en un celular, y desde otro dispositivo/usuario generar una
+   notificación que te llegue a vos (ej. un cambio de estado de tu
+   cuartel, o pedirle a informática que te mande una prueba). Confirmar
+   que el push llega igual con la app cerrada.
+2. Ajustes → Notificaciones push → **"Probar push server-side"**: confirmar
+   que muestra "Push server-side enviado a N de M dispositivo(s)" (no
+   "push no intentado").
+3. Ajustes → **"Ver diagnóstico de push"**: confirmar que la cantidad de
+   suscripciones activas coincide con tus dispositivos reales, y que las
+   últimas notificaciones muestran resultado de envío.
+4. Recordatorio semanal / resumen admin: confirmar que un lunes siguen
+   llegando igual que antes (arquitectura sin cambios funcionales para
+   estos dos, solo se sacó la llamada duplicada a `pg_net`).
+5. Notificación de calendario, préstamo, curso nuevo, documento nuevo:
+   generar una de cada una y confirmar que ahora también llega como push
+   real (antes de esta ronda, dependían 100% de tener la app abierta).
+6. PWA instalada vs. navegador mobile vs. desktop: repetir el punto 1 en
+   cada contexto.
+7. Si algo no llega: revisar el panel de diagnóstico de Ajustes primero
+   (dice si el servidor intentó el envío o no) antes de asumir que es un
+   problema de permisos del dispositivo.
+
+### 47.10 Qué queda pendiente
+
+- No hay forma de confirmar automáticamente que el push llegó a mostrarse
+  en el sistema operativo del destinatario (solo que el servidor lo
+  envió con éxito a la suscripción registrada) -- eso requiere la prueba
+  manual del punto 1 del checklist.
+- `send-push` (JWT-based) queda sin usar activamente; si en el futuro se
+  quiere un "enviar aviso ahora" manual desde la UI, ya está la
+  infraestructura lista.

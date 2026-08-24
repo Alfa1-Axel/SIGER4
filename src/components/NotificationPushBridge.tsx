@@ -1,39 +1,23 @@
 import { useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabaseClient'
-import { triggerPush } from '../lib/api/pushSubscriptions'
 import { useAuth } from '../hooks/useAuth'
-import type { Notification } from '../types/database'
 
-// Roles autorizados a disparar push de alcance masivo (region/subsede/
-// cuartel), espejo exacto de can_send_push_scope() en la base (migración
-// 0025_push_authorization_and_dedup.sql). Se replica acá para que el cliente
-// ni siquiera intente llamar a send-push cuando sabe de antemano que el
-// backend lo va a rechazar con 403 — evita ruido de errores en consola para
-// la mayoría de los usuarios (roles de cuartel), que nunca tienen permiso de
-// alcance masivo.
-const PUSH_SCOPE_ROLES = ['informatica_r4', 'integrante_informatica', 'secretario_regional', 'director_escuela', 'instructor'] as const
-
-// Punto unico de disparo de push: escucha por Realtime todo insert en
-// "notifications" (RLS ya filtra el resultado a lo que el perfil actual
-// puede ver) y dispara el push correspondiente desde aca, sin importar si la
-// notificacion la creo el propio frontend (formulario manual, reporte
-// generado) o un trigger de Postgres (curso nuevo, documento nuevo, cambio de
-// estado, asistencia/intervencion cargada). Evita duplicar la logica de
-// disparo en cada punto de creacion de notificaciones.
-//
-// send-push deduplica de forma atomica por notification_id (el primer
-// pedido que llega gana, el resto recibe duplicate:true sin reenviar nada),
-// asi que aunque varios navegadores con permiso de alcance masivo esten
-// conectados a la vez, el push real se manda una sola vez. Pero un usuario
-// SIN permiso de alcance masivo (la mayoria: roles de cuartel) nunca deberia
-// ni intentarlo — antes se intentaba siempre y el backend respondia 403 en
-// cada notificacion, ensuciando la consola sin ningun beneficio.
-//
-// Se monta una sola vez (dentro de AuthProvider, en App.tsx) para mantener
-// una unica suscripcion viva durante toda la sesion, sin importar en que
-// pantalla este el usuario.
+// Desde la migracion 0085, el push REAL (Web Push, funciona con la PWA
+// cerrada) lo dispara un trigger server-side (dispatch_notification_push(),
+// AFTER INSERT ON notifications) via pg_net -> send-push-system, para
+// CUALQUIER notificacion del sistema. Este componente YA NO llama a
+// send-push: antes era el UNICO disparador de push para notificaciones que
+// no fueran el recordatorio semanal, lo que significaba que si nadie tenia
+// el navegador abierto cuando se insertaba la notificacion, el push real
+// nunca salia (la notificacion interna se creaba igual, la campanita la
+// mostraba en la proxima visita, pero sin push -- ese era el bug real
+// reportado). Ahora se limita a lo que le corresponde a un componente que
+// solo existe mientras hay una pestaña abierta: sonido interno y (a futuro)
+// actualizacion visual en vivo. Se monta una sola vez (dentro de
+// AuthProvider, en App.tsx) para mantener una unica suscripcion viva
+// durante toda la sesion, sin importar en que pantalla este el usuario.
 export function NotificationPushBridge() {
-  const { profile, roles } = useAuth()
+  const { profile } = useAuth()
   const playSoundRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
@@ -61,35 +45,20 @@ export function NotificationPushBridge() {
   useEffect(() => {
     if (!profile?.id) return
 
+    // Filtro por profile_id=eq en la propia suscripcion de Realtime (no un
+    // "if" adentro del callback): esto es notificaciones self-scope
+    // dirigidas a este perfil puntual. Las de alcance region/subsede/
+    // cuartel no generan sonido en este canal -- son mucho mas frecuentes
+    // (courses, documents, cambios de estado) y sonar por cada una para
+    // cualquier usuario en ese alcance seria ruidoso; el push real (que si
+    // llega para todo alcance) ya cubre el aviso importante.
     const channel = supabase
       .channel('notifications-push-bridge')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          const notification = payload.new as Notification
-
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `profile_id=eq.${profile.id}` },
+        () => {
           playSoundRef.current?.()
-
-          // Alcance puntual al propio perfil: siempre permitido (mismo
-          // criterio que can_send_push_scope() en la base). Alcance masivo
-          // (region/subsede/cuartel): solo si el rol actual tiene permiso —
-          // si no, ni se llama a send-push, para no generar un 403 esperado
-          // en la consola de cada usuario de cuartel en cada notificación.
-          const isSelfScope = notification.profile_id === profile.id
-          const canSendMassScope = PUSH_SCOPE_ROLES.some((r) => roles.includes(r))
-          if (!isSelfScope && !canSendMassScope) return
-
-          void triggerPush({
-            title: notification.title,
-            body: notification.body ?? undefined,
-            url: '/notificaciones',
-            profileId: notification.profile_id,
-            regionId: notification.region_id,
-            subsedeId: notification.subsede_id,
-            stationId: notification.station_id,
-            notificationId: notification.id,
-          })
         },
       )
       .subscribe()
@@ -97,7 +66,7 @@ export function NotificationPushBridge() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [profile, roles])
+  }, [profile])
 
   return null
 }

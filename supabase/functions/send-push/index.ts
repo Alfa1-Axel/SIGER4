@@ -2,10 +2,22 @@
 //
 // Envia una notificacion push real (Web Push API) a las suscripciones que
 // coincidan con el alcance recibido (perfil especifico, o region/subsede/
-// cuartel). El frontend la invoca inmediatamente despues de crear una fila en
-// "notifications" (arquitectura elegida: el frontend dispara el push tras
-// crear la notificacion en pantalla, no un trigger de base de datos) o desde
-// NotificationPushBridge al recibir un insert por Realtime.
+// cuartel), autorizado bajo la identidad de un usuario real con sesion (JWT).
+//
+// Desde la migracion 0085, esta funcion YA NO es parte del camino principal
+// de push: el disparo automatico de TODA notificacion (sin importar su
+// origen) lo hace un trigger server-side (dispatch_notification_push()) via
+// send-push-system (autorizado por secreto, no por JWT de usuario) -- ver
+// ese archivo. NotificationPushBridge (frontend) tampoco llama mas a esta
+// funcion: antes era el unico disparador de push para notificaciones que no
+// fueran el recordatorio semanal, lo que significaba que el push real nunca
+// salia si nadie tenia el navegador abierto (el bug real que motivo 0085).
+//
+// send-push se conserva como infraestructura para un eventual envio push
+// MANUAL iniciado por un usuario real con sesion desde la UI (ej. un futuro
+// "enviar aviso ahora" a un alcance elegido a mano) -- no como fallback del
+// flujo automatico, que ya no la necesita. Hoy no tiene ningun llamador
+// activo en el frontend.
 //
 // Seguridad (revision 2026-07):
 // - Requiere un usuario autenticado real (valida el JWT recibido).
@@ -14,13 +26,11 @@
 //   can_send_push_scope() con la clave anon + el JWT del usuario (no con
 //   service_role) para que corra bajo su identidad real. Nunca confia en que
 //   el frontend haya mostrado o no la UI de "enviar masivo".
-// - Deduplica por notification_id: NotificationPushBridge se conecta desde
-//   CADA navegador con una sesion abierta y dispara triggerPush() al ver el
-//   mismo insert de Realtime, asi que la misma notificacion puede pedir el
-//   mismo push muchas veces en paralelo. La deduplicacion es atomica (indice
-//   unico parcial en push_send_log sobre notification_id where status='ok'):
-//   el primer pedido que logra insertar su fila 'ok' es el que efectivamente
-//   envia; el resto recibe "duplicate" y no reenvia nada.
+// - Deduplica por notification_id: indice unico parcial en push_send_log
+//   sobre notification_id where status='ok' -- el primer pedido que logra
+//   insertar su fila 'ok' es el que efectivamente envia; cualquier otro
+//   pedido posterior por la misma notificacion (de esta funcion o de
+//   send-push-system) recibe "duplicate" y no reenvia nada.
 // - Rate limit basico por actor: push_send_rate_check() (RPC bajo el JWT del
 //   usuario) limita a 10 envios "ok" exitosos por minuto por actor, para
 //   evitar abuso aunque el actor tenga permiso de alcance masivo.

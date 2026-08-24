@@ -1,5 +1,4 @@
 import { supabase } from '../supabaseClient'
-import { describeSupabaseError } from './errors'
 
 export async function savePushSubscription(
   profileId: string,
@@ -42,62 +41,31 @@ export async function hasActiveSubscriptionRow(endpoint: string): Promise<boolea
   return Boolean(data)
 }
 
-export interface PushTriggerInput {
-  title: string
-  body?: string
-  url?: string
-  tag?: string
-  profileId?: string | null
-  regionId?: string | null
-  subsedeId?: string | null
-  stationId?: string | null
-  // Id de la fila en "notifications" que origina este push. Obligatorio en la
-  // practica: send-push lo usa para deduplicar server-side (si varias
-  // pestañas/navegadores disparan el mismo push por la misma notificacion,
-  // solo el primer pedido efectivamente envia).
-  notificationId: string
+export interface OwnPushDiagnosticRow {
+  notification_id: string
+  notification_title: string
+  notification_created_at: string
+  push_attempted: boolean
+  push_status: string | null
+  push_sent_count: number | null
+  push_recipients_count: number | null
+  push_error_message: string | null
 }
 
-// Dispara el envío del push real via la Edge Function send-push. Se llama
-// siempre inmediatamente después de crear la notificación interna
-// correspondiente (arquitectura elegida: frontend-driven, no trigger de DB).
-// Nunca debe romper el flujo que la llama si el push falla o no está
-// configurado — las notificaciones internas ya quedaron guardadas antes.
-export async function triggerPush(input: PushTriggerInput): Promise<void> {
-  try {
-    await supabase.functions.invoke('send-push', { body: input })
-  } catch {
-    // Silencioso a propósito: el push es una mejora sobre las notificaciones
-    // internas, no un requisito para que estas funcionen.
-  }
+// Diagnostico de push del perfil actual (migracion 0086) -- las ultimas
+// notificaciones propias cruzadas contra push_send_log, para saber si el
+// trigger server-side (dispatch_notification_push, 0085) efectivamente
+// disparo/logro el push real de cada una.
+export async function fetchOwnPushDiagnostics(limit = 10): Promise<OwnPushDiagnosticRow[]> {
+  const { data, error } = await supabase.rpc('get_own_push_diagnostics', { p_limit: limit })
+  if (error) throw error
+  return (data ?? []) as OwnPushDiagnosticRow[]
 }
 
-export interface PushTriggerDiagnosticResult {
-  ok: boolean
-  sent: number
-  duplicate: boolean
-  error?: string
-}
-
-// Variante de triggerPush que SI devuelve el resultado real, en vez de
-// tragarse cualquier error — usada únicamente por el botón "Probar
-// notificación" de Ajustes, donde el usuario necesita saber explícitamente
-// si el push se intentó enviar y cuántos dispositivos lo recibieron, para
-// distinguir "la notificación interna funciona pero el push real no se está
-// enviando/llegando" del caso en que todo funciona. "duplicate: true" pasa
-// cuando NotificationPushBridge (que escucha el mismo insert por Realtime)
-// ya reclamó el envío primero — no es un fallo, send-push dedupea a
-// propósito (ver push_send_log, índice único parcial por notification_id).
-export async function triggerPushDiagnostic(input: PushTriggerInput): Promise<PushTriggerDiagnosticResult> {
-  try {
-    const { data, error } = await supabase.functions.invoke<{ sent?: number; error?: string; duplicate?: boolean }>('send-push', {
-      body: input,
-    })
-    if (error) return { ok: false, sent: 0, duplicate: false, error: error.message }
-    if (data?.error) return { ok: false, sent: 0, duplicate: false, error: data.error }
-    if (data?.duplicate) return { ok: true, sent: 0, duplicate: true }
-    return { ok: true, sent: data?.sent ?? 0, duplicate: false }
-  } catch (err) {
-    return { ok: false, sent: 0, duplicate: false, error: describeSupabaseError(err, 'Error desconocido al invocar send-push.') }
-  }
+// Cantidad de dispositivos/navegadores con suscripcion push activa del
+// perfil actual (migracion 0086).
+export async function fetchOwnPushSubscriptionCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('get_own_push_subscription_count')
+  if (error) throw error
+  return (data as number) ?? 0
 }

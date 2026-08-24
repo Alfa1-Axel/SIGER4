@@ -1282,21 +1282,50 @@ a.card-solid:focus-visible {
 }
 
 /* ---------- Mapa Regional (Leaflet) ----------
-   Leaflet usa z-index internos altos (~400-1000) para sus paneles de
-   controles/popups, pensados para ocupar toda la pantalla -- acá el mapa
-   vive dentro de un .card con overflow:hidden (contenedor acotado, no
-   pantalla completa), así que se topean esos z-index para que nunca
-   compitan con el sidebar (z-index 50) ni el drawer mobile (z-index 40) si
-   algún navegador no respeta el overflow:hidden del contenedor padre en
-   algún caso límite. */
+   Leaflet usa z-index internos altos (200-1000, ver leaflet.css) para sus
+   paneles de tiles/markers/popups y controles, pensados para ocupar toda
+   la pantalla -- acá el mapa vive dentro de un .card acotado (no pantalla
+   completa), así que se topean para que nunca compitan con el header
+   (z-index 20), el drawer mobile (backdrop 40, sidebar 50) ni modales/
+   toasts (60-70). Cubre CADA selector propio de leaflet.css
+   (.leaflet-tile-pane, .leaflet-marker-pane, .leaflet-popup-pane, etc.),
+   no solo ".leaflet-pane" genérico: como leaflet.css se importa DESPUÉS de
+   este archivo (import en MapaRegionalPage.tsx, chunk separado), sus
+   selectores de igual especificidad (una sola clase) ganan por orden en
+   el stylesheet si acá solo se pisa el selector genérico -- por eso antes
+   .leaflet-marker-pane/.leaflet-popup-pane/.leaflet-control seguían en
+   600-1000 pese a la regla existente, y el mapa quedaba por encima del
+   drawer/backdrop mobile al abrir el menú. Todo queda por debajo de 20
+   (header) para que ni siquiera el header quede tapado. */
 .leaflet-pane,
+.leaflet-tile-pane,
+.leaflet-overlay-pane,
+.leaflet-shadow-pane,
+.leaflet-marker-pane,
+.leaflet-tooltip-pane,
+.leaflet-popup-pane,
+.leaflet-map-pane canvas,
+.leaflet-map-pane svg,
 .leaflet-top,
-.leaflet-bottom {
+.leaflet-bottom,
+.leaflet-control,
+.leaflet-zoom-box {
   z-index: 10;
 }
 
 .leaflet-popup {
   z-index: 15;
+}
+
+@media (max-width: 899px) {
+  /* Con el drawer abierto, ningún pane/control de Leaflet debe seguir
+     recibiendo clicks/taps -- sin esto el mapa (que sigue montado detrás
+     del backdrop) capturaba gestos de pan/zoom mientras el usuario
+     interactuaba con el menú. body.drawer-open lo setea AppShell.tsx al
+     abrir/cerrar el drawer. */
+  body.drawer-open .leaflet-container {
+    pointer-events: none;
+  }
 }
 
 /* Nombres/descripciones cargados por el usuario (cuarteles y puntos de

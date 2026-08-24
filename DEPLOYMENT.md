@@ -6286,3 +6286,122 @@ arriba era necesario).
 
 Nada -- sin migraciones nuevas en esta ronda. Redeploy normal del frontend
 (Vercel).
+
+## 45. Estabilización Mapa Regional + limpieza general (2026-08-24)
+
+Pasada de estabilización enfocada en dos bugs reales de código: superposición
+mapa/drawer en mobile, y una revisión de seguridad/limpieza general del
+estado del repo. Sin migraciones nuevas, sin cambios de RLS.
+
+### 45.1 Carga del mapa (CSP / Workbox / tiles)
+
+Revisado por código, sin cambios: CSP en `vercel.json` sigue permitiendo
+`https://*.tile.openstreetmap.org` en `img-src` y `connect-src` (fix de la
+sección 42), y `src/sw.ts` sigue con la ruta dedicada de Workbox para tiles
+registrada antes de la regla genérica de imágenes. El import de
+`leaflet/dist/leaflet.css` en `MapaRegionalPage.tsx` está presente y es el
+origen real del bug de la sección 45.2 (ver abajo) -- no un problema en sí.
+Sin nada que corregir acá.
+
+### 45.2 Bug real: el mapa quedaba por encima del drawer mobile
+
+**Causa exacta.** `styles.css` ya topeaba `.leaflet-pane, .leaflet-top,
+.leaflet-bottom` a `z-index: 10` con un comentario explicando la intención,
+pero `leaflet.css` (node_modules) define el z-index real en selectores MÁS
+ESPECÍFICOS por nombre propio: `.leaflet-tile-pane` (200),
+`.leaflet-marker-pane` (600), `.leaflet-tooltip-pane` (650),
+`.leaflet-popup-pane` (700), `.leaflet-control` (800/1000). Estos selectores
+tienen la MISMA especificidad CSS que `.leaflet-pane` (una sola clase cada
+uno) -- en un empate de especificidad gana el que aparece último en el
+stylesheet, y como `leaflet.css` se importa en `MapaRegionalPage.tsx`
+(chunk separado, cargado después de `styles.css` global), sus reglas
+ganaban. En la práctica: markers, tooltips, popups y los controles de zoom
+del mapa seguían con z-index 600-1000 pese a la regla "genérica" existente,
+muy por encima del backdrop (40) y el sidebar (50) del drawer mobile.
+
+**Fix.** `styles.css` (bloque "Mapa Regional (Leaflet)") ahora topea CADA
+selector propio de `leaflet.css` explícitamente (`.leaflet-tile-pane`,
+`.leaflet-overlay-pane`, `.leaflet-shadow-pane`, `.leaflet-marker-pane`,
+`.leaflet-tooltip-pane`, `.leaflet-popup-pane`, `.leaflet-map-pane canvas`,
+`.leaflet-map-pane svg`, `.leaflet-control`, `.leaflet-zoom-box`), no solo
+el genérico `.leaflet-pane`. Todos quedan en z-index 10 (popups en 15),
+por debajo del header (20).
+
+**Escala de z-index del sistema** (ya existía, documentada más explícita
+ahora): contenido normal (mapa Leaflet: 10-15) < header (20) < drawer
+backdrop mobile (40) < sidebar/drawer (50) < modales (60) < toasts (70).
+
+**Mapa no clickeable con el drawer abierto.** El backdrop
+(`.sidebar-drawer-backdrop.open`) ya cubría visualmente todo `.app-content`
+(`position: fixed; inset: 0`) e interceptaba clicks simples para cerrar el
+drawer, pero un `<MapContainer>` de Leaflet sigue montado detrás y puede
+seguir respondiendo a gestos táctiles (pan/zoom) en algunos navegadores
+mobile aunque esté visualmente tapado. Se agregó una clase `drawer-open` en
+`<body>`, togglada por un `useEffect` en `AppShell.tsx` según el estado del
+drawer, que en mobile (`max-width: 899px`) desactiva `pointer-events` en
+`.leaflet-container` mientras el drawer está abierto.
+
+**Verificado que no rompe:** desktop (el sidebar ahí no es `position:
+fixed`, no compite con nada) y los popups/controles del mapa cuando el
+drawer está cerrado (siguen clickeables, z-index 10/15 alcanza dentro del
+`.card` contenedor acotado del mapa).
+
+### 45.3 Puntos de referencia territorial
+
+Revisados los 5 fixes de la sección 44 (alcance de secretario_regional,
+botón Eliminar oculto para roles sin permiso RLS, filtro de subsede
+resolviendo cuarteles, overflow-wrap en popups) -- todos siguen vigentes,
+sin regresiones. RLS de `map_reference_points` (0084) sin cambios, sigue
+correcta: `informatica_r4` gestiona todo, `secretario_regional` solo dentro
+de su región (con o sin acotar a subsede/cuartel), roles de cuartel e
+invitado sin escritura (solo lectura vía RLS de select).
+
+### 45.4 Cuarteles en el mapa
+
+Revisado sin encontrar bugs: `withCoordinates`/`withoutCoordinates` separan
+correctamente cuarteles con y sin lat/lng (ninguna coordenada se inventa),
+el popup de cuartel muestra código, nombre, subsede, dirección, contacto
+condicional y link a detalle, el filtro por subsede funciona, y el
+formulario de edición de cuartel (`CuartelFormPage.tsx`) sigue validando
+"ambas coordenadas o ninguna" con rango min/max en los inputs.
+
+### 45.5 Limpieza del importador Excel/CSV
+
+Confirmado sin residuos: sin ruta `/importar`, sin componentes/páginas
+importer-named, sin `exceljs`/`xlsx`/`sheetjs` en `package.json` ni
+lockfile, migración `0083` documentada como el drop correcto de las tablas
+de `0082`, y DEPLOYMENT.md (sección 41) documenta la eliminación completa.
+Nada que corregir.
+
+### 45.6 Seguridad del repo público
+
+Revisado el estado de archivos versionados: `.claude/` correctamente en
+`.gitignore` (con comentario explicando por qué), `.env.example` solo tiene
+placeholders, ningún `.env` real trackeado, `service_role`/
+`VAPID_PRIVATE_KEY` en las Edge Functions se leen siempre de
+`Deno.env.get(...)` (nunca hardcodeados), sin emails/UUIDs reales en los
+scripts SQL versionados (`create_admin_user_example.sql` y
+`cleanup_test_data.sql` usan placeholders explícitos), y sin backups/dumps/
+logs/capturas versionados. No se detectó ninguna credencial real en el
+historial -- no se tocó el historial de git (reescribirlo sería una
+decisión manual/destructiva, no aplica acá porque no hubo nada que
+justificara evaluarla).
+
+### 45.7 Logo optimizado
+
+Revisado sin cambios: `logo-escuela.png`/`logo-informatica.png` (400×400px,
+47-61 KB) siguen siendo los únicos logos institucionales, referenciados
+consistentemente en Login/Sidebar/Header/Ajustes/Escuela/CambiarPassword/
+reportBuilder (PDF), sin assets viejos sin uso en `public/logos/` ni
+`public/icons/`.
+
+### 45.8 Diagnóstico semanal
+
+No tocado -- `SystemSettingsSection.tsx`/`systemSettings.ts` no dependen de
+nada modificado en esta ronda (mapa, sidebar, z-index). Sin necesidad de
+tocar cron ni Edge Functions.
+
+### 45.9 Qué correr en Supabase
+
+Nada -- sin migraciones nuevas en esta ronda. Redeploy normal del frontend
+(Vercel).

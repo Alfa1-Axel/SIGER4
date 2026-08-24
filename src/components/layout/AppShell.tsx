@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from './Sidebar'
 import { AppHeader } from './AppHeader'
 import { Footer } from './Footer'
@@ -14,6 +14,17 @@ interface AppShellProps {
 export function AppShell({ title, children }: AppShellProps) {
   const online = useOnlineStatus()
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // body.drawer-open habilita reglas CSS globales (ver styles.css) que
+  // apagan pointer-events en contenido con su propio manejo de gestos
+  // táctiles (ej. pan/zoom de Leaflet en /mapa) mientras el drawer está
+  // abierto -- el backdrop ya lo cubre visualmente e intercepta clicks
+  // simples, pero un mapa Leaflet debajo puede seguir respondiendo a
+  // gestos touch si el navegador no lo trata como "tapado".
+  useEffect(() => {
+    document.body.classList.toggle('drawer-open', drawerOpen)
+    return () => document.body.classList.remove('drawer-open')
+  }, [drawerOpen])
 
   return (
     <div className="app-shell">

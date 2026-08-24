@@ -1,29 +1,32 @@
 import { supabase } from '../supabaseClient'
 
-export async function savePushSubscription(
-  profileId: string,
-  subscription: PushSubscription,
-): Promise<void> {
+// register_my_push_subscription()/unregister_my_push_subscription()
+// (migración 0088) reemplazan el upsert/delete directo desde el cliente:
+// el navegador reutiliza el MISMO endpoint entre sesiones de distintos
+// usuarios en el mismo dispositivo (comportamiento normal del PushManager,
+// no algo que la app controle) -- un upsert/delete directo quedaba
+// bloqueado en silencio por RLS (push_subscriptions_update_own/delete_own,
+// que solo autorizan filas ya propias) cuando el endpoint pertenecía a
+// OTRO perfil, dejándolo huérfano indefinidamente. Estas RPC resuelven el
+// perfil desde current_profile_id() server-side (nunca un parámetro) y
+// reasignan el endpoint sin pasar por esa restricción de RLS.
+export async function savePushSubscription(subscription: PushSubscription): Promise<void> {
   const json = subscription.toJSON()
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
     throw new Error('La suscripción push del navegador no tiene los datos esperados.')
   }
 
-  const { error } = await supabase.from('push_subscriptions').upsert(
-    {
-      profile_id: profileId,
-      endpoint: json.endpoint,
-      p256dh_key: json.keys.p256dh,
-      auth_key: json.keys.auth,
-      user_agent: navigator.userAgent,
-    },
-    { onConflict: 'endpoint' },
-  )
+  const { error } = await supabase.rpc('register_my_push_subscription', {
+    p_endpoint: json.endpoint,
+    p_p256dh_key: json.keys.p256dh,
+    p_auth_key: json.keys.auth,
+    p_user_agent: navigator.userAgent,
+  })
   if (error) throw error
 }
 
 export async function removePushSubscription(endpoint: string): Promise<void> {
-  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+  const { error } = await supabase.rpc('unregister_my_push_subscription', { p_endpoint: endpoint })
   if (error) throw error
 }
 
@@ -35,10 +38,15 @@ export async function removePushSubscription(endpoint: string): Promise<void> {
 // distinto quedó huérfana. En ese caso "activar push" en la UI mostraría
 // como suscripto un dispositivo que en realidad no va a recibir nada. Se usa
 // para diagnóstico real en Ajustes, no solo el estado local del navegador.
-export async function hasActiveSubscriptionRow(endpoint: string): Promise<boolean> {
-  const { data, error } = await supabase.from('push_subscriptions').select('id').eq('endpoint', endpoint).maybeSingle()
-  if (error) return false
-  return Boolean(data)
+//
+// Devuelve tanto si existe la fila como a qué perfil pertenece hoy (no solo
+// un booleano): distingue "activo para mi perfil" de "activo pero atado a
+// otro perfil" (dispositivo compartido/sesión anterior, ver 0088) -- el
+// segundo caso antes se mostraba como "Activo" sin serlo realmente.
+export async function getPushSubscriptionOwner(endpoint: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_push_subscription_owner', { p_endpoint: endpoint })
+  if (error) return null
+  return (data as string | null) ?? null
 }
 
 export interface OwnPushDiagnosticRow {
@@ -68,4 +76,35 @@ export async function fetchOwnPushSubscriptionCount(): Promise<number> {
   const { data, error } = await supabase.rpc('get_own_push_subscription_count')
   if (error) throw error
   return (data as number) ?? 0
+}
+
+export interface PushSubscriptionAdminDiagnosticRow {
+  subscription_id: string
+  profile_id: string
+  profile_full_name: string
+  endpoint_short: string
+  user_agent: string | null
+  updated_at: string
+  created_at: string
+}
+
+// Diagnostico completo de push_subscriptions (migracion 0088) -- SOLO
+// informatica_r4/integrante_informatica, la RPC ya lo exige server-side
+// (where is_informatica_r4() or has_role('integrante_informatica')).
+export async function fetchPushSubscriptionsAdminDiagnostics(): Promise<PushSubscriptionAdminDiagnosticRow[]> {
+  const { data, error } = await supabase.rpc('get_push_subscriptions_admin_diagnostics')
+  if (error) throw error
+  return (data ?? []) as PushSubscriptionAdminDiagnosticRow[]
+}
+
+export interface PushSubscriptionCountByProfileRow {
+  profile_id: string
+  profile_full_name: string
+  subscription_count: number
+}
+
+export async function fetchPushSubscriptionCountsByProfile(): Promise<PushSubscriptionCountByProfileRow[]> {
+  const { data, error } = await supabase.rpc('get_push_subscription_counts_by_profile')
+  if (error) throw error
+  return (data ?? []) as PushSubscriptionCountByProfileRow[]
 }

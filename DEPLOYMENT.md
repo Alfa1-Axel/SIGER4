@@ -6817,3 +6817,168 @@ aplicadas si esta ronda se corre de forma independiente.)
    a otros.
 5. Repetir con alcance de región/subsede/cuartel: confirmar que llega solo
    a los usuarios de ese alcance.
+
+## 49. Fix: suscripción push quedaba atada al perfil anterior en el mismo dispositivo (2026-08-24)
+
+Bug real reportado: al loguear un segundo usuario en el mismo navegador/PWA
+(ej. probar con `jefe_cuerpo_activo` después de haber usado
+`informatica_r4` en ese dispositivo), la notificación de prueba quedaba
+asociada al usuario anterior y el push real no llegaba, con el mensaje "No
+pudimos confirmar el envío del push" pese a que el estado decía "Activo".
+
+### 49.1 Causa exacta
+
+El navegador reutiliza la MISMA `PushSubscription` (mismo `endpoint`) entre
+sesiones de distintos usuarios en el mismo dispositivo -- comportamiento
+normal del `PushManager` del navegador, no algo que la app controle.
+`savePushSubscription()` (`src/lib/api/pushSubscriptions.ts`) hacía un
+upsert DIRECTO desde el cliente:
+
+```
+supabase.from('push_subscriptions').upsert(
+  { profile_id: profileId, endpoint, ... },
+  { onConflict: 'endpoint' }
+)
+```
+
+PostgREST traduce esto en `INSERT ... ON CONFLICT (endpoint) DO UPDATE`. Si
+el endpoint ya existía con `profile_id = A` (usuario anterior) y ahora
+loguea el usuario B, ese `UPDATE` queda sujeto a la policy
+`push_subscriptions_update_own` (`for update using (profile_id =
+current_profile_id())`). El `using` de `UPDATE` se evalúa contra la fila
+**tal como está antes** del cambio -- esa fila tiene `profile_id = A`, pero
+quien ejecuta la query es B, así que la condición es falsa: **RLS rechaza
+el `UPDATE` en silencio, 0 filas afectadas, sin lanzar error** (mismo
+patrón "delete/update bloqueado por RLS no lanza excepción" ya documentado
+en otras rondas de este proyecto). El cliente nunca se enteraba: la UI
+seguía mostrando "Activo" porque la fila con ese `endpoint` SÍ existía
+(solo que seguía perteneciendo a A, no a B).
+
+"Reactivar" tampoco lo arreglaba: intentaba borrar la fila vieja primero,
+sujeto a la misma lógica de RLS sobre una fila ajena (también rechazado en
+silencio), y como el navegador suele devolver la MISMA suscripción
+existente al volver a pedir permiso, el upsert posterior volvía a fallar
+por el mismo motivo. El endpoint quedaba huérfano, atado indefinidamente al
+primer perfil que lo registró en ese dispositivo.
+
+### 49.2 Qué cambió en `push_subscriptions` / migración `0088`
+
+No se tocó el schema de RLS existente (las policies `_own` siguen
+correctas para el caso normal de un usuario gestionando sus propias filas).
+Se agregaron:
+
+- **`register_my_push_subscription(endpoint, p256dh, auth, user_agent)`**
+  (RPC `SECURITY DEFINER`): resuelve `profile_id` desde
+  `current_profile_id()` -- nunca un parámetro que el cliente pueda mandar
+  falseado -- y hace el upsert/reasignación server-side, sin pasar por la
+  restricción de RLS sobre una fila que hoy pertenece a otro perfil. Si el
+  endpoint ya existía atado a otro perfil, lo reasigna al actual.
+- **`unregister_my_push_subscription(endpoint)`**: mismo criterio para el
+  borrado -- por el mismo motivo, un delete "own" fallaría en silencio si
+  el endpoint quedó atado a otro perfil.
+- **`get_push_subscription_owner(endpoint)`**: self-service, devuelve a
+  qué perfil pertenece HOY un endpoint dado (el propio navegador que llama
+  ya conoce ese endpoint vía `pushManager.getSubscription()` -- no es
+  información nueva que se le esté regalando).
+- **`get_push_subscriptions_admin_diagnostics()`** /
+  **`get_push_subscription_counts_by_profile()`**: diagnóstico ampliado
+  (endpoint abreviado -- nunca completo --, perfil vinculado, user_agent,
+  fechas, conteo por usuario) -- SOLO `informatica_r4`/
+  `integrante_informatica`.
+- Columna `push_subscriptions.updated_at` (no existía, la tabla original
+  solo tenía `created_at`) -- distingue una fila recién revinculada de una
+  vieja sin tocar.
+
+### 49.3 Cómo se revincula una suscripción al usuario actual
+
+`usePushNotifications` (`checkStatus`) ahora compara el `endpoint` local
+del navegador contra `get_push_subscription_owner()`: si pertenece a OTRO
+perfil, se revincula automáticamente y en silencio llamando a
+`register_my_push_subscription()` -- el permiso del navegador ya está
+concedido (no hace falta pedirlo de nuevo), así que no hay fricción real en
+re-registrar el mismo endpoint para el perfil actual la primera vez que el
+usuario entra a Ajustes (o hace cualquier chequeo de estado de push) tras
+cambiar de sesión en el mismo dispositivo. Si por algún motivo esa
+revinculación automática falla (error de red, etc.), queda el fallback
+manual: el badge muestra "Suscripción de otra sesión en este dispositivo"
+con un botón "Activar para este usuario" que fuerza la misma revinculación.
+
+No se implementó revinculación al `login` en sí (fuera de Ajustes) ni un
+hook global: `usePushNotifications` solo se usa en `AjustesPage` hoy --
+mover esa lógica a un hook global montado en toda la app sería una
+ampliación arquitectónica mayor, fuera del alcance de este fix de bug. En
+la práctica, la revinculación ocurre la primera vez que el usuario entra a
+Ajustes después de loguearse, lo cual cubre el caso reportado.
+
+### 49.4 Logout / cambio de cuenta: comportamiento elegido
+
+Se implementó la opción recomendada por el propio pedido: **no se borra la
+suscripción del navegador en logout**. Al próximo login (en Ajustes), la
+suscripción se revincula automáticamente al nuevo perfil. Esto evita que
+cerrar sesión "rompa" el push sin querer (ej. si el mismo usuario vuelve a
+loguearse), y resuelve el caso real de un dispositivo compartido/de prueba
+sin pedirle al usuario que recuerde desactivar nada al salir.
+
+### 49.5 Estado "Activo": qué significa ahora
+
+Antes: "existe una fila en `push_subscriptions` con ese endpoint" (sin
+importar de quién). Ahora, `PushDiagnosticStatus` distingue:
+
+- **`active`**: permiso concedido, service worker listo, suscripción del
+  navegador existe, Y la fila en `push_subscriptions` pertenece al perfil
+  actual.
+- **`other_profile`** (nuevo): la suscripción del navegador existe, la fila
+  existe, pero pertenece a OTRO perfil -- estado transitorio en la práctica
+  (se auto-revincula), visible solo si la revinculación automática falla.
+- `stale`/`denied`/`not_subscribed`/`no_worker`: sin cambios de criterio.
+
+### 49.6 "Probar mi notificación" / "Probar push server-side"
+
+Sin cambios de arquitectura (ya usaba `profile.id` de `useAuth()`, que se
+actualiza correctamente en cada cambio de sesión vía
+`onAuthStateChange` -- no había staleness ahí, el bug era enteramente de
+`push_subscriptions`). Se agregó un mensaje específico para usuario común:
+si no hay suscripción activa para el perfil actual (`!push.subscribed`),
+el resultado dice explícitamente "No hay dispositivo push registrado para
+este usuario" en vez del genérico "no pudimos confirmar el envío".
+
+### 49.7 `send-push-system`
+
+Sin cambios en esta ronda (ya resolvía destinatarios solo por `profile_id`
+sin mezclar perfiles, corregido en la sección 48). El fix de esta ronda es
+enteramente sobre cómo se registra/revincula la fila en
+`push_subscriptions`, no sobre cómo `send-push-system` la consume.
+
+### 49.8 Qué correr en Supabase
+
+1. Migración `0088_push_subscription_rebind.sql`.
+
+### 49.9 Edge Functions a redesplegar
+
+Ninguna -- el fix es enteramente RPC de Postgres + frontend.
+
+### 49.10 Checklist manual para Axel (dos usuarios, mismo dispositivo)
+
+**Caso A:**
+1. Login como Informática (`informatica_r4`). Activar push.
+2. Logout. Login como Jefe de Cuerpo Activo, mismo navegador.
+3. Entrar a Ajustes (dispara la revinculación automática) y "Probar mi
+   notificación".
+4. Confirmar: la notificación aparece solo para Jefe, el push llega solo
+   al dispositivo (ahora vinculado a Jefe), Informática no recibe nada.
+
+**Caso B:**
+1. Como Jefe, "Probar mi notificación" de nuevo. Confirmar que sigue
+   funcionando (push log OK, sin mensajes de "otra sesión").
+
+**Caso C:**
+1. Logout, login de nuevo como Informática en el mismo dispositivo.
+2. Entrar a Ajustes: la suscripción debe revincularse a Informática (o
+   mostrar el botón "Activar para este usuario" si la revinculación
+   automática no llegó a completarse).
+3. Confirmar que Jefe ya no recibe push de Informática después de esto.
+
+**Caso D:**
+1. Notificación manual a un usuario específico (desde Nueva Notificación).
+2. Confirmar que llega solo a ese usuario (sin cambios respecto a la
+   sección 48).

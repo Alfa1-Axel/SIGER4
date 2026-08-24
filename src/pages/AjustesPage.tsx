@@ -11,8 +11,17 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
-import { fetchOwnPushDiagnostics, fetchOwnPushSubscriptionCount } from '../lib/api/pushSubscriptions'
-import type { OwnPushDiagnosticRow } from '../lib/api/pushSubscriptions'
+import {
+  fetchOwnPushDiagnostics,
+  fetchOwnPushSubscriptionCount,
+  fetchPushSubscriptionsAdminDiagnostics,
+  fetchPushSubscriptionCountsByProfile,
+} from '../lib/api/pushSubscriptions'
+import type {
+  OwnPushDiagnosticRow,
+  PushSubscriptionAdminDiagnosticRow,
+  PushSubscriptionCountByProfileRow,
+} from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -55,6 +64,8 @@ export function AjustesPage() {
   const [pushDiagnosticsError, setPushDiagnosticsError] = useState<string | null>(null)
   const [pushSubscriptionCount, setPushSubscriptionCount] = useState<number | null>(null)
   const [pushDiagnosticsRows, setPushDiagnosticsRows] = useState<OwnPushDiagnosticRow[]>([])
+  const [pushSubscriptionsAdmin, setPushSubscriptionsAdmin] = useState<PushSubscriptionAdminDiagnosticRow[]>([])
+  const [pushSubscriptionCountsByProfile, setPushSubscriptionCountsByProfile] = useState<PushSubscriptionCountByProfileRow[]>([])
 
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
@@ -174,9 +185,19 @@ export function AjustesPage() {
     setLoadingPushDiagnostics(true)
     setPushDiagnosticsError(null)
     try {
-      const [count, rows] = await Promise.all([fetchOwnPushSubscriptionCount(), fetchOwnPushDiagnostics(10)])
+      // Las funciones "admin" (endpoint/perfil vinculado de TODOS los
+      // usuarios) solo se piden si isAdmin -- la RPC ya las restringe
+      // server-side, pero evitamos la llamada innecesaria para el resto.
+      const [count, rows, adminRows, adminCounts] = await Promise.all([
+        fetchOwnPushSubscriptionCount(),
+        fetchOwnPushDiagnostics(10),
+        isAdmin ? fetchPushSubscriptionsAdminDiagnostics() : Promise.resolve([]),
+        isAdmin ? fetchPushSubscriptionCountsByProfile() : Promise.resolve([]),
+      ])
       setPushSubscriptionCount(count)
       setPushDiagnosticsRows(rows)
+      setPushSubscriptionsAdmin(adminRows)
+      setPushSubscriptionCountsByProfile(adminCounts)
     } catch (err) {
       setPushDiagnosticsError(describeSupabaseError(err, 'No pudimos cargar el diagnóstico de push.'))
     } finally {
@@ -384,6 +405,7 @@ export function AjustesPage() {
                 {push.diagnostic === 'denied' && 'Permiso de notificaciones denegado'}
                 {push.diagnostic === 'not_subscribed' && 'Sin suscripción'}
                 {push.diagnostic === 'stale' && 'Suscripción inválida — necesita reactivarse'}
+                {push.diagnostic === 'other_profile' && 'Suscripción de otra sesión en este dispositivo'}
                 {push.diagnostic === 'no_worker' && 'Service worker no disponible'}
               </div>
             )}
@@ -395,10 +417,16 @@ export function AjustesPage() {
                 para seguir recibiendo avisos.
               </p>
             )}
+            {push.diagnostic === 'other_profile' && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+                Esta suscripción estaba asociada a otra sesión en este mismo dispositivo. Activala de nuevo
+                para vincularla a tu usuario.
+              </p>
+            )}
 
-            {push.diagnostic === 'stale' ? (
-              <button type="button" className="btn btn-primary btn-block" disabled={push.loading} onClick={() => push.reactivate()}>
-                {push.loading ? 'Reactivando…' : 'Reactivar notificaciones push'}
+            {push.diagnostic === 'stale' || push.diagnostic === 'other_profile' ? (
+              <button type="button" className="btn btn-primary btn-block" disabled={push.loading} onClick={() => push.enable()}>
+                {push.loading ? 'Vinculando…' : 'Activar para este usuario'}
               </button>
             ) : push.subscribed ? (
               <>
@@ -468,7 +496,9 @@ export function AjustesPage() {
           >
             {testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0 &&
               'Push enviado a tu(s) dispositivo(s). Si no te llegó, revisá los permisos de notificaciones del navegador/SO.'}
-            {!(testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0) &&
+            {!(testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0) && !push.subscribed &&
+              'No hay dispositivo push registrado para este usuario. Activá las notificaciones push arriba.'}
+            {!(testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0) && push.subscribed &&
               'No pudimos confirmar el envío del push. Probá reactivar las notificaciones push arriba.'}
           </p>
         )}
@@ -534,6 +564,38 @@ export function AjustesPage() {
                               {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
                               {row.push_attempted && row.push_status !== 'error' &&
                                 `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Diagnostico de TODOS los usuarios (endpoint/perfil
+                        vinculado) -- solo informatica_r4/integrante_informatica,
+                        ver seccion 7 del pedido. Sirve para detectar un
+                        endpoint atado a un perfil equivocado (dispositivo
+                        compartido/de prueba, ver migración 0088). */}
+                    <p style={{ fontSize: 12, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>
+                      Suscripciones de todos los usuarios ({pushSubscriptionsAdmin.length})
+                    </p>
+                    {pushSubscriptionCountsByProfile.length > 0 && (
+                      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                        Por usuario: {pushSubscriptionCountsByProfile.map((c) => `${c.profile_full_name} (${c.subscription_count})`).join(', ')}
+                      </p>
+                    )}
+                    {pushSubscriptionsAdmin.length === 0 && (
+                      <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No hay suscripciones registradas.</p>
+                    )}
+                    {pushSubscriptionsAdmin.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {pushSubscriptionsAdmin.map((row) => (
+                          <div key={row.subscription_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
+                            <div style={{ fontWeight: 600 }}>{row.profile_full_name}</div>
+                            <div style={{ color: 'var(--color-text-muted)' }}>
+                              {row.endpoint_short} · {row.user_agent ?? 'sin user agent'}
+                            </div>
+                            <div style={{ color: 'var(--color-text-muted)' }}>
+                              actualizada: {new Date(row.updated_at).toLocaleString('es-AR')}
                             </div>
                           </div>
                         ))}

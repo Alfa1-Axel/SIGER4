@@ -437,12 +437,14 @@ export function AjustesPage() {
           disabled={testingNotification}
           onClick={handleTestNotification}
         >
-          {testingNotification ? 'Probando push server-side…' : 'Probar push server-side'}
+          {testingNotification ? 'Probando…' : isAdmin ? 'Probar push server-side' : 'Probar mi notificación'}
         </button>
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-          Crea una notificación real y espera a que el dispatcher server-side (no el navegador) confirme el envío del push —
-          prueba lo mismo que recibirías con la app cerrada.
-        </p>
+        {isAdmin && (
+          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            Crea una notificación real y espera a que el dispatcher server-side (no el navegador) confirme el envío del push —
+            prueba lo mismo que recibirías con la app cerrada.
+          </p>
+        )}
         {testNotificationResult === 'ok' && (
           <p style={{ fontSize: 12, color: 'var(--color-success)', marginTop: 8 }}>
             Notificación interna creada correctamente. Revisá /notificaciones.
@@ -453,7 +455,24 @@ export function AjustesPage() {
             No pudimos crear la notificación de prueba.
           </p>
         )}
-        {testPushResult && (
+        {/* Usuario comun: solo un resultado binario, sin detalle tecnico
+            (status/error/conteos globales) -- ver seccion 6 del pedido. Solo
+            informatica_r4/integrante_informatica ve el detalle completo. */}
+        {testPushResult && !isAdmin && (
+          <p
+            style={{
+              fontSize: 12,
+              marginTop: 4,
+              color: testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0 ? 'var(--color-success)' : 'var(--color-danger)',
+            }}
+          >
+            {testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0 &&
+              'Push enviado a tu(s) dispositivo(s). Si no te llegó, revisá los permisos de notificaciones del navegador/SO.'}
+            {!(testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0) &&
+              'No pudimos confirmar el envío del push. Probá reactivar las notificaciones push arriba.'}
+          </p>
+        )}
+        {testPushResult && isAdmin && (
           <p
             style={{
               fontSize: 12,
@@ -462,7 +481,7 @@ export function AjustesPage() {
             }}
           >
             {!testPushResult.attempted &&
-              'El servidor todavía no intentó el push (project_url/cron_shared_secret sin configurar, o pg_net no respondió a tiempo). Revisá el diagnóstico de arriba.'}
+              'El servidor todavía no intentó el push (project_url/cron_shared_secret sin configurar, o pg_net no respondió a tiempo). Revisá el diagnóstico de abajo.'}
             {testPushResult.attempted && testPushResult.ok && testPushResult.sent > 0 &&
               `Push server-side enviado a ${testPushResult.sent} de ${testPushResult.recipients} dispositivo(s). Si no te llegó, revisá los permisos de notificaciones del navegador/SO.`}
             {testPushResult.attempted && testPushResult.ok && testPushResult.sent === 0 &&
@@ -476,46 +495,55 @@ export function AjustesPage() {
           </p>
         )}
 
-        <button
-          type="button"
-          className="btn btn-outlined btn-block"
-          style={{ marginTop: 12 }}
-          onClick={handleTogglePushDiagnostics}
-        >
-          {pushDiagnosticsOpen ? 'Ocultar diagnóstico de push' : 'Ver diagnóstico de push'}
-        </button>
-        {pushDiagnosticsOpen && (
-          <div style={{ marginTop: 8 }}>
-            {loadingPushDiagnostics && <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Cargando…</p>}
-            {pushDiagnosticsError && <p className="field-error">{pushDiagnosticsError}</p>}
-            {!loadingPushDiagnostics && !pushDiagnosticsError && (
-              <>
-                <p style={{ fontSize: 12, marginBottom: 8 }}>
-                  Suscripciones activas (todos tus dispositivos):{' '}
-                  <strong>{pushSubscriptionCount ?? 0}</strong>
-                </p>
-                {pushDiagnosticsRows.length === 0 && (
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Todavía no tenés notificaciones propias.</p>
-                )}
-                {pushDiagnosticsRows.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {pushDiagnosticsRows.map((row) => (
-                      <div key={row.notification_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
-                        <div style={{ fontWeight: 600 }}>{row.notification_title}</div>
-                        <div style={{ color: 'var(--color-text-muted)' }}>
-                          {new Date(row.notification_created_at).toLocaleString('es-AR')} —{' '}
-                          {!row.push_attempted && 'push no intentado (¿project_url/cron_shared_secret sin configurar?)'}
-                          {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
-                          {row.push_attempted && row.push_status !== 'error' &&
-                            `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
-                        </div>
+        {/* Diagnostico tecnico completo (push_send_log: estado, errores,
+            conteos por notificacion) -- SOLO informatica_r4/integrante_informatica.
+            Un usuario comun nunca ve esto (seccion 6 del pedido): ni siquiera
+            de sus propias notificaciones, para no exponer vocabulario tecnico
+            (project_url/cron_shared_secret/pg_net) que no puede accionar. */}
+        {isAdmin && (
+          <>
+            <button
+              type="button"
+              className="btn btn-outlined btn-block"
+              style={{ marginTop: 12 }}
+              onClick={handleTogglePushDiagnostics}
+            >
+              {pushDiagnosticsOpen ? 'Ocultar diagnóstico de push' : 'Ver diagnóstico de push'}
+            </button>
+            {pushDiagnosticsOpen && (
+              <div style={{ marginTop: 8 }}>
+                {loadingPushDiagnostics && <p style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>Cargando…</p>}
+                {pushDiagnosticsError && <p className="field-error">{pushDiagnosticsError}</p>}
+                {!loadingPushDiagnostics && !pushDiagnosticsError && (
+                  <>
+                    <p style={{ fontSize: 12, marginBottom: 8 }}>
+                      Suscripciones activas (todos tus dispositivos):{' '}
+                      <strong>{pushSubscriptionCount ?? 0}</strong>
+                    </p>
+                    {pushDiagnosticsRows.length === 0 && (
+                      <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Todavía no tenés notificaciones propias.</p>
+                    )}
+                    {pushDiagnosticsRows.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {pushDiagnosticsRows.map((row) => (
+                          <div key={row.notification_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
+                            <div style={{ fontWeight: 600 }}>{row.notification_title}</div>
+                            <div style={{ color: 'var(--color-text-muted)' }}>
+                              {new Date(row.notification_created_at).toLocaleString('es-AR')} —{' '}
+                              {!row.push_attempted && 'push no intentado (¿project_url/cron_shared_secret sin configurar?)'}
+                              {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
+                              {row.push_attempted && row.push_status !== 'error' &&
+                                `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+                  </>
                 )}
-              </>
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
 

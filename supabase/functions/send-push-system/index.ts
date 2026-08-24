@@ -5,11 +5,26 @@
 // semanal. Desde la migración 0085, un trigger AFTER INSERT ON notifications
 // (dispatch_notification_push()) llama a esta función por cada notificación
 // nueva del sistema, sin importar su origen (trigger de Postgres, cron, o un
-// insert directo del frontend). Antes de 0085 esta función solo aceptaba
-// profileId puntual porque el único llamador era el recordatorio semanal
-// (self-scope); ahora acepta el mismo alcance completo que send-push
-// (profileId, o region/subsede/station), porque cualquier notificación del
-// sistema puede tener cualquiera de esos alcances.
+// insert directo del frontend), mandando SOLO notificationId.
+//
+// Revisión 2026-08 (endurecido): la versión anterior leía el alcance
+// (profileId/regionId/subsedeId/stationId) directo del PAYLOAD que mandaba
+// el llamador -- un guard temprano rechazaba con 400 el caso "los 4 campos
+// vacíos", así que el branch de resolución de destinatarios sin ningún
+// filtro (heredado de send-push, migración 0025) no debería haberse
+// alcanzado nunca en la práctica, pero el diseño era frágil: dependía
+// enteramente de que ese guard nunca cambiara, y confiaba en lo que el
+// llamador (el trigger SQL) le pasara en vez de la fila real. Bug real
+// confirmado en el camino: notificaciones de calendar_events tipo
+// escuela/capacitación (sin ningún alcance por diseño, ver 0087) hacían que
+// esta función devolviera 400 y el push real nunca salía para ellas.
+// Ahora esta función IGNORA cualquier alcance que le llegue por payload:
+// lee la fila real de notifications por notificationId (con service_role,
+// la única fuente de verdad) y resuelve el alcance desde ahí, con
+// prioridad estricta profile_id > station_id > subsede_id > region_id
+// (nunca más de un nivel a la vez, nunca "sin alcance = todos" como
+// fallback) -- ver migración 0087 para el detalle completo y el
+// endurecimiento del constraint de notifications.
 //
 // Seguridad:
 // - NO acepta JWT de usuario. En su lugar exige el header
@@ -19,7 +34,7 @@
 //   autorización de alcance estilo can_send_push_scope() (como sí tiene
 //   send-push): quien puede invocar esto ya demostró conocer el secreto
 //   server-side, no es un usuario con sesión que podría intentar abusar del
-//   alcance.
+//   alcance -- y de cualquier forma el alcance ya no se confía al payload.
 // - Mismo mecanismo de deduplicación por notification_id que send-push
 //   (índice único parcial en push_send_log), así que si pg_cron/pg_net
 //   reintenta la llamada (timeout, error transitorio) nunca se manda el
@@ -47,15 +62,20 @@ const CORS_HEADERS = {
 }
 
 interface PushTriggerBody {
-  title: string
-  body?: string
-  url?: string
-  tag?: string
-  profileId?: string | null
-  regionId?: string | null
-  subsedeId?: string | null
-  stationId?: string | null
+  // El unico dato que hace falta del llamador: todo lo demas (title/body/
+  // alcance) se lee de la fila real de notifications, nunca del payload.
   notificationId: string
+}
+
+interface NotificationRow {
+  id: string
+  title: string
+  body: string | null
+  type: string
+  profile_id: string | null
+  region_id: string | null
+  subsede_id: string | null
+  station_id: string | null
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200): Response {
@@ -87,13 +107,20 @@ Deno.serve(async (req: Request) => {
   } catch {
     return jsonResponse({ sent: 0, error: 'Solicitud inválida.' }, 400)
   }
-  if (!body.title) return jsonResponse({ sent: 0, error: 'Falta el título de la notificación.' }, 400)
-  if (!body.profileId && !body.regionId && !body.subsedeId && !body.stationId) {
-    return jsonResponse({ sent: 0, error: 'Falta el alcance destino (profileId/regionId/subsedeId/stationId).' }, 400)
-  }
   if (!body.notificationId) return jsonResponse({ sent: 0, error: 'Falta notificationId.' }, 400)
 
   const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+  // Fuente de verdad del alcance: la fila REAL en notifications, nunca lo
+  // que haya mandado el llamador -- ver comentario de cabecera (bug de
+  // broadcast corregido).
+  const { data: notification, error: notificationError } = await supabaseAdmin
+    .from('notifications')
+    .select('id, title, body, type, profile_id, region_id, subsede_id, station_id')
+    .eq('id', body.notificationId)
+    .maybeSingle<NotificationRow>()
+  if (notificationError) return jsonResponse({ sent: 0, error: notificationError.message }, 500)
+  if (!notification) return jsonResponse({ sent: 0, error: 'La notificación no existe.' }, 404)
 
   // Deduplicacion atomica: mismo mecanismo que send-push (indice unico
   // parcial en push_send_log sobre notification_id where status='ok').
@@ -101,11 +128,11 @@ Deno.serve(async (req: Request) => {
     .from('push_send_log')
     .insert({
       actor_profile_id: null,
-      notification_id: body.notificationId,
-      profile_id: body.profileId ?? null,
-      region_id: body.regionId ?? null,
-      subsede_id: body.subsedeId ?? null,
-      station_id: body.stationId ?? null,
+      notification_id: notification.id,
+      profile_id: notification.profile_id,
+      region_id: notification.region_id,
+      subsede_id: notification.subsede_id,
+      station_id: notification.station_id,
       status: 'ok',
     })
     .select('id')
@@ -118,27 +145,59 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ sent: 0, error: claimError.message }, 500)
   }
 
-  // Resuelve los profile_id destino segun el alcance recibido -- mismo
-  // criterio que send-push: profileId puntual, o region/subsede/station
-  // resolviendo contra profiles/stations.
+  // Resuelve destinatarios con PRIORIDAD ESTRICTA, un solo nivel a la vez,
+  // nunca "sin alcance = todos": profile_id puntual gana sobre cualquier
+  // territorio (aunque la fila tuviera ambos seteados a la vez -- el
+  // constraint de 0032 no lo prohibía antes de esta ronda); si no hay
+  // profile_id, station_id > subsede_id > region_id, del más específico al
+  // menos específico; si ninguno de los cuatro está seteado, NO se envía
+  // nada (una notificación "sin alcance" es una referencia general visible
+  // en la campanita, pero eso nunca implica push masivo automático).
   let targetProfileIds: string[] = []
-  if (body.profileId) {
-    targetProfileIds = [body.profileId]
-  } else {
-    let query = supabaseAdmin.from('profiles').select('id')
-    if (body.stationId) query = query.eq('station_id', body.stationId)
-    else if (body.regionId) query = query.eq('region_id', body.regionId)
-    if (body.subsedeId) {
-      const { data: stations } = await supabaseAdmin.from('stations').select('id').eq('subsede_id', body.subsedeId)
-      const stationIds = (stations ?? []).map((s: { id: string }) => s.id)
-      query = query.in('station_id', stationIds.length ? stationIds : ['00000000-0000-0000-0000-000000000000'])
-    }
-    const { data: profiles, error: profilesError } = await query
+  if (notification.profile_id) {
+    targetProfileIds = [notification.profile_id]
+  } else if (notification.station_id) {
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('station_id', notification.station_id)
     if (profilesError) {
       await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
       return jsonResponse({ sent: 0, error: profilesError.message }, 500)
     }
     targetProfileIds = (profiles ?? []).map((p: { id: string }) => p.id)
+  } else if (notification.subsede_id) {
+    const { data: stations } = await supabaseAdmin.from('stations').select('id').eq('subsede_id', notification.subsede_id)
+    const stationIds = (stations ?? []).map((s: { id: string }) => s.id)
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .in('station_id', stationIds.length ? stationIds : ['00000000-0000-0000-0000-000000000000'])
+    if (profilesError) {
+      await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
+      return jsonResponse({ sent: 0, error: profilesError.message }, 500)
+    }
+    targetProfileIds = (profiles ?? []).map((p: { id: string }) => p.id)
+  } else if (notification.region_id) {
+    const { data: profiles, error: profilesError } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('region_id', notification.region_id)
+    if (profilesError) {
+      await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
+      return jsonResponse({ sent: 0, error: profilesError.message }, 500)
+    }
+    targetProfileIds = (profiles ?? []).map((p: { id: string }) => p.id)
+  } else {
+    // Notificación sin ningún alcance: nunca se interpreta como broadcast.
+    // Se registra con error_message explícito para que el diagnóstico de
+    // Ajustes distinga esto de "no había suscripciones" (recipients_count 0
+    // por falta de suscripciones) o de un error real.
+    await supabaseAdmin
+      .from('push_send_log')
+      .update({ status: 'error', error_message: 'Notificación sin alcance push válido (sin profile_id/station_id/subsede_id/region_id) -- no se envía broadcast.', recipients_count: 0, sent_count: 0 })
+      .eq('id', logRow.id)
+    return jsonResponse({ sent: 0, error: 'Notificación sin alcance push válido.' })
   }
 
   if (!targetProfileIds.length) {
@@ -162,10 +221,10 @@ Deno.serve(async (req: Request) => {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 
   const payload = JSON.stringify({
-    title: body.title,
-    body: body.body ?? '',
-    url: body.url ?? '/notificaciones',
-    tag: body.tag,
+    title: notification.title,
+    body: notification.body ?? '',
+    url: '/notificaciones',
+    tag: notification.type,
   })
 
   let sent = 0

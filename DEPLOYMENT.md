@@ -6679,3 +6679,141 @@ documentados en la sección "Notificaciones push" más arriba):
 - `send-push` (JWT-based) queda sin usar activamente; si en el futuro se
   quiere un "enviar aviso ahora" manual desde la UI, ya está la
   infraestructura lista.
+
+## 48. Endurecimiento de destinatarios push + diagnóstico restringido (2026-08-24)
+
+Auditoría de seguridad sobre el dispatcher server-side de la sección 47,
+pedida tras sospechar que una notificación dirigida a un usuario específico
+podía llegar a todos. Resultado de la auditoría, qué se corrigió, y qué NO
+se pudo confirmar como bug real (para no reportar algo que el código no
+respalda).
+
+### 48.1 Qué se auditó y qué se encontró
+
+Revisé el trigger `dispatch_notification_push()` (0085), el payload que
+manda a `send-push-system`, y la resolución de destinatarios de esa Edge
+Function. La versión de la sección 47 ya tenía un guard temprano que
+rechazaba con `400` un payload sin `profileId`/`regionId`/`subsedeId`/
+`stationId` -- por eso, **por código, no encontré evidencia de que una
+notificación con `profile_id` real pudiera terminar mandando push a todos
+los perfiles**: `if (body.profileId) targetProfileIds = [body.profileId]`
+ya devolvía exactamente un destinatario, sin excepción.
+
+Lo que sí encontré y confirmé como bug real: `notify_calendar_event_created()`/
+`send_calendar_event_reminders()` (migración 0051) insertan notificaciones
+para eventos de tipo `escuela`/`capacitacion` con `region_id`/`subsede_id`/
+`station_id` los TRES en `null` a propósito (diseño original: "Escuela es
+regional-wide", pero sin asignarle una región real como sí hace `courses`).
+Con el guard existente, esas notificaciones hacían que `send-push-system`
+devolviera `400 Falta el alcance destino` -- **el push real nunca salía
+para esos eventos** (la notificación interna se creaba y se veía en la
+campanita igual). Ese es probablemente el origen real de lo que se percibió
+como "push que no llega bien a destino".
+
+También confirmé un diseño frágil, aunque no explotado en el flujo actual:
+`send-push-system` confiaba en el alcance que le pasaba el PAYLOAD del
+llamador (el trigger SQL), no en la fila real de `notifications` -- si
+alguna vez se tocaba ese guard, o se agregaba un llamador nuevo sin
+replicarlo, el broadcast sin filtro (heredado de `send-push`, migración
+0025, nunca usado en la práctica porque ahí el guard es aún más estricto)
+volvía a quedar alcanzable. Se corrigió de raíz, no solo el síntoma.
+
+### 48.2 Prioridad de alcance (cómo quedó)
+
+`send-push-system` ya NO recibe ni confía en ningún campo de alcance del
+payload -- solo recibe `notificationId`, relee la fila real de
+`notifications` con `service_role`, y resuelve destinatarios con prioridad
+estricta y excluyente:
+
+1. `profile_id` presente → solo ese perfil, ignora cualquier territorio.
+2. si no, `station_id` presente → perfiles de ese cuartel.
+3. si no, `subsede_id` presente → perfiles de los cuarteles de esa subsede.
+4. si no, `region_id` presente → perfiles de esa región.
+5. si ninguno está presente → **no se envía nada**, se registra en
+   `push_send_log` con `status='error'` y un mensaje explícito ("sin
+   alcance push válido"), nunca un fallback a "todos".
+
+El trigger `dispatch_notification_push()` (0085) se simplificó: manda
+ÚNICAMENTE `notificationId` en el payload (antes mandaba también título,
+cuerpo y los 4 campos de alcance, que ya no se usan ni se confían).
+
+### 48.3 Notificación sin alcance: qué pasa ahora
+
+Nunca dispara broadcast. La fila interna se crea igual (sigue visible en
+la campanita para quien pueda verla por RLS), pero `send-push-system`
+responde con error y lo deja registrado -- distinguible en el diagnóstico
+de "no había suscripciones" (otro tipo de fila, `recipients_count=0` sin
+error) o de un error real de infraestructura.
+
+### 48.4 Constraint de `notifications` (migración `0087`)
+
+`notifications_scope_not_ambiguous` (0032) se endureció: antes solo exigía
+"a lo sumo un territorio cuando `profile_id` es null" -- permitía tanto
+los 4 campos en `null` como `profile_id` combinado con territorio. Ahora
+exige **exactamente una** fuente de alcance (`profile_id` XOR un solo
+territorial), nunca cero, nunca ambigua. Se corrigieron antes de endurecer
+el constraint:
+
+- Filas históricas sin ningún alcance (si las hubiera): `region_id` =
+  Regional 4 (única región del sistema hoy). Nunca se borra ninguna
+  notificación existente.
+- `notify_calendar_event_created()`/`send_calendar_event_reminders()`: los
+  eventos de Escuela/capacitación ahora asignan `region_id` = la región del
+  perfil que creó el evento (o Regional 4 si no se puede resolver) en vez
+  de dejar la notificación sin alcance.
+
+No se agregó una feature de "broadcast global real": si en el futuro hace
+falta una notificación explícitamente "para todos, sin excepción", el
+criterio documentado es una columna nueva (`is_global boolean`) con su
+propia autorización, no una fila sin alcance.
+
+### 48.5 Diagnóstico de push en Ajustes: quién ve qué
+
+- **Usuario común**: estado simple de push (activo/inactivo/denegado,
+  igual que antes), botón **"Probar mi notificación"** con resultado
+  binario ("llegó" / "no pudimos confirmar el envío, probá reactivar"),
+  sin ningún detalle técnico. NO ve el panel de diagnóstico completo.
+- **`informatica_r4`/`integrante_informatica`** (`isAdmin`): botón **"Probar
+  push server-side"** con detalle técnico (cantidad enviada/destinatarios,
+  error crudo si falló), y el panel **"Ver diagnóstico de push"**
+  (suscripciones activas, últimas notificaciones propias con su resultado).
+
+Las RPCs subyacentes (`get_own_push_diagnostics`/
+`get_own_push_subscription_count`, migración 0086) ya estaban acotadas a
+`current_profile_id()` -- ningún usuario podía ver diagnóstico de otro. El
+cambio de esta ronda es de UI: ocultar el panel técnico completo a quien no
+sea informática, no un cambio de qué datos expone el backend (que ya eran
+correctos).
+
+`system_settings` (`project_url`/`cron_shared_secret`) sigue visible solo
+para `informatica_r4` (ni siquiera `integrante_informatica`, sin cambios --
+ya estaba así desde 0074).
+
+### 48.6 Qué correr en Supabase
+
+1. Migración `0087_notifications_scope_strict.sql`.
+
+(Las migraciones `0085`/`0086` de la sección 47 también deben estar
+aplicadas si esta ronda se corre de forma independiente.)
+
+### 48.7 Edge Functions a redesplegar
+
+- `send-push-system` (cambio de código real: ya no confía en el payload):
+  `supabase functions deploy send-push-system`.
+
+### 48.8 Checklist manual para Axel
+
+1. Con un usuario común: Ajustes → confirmar que el botón dice "Probar mi
+   notificación" (no "server-side") y que NO aparece ningún botón/panel de
+   diagnóstico técnico.
+2. Con `informatica_r4`: confirmar que sigue viendo "Probar push
+   server-side" + "Ver diagnóstico de push" con el detalle completo.
+3. Crear/editar un evento de Escuela o Capacitación con "notificar al
+   crear" activado: confirmar que ahora SÍ llega push (antes de esta
+   ronda, la notificación interna se creaba pero el push real fallaba en
+   silencio).
+4. Crear una notificación manual dirigida a un usuario específico (desde
+   Nueva Notificación): confirmar que el push llega SOLO a ese usuario, no
+   a otros.
+5. Repetir con alcance de región/subsede/cuartel: confirmar que llega solo
+   a los usuarios de ese alcance.

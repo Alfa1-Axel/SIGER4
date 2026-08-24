@@ -57,7 +57,7 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 100,
+        zIndex: 10000,
         padding: 24,
       }}
     >

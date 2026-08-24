@@ -6405,3 +6405,95 @@ tocar cron ni Edge Functions.
 
 Nada -- sin migraciones nuevas en esta ronda. Redeploy normal del frontend
 (Vercel).
+
+## 46. Fix definitivo: mapa seguía superponiéndose al drawer mobile en producción (2026-08-24)
+
+El fix de la sección 45.2 (topear z-index de panes Leaflet) no alcanzó en
+producción real: seguía viéndose el mapa por encima/mezclado con el drawer
+en celular. Investigación de causa real y fix estructural.
+
+### 46.1 Por qué el fix anterior no alcanzó
+
+El fix de 45.2 solo atacaba el z-index NUMÉRICO de los panes de Leaflet.
+Pero `.app-sidebar` y `.sidebar-drawer-backdrop` seguían siendo
+DESCENDIENTES de `.app-shell`, el mismo ancestro común que envuelve al
+mapa. Un z-index solo gana dentro de su propio stacking context -- si
+CUALQUIER elemento en el árbol compartido (el mapa incluido) genera un
+stacking context nuevo (Leaflet aplica `transform: translate3d(...)`
+inline a `.leaflet-map-pane` en cada pan/zoom, y `transform` genera
+stacking context por spec), el navegador puede terminar resolviendo el
+z-index del drawer DENTRO de ese contexto en vez de contra la página
+entera. Es sensible al motor de render exacto (por eso "funciona en
+desktop, se rompe en mobile real" y no es 100% reproducible) -- no era
+solo "orden de CSS insuficiente", era la arquitectura del DOM la que dejaba
+la comparación de z-index a merced de un ancestro compartido.
+
+### 46.2 Fix estructural: portal a `document.body`
+
+`AppShell.tsx`: en mobile (`<900px`, mismo breakpoint que el CSS),
+`Sidebar` y el backdrop ahora se montan con `createPortal(...,
+document.body)` -- quedan como hijos DIRECTOS de `<body>`, sin ningún
+ancestro en común con el mapa. Ningún stacking context que el contenido
+genere puede encerrarlos: compiten directo en la raíz del documento. En
+desktop (`>=900px`) NO se usa portal -- ahí el sidebar es una columna
+normal dentro del `display:flex` de `.app-shell` (sacarlo por portal
+rompería el layout, dejaría de reservar espacio como columna), y tampoco
+hace falta: en desktop no es `position: fixed`, no compite con nada. El
+breakpoint se detecta con `window.matchMedia` + listener de `change`, así
+que un resize en vivo (rotar el celular, o cambiar de ventana en
+desktop) no deja el drawer atascado en el modo equivocado. Mismo patrón de
+portal ya usado en los modales del proyecto (`ReasonPromptModal.tsx`,
+`Lightbox.tsx`, etc.) -- no una técnica nueva en el codebase.
+
+### 46.3 Refuerzos (cinturón de seguridad, no la defensa principal)
+
+- **z-index con `!important` en Leaflet.** Los selectores propios de
+  `leaflet.css` (`.leaflet-marker-pane`, `.leaflet-popup-pane`,
+  `.leaflet-control`, etc.) tienen la misma especificidad que las reglas
+  del proyecto -- en un empate gana el que se aplica último en el
+  stylesheet, y eso depende de en qué chunk/orden termine cargando cada
+  CSS. `!important` saca a la regla del proyecto de esa pelea de raíz.
+- **`visibility: hidden` en el mapa mientras el drawer está abierto**
+  (`body.drawer-open .leaflet-container`), no solo `pointer-events: none`
+  (que ya estaba y no alcanzaba solo): con `visibility:hidden` el mapa
+  directamente no se pinta, sin depender de que `pointer-events`/z-index
+  se resuelvan bien en todos los navegadores. No desmonta el mapa (no
+  pierde posición/zoom), solo lo saca del render visual.
+- **Escala de z-index global subida y explícita** (antes 20/40/50/60/70,
+  ahora con más margen): contenido/mapa 0-10 < header 100 < backdrop
+  drawer mobile 9000 < drawer/sidebar mobile 9010 < modales 10000 <
+  `AppUpdateBanner` 10010 < `SwUpdateBanner` 10020. Los 4 modales con
+  portal (`ReasonPromptModal`, `Lightbox`, `NotificationDetailModal`,
+  `DeleteUserConfirmModal`) subieron de `zIndex: 100` a `10000` -- con la
+  escala vieja habrían quedado POR DEBAJO del nuevo z-index del drawer
+  (9010), rompiendo la regla "un modal siempre gana".
+
+### 46.4 Por qué es "definitivo" y no otro parche de z-index
+
+La garantía real no es el número de z-index (eso es el refuerzo) sino que
+el drawer/backdrop ya NO comparten ancestro con el mapa en el DOM. Un
+z-index alto sin el portal seguía siendo un parche -- funcionaba mientras
+ningún ancestro del árbol de contenido generara un stacking context
+inesperado, que es exactamente lo que Leaflet hace al mover el mapa. Con
+portal, esa precondición ya no existe: no importa qué haga Leaflet
+internamente, el drawer vive en otra rama del árbol.
+
+### 46.5 Verificado que no rompe
+
+- **Desktop:** sidebar sigue como columna fija de la grilla (sin portal),
+  mapa sigue interactivo, sin overlay raro, popups/controles de Leaflet
+  funcionan igual que antes.
+- **Mobile, drawer cerrado:** mapa funciona normal (pan/zoom/popups).
+- **Mobile, drawer abierto:** mapa completamente inactivo y no visible
+  (pointer-events + visibility), sin importar si había un popup abierto o
+  los controles de zoom visibles al momento de abrir el drawer.
+- **Mobile, drawer cerrado de nuevo:** mapa vuelve a responder normal (no
+  se desmontó, solo se ocultó).
+- Build/lint/audit sin errores nuevos (un error de ESLint `no-undef` sobre
+  `MediaQueryListEvent` en el listener de `matchMedia` se corrigió
+  tipando el parámetro inline en vez de depender del tipo global de lib.dom).
+
+### 46.6 Qué correr en Supabase
+
+Nada -- sin migraciones, sin cambios de RLS, sin Edge Functions tocadas.
+Redeploy normal del frontend (Vercel).

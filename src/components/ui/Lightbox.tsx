@@ -34,7 +34,7 @@ export function Lightbox({ src, alt, onClose }: LightboxProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 100,
+        zIndex: 10000,
         padding: 24,
       }}
     >

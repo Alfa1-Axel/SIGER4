@@ -200,6 +200,14 @@ img {
    fuera de pantalla con translateX, se desliza al agregar .open -- mismo
    criterio de scroll interno aplica ahi tambien, sin cambios adicionales
    porque ya es el mismo <aside>. */
+/* Escala de z-index del sistema (ver también el bloque "Mapa Regional
+   (Leaflet)" más abajo): contenido normal / mapa 0-10 < header 100 <
+   backdrop del drawer mobile 9000 < drawer/sidebar mobile 9010 < modales
+   10000 < banners de sistema encima de un modal 10010. En desktop
+   .app-sidebar NO es position:fixed (columna normal de la grilla), así que
+   su z-index no compite con nada; en mobile pasa a fixed + drawer, ver
+   media query más abajo, donde SÍ importa que gane a cualquier contenido
+   con position fija de la página (el mapa Leaflet en particular). */
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
@@ -210,7 +218,6 @@ img {
   height: 100vh;
   padding: 20px 16px;
   transition: transform 0.2s ease;
-  z-index: 50;
 }
 
 /* Columna principal: header y footer quedan fijos dentro de esta columna
@@ -238,7 +245,8 @@ img {
   padding: 0 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-card);
-  z-index: 20;
+  position: relative;
+  z-index: 100;
 }
 
 /* Unico contenedor con scroll propio de la columna principal -- el header
@@ -264,11 +272,24 @@ img {
 }
 
 @media (max-width: 899px) {
+  /* .app-sidebar y .sidebar-drawer-backdrop se renderizan con
+     createPortal(..., document.body) (ver Sidebar.tsx/AppShell.tsx) --
+     quedan como hijos directos de <body>, fuera del árbol de .app-shell/
+     .app-content, así que ningún ancestro de "contenido normal" (el mapa
+     Leaflet incluido) puede encerrarlos en un stacking context propio que
+     los deje por debajo pese al z-index. Esto es lo que corrige de raíz
+     el bug: antes, aunque el z-index numérico fuera mayor, un ancestro
+     con position/transform en el árbol del contenido podía crear un
+     stacking context que capturaba al backdrop/drawer -- con portal ya no
+     hay ancestro compartido con el contenido, compiten directo en la raíz
+     del documento. z-index igual se deja alto (9000/9010) como refuerzo,
+     no como única defensa. */
   .app-sidebar {
     position: fixed;
     top: 0;
     left: 0;
     transform: translateX(-100%);
+    z-index: 9010;
   }
   .app-sidebar.open {
     transform: translateX(0);
@@ -279,10 +300,22 @@ img {
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.5);
-    z-index: 40;
+    z-index: 9000;
   }
   .hamburger-button {
     display: inline-flex;
+  }
+}
+
+@media (min-width: 900px) {
+  /* En desktop el sidebar es una columna normal de la grilla (no fixed),
+     así que necesita volver a tener un z-index bajo y explícito: sin
+     esto, en el portal a document.body (ver arriba) quedaría compitiendo
+     en el stacking context raíz igual que en mobile, por encima de
+     modales (10000) si alguno decidiera abrirse con un z-index menor. */
+  .app-sidebar {
+    position: relative;
+    z-index: 10;
   }
 }
 
@@ -1133,16 +1166,17 @@ a.card-solid:focus-visible {
 
 /* ---------- Novedades del sistema (AppUpdateBanner) ---------- */
 
-/* z-index por encima de todo lo demás en el sistema (sidebar 50, backdrop
-   del drawer mobile 40, header 20) — es un modal real, tiene que ganarle a
-   cualquier elemento con posición fija de cualquier pantalla. No bloquea
-   scroll del body a propósito (ver AppUpdateBanner.tsx: "no debe bloquear
-   el uso del sistema" es un requisito explícito, aunque visualmente se vea
-   como un modal centrado). */
+/* z-index por encima de todo lo demás en el sistema (ver escala junto a
+   .app-sidebar más arriba: mapa 0-10, header 100, drawer 9000-9010,
+   modales 10000) — es un modal real, tiene que ganarle a cualquier
+   elemento con posición fija de cualquier pantalla, drawer mobile
+   incluido. No bloquea scroll del body a propósito (ver AppUpdateBanner.tsx:
+   "no debe bloquear el uso del sistema" es un requisito explícito, aunque
+   visualmente se vea como un modal centrado). */
 .app-update-overlay {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 10010;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1248,7 +1282,7 @@ a.card-solid:focus-visible {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 70;
+  z-index: 10020;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -1282,21 +1316,18 @@ a.card-solid:focus-visible {
 }
 
 /* ---------- Mapa Regional (Leaflet) ----------
-   Leaflet usa z-index internos altos (200-1000, ver leaflet.css) para sus
-   paneles de tiles/markers/popups y controles, pensados para ocupar toda
-   la pantalla -- acá el mapa vive dentro de un .card acotado (no pantalla
-   completa), así que se topean para que nunca compitan con el header
-   (z-index 20), el drawer mobile (backdrop 40, sidebar 50) ni modales/
-   toasts (60-70). Cubre CADA selector propio de leaflet.css
-   (.leaflet-tile-pane, .leaflet-marker-pane, .leaflet-popup-pane, etc.),
-   no solo ".leaflet-pane" genérico: como leaflet.css se importa DESPUÉS de
-   este archivo (import en MapaRegionalPage.tsx, chunk separado), sus
-   selectores de igual especificidad (una sola clase) ganan por orden en
-   el stylesheet si acá solo se pisa el selector genérico -- por eso antes
-   .leaflet-marker-pane/.leaflet-popup-pane/.leaflet-control seguían en
-   600-1000 pese a la regla existente, y el mapa quedaba por encima del
-   drawer/backdrop mobile al abrir el menú. Todo queda por debajo de 20
-   (header) para que ni siquiera el header quede tapado. */
+   Leaflet crea panes/controles con z-index propios (200-1000, ver
+   leaflet.css) pensados para ocupar toda la pantalla; el drawer mobile
+   tiene que ganarles siempre. Acá el mapa vive dentro de un .card acotado
+   (no pantalla completa), así que se topean con !important: sin esto,
+   leaflet.css (importado en MapaRegionalPage.tsx, un chunk que Vite puede
+   cargar/aplicar después de este archivo global) define z-index en
+   selectores de la MISMA especificidad (una sola clase cada uno --
+   .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-control, etc.), y en
+   un empate de especificidad gana el que se aplica último, no importa cuál
+   "debería" ganar por intención. !important saca a este bloque de esa
+   pelea de raíz -- es la única forma de garantizar el orden sin depender
+   de en qué chunk terminó cada regla. */
 .leaflet-pane,
 .leaflet-tile-pane,
 .leaflet-overlay-pane,
@@ -1310,21 +1341,27 @@ a.card-solid:focus-visible {
 .leaflet-bottom,
 .leaflet-control,
 .leaflet-zoom-box {
-  z-index: 10;
+  z-index: 10 !important;
 }
 
 .leaflet-popup {
-  z-index: 15;
+  z-index: 15 !important;
 }
 
 @media (max-width: 899px) {
-  /* Con el drawer abierto, ningún pane/control de Leaflet debe seguir
-     recibiendo clicks/taps -- sin esto el mapa (que sigue montado detrás
-     del backdrop) capturaba gestos de pan/zoom mientras el usuario
-     interactuaba con el menú. body.drawer-open lo setea AppShell.tsx al
-     abrir/cerrar el drawer. */
+  /* Cinturón de seguridad además del portal del drawer (ver Sidebar.tsx/
+     AppShell.tsx): con el drawer abierto, el mapa completo se apaga
+     visual y funcionalmente -- no solo pointer-events (que no alcanzaba
+     por sí solo en producción: no evita que el pane siga pintándose por
+     encima si algún ancestro genera un stacking context inesperado).
+     visibility:hidden saca el mapa del árbol de render visual sin
+     desmontarlo (no pierde estado/posición) y además corta cualquier
+     interacción, sin depender de que pointer-events alcance en todos los
+     navegadores. body.drawer-open lo setea AppShell.tsx al abrir/cerrar
+     el drawer. */
   body.drawer-open .leaflet-container {
-    pointer-events: none;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 }
 

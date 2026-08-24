@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
-import { fetchNotificationsForProfile } from '../../lib/api/notifications'
+import { fetchUnreadNotificationCount } from '../../lib/api/notifications'
 
 interface AppHeaderProps {
   title: string
@@ -19,10 +19,9 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   useEffect(() => {
     if (!profile) return
     let active = true
-    fetchNotificationsForProfile(profile.id)
-      .then((data) => {
-        if (!active) return
-        setUnreadCount(data.filter((n) => !n.is_read).length)
+    fetchUnreadNotificationCount()
+      .then((count) => {
+        if (active) setUnreadCount(count)
       })
       .catch(() => {
         // Si falla la carga del contador, simplemente no se muestra el badge.

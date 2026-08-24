@@ -108,3 +108,25 @@ export async function fetchPushSubscriptionCountsByProfile(): Promise<PushSubscr
   if (error) throw error
   return (data ?? []) as PushSubscriptionCountByProfileRow[]
 }
+
+export interface PushInfraDiagnostics {
+  project_url_configured: boolean
+  cron_shared_secret_configured: boolean
+  pg_net_installed: boolean
+  recent_requests_count: number
+  recent_responses_count: number | null
+  last_response_status_code: number | null
+  last_response_error: string | null
+  last_response_at: string | null
+}
+
+// Diagnostico consolidado de infraestructura de push (migracion 0089) --
+// SOLO informatica_r4 (is_super_admin(), la RPC ya lo exige server-side).
+// Distingue "falta config" de "pg_net no instalado" de "se llamó pero el
+// servidor respondió con error" -- las tres causas de "push no intentado"
+// que antes eran indistinguibles desde el diagnóstico por-notificación.
+export async function fetchPushInfraDiagnostics(): Promise<PushInfraDiagnostics> {
+  const { data, error } = await supabase.rpc('get_push_infra_diagnostics').single()
+  if (error) throw error
+  return data as PushInfraDiagnostics
+}

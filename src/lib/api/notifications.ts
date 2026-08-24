@@ -3,14 +3,38 @@ import type { Notification, NotificationType } from '../../types/database'
 
 // RLS ya restringe el resultado a lo que el perfil actual puede ver (propias,
 // o masivas de su region/subsede/cuartel); no hace falta filtrar en el cliente.
-export async function fetchNotificationsForProfile(_profileId: string): Promise<Notification[]> {
+//
+// limit sube de 20 (valor original, pensado solo para el dropdown de la
+// campanita) a 100 por defecto: /notificaciones (NotificacionesPage) usa
+// esta misma función para el LISTADO COMPLETO, y con 20 una notificación
+// propia reciente podía quedar fuera de la ventana visible si el sistema
+// generó 20+ notificaciones automáticas más nuevas en el medio (cursos,
+// documentos, cambios de estado, recordatorios) -- bug real reportado:
+// "algunas notificaciones ni siquiera aparecen en la app". El contador de
+// no leídas del header YA NO usa esta función (ver fetchUnreadNotificationCount
+// más abajo) -- antes también estaba limitado a las mismas 20 filas, así
+// que subestimaba el conteo real si había más de 20 sin leer.
+export async function fetchNotificationsForProfile(_profileId: string, limit = 100): Promise<Notification[]> {
   const { data, error } = await supabase
     .from('notifications')
     .select('*')
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(limit)
   if (error) throw error
   return (data ?? []) as Notification[]
+}
+
+// Conteo real de notificaciones no leídas (usa count exacto de Postgres, no
+// trae filas) -- reemplaza el filter(!is_read).length sobre una página
+// limitada que usaba el header antes, que subestimaba el conteo si había
+// más no leídas que el límite de esa página.
+export async function fetchUnreadNotificationCount(): Promise<number> {
+  const { count, error } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_read', false)
+  if (error) throw error
+  return count ?? 0
 }
 
 export async function markNotificationRead(id: string): Promise<void> {

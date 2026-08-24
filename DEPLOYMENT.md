@@ -6982,3 +6982,169 @@ Ninguna -- el fix es enteramente RPC de Postgres + frontend.
 1. Notificación manual a un usuario específico (desde Nueva Notificación).
 2. Confirmar que llega solo a ese usuario (sin cambios respecto a la
    sección 48).
+
+## 50. Diagnóstico preciso de "push no intentado" + fix de notificaciones que no aparecían en /notificaciones (2026-08-24)
+
+Síntoma reportado: el diagnóstico de Ajustes mostraba "push no intentado"
+para varias notificaciones (prueba, recordatorio semanal, resumen semanal)
+con suscripciones activas confirmadas, y algunas notificaciones ni siquiera
+aparecían en `/notificaciones`. Investigación completa y fix de ambos
+problemas -- resultaron ser dos causas independientes.
+
+### 50.1 Causa exacta de "push no intentado"
+
+`dispatch_notification_push()` (0085) solo dejaba una fila en
+`push_send_log` DESPUÉS de que `send-push-system` respondiera -- y eso lo
+escribe la propia Edge Function, no el trigger. Si el trigger nunca llegaba
+a disparar `net.http_post` (porque `project_url`/`cron_shared_secret` no
+estaban configurados en `system_settings` en ESE momento) o la llamada
+quedaba sin respuesta (`pg_net` sin procesar, timeout), **no quedaba
+ninguna fila en `push_send_log`**. El diagnóstico interpretaba "sin fila"
+como "no intentado" sin poder decir el motivo real -- exactamente el
+síntoma reportado. No se pudo determinar con certeza, sin acceso a la base
+real, cuál de las causas (a-d de la sección de arriba) era la que estaba
+pasando en producción en el momento del reporte -- por eso el fix es hacer
+que el sistema deje rastro suficiente para que informática lo pueda ver
+directamente, en vez de intentar adivinar la causa desde acá.
+
+### 50.2 Qué cambió: `dispatch_notification_push()` deja rastro SIEMPRE
+
+Migración `0089_push_dispatch_diagnostics.sql`:
+
+- **`push_send_log.status`** gana dos valores nuevos, escritos por el
+  TRIGGER (no por las Edge Functions): `not_attempted` (no se pudo llamar
+  a `pg_net` -- falta `project_url`/`cron_shared_secret`, o la extensión
+  `pg_net` no está instalada/habilitada) y `dispatched` (el trigger SÍ
+  llamó a `net.http_post`, con el `request_id` guardado, pero esta fila no
+  dice si `send-push-system` respondió bien -- eso lo determina la fila
+  `ok`/`error` que la Edge Function inserta después).
+- **`push_send_log.pg_net_request_id`** (columna nueva): el `request_id`
+  que devuelve `net.http_post()`, para poder cruzarlo contra
+  `net._http_response` (tabla interna de la extensión `pg_net`) y ver la
+  respuesta HTTP real de esa llamada puntual.
+- `dispatch_notification_push()` ahora tiene un `EXCEPTION` handler:
+  antes, si `pg_net` no estaba instalado, `net.http_post` lanzaba una
+  excepción que -- al no estar capturada en un trigger `AFTER INSERT` --
+  revertía TODA la transacción, **incluida la notificación interna que se
+  estaba insertando**. Esto significa que en ese escenario específico ni
+  siquiera la notificación interna llegaba a guardarse (haría sentido con
+  "algunas notificaciones no aparecen", aunque no se pudo confirmar que
+  este fuera el caso real sin `pg_net` en un entorno de prueba). Ahora el
+  error se captura, se registra en `push_send_log` como `not_attempted`
+  con el mensaje real de Postgres, y la notificación interna se guarda
+  igual.
+- El índice único de deduplicación (`idx_push_send_log_notification_dedup`,
+  0025) sigue aplicando solo a `status='ok'` -- las filas nuevas
+  (`not_attempted`/`dispatched`) nunca compiten con la deduplicación real.
+
+### 50.3 `get_push_infra_diagnostics()` (nueva, solo `informatica_r4`)
+
+Consolida en una sola llamada: si `project_url`/`cron_shared_secret` están
+configurados (sin exponer el valor), si la extensión `pg_net` está
+instalada, cuántas llamadas a `pg_net` se registraron en los últimos 7
+días, y la última respuesta HTTP real capturada (status code / error),
+cruzando `push_send_log.pg_net_request_id` contra `net._http_response`.
+Exige `is_super_admin()` (solo `informatica_r4`, ni siquiera
+`integrante_informatica` -- mismo criterio que `project_url`/
+`cron_shared_secret` en Configuración del sistema, 0074). Visible en
+Ajustes → diagnóstico de push → "Infraestructura del dispatcher".
+
+### 50.4 `get_own_push_diagnostics()`: prioriza la fila más informativa
+
+Ahora puede haber hasta 3 filas de `push_send_log` por notificación
+(`dispatched`/`not_attempted` del trigger, más `ok`/`error`/etc. de la
+Edge Function). Se redefinió con un `LATERAL JOIN` que prioriza, por
+notificación: resultado real (`ok`/`error`/`rate_limited`/`duplicate`) >
+`dispatched` (se llamó, sin resultado conocido todavía) > `not_attempted`
+(nunca se pudo llamar). `push_attempted` en el resultado sigue significando
+"hay un resultado real", no solo "el trigger corrió".
+
+### 50.5 Segundo problema: notificaciones que no aparecían en /notificaciones
+
+Causa distinta y confirmada por código, sin relación con RLS ni con
+`notifications_scope_not_ambiguous` (0087): `fetchNotificationsForProfile()`
+(`src/lib/api/notifications.ts`) tenía `.limit(20)` fijo, y **se usaba
+tanto para el listado completo de `/notificaciones` como para el contador
+de no leídas del header** (`AppHeader.tsx`, vía
+`data.filter((n) => !n.is_read).length` sobre esas mismas 20 filas). Si el
+sistema generaba 20 o más notificaciones automáticas (cursos, documentos,
+cambios de estado, recordatorios) más recientes que una notificación
+propia, esa notificación quedaba fuera de la ventana visible -- tanto en
+el listado como en el contador de la campanita, que además subestimaba el
+total real de no leídas en cualquier caso con más de 20 pendientes. RLS
+estaba (y sigue estando) correcta: la fila existía y era visible por
+`profile_id = current_profile_id()`, simplemente nunca llegaba a pedirse
+del backend.
+
+Fix:
+- `fetchNotificationsForProfile()` sube el límite por defecto de 20 a 100
+  (parámetro opcional, sigue siendo un límite -- no es "traer todo", pero
+  cubre el caso real reportado).
+- Nueva `fetchUnreadNotificationCount()`: usa `count: 'exact', head: true`
+  de PostgREST (un conteo real de Postgres, sin traer filas) en vez de
+  contar sobre una página limitada. `AppHeader.tsx` la usa para el badge
+  de no leídas -- ya no depende de que la notificación esté dentro de
+  ninguna ventana de paginación.
+
+### 50.6 Seguridad
+
+- `cron_shared_secret`/`project_url` nunca se exponen en valor -- solo
+  `configured: true/false` (mismo criterio que `list_system_settings_status`,
+  0074).
+- `get_push_infra_diagnostics()` exige `is_super_admin()` server-side, no
+  solo ocultar el botón en la UI.
+- `net._http_response` solo se consulta cruzada contra
+  `push_send_log.pg_net_request_id` (requests que este mismo sistema
+  generó), nunca toda la tabla -- evita exponer tráfico HTTP de otras
+  funciones que pudieran usar `pg_net` en el mismo proyecto.
+- No se tocó ninguna policy de RLS en esta ronda.
+
+### 50.7 Qué correr en Supabase
+
+1. Migración `0089_push_dispatch_diagnostics.sql`.
+2. **Verificación de configuración (query para Axel, sin exponer el
+   secreto)** -- correr en el SQL Editor como `informatica_r4` logueado en
+   la app (no funciona desde el SQL Editor directo, ver 0074): desde
+   Ajustes → "Ver diagnóstico de push" → "Infraestructura del
+   dispatcher", confirmar que `project_url` y `cron_shared_secret`
+   figuran como "configurado". Si `project_url` está configurado pero no
+   apunta a `https://tuhynszatghlfohugexn.supabase.co`, corregirlo desde
+   Ajustes → Configuración del sistema.
+3. Si `cron_shared_secret` figura como "sin configurar", o si figura
+   configurado pero `send-push-system` sigue sin responder, regenerar y
+   sincronizar ambos lados:
+   - En Ajustes → Configuración del sistema, guardar un `cron_shared_secret`
+     nuevo (cualquier string largo y aleatorio).
+   - Configurar el mismo valor exacto como secreto de la Edge Function:
+     `npx supabase secrets set CRON_SHARED_SECRET="el_mismo_valor_exacto"`.
+   - Ambos valores deben coincidir carácter por carácter -- un desajuste
+     hace que `send-push-system` responda 401 sin dejar ningún registro
+     adicional más allá de lo que ya captura `net._http_response`.
+
+### 50.8 Edge Functions a redesplegar
+
+Ninguna -- el fix de esta ronda es enteramente SQL (trigger + funciones de
+diagnóstico) y frontend.
+
+### 50.9 Checklist manual para Axel
+
+1. Ajustes → "Ver diagnóstico de push" → confirmar que "Infraestructura
+   del dispatcher" muestra `project_url`/`cron_shared_secret`/`pg_net`
+   como corresponda -- si alguno dice "sin configurar" o "no instalada",
+   seguir el punto 50.7.3 de arriba.
+2. "Probar push server-side": confirmar que el resultado ya no queda en
+   "todavía no intentó" de forma indefinida -- debe resolver a un
+   resultado real (enviado, o error explícito) en los ~4 segundos del
+   polling.
+3. Si sigue en "todavía no intentó" tras la prueba: revisar en el panel
+   de infraestructura si "Llamadas a pg_net" es mayor a 0 pero
+   "respuestas registradas" es 0 -- indicaría que `pg_net` no está
+   procesando la cola (revisar la extensión desde el Dashboard de
+   Supabase) o que la respuesta tardó más que la ventana de polling
+   (recargar el diagnóstico unos segundos después).
+4. `/notificaciones`: confirmar que el listado ya no corta en 20
+   resultados si hay más notificaciones recientes que esas -- generar
+   varias notificaciones de prueba y confirmar que todas aparecen.
+5. Confirmar que el número en la campanita del header coincide con la
+   cantidad real de notificaciones sin leer (antes podía subestimar si
+   había más de 20 pendientes).

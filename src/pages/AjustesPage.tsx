@@ -16,11 +16,13 @@ import {
   fetchOwnPushSubscriptionCount,
   fetchPushSubscriptionsAdminDiagnostics,
   fetchPushSubscriptionCountsByProfile,
+  fetchPushInfraDiagnostics,
 } from '../lib/api/pushSubscriptions'
 import type {
   OwnPushDiagnosticRow,
   PushSubscriptionAdminDiagnosticRow,
   PushSubscriptionCountByProfileRow,
+  PushInfraDiagnostics,
 } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -66,6 +68,7 @@ export function AjustesPage() {
   const [pushDiagnosticsRows, setPushDiagnosticsRows] = useState<OwnPushDiagnosticRow[]>([])
   const [pushSubscriptionsAdmin, setPushSubscriptionsAdmin] = useState<PushSubscriptionAdminDiagnosticRow[]>([])
   const [pushSubscriptionCountsByProfile, setPushSubscriptionCountsByProfile] = useState<PushSubscriptionCountByProfileRow[]>([])
+  const [pushInfraDiagnostics, setPushInfraDiagnostics] = useState<PushInfraDiagnostics | null>(null)
 
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
@@ -188,16 +191,24 @@ export function AjustesPage() {
       // Las funciones "admin" (endpoint/perfil vinculado de TODOS los
       // usuarios) solo se piden si isAdmin -- la RPC ya las restringe
       // server-side, pero evitamos la llamada innecesaria para el resto.
-      const [count, rows, adminRows, adminCounts] = await Promise.all([
+      // get_push_infra_diagnostics() exige is_super_admin() (solo
+      // informatica_r4, NI SIQUIERA integrante_informatica -- mismo
+      // criterio que list_system_settings_status/set_system_setting,
+      // project_url/cron_shared_secret son datos de infraestructura), asi
+      // que se pide aparte con hasRole('informatica_r4'), no isAdmin.
+      const canSeeInfra = hasRole('informatica_r4')
+      const [count, rows, adminRows, adminCounts, infra] = await Promise.all([
         fetchOwnPushSubscriptionCount(),
         fetchOwnPushDiagnostics(10),
         isAdmin ? fetchPushSubscriptionsAdminDiagnostics() : Promise.resolve([]),
         isAdmin ? fetchPushSubscriptionCountsByProfile() : Promise.resolve([]),
+        canSeeInfra ? fetchPushInfraDiagnostics() : Promise.resolve(null),
       ])
       setPushSubscriptionCount(count)
       setPushDiagnosticsRows(rows)
       setPushSubscriptionsAdmin(adminRows)
       setPushSubscriptionCountsByProfile(adminCounts)
+      setPushInfraDiagnostics(infra)
     } catch (err) {
       setPushDiagnosticsError(describeSupabaseError(err, 'No pudimos cargar el diagnóstico de push.'))
     } finally {
@@ -560,7 +571,10 @@ export function AjustesPage() {
                             <div style={{ fontWeight: 600 }}>{row.notification_title}</div>
                             <div style={{ color: 'var(--color-text-muted)' }}>
                               {new Date(row.notification_created_at).toLocaleString('es-AR')} —{' '}
-                              {!row.push_attempted && 'push no intentado (¿project_url/cron_shared_secret sin configurar?)'}
+                              {row.push_status === 'not_attempted' &&
+                                `no se pudo intentar (${row.push_error_message ?? 'falta configuración'})`}
+                              {row.push_status === 'dispatched' && 'se llamó al servidor, todavía sin resultado — revisá abajo'}
+                              {!row.push_status && 'sin registro (¿trigger no corrió?)'}
                               {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
                               {row.push_attempted && row.push_status !== 'error' &&
                                 `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
@@ -600,6 +614,64 @@ export function AjustesPage() {
                           </div>
                         ))}
                       </div>
+                    )}
+
+                    {/* Infraestructura del dispatcher server-side --
+                        SOLO informatica_r4 (is_super_admin(), ni siquiera
+                        integrante_informatica: project_url/cron_shared_secret
+                        son datos de infraestructura, mismo criterio que
+                        Configuración del sistema más abajo). */}
+                    {pushInfraDiagnostics && (
+                      <>
+                        <p style={{ fontSize: 12, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>
+                          Infraestructura del dispatcher
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+                          <div>
+                            project_url:{' '}
+                            <strong style={{ color: pushInfraDiagnostics.project_url_configured ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              {pushInfraDiagnostics.project_url_configured ? 'configurado' : 'sin configurar'}
+                            </strong>
+                          </div>
+                          <div>
+                            cron_shared_secret:{' '}
+                            <strong style={{ color: pushInfraDiagnostics.cron_shared_secret_configured ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              {pushInfraDiagnostics.cron_shared_secret_configured ? 'configurado' : 'sin configurar'}
+                            </strong>
+                          </div>
+                          <div>
+                            extensión pg_net:{' '}
+                            <strong style={{ color: pushInfraDiagnostics.pg_net_installed ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                              {pushInfraDiagnostics.pg_net_installed ? 'instalada' : 'no instalada'}
+                            </strong>
+                          </div>
+                          <div style={{ color: 'var(--color-text-muted)' }}>
+                            Llamadas a pg_net (últimos 7 días): {pushInfraDiagnostics.recent_requests_count}
+                            {pushInfraDiagnostics.recent_responses_count != null &&
+                              ` · respuestas registradas: ${pushInfraDiagnostics.recent_responses_count}`}
+                          </div>
+                          {pushInfraDiagnostics.last_response_at && (
+                            <div style={{ color: 'var(--color-text-muted)' }}>
+                              Última respuesta: {new Date(pushInfraDiagnostics.last_response_at).toLocaleString('es-AR')}
+                              {pushInfraDiagnostics.last_response_status_code != null && ` · HTTP ${pushInfraDiagnostics.last_response_status_code}`}
+                              {pushInfraDiagnostics.last_response_error && ` · ${pushInfraDiagnostics.last_response_error}`}
+                            </div>
+                          )}
+                          {pushInfraDiagnostics.recent_requests_count > 0 && pushInfraDiagnostics.recent_responses_count === 0 && (
+                            <p style={{ color: 'var(--color-danger)', marginTop: 4 }}>
+                              Se llamó a pg_net pero no hay ninguna respuesta registrada — la request puede haber quedado
+                              pendiente o pg_net no la procesó. Revisar la extensión desde el Dashboard de Supabase.
+                            </p>
+                          )}
+                          {(!pushInfraDiagnostics.project_url_configured || !pushInfraDiagnostics.cron_shared_secret_configured) && (
+                            <p style={{ color: 'var(--color-danger)', marginTop: 4 }}>
+                              Configurá los valores faltantes en "Configuración del sistema" más abajo. El
+                              cron_shared_secret guardado ahí debe coincidir exactamente con el secreto{' '}
+                              <code>CRON_SHARED_SECRET</code> de la Edge Function send-push-system.
+                            </p>
+                          )}
+                        </div>
+                      </>
                     )}
                   </>
                 )}

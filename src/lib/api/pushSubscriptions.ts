@@ -53,6 +53,7 @@ export interface OwnPushDiagnosticRow {
   notification_id: string
   notification_title: string
   notification_created_at: string
+  notification_scope: 'personal' | 'cuartel' | 'subsede' | 'region' | 'sin_alcance'
   push_attempted: boolean
   push_status: string | null
   push_sent_count: number | null
@@ -60,10 +61,15 @@ export interface OwnPushDiagnosticRow {
   push_error_message: string | null
 }
 
-// Diagnostico de push del perfil actual (migracion 0086) -- las ultimas
-// notificaciones propias cruzadas contra push_send_log, para saber si el
-// trigger server-side (dispatch_notification_push, 0085) efectivamente
-// disparo/logro el push real de cada una.
+// Diagnostico de push del perfil actual (migracion 0086, ampliado en 0093)
+// -- las ultimas notificaciones VISIBLES para el usuario (propias con
+// profile_id puntual, o de scope territorial que puede ver -- antes solo
+// mostraba las de profile_id puntual, lo que dejaba ciego el diagnostico
+// para casi todas las notificaciones reales de modulos, que usan scope
+// territorial) cruzadas contra push_send_log, para saber si el trigger
+// server-side (dispatch_notification_push, 0085) efectivamente disparo/
+// logro el push real de cada una. notification_scope indica de donde viene
+// el alcance de cada fila.
 export async function fetchOwnPushDiagnostics(limit = 10): Promise<OwnPushDiagnosticRow[]> {
   const { data, error } = await supabase.rpc('get_own_push_diagnostics', { p_limit: limit })
   if (error) throw error
@@ -115,10 +121,12 @@ export interface PushInfraDiagnostics {
   pg_net_installed: boolean
   recent_requests_count: number
   recent_responses_count: number | null
+  recent_error_count: number | null
   last_response_status_code: number | null
   last_response_error: string | null
   last_response_body: string | null
   last_response_at: string | null
+  last_response_is_historical: boolean | null
 }
 
 // Diagnostico consolidado de infraestructura de push (migracion 0089) --

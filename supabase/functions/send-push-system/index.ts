@@ -166,6 +166,10 @@ Deno.serve(async (req: Request) => {
   // menos específico; si ninguno de los cuatro está seteado, NO se envía
   // nada (una notificación "sin alcance" es una referencia general visible
   // en la campanita, pero eso nunca implica push masivo automático).
+  // is_active=true en las 3 ramas territoriales: un perfil dado de baja no
+  // debe seguir recibiendo push reales aunque su fila siga en profiles (el
+  // camino profile_id puntual de arriba SÍ puede mandarle a un perfil
+  // inactivo a propósito -- ej. un aviso final -- por eso no se filtra ahí).
   let targetProfileIds: string[] = []
   if (notification.profile_id) {
     targetProfileIds = [notification.profile_id]
@@ -174,6 +178,7 @@ Deno.serve(async (req: Request) => {
       .from('profiles')
       .select('id')
       .eq('station_id', notification.station_id)
+      .eq('is_active', true)
     if (profilesError) {
       await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
       return jsonResponse({ sent: 0, error: profilesError.message }, 500)
@@ -186,6 +191,7 @@ Deno.serve(async (req: Request) => {
       .from('profiles')
       .select('id')
       .in('station_id', stationIds.length ? stationIds : ['00000000-0000-0000-0000-000000000000'])
+      .eq('is_active', true)
     if (profilesError) {
       await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
       return jsonResponse({ sent: 0, error: profilesError.message }, 500)
@@ -196,6 +202,7 @@ Deno.serve(async (req: Request) => {
       .from('profiles')
       .select('id')
       .eq('region_id', notification.region_id)
+      .eq('is_active', true)
     if (profilesError) {
       await supabaseAdmin.from('push_send_log').update({ status: 'error', error_message: profilesError.message }).eq('id', logRow.id)
       return jsonResponse({ sent: 0, error: profilesError.message }, 500)

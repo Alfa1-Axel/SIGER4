@@ -37,6 +37,19 @@ import { describeSupabaseError } from '../lib/api/errors'
 // apenas createNotification() devuelve.
 const PUSH_DIAGNOSTIC_POLL_DELAYS_MS = [800, 1200, 2000]
 
+// notification_scope (0093): de donde viene el alcance de cada notificación
+// en el diagnóstico -- antes el panel solo mostraba notificaciones
+// personales (profile_id puntual), dejando ciegas casi todas las
+// notificaciones reales de módulos (calendario/préstamos/cambios de
+// estado), que en su mayoría usan scope territorial.
+const SCOPE_LABELS: Record<string, string> = {
+  personal: 'personal',
+  cuartel: 'todo tu cuartel',
+  subsede: 'toda tu subsede',
+  region: 'toda tu región',
+  sin_alcance: 'sin alcance',
+}
+
 // Un 401 puede venir de dos lugares completamente distintos, y ningún
 // cambio de cron_shared_secret arregla el que no corresponde:
 //   - GATEWAY de Supabase Edge Functions (verify_jwt=true, el valor por
@@ -78,29 +91,34 @@ function describePushInfraStatus(infra: PushInfraDiagnostics): { message: string
     }
   }
   const status = infra.last_response_status_code
+  // Prefijo "(histórico)" cuando la última respuesta tiene más de 15 minutos
+  // (0093, last_response_is_historical) -- evita que un error viejo ya
+  // corregido (ej. el 401 de JWT antes del fix de --no-verify-jwt) se lea
+  // como si fuera el problema vigente ahora mismo.
+  const prefix = infra.last_response_is_historical ? '(Histórico, no necesariamente vigente) ' : ''
   if (status === 401 && looksLikeGatewayRejection(infra.last_response_body)) {
     return {
-      message: 'HTTP 401 del GATEWAY de Supabase, no de nuestro código: send-push-system exige un JWT válido y pg_net nunca lo manda (solo x-cron-secret).',
+      message: prefix + 'HTTP 401 del GATEWAY de Supabase, no de nuestro código: send-push-system exige un JWT válido y pg_net nunca lo manda (solo x-cron-secret).',
       action: 'Redesplegar con: npx supabase functions deploy send-push-system --no-verify-jwt. Ningún cambio en cron_shared_secret va a arreglar esto.',
     }
   }
   if (status === 401) {
     return {
-      message: 'La Edge Function rechazó la llamada: secreto incorrecto o desincronizado.',
+      message: prefix + 'La Edge Function rechazó la llamada: secreto incorrecto o desincronizado.',
       action: 'Verificá que system_settings.cron_shared_secret (Configuración del sistema, abajo) y el Edge Secret CRON_SHARED_SECRET de send-push-system sean exactamente iguales -- cuidado con espacios o saltos de línea al pegarlos. Usá "Probar autorización" abajo para confirmar sin esperar al próximo insert.',
     }
   }
   if (status === 404) {
-    return { message: 'La Edge Function no existe o no está desplegada.', action: 'Ejecutar: npx supabase functions deploy send-push-system' }
+    return { message: prefix + 'La Edge Function no existe o no está desplegada.', action: 'Ejecutar: npx supabase functions deploy send-push-system' }
   }
   if (status === 500) {
-    return { message: 'La Edge Function falló internamente.', action: 'Revisar logs de send-push-system en el Dashboard de Supabase (probablemente faltan VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/SUPABASE_SERVICE_ROLE_KEY).' }
+    return { message: prefix + 'La Edge Function falló internamente.', action: 'Revisar logs de send-push-system en el Dashboard de Supabase (probablemente faltan VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/SUPABASE_SERVICE_ROLE_KEY).' }
   }
   if (status != null && status >= 200 && status < 300) {
-    return { message: `La última llamada respondió correctamente (HTTP ${status}).` }
+    return { message: `${prefix}La última llamada respondió correctamente (HTTP ${status}).` }
   }
   if (status != null) {
-    return { message: `La última llamada respondió con HTTP ${status} -- revisar logs de send-push-system.` }
+    return { message: `${prefix}La última llamada respondió con HTTP ${status} -- revisar logs de send-push-system.` }
   }
   return null
 }
@@ -654,7 +672,12 @@ export function AjustesPage() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {pushDiagnosticsRows.map((row) => (
                           <div key={row.notification_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
-                            <div style={{ fontWeight: 600 }}>{row.notification_title}</div>
+                            <div style={{ fontWeight: 600 }}>
+                              {row.notification_title}{' '}
+                              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: 10 }}>
+                                ({SCOPE_LABELS[row.notification_scope] ?? row.notification_scope})
+                              </span>
+                            </div>
                             <div style={{ color: 'var(--color-text-muted)' }}>
                               {new Date(row.notification_created_at).toLocaleString('es-AR')} —{' '}
                               {row.push_status === 'not_attempted' &&
@@ -735,13 +758,26 @@ export function AjustesPage() {
                             Llamadas a pg_net (últimos 7 días): {pushInfraDiagnostics.recent_requests_count}
                             {pushInfraDiagnostics.recent_responses_count != null &&
                               ` · respuestas registradas: ${pushInfraDiagnostics.recent_responses_count}`}
+                            {pushInfraDiagnostics.recent_error_count != null &&
+                              ` · con error: ${pushInfraDiagnostics.recent_error_count}`}
                           </div>
                           {pushInfraDiagnostics.last_response_at && (
                             <div style={{ color: 'var(--color-text-muted)' }}>
-                              Última respuesta: {new Date(pushInfraDiagnostics.last_response_at).toLocaleString('es-AR')}
+                              {pushInfraDiagnostics.last_response_is_historical
+                                ? 'Última respuesta (histórica, no necesariamente el estado actual): '
+                                : 'Última respuesta (reciente, refleja el estado actual): '}
+                              {new Date(pushInfraDiagnostics.last_response_at).toLocaleString('es-AR')}
                               {pushInfraDiagnostics.last_response_status_code != null && ` · HTTP ${pushInfraDiagnostics.last_response_status_code}`}
                               {pushInfraDiagnostics.last_response_error && ` · ${pushInfraDiagnostics.last_response_error}`}
                             </div>
+                          )}
+                          {pushInfraDiagnostics.last_response_is_historical &&
+                            pushInfraDiagnostics.last_response_status_code != null &&
+                            pushInfraDiagnostics.last_response_status_code >= 400 && (
+                            <p style={{ color: 'var(--color-text-muted)', fontSize: 10, marginTop: 2 }}>
+                              Este error tiene más de 15 minutos -- puede ya estar resuelto. Usá "Probar autorización"
+                              abajo para confirmar el estado actual sin esperar a la próxima notificación real.
+                            </p>
                           )}
                           {pushInfraDiagnostics.last_response_body && (
                             <div style={{ color: 'var(--color-text-muted)', fontSize: 10, wordBreak: 'break-all' }}>

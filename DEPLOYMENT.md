@@ -7289,3 +7289,88 @@ camino por SQL Editor para esto -- es la misma RLS que protege
    problema real de `cron_shared_secret` (sección 33.4).
 5. "Probar push server-side" con una notificación real → confirmar que llega el push físico al
    dispositivo (no solo que el diagnóstico dice "enviado").
+
+## 52. "Probar push server-side" funcionaba pero las notificaciones reales de módulos no mostraban nada en el diagnóstico (2026-08-26) — migración 0093
+
+Síntoma reportado, ya con la infraestructura del dispatcher funcionando
+(sección 51 aplicada, `--no-verify-jwt` desplegado): las notificaciones de
+prueba funcionaban, pero las notificaciones reales de calendario/
+préstamos/cambios de estado no mostraban confirmación de push en Ajustes,
+aunque la notificación interna sí aparecía en la campanita.
+
+### 52.1 Investigación
+
+Se revisó, uno por uno, todo el camino real: cada función que inserta en
+`notifications` (`notify_calendar_event_created`,
+`send_calendar_event_reminders`, `notify_loan_request_created`,
+`notify_loan_request_status_change`, `notify_document_created`,
+`notify_station_status_change`, etc.), el trigger
+`dispatch_notification_push()` (confirmado: corre `AFTER INSERT` sin
+ningún filtro por `type`/origen, dispara para cualquier notificación) y la
+resolución de destinatarios en `send-push-system` (`profile_id` >
+`station_id` > `subsede_id` > `region_id`, con los joins
+`profiles`/`stations`/`subsedes` correctos). **No se encontró ningún bug
+de envío** -- el push real se manda igual para notificaciones con scope
+territorial.
+
+### 52.2 Causa exacta
+
+El bug estaba en la **visibilidad del diagnóstico**, no en el envío.
+`get_own_push_diagnostics()` (0086/0089) filtraba
+`where n.profile_id = current_profile_id()` -- es decir, solo mostraba
+notificaciones con `profile_id` puntual. El botón "Probar push
+server-side" siempre crea su notificación de prueba con
+`profile_id = uno mismo` (ver `AjustesPage.tsx`), así que ese camino
+siempre aparecía bien en el diagnóstico. Pero **casi todas las
+notificaciones reales de módulos usan scope territorial**
+(`region_id`/`subsede_id`/`station_id`, `profile_id` NULL) -- calendario,
+préstamos sin responsable puntual, cambios de estado de vehículos/
+personal/cuarteles, etc. Esas notificaciones nunca aparecían en el panel,
+sin importar si el push se había enviado correctamente o no. El síntoma
+percibido ("no veo confirmación de que llegó") tenía una causa distinta a
+la que parecía: no era que el push fallara, era que el diagnóstico nunca
+buscaba esas filas.
+
+### 52.3 Fix
+
+- `get_own_push_diagnostics()`: incluye también notificaciones de scope
+  territorial visibles para el usuario actual (mismo criterio que la RLS
+  `notifications_select_own_or_scope`, reusado, no reinventado). Agrega
+  `notification_scope` (`personal`/`cuartel`/`subsede`/`region`/
+  `sin_alcance`) para que el panel muestre de dónde viene el alcance de
+  cada fila.
+- `get_push_infra_diagnostics()`: agrega `recent_error_count` (errores en
+  toda la ventana de 7 días) y `last_response_is_historical` (true si la
+  última respuesta tiene más de 15 minutos) -- antes un 401 viejo ya
+  corregido (por ejemplo el de la sección 51, antes del fix de
+  `--no-verify-jwt`) seguía leyéndose como si fuera el problema vigente
+  hasta la próxima notificación real.
+- `send-push-system`: agrega `.eq('is_active', true)` en las 3 ramas
+  territoriales de resolución de destinatarios (defensiva, no la causa
+  raíz de este síntoma -- un perfil dado de baja no debe seguir recibiendo
+  push reales de scope territorial; el camino `profile_id` puntual no se
+  filtra, puede mandarle a un perfil inactivo a propósito).
+- Diagnóstico de Ajustes: cada notificación muestra su scope, y los
+  errores de infraestructura distinguen explícitamente "histórico" de
+  "vigente".
+
+### 52.4 Edge Functions a redesplegar
+
+- `send-push-system`: `supabase functions deploy send-push-system --no-verify-jwt` (cambio de
+  código real -- filtro `is_active`; recordar el flag, ver sección 51).
+
+### 52.5 Checklist manual para Axel
+
+1. Aplicar la migración `0093_push_diagnostics_territorial_scope.sql`.
+2. `npx supabase functions deploy send-push-system --no-verify-jwt`.
+3. "Probar push server-side" → sigue funcionando igual que antes (no se tocó ese camino).
+4. Crear un evento de Calendario con alcance de cuartel/subsede/región → confirmar que el
+   diagnóstico de Ajustes ahora SÍ muestra esa notificación (con la etiqueta de scope
+   correspondiente) y su resultado real de push.
+5. Crear una solicitud de préstamo → mismo chequeo.
+6. Notificación a un usuario específico (`profile_id` puntual, ej. aprobación/rechazo de
+   préstamo) → confirmar que sigue funcionando y aparece como "personal".
+7. Notificación a cuartel/subsede/región → confirmar que **solo** los usuarios de ese alcance
+   reciben el push (privacidad: nunca debe llegar a usuarios fuera del alcance).
+8. Con la app cerrada en el celular (no solo en segundo plano): repetir 4-6 y confirmar que el
+   push físico llega igual sin la PWA abierta.

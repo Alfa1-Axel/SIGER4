@@ -17,12 +17,14 @@ import {
   fetchPushSubscriptionsAdminDiagnostics,
   fetchPushSubscriptionCountsByProfile,
   fetchPushInfraDiagnostics,
+  testPushDispatcherAuth,
 } from '../lib/api/pushSubscriptions'
 import type {
   OwnPushDiagnosticRow,
   PushSubscriptionAdminDiagnosticRow,
   PushSubscriptionCountByProfileRow,
   PushInfraDiagnostics,
+  PushDispatcherAuthTestResult,
 } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -34,6 +36,43 @@ import { describeSupabaseError } from '../lib/api/errors'
 // margen real antes de leer el resultado, no asumir que ya está listo
 // apenas createNotification() devuelve.
 const PUSH_DIAGNOSTIC_POLL_DELAYS_MS = [800, 1200, 2000]
+
+// Interpreta el resultado consolidado de get_push_infra_diagnostics()
+// (0089) en un mensaje accionable en vez de mostrar el número de status
+// HTTP pelado -- antes de esto, un HTTP 401 ya registrado en
+// last_response_status_code no se distinguía de "todavía no hay
+// respuesta" (ambos caían en el mismo texto genérico "sin resultado").
+function describePushInfraStatus(infra: PushInfraDiagnostics): { message: string; action?: string } | null {
+  if (infra.recent_requests_count === 0) {
+    return { message: 'El trigger no llamó a pg_net en los últimos 7 días (sin notificaciones recientes, o project_url/cron_shared_secret faltaban en ese momento).' }
+  }
+  if (infra.recent_responses_count === 0 || infra.recent_responses_count == null) {
+    return {
+      message: 'pg_net todavía no registró respuesta para las llamadas recientes.',
+      action: 'Puede ser una demora normal (unos segundos) o que pg_net esté atascado -- revisar la extensión desde el Dashboard de Supabase, o usar "Probar autorización" abajo para un chequeo inmediato.',
+    }
+  }
+  const status = infra.last_response_status_code
+  if (status === 401) {
+    return {
+      message: 'La Edge Function rechazó la llamada: secreto incorrecto o desincronizado.',
+      action: 'Verificá que system_settings.cron_shared_secret (Configuración del sistema, abajo) y el Edge Secret CRON_SHARED_SECRET de send-push-system sean exactamente iguales -- cuidado con espacios o saltos de línea al pegarlos. Usá "Probar autorización" abajo para confirmar sin esperar al próximo insert.',
+    }
+  }
+  if (status === 404) {
+    return { message: 'La Edge Function no existe o no está desplegada.', action: 'Ejecutar: npx supabase functions deploy send-push-system' }
+  }
+  if (status === 500) {
+    return { message: 'La Edge Function falló internamente.', action: 'Revisar logs de send-push-system en el Dashboard de Supabase (probablemente faltan VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/SUPABASE_SERVICE_ROLE_KEY).' }
+  }
+  if (status != null && status >= 200 && status < 300) {
+    return { message: `La última llamada respondió correctamente (HTTP ${status}).` }
+  }
+  if (status != null) {
+    return { message: `La última llamada respondió con HTTP ${status} -- revisar logs de send-push-system.` }
+  }
+  return null
+}
 
 export function AjustesPage() {
   const { profile, user, roles, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
@@ -69,6 +108,9 @@ export function AjustesPage() {
   const [pushSubscriptionsAdmin, setPushSubscriptionsAdmin] = useState<PushSubscriptionAdminDiagnosticRow[]>([])
   const [pushSubscriptionCountsByProfile, setPushSubscriptionCountsByProfile] = useState<PushSubscriptionCountByProfileRow[]>([])
   const [pushInfraDiagnostics, setPushInfraDiagnostics] = useState<PushInfraDiagnostics | null>(null)
+  const [runningAuthTest, setRunningAuthTest] = useState(false)
+  const [authTestError, setAuthTestError] = useState<string | null>(null)
+  const [authTestResult, setAuthTestResult] = useState<PushDispatcherAuthTestResult | null>(null)
 
   const [savingWeeklyReminder, setSavingWeeklyReminder] = useState(false)
   const [weeklyReminderError, setWeeklyReminderError] = useState<string | null>(null)
@@ -213,6 +255,19 @@ export function AjustesPage() {
       setPushDiagnosticsError(describeSupabaseError(err, 'No pudimos cargar el diagnóstico de push.'))
     } finally {
       setLoadingPushDiagnostics(false)
+    }
+  }
+
+  async function handleRunAuthTest() {
+    setRunningAuthTest(true)
+    setAuthTestError(null)
+    try {
+      const result = await testPushDispatcherAuth()
+      setAuthTestResult(result)
+    } catch (err) {
+      setAuthTestError(describeSupabaseError(err, 'No pudimos ejecutar la prueba de autorización.'))
+    } finally {
+      setRunningAuthTest(false)
     }
   }
 
@@ -657,12 +712,16 @@ export function AjustesPage() {
                               {pushInfraDiagnostics.last_response_error && ` · ${pushInfraDiagnostics.last_response_error}`}
                             </div>
                           )}
-                          {pushInfraDiagnostics.recent_requests_count > 0 && pushInfraDiagnostics.recent_responses_count === 0 && (
-                            <p style={{ color: 'var(--color-danger)', marginTop: 4 }}>
-                              Se llamó a pg_net pero no hay ninguna respuesta registrada — la request puede haber quedado
-                              pendiente o pg_net no la procesó. Revisar la extensión desde el Dashboard de Supabase.
-                            </p>
-                          )}
+                          {(() => {
+                            const status = describePushInfraStatus(pushInfraDiagnostics)
+                            if (!status) return null
+                            return (
+                              <p style={{ color: 'var(--color-danger)', marginTop: 4 }}>
+                                {status.message}
+                                {status.action && <><br />{status.action}</>}
+                              </p>
+                            )
+                          })()}
                           {(!pushInfraDiagnostics.project_url_configured || !pushInfraDiagnostics.cron_shared_secret_configured) && (
                             <p style={{ color: 'var(--color-danger)', marginTop: 4 }}>
                               Configurá los valores faltantes en "Configuración del sistema" más abajo. El
@@ -670,6 +729,29 @@ export function AjustesPage() {
                               <code>CRON_SHARED_SECRET</code> de la Edge Function send-push-system.
                             </p>
                           )}
+
+                          <div style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-outlined"
+                              style={{ fontSize: 12, padding: '6px 12px' }}
+                              onClick={handleRunAuthTest}
+                              disabled={runningAuthTest}
+                            >
+                              {runningAuthTest ? 'Probando…' : 'Probar autorización'}
+                            </button>
+                            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                              Llama a send-push-system con un ID inexistente (nunca manda un push real) para confirmar
+                              en el momento si el secreto está sincronizado, sin esperar a la próxima notificación.
+                            </p>
+                            {authTestError && <p className="field-error">{authTestError}</p>}
+                            {authTestResult && (
+                              <p style={{ fontSize: 12, marginTop: 4, color: authTestResult.http_status_code === 404 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                {authTestResult.http_status_code != null && `HTTP ${authTestResult.http_status_code} — `}
+                                {authTestResult.diagnosis}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </>
                     )}

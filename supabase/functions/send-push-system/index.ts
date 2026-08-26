@@ -28,9 +28,13 @@
 //
 // Seguridad:
 // - NO acepta JWT de usuario. En su lugar exige el header
-//   "x-cron-secret" con el valor exacto del secreto CRON_SHARED_SECRET
+//   "x-cron-secret" con el valor del secreto CRON_SHARED_SECRET
 //   (configurado como secreto de esta función, nunca en el frontend, nunca
-//   en el repositorio). Sin ese header exacto, 401 inmediato. No hace falta
+//   en el repositorio). La comparación aplica trim() a ambos lados
+//   (revisión 2026-08: un 401 recurrente resultó ser whitespace invisible
+//   en uno de los dos valores, nunca un mismatch de contrato -- el header
+//   y el nombre del secreto siempre fueron los mismos en SQL y acá). Sin
+//   ese header, o si no coincide tras el trim(), 401 inmediato. No hace falta
 //   autorización de alcance estilo can_send_push_scope() (como sí tiene
 //   send-push): quien puede invocar esto ya demostró conocer el secreto
 //   server-side, no es un usuario con sesión que podría intentar abusar del
@@ -96,8 +100,17 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ sent: 0, error: 'Push no configurado (faltan VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY).' })
   }
 
-  const providedSecret = req.headers.get('x-cron-secret')
-  if (!providedSecret || providedSecret !== CRON_SHARED_SECRET) {
+  // trim() en ambos lados de la comparacion: el valor de system_settings ya
+  // se guarda con trim() (SystemSettingsSection.tsx), pero el Edge Secret
+  // CRON_SHARED_SECRET se setea vía `supabase secrets set` fuera de esta
+  // app -- un salto de linea o espacio pegado por error ahi (por ejemplo al
+  // copiar desde un archivo .env con newline final) rompe la comparacion
+  // estricta sin dejar ninguna pista visible. Mismo trim() del lado SQL
+  // (dispatch_notification_push, migracion 0090) para que ninguno de los
+  // dos lados pueda desincronizarse por whitespace invisible.
+  const providedSecret = req.headers.get('x-cron-secret')?.trim()
+  const expectedSecret = CRON_SHARED_SECRET.trim()
+  if (!providedSecret || providedSecret !== expectedSecret) {
     return jsonResponse({ sent: 0, error: 'No autorizado.' }, 401)
   }
 

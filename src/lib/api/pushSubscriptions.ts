@@ -130,3 +130,24 @@ export async function fetchPushInfraDiagnostics(): Promise<PushInfraDiagnostics>
   if (error) throw error
   return data as PushInfraDiagnostics
 }
+
+export interface PushDispatcherAuthTestResult {
+  project_url_configured: boolean
+  cron_shared_secret_configured: boolean
+  pg_net_installed: boolean
+  request_sent: boolean
+  http_status_code: number | null
+  diagnosis: string
+}
+
+// Prueba directa de autorización del dispatcher (migración 0090) -- llama a
+// send-push-system con un notificationId inexistente (nunca manda un push
+// real) para confirmar EN EL MOMENTO si system_settings.cron_shared_secret
+// y el Edge Secret CRON_SHARED_SECRET están sincronizados, sin esperar al
+// próximo insert en notifications. SOLO informatica_r4 (la RPC ya lo exige
+// server-side).
+export async function testPushDispatcherAuth(): Promise<PushDispatcherAuthTestResult> {
+  const { data, error } = await supabase.rpc('test_push_dispatcher_auth').single()
+  if (error) throw error
+  return data as PushDispatcherAuthTestResult
+}

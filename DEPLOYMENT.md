@@ -594,8 +594,19 @@ bloque de ejecución.
 
 ```
 supabase functions deploy admin-create-user
-supabase functions deploy send-push-system
+supabase functions deploy send-push-system --no-verify-jwt
 ```
+
+> **⚠️ `send-push-system` SIEMPRE necesita `--no-verify-jwt`.** La función nunca lee ni valida un
+> JWT de usuario (ver su código: la única autorización real es el header `x-cron-secret` contra
+> `CRON_SHARED_SECRET`) — la invoca `pg_net` desde `dispatch_notification_push()`, que solo manda
+> `Content-Type` y `x-cron-secret`, nunca `Authorization: Bearer <jwt>`. Si se despliega sin este
+> flag (el comportamiento por default de `supabase functions deploy`, y este proyecto no tiene
+> `supabase/config.toml` que lo cambie), el **gateway de Supabase Edge Functions** rechaza la
+> llamada con 401 *antes* de que el código de la función se ejecute — un 401 que ningún cambio en
+> `cron_shared_secret` puede arreglar, porque la comparación del secreto nunca llega a correr. Ver
+> sección 51 para cómo distinguir este 401 (del gateway) de un 401 real de `x-cron-secret`
+> desincronizado.
 
 `send-push-system` es una función nueva (recordatorio semanal, ver 6.3): requiere el secreto
 `CRON_SHARED_SECRET` (además de `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`VAPID_PUBLIC_KEY`/
@@ -6626,7 +6637,8 @@ En Ajustes → Notificaciones push se agregó:
 ### 47.7 Edge Functions a redesplegar
 
 - `send-push-system` (cambio de código: ahora acepta alcance completo, no
-  solo `profileId`): `supabase functions deploy send-push-system`.
+  solo `profileId`): `supabase functions deploy send-push-system --no-verify-jwt` (ver sección 6.2
+  para por qué este flag es obligatorio, no opcional).
 - `send-push`: sin cambios de código funcional (solo el comentario de
   cabecera), redeploy opcional.
 
@@ -6799,7 +6811,7 @@ aplicadas si esta ronda se corre de forma independiente.)
 ### 48.7 Edge Functions a redesplegar
 
 - `send-push-system` (cambio de código real: ya no confía en el payload):
-  `supabase functions deploy send-push-system`.
+  `supabase functions deploy send-push-system --no-verify-jwt` (ver sección 6.2).
 
 ### 48.8 Checklist manual para Axel
 
@@ -7148,3 +7160,132 @@ diagnóstico) y frontend.
 5. Confirmar que el número en la campanita del header coincide con la
    cantidad real de notificaciones sin leer (antes podía subestimar si
    había más de 20 pendientes).
+
+## 51. HTTP 401 persistente en `send-push-system`: el gateway de Supabase (JWT), no `x-cron-secret` (2026-08-26) — migración 0092
+
+Seguimiento del 401 de la sección 50: el fix de `trim()` sobre el secreto
+no resolvió el problema. El síntoma clave que lo confirmó: `informatica_r4`
+reseteó `CRON_SHARED_SECRET` en ambos lados (Edge Secret y
+`system_settings.cron_shared_secret`), redesplegó `send-push-system`, y el
+401 siguió exactamente igual. Si la causa fuera un mismatch de VALOR del
+secreto, un reset prolijo de ambos lados lo habría resuelto.
+
+### 51.1 Causa exacta
+
+El repo **nunca tuvo `supabase/config.toml`**. Toda Edge Function que se
+despliega con `supabase functions deploy <nombre>` sin el flag
+`--no-verify-jwt` (y sin un `config.toml` que lo desactive por proyecto)
+queda con `verify_jwt=true` -- el comportamiento por default de Supabase.
+Con `verify_jwt=true`, el **gateway** de Supabase Edge Functions (una capa
+delante de `Deno.serve()`, no código nuestro) exige un `Authorization:
+Bearer <jwt>` válido y responde 401 él mismo si no lo encuentra --
+**antes** de que el código de `send-push-system` (el `x-cron-secret`
+check) llegue a ejecutarse.
+
+`dispatch_notification_push()` (0085/0089/0090) llama a `send-push-system`
+vía `net.http_post()` mandando únicamente `Content-Type` y `x-cron-secret`
+-- nunca mandó ni debía mandar un JWT, porque la función está diseñada
+explícitamente para no aceptar JWT de usuario (ver el comentario de
+cabecera de `send-push-system/index.ts`: "NO acepta JWT de usuario... Sin
+ese header (`x-cron-secret`), o si no coincide, 401 inmediato"). El
+gateway, sin embargo, no sabe nada de ese diseño -- exige JWT igual, salvo
+que se le indique explícitamente lo contrario en el deploy.
+
+Cualquier despliegue anterior de `send-push-system` (todos los comandos
+documentados en este archivo antes de esta sección) quedó con
+`verify_jwt=true` por default. **Todos** los 401 reportados en la sección
+50 y en los seguimientos posteriores son consistentes con esto.
+
+### 51.2 Cómo se distinguió sin acceso directo a producción
+
+`net._http_response` (tabla interna de `pg_net`) guarda el **body real**
+de la respuesta HTTP, no solo el `status_code`. El body del gateway y el
+body de nuestro código tienen formas completamente distintas:
+
+- Gateway (JWT rechazado): algo como
+  `{"code":401,"message":"Missing authorization header"}` (o "Invalid
+  JWT", "invalid claim: missing sub claim", etc. -- siempre con la clave
+  `"message"`).
+- Nuestro código (`send-push-system/index.ts`, ver `jsonResponse`):
+  `{"sent":0,"error":"No autorizado."}` -- nunca `"message"`, nunca
+  menciona JWT.
+
+Antes de esta migración, ni `get_push_infra_diagnostics()` (0089) ni
+`test_push_dispatcher_auth()` (0090) leían esa columna (`content`) --
+ambas solo tenían `status_code`/`error_msg`, insuficiente para diferenciar
+las dos causas de 401.
+
+### 51.3 Fix
+
+**Edge Function (obligatorio para resolver el 401):**
+
+```
+supabase functions deploy send-push-system --no-verify-jwt
+```
+
+Esto es seguro -- `send-push-system` nunca dependió de la verificación de
+JWT del gateway para su autorización real; esa siempre fue exclusivamente
+el header `x-cron-secret` comparado contra `CRON_SHARED_SECRET` dentro del
+propio código (ver `index.ts`). Desactivar `verify_jwt` a nivel de gateway
+no abre ninguna puerta nueva: la función seguía (y sigue) rechazando con
+401 cualquier request sin el `x-cron-secret` correcto.
+
+**SQL (migración 0092, diagnóstico únicamente -- no cambia autorización ni
+RLS):** `get_push_infra_diagnostics()` y `test_push_dispatcher_auth()`
+ahora también devuelven el body real de la última respuesta HTTP
+(`last_response_body`/`response_body`, truncado a 300 caracteres --
+ninguno de los dos bodies posibles contiene el secreto). El diagnóstico de
+Ajustes usa ese body para mostrar un mensaje distinto según el origen del
+401:
+
+- Si el body contiene `"message"`/"missing authorization"/"invalid
+  jwt"/etc: "HTTP 401 del GATEWAY de Supabase... hay que redesplegar con
+  `--no-verify-jwt`".
+- Si no: "La Edge Function rechazó la llamada: secreto incorrecto o
+  desincronizado" (el mensaje que ya existía desde la sección 50).
+
+### 51.4 Validación esperada después del fix
+
+1. Ajustes → "Ver diagnóstico de push" → "Probar autorización": debe
+   devolver **HTTP 404** ("¡autorización correcta!"), no 401. Un 404 acá
+   es el resultado ESPERADO -- la prueba usa un `notificationId` que no
+   existe a propósito, así que la Edge Function llega a buscarlo (superó
+   la autorización) y no lo encuentra.
+2. "Probar push server-side" (con una notificación real): debe terminar
+   en "push enviado a X/Y dispositivo(s)" o un error real posterior (por
+   ejemplo, sin suscripciones activas) -- nunca más en 401.
+3. Si el 401 persiste después de `--no-verify-jwt`: recién ahí es momento
+   de sospechar de `x-cron-secret` en sí (ver sección 33.4/50 para cómo
+   reconfigurarlo) -- el body de la respuesta (visible en el diagnóstico)
+   lo va a confirmar sin ambigüedad.
+
+### 51.5 Nota sobre `set_system_setting()` en el SQL Editor
+
+Sigue sin funcionar desde ahí, y es esperado (ver sección 33.3): el SQL
+Editor de Supabase corre sin el JWT de ningún usuario de la app, así que
+`auth.uid()` es `null` y `is_super_admin()` da `false` aunque tu usuario
+real sea `informatica_r4`. La única forma soportada de configurar
+`cron_shared_secret`/`project_url` es `/ajustes` → "Configuración del
+sistema", que sí corre bajo tu sesión real. No hay (ni va a haber) un
+camino por SQL Editor para esto -- es la misma RLS que protege
+`system_settings` de cualquier usuario autenticado que no sea
+`informatica_r4`, y el SQL Editor no tiene forma de asumir esa identidad.
+
+### 51.6 Edge Functions a redesplegar
+
+- `send-push-system`: `supabase functions deploy send-push-system --no-verify-jwt` (el fix real de
+  esta ronda).
+
+### 51.7 Checklist manual para Axel
+
+1. Ejecutar `npx supabase functions deploy send-push-system --no-verify-jwt` (con `--no-verify-jwt`,
+   no el comando sin el flag que se usó antes).
+2. Aplicar la migración `0092_push_dispatcher_gateway_vs_function_401.sql`.
+3. Ajustes → "Ver diagnóstico de push" → "Probar autorización" → confirmar HTTP 404.
+4. Si sigue en 401: mirar el texto "Respuesta cruda" que ahora aparece debajo del resultado --
+   si menciona "message"/"authorization"/"jwt", el deploy sin `--no-verify-jwt` no se aplicó
+   correctamente (confirmar en el Dashboard → Edge Functions → send-push-system → Details que
+   "Verify JWT" está en OFF); si dice `{"sent":0,"error":"No autorizado."}`, recién ahí es un
+   problema real de `cron_shared_secret` (sección 33.4).
+5. "Probar push server-side" con una notificación real → confirmar que llega el push físico al
+   dispositivo (no solo que el diagnóstico dice "enviado").

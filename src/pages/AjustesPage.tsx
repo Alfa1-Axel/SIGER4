@@ -37,6 +37,31 @@ import { describeSupabaseError } from '../lib/api/errors'
 // apenas createNotification() devuelve.
 const PUSH_DIAGNOSTIC_POLL_DELAYS_MS = [800, 1200, 2000]
 
+// Un 401 puede venir de dos lugares completamente distintos, y ningún
+// cambio de cron_shared_secret arregla el que no corresponde:
+//   - GATEWAY de Supabase Edge Functions (verify_jwt=true, el valor por
+//     defecto si la función se desplegó sin --no-verify-jwt): rechaza la
+//     request ANTES de ejecutar nuestro código, porque pg_net nunca manda
+//     un JWT (solo x-cron-secret). Body típico: {"code":401,"message":
+//     "Missing authorization header"} o "Invalid JWT".
+//   - NUESTRO CÓDIGO (send-push-system/index.ts): x-cron-secret no
+//     coincide con CRON_SHARED_SECRET. Body: {"sent":0,"error":"No
+//     autorizado."} -- nunca dice "message" ni menciona JWT.
+// Se distingue por el CONTENIDO del body, no solo por el status_code
+// (ambos casos dan 401) -- ver get_push_infra_diagnostics()/
+// test_push_dispatcher_auth() (migración 0092).
+function looksLikeGatewayRejection(body: string | null): boolean {
+  if (!body) return false
+  const lower = body.toLowerCase()
+  return (
+    lower.includes('missing authorization') ||
+    lower.includes('invalid jwt') ||
+    lower.includes('invalid claim') ||
+    lower.includes('jwt expired') ||
+    lower.includes('"message"')
+  )
+}
+
 // Interpreta el resultado consolidado de get_push_infra_diagnostics()
 // (0089) en un mensaje accionable en vez de mostrar el número de status
 // HTTP pelado -- antes de esto, un HTTP 401 ya registrado en
@@ -53,6 +78,12 @@ function describePushInfraStatus(infra: PushInfraDiagnostics): { message: string
     }
   }
   const status = infra.last_response_status_code
+  if (status === 401 && looksLikeGatewayRejection(infra.last_response_body)) {
+    return {
+      message: 'HTTP 401 del GATEWAY de Supabase, no de nuestro código: send-push-system exige un JWT válido y pg_net nunca lo manda (solo x-cron-secret).',
+      action: 'Redesplegar con: npx supabase functions deploy send-push-system --no-verify-jwt. Ningún cambio en cron_shared_secret va a arreglar esto.',
+    }
+  }
   if (status === 401) {
     return {
       message: 'La Edge Function rechazó la llamada: secreto incorrecto o desincronizado.',
@@ -712,6 +743,11 @@ export function AjustesPage() {
                               {pushInfraDiagnostics.last_response_error && ` · ${pushInfraDiagnostics.last_response_error}`}
                             </div>
                           )}
+                          {pushInfraDiagnostics.last_response_body && (
+                            <div style={{ color: 'var(--color-text-muted)', fontSize: 10, wordBreak: 'break-all' }}>
+                              Respuesta cruda: <code>{pushInfraDiagnostics.last_response_body}</code>
+                            </div>
+                          )}
                           {(() => {
                             const status = describePushInfraStatus(pushInfraDiagnostics)
                             if (!status) return null
@@ -746,10 +782,17 @@ export function AjustesPage() {
                             </p>
                             {authTestError && <p className="field-error">{authTestError}</p>}
                             {authTestResult && (
-                              <p style={{ fontSize: 12, marginTop: 4, color: authTestResult.http_status_code === 404 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                {authTestResult.http_status_code != null && `HTTP ${authTestResult.http_status_code} — `}
-                                {authTestResult.diagnosis}
-                              </p>
+                              <>
+                                <p style={{ fontSize: 12, marginTop: 4, color: authTestResult.http_status_code === 404 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                  {authTestResult.http_status_code != null && `HTTP ${authTestResult.http_status_code} — `}
+                                  {authTestResult.diagnosis}
+                                </p>
+                                {authTestResult.response_body && (
+                                  <p style={{ fontSize: 10, marginTop: 2, color: 'var(--color-text-muted)', wordBreak: 'break-all' }}>
+                                    Respuesta cruda: <code>{authTestResult.response_body}</code>
+                                  </p>
+                                )}
+                              </>
                             )}
                           </div>
                         </div>

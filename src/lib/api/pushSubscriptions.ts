@@ -117,6 +117,7 @@ export interface PushInfraDiagnostics {
   recent_responses_count: number | null
   last_response_status_code: number | null
   last_response_error: string | null
+  last_response_body: string | null
   last_response_at: string | null
 }
 
@@ -137,6 +138,7 @@ export interface PushDispatcherAuthTestResult {
   pg_net_installed: boolean
   request_sent: boolean
   http_status_code: number | null
+  response_body: string | null
   diagnosis: string
 }
 

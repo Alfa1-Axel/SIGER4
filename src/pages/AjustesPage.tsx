@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
@@ -28,6 +28,8 @@ import type {
 } from '../lib/api/pushSubscriptions'
 import { supabase } from '../lib/supabaseClient'
 import { describeSupabaseError } from '../lib/api/errors'
+import { readLastPushDiagnostic } from '../lib/pushDiagnosticLocal'
+import type { PushDiagnosticRecord } from '../lib/pushDiagnosticLocal'
 
 // Cuanto esperar entre reintentos de lectura de push_send_log al probar el
 // push server-side: pg_net (dispatch_notification_push, migracion 0085) es
@@ -146,8 +148,11 @@ export function AjustesPage() {
   const [testingNotification, setTestingNotification] = useState(false)
   const [testNotificationResult, setTestNotificationResult] = useState<'ok' | 'error' | null>(null)
   const [testPushResult, setTestPushResult] = useState<
-    { ok: boolean; attempted: boolean; sent: number; recipients: number; error?: string } | null
+    { ok: boolean; attempted: boolean; sent: number; recipients: number; error?: string; notificationId?: string } | null
   >(null)
+
+  const [localPushDiagnostic, setLocalPushDiagnostic] = useState<PushDiagnosticRecord | null>(null)
+  const [localPushDiagnosticLoaded, setLocalPushDiagnosticLoaded] = useState(false)
 
   const [pushDiagnosticsOpen, setPushDiagnosticsOpen] = useState(false)
   const [loadingPushDiagnostics, setLoadingPushDiagnostics] = useState(false)
@@ -252,27 +257,55 @@ export function AjustesPage() {
         const rows = await fetchOwnPushDiagnostics(5)
         const row = rows.find((r) => r.notification_id === notification.id)
         if (row?.push_attempted) {
+          // "ok" exige status distinto de 'error' Y ausencia de error_message:
+          // push_send_log.status se queda en 'ok' aunque haya fallas
+          // PARCIALES de entrega (ver send-push-system/index.ts,
+          // deliveryErrors) -- confiar solo en push_status ocultaría un envío
+          // parcialmente fallido detrás de un resultado "exitoso".
+          const hasPartialError = Boolean(row.push_error_message)
           setTestPushResult({
-            ok: row.push_status !== 'error',
+            ok: row.push_status !== 'error' && !hasPartialError,
             attempted: true,
             sent: row.push_sent_count ?? 0,
             recipients: row.push_recipients_count ?? 0,
             error: row.push_error_message ?? undefined,
+            notificationId: notification.id,
           })
           break
         }
-        setTestPushResult({ ok: false, attempted: false, sent: 0, recipients: 0 })
+        setTestPushResult({ ok: false, attempted: false, sent: 0, recipients: 0, notificationId: notification.id })
       }
 
       // Refresca el panel de diagnóstico (si está abierto) para que la
       // prueba recién hecha aparezca sin tener que cerrarlo y reabrirlo.
       if (pushDiagnosticsOpen) void handleLoadPushDiagnostics()
+      // Re-lee el diagnóstico local del SW: si la pestaña sigue en primer
+      // plano, el evento 'push' puede llegar a procesarse durante el poll
+      // de arriba y dejar un registro nuevo en IndexedDB.
+      void loadLocalPushDiagnostic()
     } catch {
       setTestNotificationResult('error')
     } finally {
       setTestingNotification(false)
     }
   }
+
+  // Diagnostico local del service worker (IndexedDB, ver src/sw.ts) -- se
+  // carga solo, sin esperar a que el usuario abra "Ver diagnóstico de push":
+  // es lo único que puede responder "¿el push que el backend dice haber
+  // enviado realmente llegó a ESTE dispositivo?", y el usuario común
+  // también debe poder verlo (a diferencia del resto del diagnóstico
+  // técnico, esto no expone infraestructura del servidor -- ver sección 2
+  // del pedido).
+  async function loadLocalPushDiagnostic() {
+    const record = await readLastPushDiagnostic()
+    setLocalPushDiagnostic(record)
+    setLocalPushDiagnosticLoaded(true)
+  }
+
+  useEffect(() => {
+    void loadLocalPushDiagnostic()
+  }, [])
 
   async function handleLoadPushDiagnostics() {
     if (!profile) return
@@ -631,13 +664,84 @@ export function AjustesPage() {
               `Push server-side enviado a ${testPushResult.sent} de ${testPushResult.recipients} dispositivo(s). Si no te llegó, revisá los permisos de notificaciones del navegador/SO.`}
             {testPushResult.attempted && testPushResult.ok && testPushResult.sent === 0 &&
               'El servidor intentó el push, pero no había ninguna suscripción activa para este perfil (revisá el estado de arriba).'}
-            {testPushResult.attempted && !testPushResult.ok && `El servidor intentó el push y falló: ${testPushResult.error}`}
+            {testPushResult.attempted && !testPushResult.ok && testPushResult.sent > 0 &&
+              `El servidor envió el push a ${testPushResult.sent} de ${testPushResult.recipients} dispositivo(s), con errores parciales: ${testPushResult.error}`}
+            {testPushResult.attempted && !testPushResult.ok && testPushResult.sent === 0 &&
+              `El servidor intentó el push y falló: ${testPushResult.error}`}
           </p>
         )}
         {testNotificationResult === 'ok' && push.status === 'ready' && !push.subscribed && (
           <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Notificaciones push desactivadas en este dispositivo: no vas a recibir el push aunque el servidor lo envíe.
           </p>
+        )}
+
+        {/* Diagnostico local del service worker de ESTE dispositivo (ver
+            src/sw.ts / src/lib/pushDiagnosticLocal.ts) -- visible para
+            cualquier usuario, a diferencia del diagnostico tecnico de abajo:
+            no expone infraestructura del servidor, solo si el navegador
+            recibió y pudo mostrar el último push. Es la pieza que faltaba
+            para distinguir "el backend envió" de "la PWA recibió": el
+            backend nunca puede saber esto por sí solo. */}
+        {push.status === 'ready' && localPushDiagnosticLoaded && (
+          <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: 'var(--color-surface-muted, rgba(0,0,0,0.03))' }}>
+            <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Último push recibido en este dispositivo</p>
+            {!localPushDiagnostic && (
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                Este service worker todavía no registró haber recibido ningún push (probá el botón de arriba con la app en
+                segundo plano, o esperá a la próxima notificación real).
+              </p>
+            )}
+            {localPushDiagnostic && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
+                <div>Recibido: {new Date(localPushDiagnostic.push_event_received_at).toLocaleString('es-AR')}</div>
+                <div>Título: {localPushDiagnostic.notification_title ?? '(sin título)'}</div>
+                {!localPushDiagnostic.payload_valid_json && (
+                  <div style={{ color: 'var(--color-danger)' }}>
+                    El payload recibido no era JSON válido — se mostró un título/cuerpo genérico como respaldo.
+                  </div>
+                )}
+                {localPushDiagnostic.show_notification_succeeded ? (
+                  <div style={{ color: 'var(--color-success)' }}>La notificación se mostró correctamente en este dispositivo.</div>
+                ) : (
+                  <div style={{ color: 'var(--color-danger)' }}>
+                    El service worker recibió el push pero showNotification() falló
+                    {localPushDiagnostic.show_notification_error ? `: ${localPushDiagnostic.show_notification_error}` : '.'}
+                  </div>
+                )}
+                {testPushResult?.attempted &&
+                  testPushResult.notificationId &&
+                  localPushDiagnostic.notification_id === testPushResult.notificationId && (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
+                      {/* Solo se muestra cuando el push local registrado ES el de esta
+                          prueba (mismo notification_id) -- evita comparar contra un push
+                          viejo que no tiene nada que ver con la prueba recién hecha. */}
+                      Comparación: el servidor confirmó el envío de esta prueba{testPushResult.ok && testPushResult.sent > 0 ? ' y' : ', pero'} el
+                      service worker {localPushDiagnostic.show_notification_succeeded ? 'sí' : 'no'} llegó a mostrarla.
+                    </div>
+                  )}
+                {testPushResult?.attempted &&
+                  testPushResult.notificationId &&
+                  testPushResult.ok &&
+                  testPushResult.sent > 0 &&
+                  localPushDiagnostic.notification_id !== testPushResult.notificationId && (
+                    <div style={{ color: 'var(--color-danger)', fontSize: 11 }}>
+                      El servidor confirmó el envío de esta prueba, pero el service worker de este dispositivo todavía no
+                      registró haberla recibido. Probá "Actualizar" en unos segundos, o esto puede indicar que el push no
+                      llegó al navegador.
+                    </div>
+                  )}
+              </div>
+            )}
+            <button
+              type="button"
+              className="btn btn-outlined"
+              style={{ fontSize: 11, padding: '4px 10px', marginTop: 8 }}
+              onClick={() => void loadLocalPushDiagnostic()}
+            >
+              Actualizar
+            </button>
+          </div>
         )}
 
         {/* Diagnostico tecnico completo (push_send_log: estado, errores,
@@ -686,7 +790,8 @@ export function AjustesPage() {
                               {!row.push_status && 'sin registro (¿trigger no corrió?)'}
                               {row.push_attempted && row.push_status === 'error' && `error: ${row.push_error_message ?? 'desconocido'}`}
                               {row.push_attempted && row.push_status !== 'error' &&
-                                `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)`}
+                                `push enviado a ${row.push_sent_count ?? 0}/${row.push_recipients_count ?? 0} dispositivo(s)` +
+                                  (row.push_error_message ? ` — con errores parciales: ${row.push_error_message}` : '')}
                             </div>
                           </div>
                         ))}

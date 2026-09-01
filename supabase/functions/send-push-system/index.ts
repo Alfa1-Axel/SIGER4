@@ -51,6 +51,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import webpush from 'npm:web-push@3.6.7'
+import { resolvePushTitle, resolvePushBody, WEB_PUSH_OPTIONS } from '../_shared/pushPayload.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -240,15 +241,27 @@ Deno.serve(async (req: Request) => {
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 
+  // title/body siempre tienen fallback (nunca vacíos, ver
+  // _shared/pushPayload.ts): un push sin título puede no mostrarse en
+  // Android/Chrome, lo que en el dispositivo es indistinguible de "nunca
+  // llegó nada" -- ver el mismo fallback del lado del service worker
+  // (src/sw.ts) como segunda barrera. notification_id/type van en el
+  // payload para que el diagnóstico local del SW pueda correlacionar
+  // "backend envió esta notificación" con "el SW recibió este evento push"
+  // -- antes el payload no traía ningún identificador, así que ese cruce
+  // era imposible de hacer del lado del dispositivo.
   const payload = JSON.stringify({
-    title: notification.title,
-    body: notification.body ?? '',
+    title: resolvePushTitle(notification.title),
+    body: resolvePushBody(notification.body),
     url: '/notificaciones',
     tag: notification.type,
+    notification_id: notification.id,
+    type: notification.type,
   })
 
   let sent = 0
   const staleSubscriptionIds: string[] = []
+  const deliveryErrors: string[] = []
 
   await Promise.all(
     subscriptions.map(async (sub: { id: string; endpoint: string; p256dh_key: string; auth_key: string }) => {
@@ -256,11 +269,22 @@ Deno.serve(async (req: Request) => {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh_key, auth: sub.auth_key } },
           payload,
+          WEB_PUSH_OPTIONS,
         )
         sent += 1
       } catch (err) {
         const status = (err as { statusCode?: number })?.statusCode
-        if (status === 404 || status === 410) staleSubscriptionIds.push(sub.id)
+        if (status === 404 || status === 410) {
+          staleSubscriptionIds.push(sub.id)
+        } else {
+          // Antes: cualquier error que no fuera 404/410 (429 rate-limit de
+          // FCM, timeout, 5xx del push service) se tragaba en silencio --
+          // ni contaba como enviado ni quedaba rastro de qué pasó. Ahora
+          // queda registrado en error_message (push_send_log) aunque el
+          // resto de las suscripciones sí se hayan enviado bien.
+          const message = err instanceof Error ? err.message : String(err)
+          deliveryErrors.push(`${sub.id}: HTTP ${status ?? '?'} ${message}`)
+        }
       }
     }),
   )
@@ -271,7 +295,11 @@ Deno.serve(async (req: Request) => {
 
   await supabaseAdmin
     .from('push_send_log')
-    .update({ recipients_count: subscriptions.length, sent_count: sent })
+    .update({
+      recipients_count: subscriptions.length,
+      sent_count: sent,
+      error_message: deliveryErrors.length ? deliveryErrors.join(' | ').slice(0, 2000) : null,
+    })
     .eq('id', logRow.id)
 
   return jsonResponse({ sent, removed: staleSubscriptionIds.length })

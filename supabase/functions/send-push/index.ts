@@ -50,6 +50,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
 import webpush from 'npm:web-push@3.6.7'
+import { resolvePushTitle, resolvePushBody, WEB_PUSH_OPTIONS } from '../_shared/pushPayload.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
@@ -239,15 +240,21 @@ Deno.serve(async (req: Request) => {
 
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
 
+  // Fallback title/body y contrato de payload compartidos con
+  // send-push-system vía _shared/pushPayload.ts -- ambas funciones
+  // alimentan el mismo service worker.
   const payload = JSON.stringify({
-    title: body.title,
-    body: body.body ?? '',
+    title: resolvePushTitle(body.title),
+    body: resolvePushBody(body.body),
     url: body.url ?? '/notificaciones',
     tag: body.tag,
+    notification_id: body.notificationId,
+    type: body.tag,
   })
 
   let sent = 0
   const staleSubscriptionIds: string[] = []
+  const deliveryErrors: string[] = []
 
   await Promise.all(
     subscriptions.map(async (sub: { id: string; endpoint: string; p256dh_key: string; auth_key: string }) => {
@@ -255,13 +262,19 @@ Deno.serve(async (req: Request) => {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh_key, auth: sub.auth_key } },
           payload,
+          WEB_PUSH_OPTIONS,
         )
         sent += 1
       } catch (err) {
         // 404/410: la suscripcion ya no es valida (usuario revoco el permiso,
         // desinstalo la app, etc.) — se limpia en vez de reintentar siempre.
         const status = (err as { statusCode?: number })?.statusCode
-        if (status === 404 || status === 410) staleSubscriptionIds.push(sub.id)
+        if (status === 404 || status === 410) {
+          staleSubscriptionIds.push(sub.id)
+        } else {
+          const message = err instanceof Error ? err.message : String(err)
+          deliveryErrors.push(`${sub.id}: HTTP ${status ?? '?'} ${message}`)
+        }
       }
     }),
   )
@@ -272,7 +285,11 @@ Deno.serve(async (req: Request) => {
 
   await supabaseAdmin
     .from('push_send_log')
-    .update({ recipients_count: subscriptions.length, sent_count: sent })
+    .update({
+      recipients_count: subscriptions.length,
+      sent_count: sent,
+      error_message: deliveryErrors.length ? deliveryErrors.join(' | ').slice(0, 2000) : null,
+    })
     .eq('id', logRow.id)
 
   return jsonResponse({ sent, removed: staleSubscriptionIds.length })

@@ -42,6 +42,8 @@ export default [
         HTMLInputElement: 'readonly',
         caches: 'readonly',
         Blob: 'readonly',
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
         __SIGER4_BUILD_VERSION__: 'readonly',
         __SIGER4_BUILD_TIME__: 'readonly',
         __SIGER4_APP_VERSION__: 'readonly',
@@ -93,6 +95,8 @@ export default [
         self: 'readonly',
         ServiceWorkerGlobalScope: 'readonly',
         WindowClient: 'readonly',
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
       },
     },
     plugins: {

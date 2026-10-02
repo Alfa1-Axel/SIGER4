@@ -13,6 +13,12 @@
   400×400px, con transparencia preservada, 47 KB (optimizado 2026-08-20 desde 338 KB / 1254×1254px,
   mismo criterio que arriba).
 
+- Logo de la Escuela Regional ("Anexo Escuela Regional 4 · Don Carlos Merlo"): NO está en esta carpeta.
+  Vive en `src/assets/Logo escuela.png`, copia exacta (mismo nombre y mismos bytes) del original
+  `Logo escuela.png` de la raíz, que sigue excluido de git. Se importa desde
+  `src/components/EscuelaHeader.tsx`, así Vite lo empaqueta con hash. 300×300px, PNG con
+  transparencia: se ve bien en tema claro y oscuro. Se muestra a 48-56px dentro del módulo Escuela.
+
 Estos archivos se usan en el login, sidebar, header, escuela, ajustes, reportes PDF y precache del
 service worker (PWA) — el favicon y el manifest de PWA en sí usan un set aparte en `public/icons/`,
 no estos archivos. Si el logo original cambia, reemplazar el archivo correspondiente en esta

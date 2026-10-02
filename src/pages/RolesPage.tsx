@@ -1,26 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '../components/layout/AppShell'
 import { useAuth } from '../hooks/useAuth'
-import { fetchSchoolDepartmentMembers, fetchSchoolDepartments } from '../lib/api/schoolAvales'
+import { fetchAvalesDepartments, fetchSchoolDepartmentMembers } from '../lib/api/schoolAvales'
 import { fetchProfiles } from '../lib/api/users'
 import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCOPE_LEVELS, groupRolesByCategory } from '../types/roles'
-import type { SchoolDepartment, SchoolDepartmentMember } from '../types/database'
+import type { Department, SchoolDepartmentMember } from '../types/database'
 
 // Guía de roles y permisos: todos los roles agrupados por tipo/nivel, con su
 // función, su alcance y sus permisos principales. Es solo informativa (no
 // asigna nada) y la puede abrir cualquier usuario. El listado de
-// departamentos internos de Escuela sale de RLS: solo lo ve quien tiene
-// acceso a Avales; los coordinadores asignados, solo Informática.
+// departamentos con coordinación en Avales sale de
+// list_school_avales_departments(): solo lo ve quien tiene acceso a Avales;
+// los coordinadores asignados, solo Informática.
 export function RolesPage() {
   const { roles: myRoles, isAdmin } = useAuth()
-  const [departments, setDepartments] = useState<SchoolDepartment[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [members, setMembers] = useState<SchoolDepartmentMember[]>([])
   const [profileNames, setProfileNames] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
     let active = true
     Promise.all([
-      fetchSchoolDepartments().catch(() => []),
+      fetchAvalesDepartments().catch(() => []),
       isAdmin ? fetchSchoolDepartmentMembers().catch(() => []) : Promise.resolve([]),
       isAdmin ? fetchProfiles().catch(() => []) : Promise.resolve([]),
     ]).then(([departmentsData, membersData, profilesData]) => {
@@ -93,7 +94,7 @@ export function RolesPage() {
             {category.key === 'departamento_escuela' && departments.length > 0 && (
               <div className="card" style={{ marginTop: 8 }}>
                 <div className="kpi-label" style={{ marginBottom: 6 }}>
-                  Departamentos internos de Escuela
+                  Departamentos en Avales (los mismos de la sección Departamentos)
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {departments.map((department) => (

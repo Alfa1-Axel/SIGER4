@@ -27,7 +27,7 @@ import { EscuelaPage } from './pages/EscuelaPage'
 import { CursoFormPage } from './pages/CursoFormPage'
 import { AvalesPage } from './pages/AvalesPage'
 import { AvalFormPage } from './pages/AvalFormPage'
-import { AvalesDepartamentosPage } from './pages/AvalesDepartamentosPage'
+import { AvalesCoordinadoresPage } from './pages/AvalesCoordinadoresPage'
 import { RolesPage } from './pages/RolesPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
@@ -94,7 +94,8 @@ export default function App() {
         <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/escuela/avales" element={<SchoolAvalesRoute><AvalesPage /></SchoolAvalesRoute>} />
         <Route path="/escuela/avales/nuevo" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
-        <Route path="/escuela/avales/departamentos" element={<SchoolAvalesRoute><AvalesDepartamentosPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/coordinadores" element={<SchoolAvalesRoute><AvalesCoordinadoresPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/departamentos" element={<Navigate to="/escuela/avales/coordinadores" replace />} />
         <Route path="/escuela/avales/:id/editar" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
         <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />

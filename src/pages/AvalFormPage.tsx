@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
-import { EscuelaTabs } from '../components/EscuelaTabs'
+import { EscuelaHeader } from '../components/EscuelaHeader'
 import {
+  fetchAvalesDepartments,
   fetchSchoolAvalDocumentById,
-  fetchSchoolDepartments,
   updateSchoolAvalDocument,
   uploadSchoolAvalDocument,
 } from '../lib/api/schoolAvales'
@@ -14,7 +14,7 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { formatBytes } from '../lib/format'
 import { isMobileUserAgent } from '../lib/device'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
-import type { SchoolAvalDocument, SchoolDepartment } from '../types/database'
+import type { Department, SchoolAvalDocument } from '../types/database'
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024
 const TITLE_MAX = 200
@@ -36,7 +36,7 @@ export function AvalFormPage() {
   const [searchParams] = useSearchParams()
   const { canManage } = useSchoolAvalesAccess()
 
-  const [departments, setDepartments] = useState<SchoolDepartment[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [existing, setExisting] = useState<SchoolAvalDocument | null>(null)
   const [departmentId, setDepartmentId] = useState('')
   const [title, setTitle] = useState('')
@@ -59,7 +59,7 @@ export function AvalFormPage() {
       return
     }
     let active = true
-    Promise.all([fetchSchoolDepartments(), id ? fetchSchoolAvalDocumentById(id) : Promise.resolve(null)])
+    Promise.all([fetchAvalesDepartments(), id ? fetchSchoolAvalDocumentById(id) : Promise.resolve(null)])
       .then(([departmentsData, doc]) => {
         if (!active) return
         setDepartments(departmentsData)
@@ -74,7 +74,7 @@ export function AvalFormPage() {
           setDescription(doc.description ?? '')
           setObservations(doc.observations ?? '')
         } else {
-          const fromQuery = departmentsData.find((d) => d.slug === searchParams.get('departamento') && d.is_active)
+          const fromQuery = departmentsData.find((d) => d.id === searchParams.get('departamento') && d.is_active)
           const activeDepartments = departmentsData.filter((d) => d.is_active)
           setDepartmentId(fromQuery?.id ?? (activeDepartments.length === 1 ? activeDepartments[0].id : ''))
         }
@@ -89,10 +89,7 @@ export function AvalFormPage() {
   // Al crear, solo departamentos activos (los únicos donde la base deja
   // cargar). Al editar (admin), todos, incluido el actual aunque esté inactivo.
   const departmentOptions = isEditing ? departments : departments.filter((d) => d.is_active)
-  const backHref = (() => {
-    const slug = departments.find((d) => d.id === departmentId)?.slug
-    return slug ? `/escuela/avales?departamento=${slug}` : '/escuela/avales'
-  })()
+  const backHref = departmentId ? `/escuela/avales?departamento=${departmentId}` : '/escuela/avales'
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0] ?? null
@@ -117,7 +114,7 @@ export function AvalFormPage() {
     event.preventDefault()
     setError(null)
     const cleanTitle = title.trim()
-    if (!departmentId) return setError('Elegí el departamento interno.')
+    if (!departmentId) return setError('Elegí el departamento.')
     if (!cleanTitle) return setError('Ingresá un título para el documento.')
     if (cleanTitle.length > TITLE_MAX) return setError(`El título no puede superar los ${TITLE_MAX} caracteres.`)
     if (description.length > TEXT_MAX || observations.length > TEXT_MAX) {
@@ -127,8 +124,7 @@ export function AvalFormPage() {
 
     setSubmitting(true)
     try {
-      const slug = departments.find((d) => d.id === departmentId)?.slug
-      const target = slug ? `/escuela/avales?departamento=${slug}` : '/escuela/avales'
+      const target = `/escuela/avales?departamento=${departmentId}`
       if (isEditing && id) {
         await updateSchoolAvalDocument(id, {
           title: cleanTitle,
@@ -159,7 +155,7 @@ export function AvalFormPage() {
   if (blockedEdit) {
     return (
       <AppShell title={pageTitle}>
-        <EscuelaTabs />
+        <EscuelaHeader />
         <div className="empty-state">
           <p style={{ marginBottom: 12 }}>Solo Informática R4 puede editar los datos de un aval ya cargado.</p>
           <Link to="/escuela/avales" className="btn btn-outlined">
@@ -173,7 +169,7 @@ export function AvalFormPage() {
   if (blockedOnMobile) {
     return (
       <AppShell title={pageTitle}>
-        <EscuelaTabs />
+        <EscuelaHeader />
         <div className="empty-state">
           <p style={{ marginBottom: 12 }}>
             La carga de documentos está disponible solo desde PC. Desde el celular podés ver y descargar los avales.
@@ -188,7 +184,7 @@ export function AvalFormPage() {
 
   return (
     <AppShell title={pageTitle}>
-      <EscuelaTabs />
+      <EscuelaHeader />
       <Link to={backHref} className="back-link">
         ← Volver a Avales
       </Link>
@@ -196,7 +192,7 @@ export function AvalFormPage() {
       <p className="page-subtitle">
         {isEditing
           ? 'Solo se edita la información del documento. El archivo cargado no se reemplaza.'
-          : 'El documento queda guardado en el departamento interno que elijas.'}
+          : 'El documento queda guardado en el departamento que elijas.'}
       </p>
 
       {loading && <div className="loading-state" role="status">Cargando…</div>}
@@ -214,7 +210,7 @@ export function AvalFormPage() {
 
       {!loading && !loadError && !notFound && departmentOptions.length === 0 && (
         <div className="empty-state">
-          No tenés departamentos internos activos donde cargar avales. Si deberías tenerlos, pedile a Informática R4 que revise tu
+          No tenés departamentos activos donde cargar avales. Si deberías tenerlos, pedile a Informática R4 que revise tu
           asignación.
         </div>
       )}
@@ -222,7 +218,7 @@ export function AvalFormPage() {
       {!loading && !loadError && !notFound && departmentOptions.length > 0 && (
         <form onSubmit={handleSubmit} className="card-solid" noValidate>
           <div className="field">
-            <label htmlFor="department">Departamento interno</label>
+            <label htmlFor="department">Departamento</label>
             <select id="department" required value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">Seleccionar departamento</option>
               {departmentOptions.map((department) => (

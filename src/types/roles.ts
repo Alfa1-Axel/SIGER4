@@ -22,9 +22,9 @@ export type RoleKey =
   | 'administrativo'
   | 'invitado'
 
-// Grupo visual de cada rol (tipo/nivel). "departamento_escuela" son los
-// departamentos INTERNOS de la Escuela (Fuego, Forestal, FASME...), no los
-// Departamentos Regionales del módulo /departamentos.
+// Grupo visual de cada rol (tipo/nivel). "departamento_escuela" agrupa la
+// coordinación de Avales por departamento: el departamento es el de la tabla
+// única departments (sección Departamentos); la asignación es de Escuela.
 export type RoleCategory = 'informatica' | 'escuela' | 'departamento_escuela' | 'region' | 'cuartel' | 'otros'
 
 export interface RoleCategoryDefinition {
@@ -47,8 +47,8 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
   },
   {
     key: 'departamento_escuela',
-    label: 'Departamento interno de Escuela',
-    description: 'Coordinación de un departamento interno de la Escuela (Fuego, Forestal, FASME, etc.). No son los Departamentos Regionales.',
+    label: 'Departamentos (coordinación en Escuela)',
+    description: 'Coordinación de un departamento en Avales regionales (Fuego, Forestal, FASME, etc.). Los departamentos son los mismos de la sección Departamentos.',
   },
   {
     key: 'region',
@@ -75,7 +75,7 @@ export const SCOPE_LEVELS: { label: string; description: string }[] = [
   { label: 'Subsede', description: 'Los cuarteles de una subsede. Se asigna como alcance del usuario, no hay roles exclusivos de subsede.' },
   { label: 'Cuartel', description: 'Un solo cuartel: el propio del usuario.' },
   { label: 'Escuela', description: 'Escuela Regional: cursos, capacitaciones y avales.' },
-  { label: 'Departamento interno', description: 'Un departamento interno de Escuela (Fuego, Forestal, FASME...). Lo asigna Informática R4.' },
+  { label: 'Departamento', description: 'Un departamento de la sección Departamentos (Fuego, Forestal, FASME...). Para Avales, lo asigna Informática R4.' },
 ]
 
 export interface RoleDefinition {
@@ -84,7 +84,7 @@ export interface RoleDefinition {
   description: string
   category: RoleCategory
   // Nivel de alcance del rol (campo histórico, ampliado con
-  // "departamento_escuela" para los coordinadores de departamento interno).
+  // "departamento_escuela" para los coordinadores de departamento en Avales).
   scope: 'system' | 'regional' | 'escuela' | 'departamento_escuela' | 'cuartel'
   // Alcance en lenguaje institucional, para mostrar junto al rol.
   scopeLabel: string
@@ -109,7 +109,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Ve, carga y edita en todos los módulos y cuarteles.',
       'Gestiona usuarios, roles y alcances. Es el único que puede eliminar usuarios y modificar a otro Informática R4.',
       'Purga definitiva de documentos y configuración del sistema.',
-      'Avales regionales: ve y carga en todos los departamentos, y es el único que edita, archiva o elimina avales y administra departamentos internos y coordinadores.',
+      'Avales regionales: ve y carga en todos los departamentos, y es el único que edita, archiva o elimina avales y asigna sus coordinadores.',
       'Auditoría completa, con datos técnicos.',
     ],
     assignable: true,
@@ -169,9 +169,9 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     description: 'Coordina la Escuela Regional y sus avales.',
     category: 'escuela',
     scope: 'escuela',
-    scopeLabel: 'Avales: todos los departamentos internos',
+    scopeLabel: 'Avales: todos los departamentos',
     permissions: [
-      'Avales regionales: ve todos los departamentos internos y sus documentos.',
+      'Avales regionales: ve todos los departamentos y sus documentos.',
       'Carga avales en cualquier departamento activo.',
       'No edita, archiva ni elimina avales ya cargados.',
       'No suma permisos en cursos, cuarteles ni otros módulos.',
@@ -184,9 +184,9 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     description: 'Gestión administrativa de la Escuela Regional y sus avales.',
     category: 'escuela',
     scope: 'escuela',
-    scopeLabel: 'Avales: todos los departamentos internos',
+    scopeLabel: 'Avales: todos los departamentos',
     permissions: [
-      'Avales regionales: ve todos los departamentos internos y sus documentos.',
+      'Avales regionales: ve todos los departamentos y sus documentos.',
       'Carga avales en cualquier departamento activo.',
       'No edita, archiva ni elimina avales ya cargados.',
       'No suma permisos en cursos, cuarteles ni otros módulos.',
@@ -195,8 +195,8 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   },
   {
     key: 'coordinador_departamento_escuela',
-    label: 'Coordinador de departamento interno',
-    description: 'Coordina un departamento interno de Escuela (Fuego, Forestal, FASME, etc.).',
+    label: 'Coordinador de departamento (Escuela)',
+    description: 'Coordina en Avales regionales un departamento del sistema (Fuego, Forestal, FASME, etc.).',
     category: 'departamento_escuela',
     scope: 'departamento_escuela',
     scopeLabel: 'Solo su(s) departamento(s) asignado(s)',
@@ -204,7 +204,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Avales regionales: ve y carga documentos solo de su propio departamento.',
       'No ve documentos de otros departamentos.',
       'No edita, archiva ni elimina avales.',
-      'El departamento lo asigna Informática R4 en Escuela → Avales regionales → Departamentos. Sin departamento asignado, el rol no da acceso a nada.',
+      'El departamento lo asigna Informática R4 en Escuela → Avales regionales → Coordinadores. Sin departamento asignado, el rol no da acceso a nada.',
     ],
     assignable: true,
   },

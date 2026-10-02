@@ -501,22 +501,10 @@ export interface MapReferencePoint {
   updated_at: string
 }
 
-
-// Departamento INTERNO de la Escuela Regional (Fuego, Forestal, FASME...).
-// Distinto de Department (Departamentos Regionales, /departamentos).
-export interface SchoolDepartment {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  is_active: boolean
-  created_by_profile_id: string | null
-  created_at: string
-  updated_at: string
-}
-
 export type SchoolDepartmentMemberRole = 'coordinador'
 
+// Coordinador de Avales regionales de un departamento (tabla departments,
+// la misma de la sección Departamentos).
 export interface SchoolDepartmentMember {
   id: string
   department_id: string

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { EscuelaTabs } from '../components/EscuelaTabs'
+import { EscuelaHeader } from '../components/EscuelaHeader'
 import { fetchCourses } from '../lib/api/courses'
 import type { Course } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -25,22 +25,9 @@ export function EscuelaPage() {
 
   return (
     <AppShell title="Escuela">
-      <EscuelaTabs />
-      <div className="card" style={{ marginBottom: 20 }}>
-        <img
-          src="/logos/logo-escuela.png"
-          alt="SIGER4"
-          style={{ height: 56, width: 56, borderRadius: 'var(--radius-lg)', objectFit: 'cover', marginBottom: 12 }}
-        />
-        <h1 style={{ margin: 0, fontSize: 18 }}>Escuela Regional de Bomberos</h1>
-        <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-          Regional 4 · Escuela de Capacitación
-        </p>
-      </div>
-
-      <div className="section-header">
-        <h2 className="section-title">Cursos Activos</h2>
-      </div>
+      <EscuelaHeader />
+      <h1 className="page-title">Cursos</h1>
+      <p className="page-subtitle">Cursos y capacitaciones de la Escuela Regional.</p>
 
       {loading && <div className="loading-state" role="status">Cargando cursos…</div>}
       {!loading && courses.length === 0 && (

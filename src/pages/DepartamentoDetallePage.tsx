@@ -30,6 +30,8 @@ import type {
   Subsede,
 } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
+import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
 import { describeSupabaseError } from '../lib/api/errors'
 
 export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
@@ -76,6 +78,26 @@ export function DepartamentoDetallePage() {
   const [reports, setReports] = useState<DepartmentActivityReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Acceso directo a los avales regionales de este departamento: el
+  // departamento es una sola entidad, la misma que usa Escuela. Se muestra
+  // solo si el usuario lo ve dentro de Avales (Informática, Coordinador o
+  // Secretario de Escuela, o coordinador de Avales de este departamento).
+  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
+  const [showAvalesLink, setShowAvalesLink] = useState(false)
+  useEffect(() => {
+    if (!hasAvalesAccess || !id) {
+      setShowAvalesLink(false)
+      return
+    }
+    let active = true
+    fetchAvalesDepartments()
+      .then((list) => active && setShowAvalesLink(list.some((d) => d.id === id)))
+      .catch(() => active && setShowAvalesLink(false))
+    return () => {
+      active = false
+    }
+  }, [hasAvalesAccess, id])
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -291,8 +313,20 @@ export function DepartamentoDetallePage() {
   async function handleDelete() {
     if (!id) return
     if (!window.confirm('¿Eliminar este departamento? Esta acción no se puede deshacer.')) return
-    await deleteDepartment(id)
-    navigate('/departamentos')
+    setError(null)
+    try {
+      await deleteDepartment(id)
+      navigate('/departamentos')
+    } catch (err) {
+      // 23503: el departamento tiene avales regionales cargados (FK restrict,
+      // 0096). Se puede desactivar, pero no eliminar mientras tenga avales.
+      const code = (err as { code?: string } | null)?.code
+      setError(
+        code === '23503'
+          ? 'Este departamento tiene avales regionales cargados y no se puede eliminar. Podés desactivarlo, o mover o eliminar antes sus avales.'
+          : describeSupabaseError(err, 'No pudimos eliminar el departamento.'),
+      )
+    }
   }
 
   async function handleAddMember() {
@@ -410,6 +444,11 @@ export function DepartamentoDetallePage() {
         {department.is_active ? 'Departamento activo' : 'Departamento inactivo'}
         {!canManage && ' · Solo el coordinador o Informática pueden modificarlo.'}
       </p>
+      {showAvalesLink && (
+        <Link to={`/escuela/avales?departamento=${department.id}`} className="link-muted" style={{ display: 'inline-block', marginBottom: 16 }}>
+          Ver los avales regionales de este departamento (Escuela) →
+        </Link>
+      )}
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
@@ -452,7 +491,7 @@ export function DepartamentoDetallePage() {
             {savingDetails ? 'Guardando…' : 'Guardar cambios'}
           </button>
           {isAdmin && (
-            <button type="button" className="btn btn-outlined btn-block" style={{ marginTop: 8 }} onClick={handleDelete}>
+            <button type="button" className="btn btn-danger-outline btn-block" style={{ marginTop: 8 }} onClick={handleDelete}>
               Eliminar departamento
             </button>
           )}

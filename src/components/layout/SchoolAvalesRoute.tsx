@@ -24,7 +24,7 @@ function SchoolAvalesGate({ children }: { children: ReactNode }) {
         <div className="empty-state">
           <p style={{ marginBottom: 12 }}>
             No tenés permiso para acceder a Avales regionales. La sección es solo para Informática, el Coordinador y el
-            Secretario de Escuela, y los coordinadores de departamentos internos.
+            Secretario de Escuela, y los coordinadores de departamento asignados en Avales.
           </p>
           <Link to="/escuela" className="btn btn-outlined">
             Volver a Escuela

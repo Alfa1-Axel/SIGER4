@@ -5,10 +5,11 @@ import { SCHOOL_AVALES_ROLES } from '../types/roles'
 // Solo decide qué mostrar: la autorización real la hacen RLS y las policies
 // de Storage.
 //   - hasAccess: puede entrar a la sección (Informática, coordinador/
-//     secretario de Escuela, coordinador de departamento interno).
+//     secretario de Escuela, coordinador de departamento asignado en Avales).
 //   - canViewAll: ve todos los departamentos (can_view_all_school_avales()).
-//   - canManage: edita, archiva, elimina y administra departamentos
+//   - canManage: edita, archiva, elimina avales y asigna sus coordinadores
 //     (can_manage_school_avales() = is_super_admin() = solo informatica_r4).
+//     Los departamentos en sí se administran en la sección Departamentos.
 export function useSchoolAvalesAccess() {
   const { isAdmin, hasRole } = useAuth()
   const canViewAll = isAdmin || hasRole('coordinador_escuela', 'secretario_escuela')

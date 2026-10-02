@@ -16,7 +16,6 @@ import { fetchCourses } from '../lib/api/courses'
 import { fetchDocuments } from '../lib/api/documents'
 import { fetchInventoryItems } from '../lib/api/inventory'
 import { fetchDepartments, fetchMyDepartmentIds } from '../lib/api/departments'
-import { fetchSchoolDepartments } from '../lib/api/schoolAvales'
 import type { Profile, Region, Station, Subsede } from '../types/database'
 import {
   buildEventSummary,
@@ -305,11 +304,8 @@ export function AuditoriaPage() {
       fetchDocuments().catch(() => []),
       fetchInventoryItems().catch(() => []),
       fetchDepartments().catch(() => []),
-      // Departamentos internos de Escuela (Avales): RLS solo los devuelve a
-      // quien tiene acceso; para el resto queda vacío, sin error.
-      fetchSchoolDepartments().catch(() => []),
     ])
-      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData, coursesData, documentsData, inventoryItemsData, departmentsData, schoolDepartmentsData]) => {
+      .then(([regionsData, subsedesData, stationsData, profilesData, actionsData, tablesData, coursesData, documentsData, inventoryItemsData, departmentsData]) => {
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
@@ -326,7 +322,6 @@ export function AuditoriaPage() {
         for (const d of documentsData) names.set(d.id, d.title)
         for (const i of inventoryItemsData) names.set(i.id, i.name)
         for (const dep of departmentsData) names.set(dep.id, dep.name)
-        for (const dep of schoolDepartmentsData) names.set(dep.id, `${dep.name} (Escuela)`)
         setEntityNames(names)
       })
       .catch(() => undefined)

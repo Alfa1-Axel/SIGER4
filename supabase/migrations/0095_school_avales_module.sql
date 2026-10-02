@@ -1,5 +1,10 @@
 -- SIGER4 - Escuela: Avales regionales por departamento interno
 --
+-- NOTA: la tabla school_departments que crea esta migración quedó
+-- reemplazada por la tabla única departments en
+-- 0096_avales_use_system_departments.sql, que migra los datos y la elimina.
+-- Correr siempre 0096 después de esta.
+--
 -- REQUISITO: correr antes 0094_school_roles_enum.sql (en su propia
 -- ejecucion del SQL Editor). Esta migracion usa los valores nuevos de
 -- role_key y falla con un mensaje claro si todavia no existen.

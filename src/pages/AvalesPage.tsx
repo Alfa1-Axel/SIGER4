@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
-import { EscuelaTabs } from '../components/EscuelaTabs'
+import { EscuelaHeader } from '../components/EscuelaHeader'
 import { Icon } from '../components/ui/Icon'
-import { deleteSchoolAvalDocument, fetchSchoolAvalDocuments, fetchSchoolDepartments, setSchoolAvalArchived } from '../lib/api/schoolAvales'
+import { deleteSchoolAvalDocument, fetchAvalesDepartments, fetchSchoolAvalDocuments, setSchoolAvalArchived } from '../lib/api/schoolAvales'
 import { getSchoolAvalSignedUrl } from '../lib/api/storage'
 import { describeSupabaseError } from '../lib/api/errors'
 import { formatBytes } from '../lib/format'
 import { isMobileUserAgent } from '../lib/device'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
-import type { SchoolAvalDocument, SchoolDepartment } from '../types/database'
+import type { Department, SchoolAvalDocument } from '../types/database'
 
 type BusyAction = 'open' | 'download' | 'archive' | 'delete'
 
@@ -20,7 +20,9 @@ function formatDate(value: string): string {
 }
 
 // Avales regionales de la Escuela: documentos organizados por departamento
-// interno (Fuego, Forestal, FASME...). Lo que se lista sale de RLS: un
+// (Fuego, Forestal, FASME...). Los departamentos son los de la tabla única
+// departments, la misma de la sección Departamentos. Lo que se lista sale de
+// la base: un
 // coordinador de departamento recibe solo su departamento, Informática y
 // coordinador/secretario de Escuela reciben todos, y solo informatica_r4
 // recibe además los archivados. Las acciones de edición/archivo/eliminación
@@ -32,7 +34,7 @@ export function AvalesPage() {
   const { canViewAll, canManage } = useSchoolAvalesAccess()
   const isMobile = isMobileUserAgent()
 
-  const [departments, setDepartments] = useState<SchoolDepartment[]>([])
+  const [allDepartments, setAllDepartments] = useState<Department[]>([])
   const [documents, setDocuments] = useState<SchoolAvalDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -47,10 +49,10 @@ export function AvalesPage() {
     let active = true
     setLoading(true)
     setLoadError(null)
-    Promise.all([fetchSchoolDepartments(), fetchSchoolAvalDocuments()])
+    Promise.all([fetchAvalesDepartments(), fetchSchoolAvalDocuments()])
       .then(([departmentsData, documentsData]) => {
         if (!active) return
-        setDepartments(departmentsData)
+        setAllDepartments(departmentsData)
         setDocuments(documentsData)
       })
       .catch((err) => active && setLoadError(describeSupabaseError(err, 'No pudimos cargar los avales.')))
@@ -68,11 +70,18 @@ export function AvalesPage() {
     }
   }, [location.pathname, location.search, location.state, navigate])
 
-  const departmentById = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments])
+  // Los departamentos inactivos (desactivados en la sección Departamentos)
+  // solo se muestran si tienen avales: se pueden consultar, no admiten
+  // cargas nuevas.
+  const departments = useMemo(
+    () => allDepartments.filter((d) => d.is_active || documents.some((doc) => doc.department_id === d.id)),
+    [allDepartments, documents],
+  )
+  const departmentById = useMemo(() => new Map(allDepartments.map((d) => [d.id, d])), [allDepartments])
   const showAllTab = departments.length > 1
-  const selectedSlug = searchParams.get('departamento') ?? ALL_DEPARTMENTS
+  const selectedId = searchParams.get('departamento') ?? ALL_DEPARTMENTS
   const selectedDepartment =
-    departments.find((d) => d.slug === selectedSlug) ?? (showAllTab ? null : (departments[0] ?? null))
+    departments.find((d) => d.id === selectedId) ?? (showAllTab ? null : (departments[0] ?? null))
 
   const activeCountByDepartment = useMemo(() => {
     const counts = new Map<string, number>()
@@ -99,12 +108,12 @@ export function AvalesPage() {
   // cargar (misma regla que can_upload_school_avales_department()).
   const uploadableDepartments = departments.filter((d) => d.is_active)
   const uploadTarget = selectedDepartment && selectedDepartment.is_active ? selectedDepartment : null
-  const uploadHref = uploadTarget ? `/escuela/avales/nuevo?departamento=${uploadTarget.slug}` : '/escuela/avales/nuevo'
+  const uploadHref = uploadTarget ? `/escuela/avales/nuevo?departamento=${uploadTarget.id}` : '/escuela/avales/nuevo'
 
-  function selectDepartment(slug: string) {
+  function selectDepartment(departmentId: string) {
     setActionError(null)
-    if (slug === ALL_DEPARTMENTS) setSearchParams({}, { replace: true })
-    else setSearchParams({ departamento: slug }, { replace: true })
+    if (departmentId === ALL_DEPARTMENTS) setSearchParams({}, { replace: true })
+    else setSearchParams({ departamento: departmentId }, { replace: true })
   }
 
   async function handleOpen(doc: SchoolAvalDocument) {
@@ -183,21 +192,21 @@ export function AvalesPage() {
 
   return (
     <AppShell title="Avales regionales">
-      <EscuelaTabs />
+      <EscuelaHeader />
 
       <div className="page-header">
         <div>
           <h1 className="page-title">Avales regionales</h1>
           <p className="page-subtitle">
-            Documentos de avales organizados por departamento interno de Escuela.
+            Documentos de avales organizados por departamento. Son los mismos departamentos de la sección Departamentos.
             {!canViewAll && ' Ves solo los departamentos que coordinás.'}
           </p>
         </div>
         <div className="page-header-actions">
           {canManage && (
-            <Link to="/escuela/avales/departamentos" className="btn btn-outlined">
-              <Icon name="settings" size={16} />
-              Departamentos
+            <Link to="/escuela/avales/coordinadores" className="btn btn-outlined">
+              <Icon name="user" size={16} />
+              Coordinadores
             </Link>
           )}
           {!loading && uploadableDepartments.length > 0 && !isMobile && (
@@ -244,14 +253,14 @@ export function AvalesPage() {
       {!loading && !loadError && departments.length === 0 && (
         <div className="empty-state">
           {canViewAll
-            ? 'Todavía no hay departamentos internos de Escuela cargados.'
-            : 'No tenés departamentos internos asignados. Pedile a Informática R4 que te asigne como coordinador de tu departamento.'}
+            ? 'Todavía no hay departamentos activos. Se crean en la sección Departamentos.'
+            : 'No tenés departamentos asignados en Avales. Pedile a Informática R4 que te asigne como coordinador de tu departamento.'}
         </div>
       )}
 
       {!loading && !loadError && departments.length > 0 && (
         <>
-          <div className="filter-chips" role="group" aria-label="Filtrar por departamento interno">
+          <div className="filter-chips" role="group" aria-label="Filtrar por departamento">
             {showAllTab && (
               <button
                 type="button"
@@ -270,7 +279,7 @@ export function AvalesPage() {
                   type="button"
                   aria-pressed={isSelected}
                   className="chip"
-                  onClick={() => selectDepartment(department.slug)}
+                  onClick={() => selectDepartment(department.id)}
                 >
                   {department.name} ({activeCountByDepartment.get(department.id) ?? 0})
                   {!department.is_active && ' · inactivo'}
@@ -281,7 +290,7 @@ export function AvalesPage() {
 
           {selectedDepartment && !selectedDepartment.is_active && (
             <p className="field-help" style={{ marginBottom: 12 }}>
-              Este departamento está inactivo: sus avales se pueden consultar, pero no admite cargas nuevas.
+              Este departamento está inactivo en la sección Departamentos: sus avales se pueden consultar, pero no admite cargas nuevas.
             </p>
           )}
           {selectedDepartment?.description && (

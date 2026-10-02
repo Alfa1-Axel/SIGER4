@@ -1,57 +1,28 @@
 import { supabase } from '../supabaseClient'
-import type { SchoolAvalDocument, SchoolDepartment, SchoolDepartmentMember } from '../../types/database'
+import type { Department, SchoolAvalDocument, SchoolDepartmentMember } from '../../types/database'
 import type { RoleKey } from '../../types/roles'
 import { removeSchoolAvalFile, uploadSchoolAvalFile } from './storage'
 
-// Avales regionales de la Escuela (ver 0095_school_avales_module.sql).
-// Todas estas consultas pasan por RLS: cada rol recibe solo lo que puede ver
-// (un coordinador de departamento, solo su departamento; un usuario común,
-// nada). La UI no filtra permisos por su cuenta, solo refleja lo que la base
-// devuelve.
+// Avales regionales de la Escuela (ver 0095_school_avales_module.sql y
+// 0096_avales_use_system_departments.sql). Todas estas consultas pasan por
+// RLS: cada rol recibe solo lo que puede ver (un coordinador de
+// departamento, solo su departamento; un usuario común, nada). La UI no
+// filtra permisos por su cuenta, solo refleja lo que la base devuelve.
+//
+// Los departamentos son los de la tabla única departments (sección
+// Departamentos). Crearlos, renombrarlos o desactivarlos se hace solo ahí
+// (lib/api/departments.ts); Escuela no tiene una lista propia.
 
-// ---------------- Departamentos internos ----------------
+// ---------------- Departamentos visibles en Avales ----------------
 
-export async function fetchSchoolDepartments(): Promise<SchoolDepartment[]> {
-  const { data, error } = await supabase.from('school_departments').select('*').order('name', { ascending: true })
+// Departamentos que el usuario actual ve dentro de Avales: todos para
+// Informática y Coordinador/Secretario de Escuela, solo los propios para un
+// coordinador de departamento, ninguno para el resto
+// (list_school_avales_departments(), 0096).
+export async function fetchAvalesDepartments(): Promise<Department[]> {
+  const { data, error } = await supabase.rpc('list_school_avales_departments')
   if (error) throw error
-  return (data ?? []) as SchoolDepartment[]
-}
-
-export interface SchoolDepartmentCreateInput {
-  name: string
-  slug: string
-  description: string | null
-}
-
-export async function createSchoolDepartment(input: SchoolDepartmentCreateInput): Promise<SchoolDepartment> {
-  const { data, error } = await supabase.from('school_departments').insert(input).select('*').single()
-  if (error) throw error
-  return data as SchoolDepartment
-}
-
-export interface SchoolDepartmentUpdateInput {
-  name?: string
-  description?: string | null
-  is_active?: boolean
-}
-
-export async function updateSchoolDepartment(id: string, input: SchoolDepartmentUpdateInput): Promise<SchoolDepartment> {
-  const { data, error } = await supabase.from('school_departments').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as SchoolDepartment
-}
-
-// "Fuego Estructural" -> "fuego-estructural". Debe cumplir el check
-// school_departments_slug_format de la base.
-export function slugifyDepartmentName(name: string): string {
-  return name
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60)
-    .replace(/-+$/g, '')
+  return (data ?? []) as Department[]
 }
 
 // ---------------- Coordinadores de departamento ----------------
@@ -66,8 +37,9 @@ export async function fetchSchoolDepartmentMembers(): Promise<SchoolDepartmentMe
   return (data ?? []) as SchoolDepartmentMember[]
 }
 
-// Asigna la membresía Y el rol coordinador_departamento_escuela en un solo
-// paso server-side. Solo informatica_r4 (la RPC lo valida).
+// Asigna como coordinador de Avales de un departamento (tabla departments):
+// membresía Y rol coordinador_departamento_escuela en un solo paso
+// server-side. Solo informatica_r4 (la RPC lo valida).
 export async function assignSchoolDepartmentCoordinator(departmentId: string, profileId: string): Promise<void> {
   const { error } = await supabase.rpc('assign_school_department_coordinator', {
     p_department_id: departmentId,

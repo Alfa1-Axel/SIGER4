@@ -484,7 +484,7 @@ export function UsuarioDetallePage() {
               disabled={rolesScopesLocked}
             />
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
-              El departamento de un "Coordinador de departamento interno" se asigna en Escuela → Avales regionales → Departamentos.
+              El departamento de un "Coordinador de departamento (Escuela)" se asigna en Escuela → Avales regionales → Coordinadores.
             </p>
           </div>
 

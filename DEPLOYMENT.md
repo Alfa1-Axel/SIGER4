@@ -7607,3 +7607,121 @@ Al reproducir las migraciones en limpio, `0093_push_diagnostics_territorial_scop
 `RETURNS TABLE` sin `drop function if exists` previo. Si en producción se aplicó con un drop manual,
 no hay nada que hacer; si no, esa función quedó en su versión anterior. No se tocó (push fuera de
 alcance de esta tanda).
+
+## 54. Sistema de diseño visual (2026-10-02)
+
+Reestructuración completa de los estilos de la interfaz. No cambia lógica, rutas, permisos, RLS,
+Edge Functions ni migraciones: solo tokens, estilos globales, componentes compartidos y el marcado
+visual de las pantallas. No requiere ningún paso en Supabase; alcanza con desplegar el frontend.
+
+### 54.1 Dirección visual
+
+**Institucional sobria.** Superficies neutras frías, un único color de acción y el rojo
+institucional reservado para la marca y los avisos puntuales.
+
+- **Color de acción: azul institucional** (`#284f86`), tomado del azul del logo SIGER4. Antes el rojo
+  era a la vez color de marca, de acción y de peligro: los botones principales se confundían con
+  acciones destructivas y la interfaz completa (fondo rosado, títulos en rojo) quedaba saturada.
+- **Rojo institucional** como acento acotado: contador de notificaciones, pin de cuarteles en el
+  mapa. Para acciones destructivas existe un rojo de "peligro" propio, usado solo ahí.
+- **Neutros fríos** para fondo, superficies, bordes y texto: el contenido es lo que destaca, no el
+  marco.
+- **Sin decoración**: sin gradientes, sombras solo en elementos flotantes (modales, drawer, menús),
+  radios moderados (4/6/8 px), tarjetas separadas por borde.
+
+### 54.2 Tokens
+
+Todos los colores salen de variables CSS definidas al principio de `src/styles.css`. El modo
+oscuro redefine los mismos tokens (`:root[data-theme='dark']`); ningún componente tiene estilos
+propios por tema.
+
+| Token | Claro | Oscuro | Uso |
+|---|---|---|---|
+| `--color-bg-app` | `#f3f5f7` | `#0e1217` | Fondo general |
+| `--color-surface` | `#ffffff` | `#151a21` | Tarjetas, header, sidebar, inputs |
+| `--color-surface-subtle` | `#f7f9fb` | `#1a2029` | Encabezados de tabla, zonas secundarias |
+| `--color-surface-hover` / `-pressed` | `#f0f3f6` / `#e6eaef` | `#212833` / `#283140` | Hover y pulsado |
+| `--color-border` / `-strong` | `#dfe3e8` / `#c3cad3` | `#28303b` / `#3a4451` | Bordes de tarjetas y botones |
+| `--color-input-border` | `#8c96a3` | `#5c6775` | Borde de campos (3:1 contra la superficie) |
+| `--color-text-primary` | `#18212d` | `#e4e8ee` | Texto principal |
+| `--color-text-secondary` | `#4a5566` | `#b1bac6` | Texto secundario |
+| `--color-text-muted` | `#667080` | `#8f99a6` | Metadatos, ayudas |
+| `--color-primary` / `-hover` | `#284f86` / `#203f6c` | `#3b67a3` / `#4774b2` | Botón principal, indicadores activos |
+| `--color-primary-soft` / `-soft-text` | `#e8eef6` / `#1f3f6b` | `#1c2a3d` / `#b9cfee` | Selección, ítem activo del menú |
+| `--color-link` | `#284f86` | `#93b5e2` | Links y texto de acción |
+| `--color-accent` / `-fill` | `#b3261e` | `#e05a52` / `#c0392b` | Rojo institucional (marca, avisos) |
+| `--color-success` / `-soft` | `#1f6e45` / `#e5f3eb` | `#5fbf8a` / `#16291f` | Estado correcto |
+| `--color-warning` / `-soft` | `#8a5300` / `#fcf1d9` | `#e0a84a` / `#2d2412` | Advertencia |
+| `--color-danger` / `-fill` / `-soft` | `#b42318` / `#b42318` / `#fcebea` | `#ef7b72` / `#b8352c` / `#321a1a` | Errores y acciones destructivas |
+| `--color-info` / `-soft` | `#245289` / `#e7f0f9` | `#93b5e2` / `#1a2635` | Información, categorías |
+| `--color-focus-ring` | `#3b6fb5` | `#7fa6dc` | Foco de teclado |
+| `--color-disabled-bg` | `#eef1f4` | `#1f252e` | Campos deshabilitados |
+
+Contraste verificado: todo par texto/fondo de la tabla cumple WCAG AA (4.5:1) en ambos temas, el
+blanco sobre el botón principal y sobre el botón de peligro también, y el borde de los campos
+llega a 3:1. Forma: `--radius-sm` 4px, `--radius-md` 6px, `--radius-lg` 8px. Alturas de control:
+36px (30px en tamaño chico), y 40px (36px) en pantallas táctiles.
+
+### 54.3 Componentes
+
+| Componente | Clases | Notas |
+|---|---|---|
+| Botones | `.btn` + `.btn-primary`, `.btn-outlined`, `.btn-secondary`, `.btn-ghost`, `.btn-danger`, `.btn-danger-outline`; tamaños `.btn-sm`, `.btn-icon`, `.btn-icon-sm`, `.btn-block` | Una acción principal por vista. Destructivas: `.btn-danger` solo para confirmar en un modal, `.btn-danger-outline` en listados. Los `Link` con clase `.btn` ya no se subrayan. |
+| Toggles y filtros | `.chip` con `aria-pressed` | Reemplaza los pares `btn-primary`/`btn-secondary` usados como selector (alcance, estado, departamento). El estado seleccionado también se anuncia a lectores de pantalla. |
+| Pestañas | `.tabs` + `.tab` / `.tab.active` | Escuela: Cursos / Avales regionales. |
+| Formularios | `.field`, `.field-error`, `.field-help`, `.check-row`, `.search-input` | Inputs, selects y textareas tienen estilo base aun fuera de `.field` (filtros sueltos). Foco con anillo suave; `aria-invalid` marca error. La carga de archivos se ve como una zona con botón integrado. |
+| Tarjetas | `.card`, `.card-solid`, `.kpi-card`, `.row-list` + `.row-item` | Sin sombras. `.row-list` para listas de filas dentro de un panel (Panel, Usuarios, Calendario). |
+| Listados | `.list-item` y derivados | Documentos, Avales, Carpetas, Notificaciones. En mobile las acciones bajan a una fila propia. |
+| Tablas | `.table-wrap` + `.data-table`, `.col-actions`, `.col-nowrap` | Encabezados claros, hover sutil, scroll horizontal dentro de su contenedor en mobile. |
+| Modales | `.modal-overlay` + `.modal`, `.modal-header`, `.modal-title`, `.modal-body`, `.modal-actions` | En mobile se abren como hoja inferior con botones a ancho completo. |
+| Estados | `.alert` + `-danger/-success/-warning/-info`, `.empty-state`, `.loading-state`, `.skeleton`, `.spinner` | Los errores ya no se arman a mano dentro de una tarjeta; todo "Cargando…" muestra un indicador. |
+| Badges | `.badge` + `-success/-warning/-danger/-info` | Siempre con texto: el color nunca es la única señal. |
+| Encabezados | `.page-header`, `.page-header-actions`, `.page-title`, `.page-subtitle`, `.section-header`, `.section-title`, `.back-link` | Títulos de sección en color de texto, no en rojo. |
+| Shell | `.app-header-*`, `.header-badge`, `.sidebar-*`, `.fab`, `.fab-menu` | El botón de menú y el de cerrar el drawer ya no aparecen en escritorio. El botón flotante queda por encima del pie. |
+
+### 54.4 Cambios de marcado en pantallas
+
+- **Panel**: el banner rojo se reemplazó por un encabezado de página con la acción "Nuevo reporte";
+  los KPI muestran un esqueleto mientras cargan; las listas usan `.row-list`.
+- **Detalle de cuartel**: sin foto de portada, el encabezado ya no deja un bloque vacío de 160px.
+- **Auditoría**: tablas con `.data-table`; los colores de "antes/después" salen de los tokens de
+  peligro/éxito; la tabla vacía ya no muestra un recuadro sin contenido.
+- **Modales** (eliminar usuario, motivo, detalle de notificación): clases del sistema; confirmar la
+  eliminación de un usuario usa el botón de peligro.
+- **Documentos**: el menú del botón flotante usa `.fab-menu`.
+- **Avales**: filtros de departamento como chips, aviso de éxito como alerta, y el texto de "solo
+  desde PC" ya no se superpone con el botón en mobile.
+- **Menú lateral**: "Usuarios" ya no queda marcado como activo dentro de "Nuevo Usuario".
+- Textos de 11px pasaron a 12px como mínimo.
+- `theme-color` del navegador y del manifiesto PWA pasaron al azul institucional.
+
+### 54.5 Colores fijos que se mantienen
+
+- **Reportes PDF** (`src/lib/pdf/reportBuilder.ts`): conservan su identidad visual propia
+  (sección 39). Un PDF no sigue el tema de la pantalla.
+- **Mapa**: los puntos de referencia usan colores categóricos fijos en ambos temas
+  (`--map-ref-*`), porque se dibujan sobre teselas que siempre son claras. Se apagaron para que no
+  compitan con el resto de la interfaz, manteniéndose distinguibles entre sí.
+- **Blanco sobre rellenos de color** (`--color-on-primary`, `--color-on-danger`, `--color-on-accent`)
+  y los velos del visor de fotos (`--color-overlay-strong`, `--color-scrim`) son tokens con valor
+  fijo a propósito.
+
+### 54.6 Reglas para estilos nuevos
+
+1. Usar un token, nunca un hex o `rgba()` suelto en un componente o en un `style` inline.
+2. Antes de escribir estilos inline, buscar si ya existe una clase (botón, chip, alerta, fila,
+   tabla, modal). Inline queda para ajustes de layout puntuales (márgenes, anchos).
+3. Un solo `.btn-primary` por vista; el resto `.btn-outlined` o `.btn-ghost`.
+4. Selectores de opción: `.chip` con `aria-pressed`, no botones primario/secundario.
+5. Errores con `.alert-danger`, cargas con `.loading-state`, vacíos con `.empty-state`.
+6. Probar en claro y oscuro, en escritorio y en mobile (390px de ancho).
+
+### 54.7 Validación
+
+Se revisaron con capturas automatizadas, en escritorio (1366px) y mobile (390px), en tema claro y
+oscuro, las pantallas de login, panel, mapa, cuarteles y detalle, escuela, avales (listado, carga,
+edición, departamentos, sin permiso, error y vista de coordinador), documentos (carpetas, detalle,
+carga, papelera y estado de carga), calendario y alta de evento, notificaciones, ajustes, usuarios
+(listado, alta y detalle), roles, auditoría, inventario, departamentos, reportes y los formularios
+de curso y personal. También el drawer mobile, los modales y el foco de teclado. Sin desbordes
+horizontales de página; la tabla de Auditoría en mobile desplaza dentro de su propio contenedor.

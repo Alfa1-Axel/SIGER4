@@ -1377,3 +1377,157 @@ a.card-solid:focus-visible {
   background: transparent;
   border: none;
 }
+
+/* ---------- Sub-navegación de módulo (Escuela: Cursos / Avales) ---------- */
+.module-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.module-tabs .btn {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* ---------- Chips de filtro (departamentos de Avales) ---------- */
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.filter-chips .btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ---------- Roles agrupados por tipo/nivel ----------
+   Usado en Nuevo usuario, Detalle de usuario, Ajustes y la guía /roles:
+   cada grupo (Informática, Escuela, Departamento interno, Región, Cuartel,
+   Otros) con sus roles como opciones con descripción y alcance. */
+.role-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.role-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.role-group-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.role-group-description {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.role-group-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+
+.role-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.role-option:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+
+.role-option:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.role-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.role-option--selected {
+  border-color: var(--color-primary);
+  background: var(--color-bg-card-soft);
+}
+
+.role-option-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  border: 1.5px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-on-primary);
+}
+
+.role-option--selected .role-option-check {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.role-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.role-option-label {
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.role-option-description {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.role-option-scope {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.role-card {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-card);
+  min-width: 0;
+}
+
+.role-permissions {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.45;
+}

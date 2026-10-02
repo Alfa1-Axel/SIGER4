@@ -7,7 +7,8 @@ import { ImagePicker } from '../components/ui/ImagePicker'
 import { SystemSettingsSection } from '../components/SystemSettingsSection'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
-import { ROLE_DEFINITIONS } from '../types/roles'
+import { Link } from 'react-router-dom'
+import { getRoleCategory, getRoleDefinition } from '../types/roles'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
@@ -442,16 +443,27 @@ export function AjustesPage() {
             <div className="kpi-label" style={{ marginBottom: 6 }}>
               Roles asignados (no editable — solo un administrador puede cambiarlo)
             </div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {roles.map((role) => {
-                const def = ROLE_DEFINITIONS.find((r) => r.key === role)
+                const def = getRoleDefinition(role)
                 return (
-                  <span key={role} className="badge badge-info">
-                    {def?.label ?? role}
-                  </span>
+                  <div key={role} style={{ fontSize: 13, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {def && <span className="badge badge-info">{getRoleCategory(def.category).label}</span>}
+                      <strong style={{ overflowWrap: 'anywhere' }}>{def?.label ?? role}</strong>
+                    </div>
+                    {def && (
+                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                        {def.description} Alcance: {def.scopeLabel}.
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
+            <Link to="/roles" className="link-muted" style={{ display: 'inline-block', marginTop: 10 }}>
+              Ver qué permite cada rol
+            </Link>
           </div>
         )}
       </div>

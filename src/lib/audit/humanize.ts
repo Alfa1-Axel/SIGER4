@@ -1,5 +1,4 @@
-import { ROLE_DEFINITIONS } from '../../types/roles'
-import type { RoleKey } from '../../types/roles'
+import { roleLabel } from '../../types/roles'
 
 export const TABLE_LABELS: Record<string, string> = {
   stations: 'Cuarteles',
@@ -27,6 +26,9 @@ export const TABLE_LABELS: Record<string, string> = {
   department_activity_reports: 'Informes de actividad de departamentos',
   department_manual_members: 'Integrantes manuales de departamento',
   system_settings: 'Configuración del sistema',
+  school_departments: 'Departamentos internos de Escuela',
+  school_department_members: 'Coordinadores de departamentos de Escuela',
+  school_avales_documents: 'Avales regionales (Escuela)',
 }
 
 export function translateTable(tableName: string): string {
@@ -161,13 +163,21 @@ export const FIELD_LABELS: Record<string, string> = {
   activity_date: 'Fecha de la actividad',
   activity_type: 'Tipo de actividad',
   hours_worked: 'Horas trabajadas',
+  slug: 'Identificador',
+  storage_bucket: 'Bucket de almacenamiento',
+  file_name: 'Nombre del archivo',
+  mime_type: 'Tipo de archivo',
+  file_size: 'Tamaño (bytes)',
+  uploaded_by_name: 'Cargado por (nombre)',
+  is_archived: 'Archivado',
+  archived_at: 'Fecha de archivado',
+  archived_by_profile_id: 'Archivado por',
+  member_role: 'Función en el departamento',
 }
 
 export function translateField(field: string): string {
   return FIELD_LABELS[field] ?? field
 }
-
-const ROLE_LABELS: Record<string, string> = Object.fromEntries(ROLE_DEFINITIONS.map((r) => [r.key, r.label]))
 
 const STATUS_LABELS: Record<string, string> = {
   operativo: 'Operativo',
@@ -238,7 +248,7 @@ const BOOLEAN_LABELS: Record<string, string> = { true: 'Sí', false: 'No' }
 // entidad, via el diccionario que arma buildEntityLookup().
 export function translateValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
-  if (field === 'role' && typeof value === 'string') return ROLE_LABELS[value as RoleKey] ?? value
+  if (field === 'role' && typeof value === 'string') return roleLabel(value)
   if (field === 'status' && typeof value === 'string') return STATUS_LABELS[value] ?? value
   if (field === 'scope_type' && typeof value === 'string') return SCOPE_TYPE_LABELS[value] ?? value
   if (field === 'type' && typeof value === 'string') return NOTIFICATION_TYPE_LABELS[value] ?? value
@@ -273,6 +283,8 @@ const NAME_RESOLVABLE_FIELDS = new Set([
   'returned_by_profile_id',
   'department_id',
   'coordinator_profile_id',
+  'archived_by_profile_id',
+  'created_by_profile_id',
 ])
 
 export function resolveDisplayValue(field: string, value: unknown, lookup: EntityLookup): string {

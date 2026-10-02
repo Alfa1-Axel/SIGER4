@@ -18,7 +18,9 @@
 // Matriz de permisos (autorización real, no solo de UI):
 //   - informatica_r4 / integrante_informatica: cualquier rol, cualquier
 //     región/cuartel.
-//   - director_escuela: cualquier rol EXCEPTO informatica_r4/integrante_informatica.
+//   - director_escuela: cualquier rol EXCEPTO informatica_r4/integrante_informatica
+//     y los roles de Avales regionales (coordinador_escuela, secretario_escuela,
+//     coordinador_departamento_escuela), que asigna solo Informática.
 //     Cualquier región/cuartel.
 //   - jefe_cuerpo_activo: solo puede crear usuarios para SU PROPIO cuartel
 //     (profiles.station_id del creador), y solo puede asignar los roles
@@ -66,6 +68,9 @@ type RoleKey =
   | 'integrante_informatica'
   | 'director_escuela'
   | 'instructor'
+  | 'coordinador_escuela'
+  | 'secretario_escuela'
+  | 'coordinador_departamento_escuela'
   | 'secretario_regional'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
@@ -81,6 +86,9 @@ const ALL_ROLES: RoleKey[] = [
   'integrante_informatica',
   'director_escuela',
   'instructor',
+  'coordinador_escuela',
+  'secretario_escuela',
+  'coordinador_departamento_escuela',
   'secretario_regional',
   'presidente_cuartel',
   'jefe_cuerpo_activo',
@@ -91,6 +99,11 @@ const ALL_ROLES: RoleKey[] = [
 ]
 
 const INFORMATICA_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']
+
+// Roles que dan acceso a Avales regionales de Escuela (0094/0095). Solo
+// Informática los asigna: director_escuela no figura en la matriz de
+// permisos de Avales, así que tampoco puede repartir ese acceso.
+const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela', 'coordinador_departamento_escuela']
 
 // Roles que un jefe_cuerpo_activo puede asignar (confirmado explícitamente:
 // nunca su propio rol, nunca nada regional/escuela/informática).
@@ -225,6 +238,9 @@ Deno.serve(async (req: Request) => {
     if (!isInformatica) {
       if (requestedRoles.some((r) => INFORMATICA_ROLES.includes(r))) {
         return jsonResponse({ error: 'No tenés permiso para asignar roles de Informática.' }, 403)
+      }
+      if (requestedRoles.some((r) => SCHOOL_AVALES_ROLES.includes(r))) {
+        return jsonResponse({ error: 'Los roles de Avales regionales (Coordinador/Secretario de Escuela, Coordinador de departamento interno) los asigna solo Informática.' }, 403)
       }
     }
 

@@ -209,3 +209,61 @@ export async function getDocumentSignedUrl(storagePath: string): Promise<string>
   if (error) throw new Error('El archivo no está disponible o fue eliminado del almacenamiento.')
   return data.signedUrl
 }
+
+// ---------------- Avales regionales (Escuela) ----------------
+// Bucket privado "school-avales" (ver 0095_school_avales_module.sql). Ruta:
+// "<department_id>/<document_id>/<archivo-sanitizado>". La policy de INSERT
+// de Storage valida que el usuario pueda cargar en ese departamento; la de
+// SELECT exige que la ruta ya tenga un documento registrado, no archivado,
+// de un departamento visible para el usuario. La seguridad NO depende de
+// conocer o no la ruta.
+const SCHOOL_AVALES_BUCKET = 'school-avales'
+// URLs firmadas cortas: alcanzan para abrir o descargar en el momento, y si
+// alguien comparte el link, deja de servir enseguida.
+const SCHOOL_AVALES_SIGNED_URL_SECONDS = 5 * 60
+
+function describeSchoolAvalesStorageError(message: string | undefined, fallback: string): string {
+  const text = (message ?? '').toLowerCase()
+  if (text.includes('row-level security') || text.includes('unauthorized') || text.includes('not authorized')) {
+    return 'No tenés permiso para cargar documentos en este departamento, o el departamento está inactivo.'
+  }
+  if (text.includes('mime') || text.includes('invalid_mime_type')) {
+    return 'Tipo de archivo no permitido. Formatos aceptados: PDF, Word, Excel, PNG, JPG, WEBP, HEIC.'
+  }
+  if (text.includes('exceeded') || text.includes('too large') || text.includes('payload')) {
+    return 'El archivo supera el tamaño máximo permitido (20 MB).'
+  }
+  return fallback
+}
+
+export async function uploadSchoolAvalFile(
+  departmentId: string,
+  documentId: string,
+  file: File,
+): Promise<{ path: string; contentType: string }> {
+  const contentType = assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
+  const path = `${departmentId}/${documentId}/${sanitizeFileName(file.name)}`
+  const correctedFile = withCorrectedMimeType(file, contentType)
+  const { error } = await supabase.storage.from(SCHOOL_AVALES_BUCKET).upload(path, correctedFile, { upsert: false, contentType })
+  if (error) throw new Error(describeSchoolAvalesStorageError(error.message, 'No pudimos subir el archivo. Reintentá en unos segundos.'))
+  return { path, contentType }
+}
+
+// Borra un archivo del bucket. Para un documento registrado solo lo permite
+// el admin supremo; para un archivo propio sin documento (carga
+// interrumpida) también quien lo subió. Si el archivo ya no existe, no es
+// error (deja reintentar una eliminación que quedó a medias).
+export async function removeSchoolAvalFile(path: string): Promise<void> {
+  const { error } = await supabase.storage.from(SCHOOL_AVALES_BUCKET).remove([path])
+  if (error) throw new Error('No pudimos borrar el archivo del almacenamiento. Reintentá en unos segundos.')
+}
+
+// downloadName: si viene, la URL fuerza la descarga con ese nombre de
+// archivo (el original). Sin él, el navegador lo abre si puede (PDF/imagen).
+export async function getSchoolAvalSignedUrl(storagePath: string, downloadName?: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(SCHOOL_AVALES_BUCKET)
+    .createSignedUrl(storagePath, SCHOOL_AVALES_SIGNED_URL_SECONDS, downloadName ? { download: downloadName } : undefined)
+  if (error || !data) throw new Error('El archivo no está disponible o no tenés permiso para verlo.')
+  return data.signedUrl
+}

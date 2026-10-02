@@ -57,6 +57,9 @@ type RoleKey =
   | 'integrante_informatica'
   | 'director_escuela'
   | 'instructor'
+  | 'coordinador_escuela'
+  | 'secretario_escuela'
+  | 'coordinador_departamento_escuela'
   | 'secretario_regional'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
@@ -72,6 +75,9 @@ const ALL_ROLES: RoleKey[] = [
   'integrante_informatica',
   'director_escuela',
   'instructor',
+  'coordinador_escuela',
+  'secretario_escuela',
+  'coordinador_departamento_escuela',
   'secretario_regional',
   'presidente_cuartel',
   'jefe_cuerpo_activo',
@@ -215,7 +221,19 @@ Deno.serve(async (req: Request) => {
     // integrante_informatica), y nunca a alguien con rol de informática,
     // regional o escuela — sin importar el cuartel.
     if (actorIsJefeCuerpoActivo) {
-      const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional']
+      // Incluye los roles de Avales regionales (0094/0095): sin esto, un
+      // jefe_cuerpo_activo podría resetear la contraseña de un usuario de
+      // Escuela de su mismo cuartel y entrar a los avales con esa cuenta.
+      const PRIVILEGED_TARGET_ROLES: RoleKey[] = [
+        'informatica_r4',
+        'integrante_informatica',
+        'director_escuela',
+        'instructor',
+        'secretario_regional',
+        'coordinador_escuela',
+        'secretario_escuela',
+        'coordinador_departamento_escuela',
+      ]
       if (!actorProfile.station_id || targetProfile.station_id !== actorProfile.station_id) {
         return jsonResponse({ error: 'Solo podés editar usuarios de tu propio cuartel.' }, 403)
       }

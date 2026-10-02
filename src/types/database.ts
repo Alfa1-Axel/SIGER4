@@ -501,3 +501,49 @@ export interface MapReferencePoint {
   updated_at: string
 }
 
+
+// Departamento INTERNO de la Escuela Regional (Fuego, Forestal, FASME...).
+// Distinto de Department (Departamentos Regionales, /departamentos).
+export interface SchoolDepartment {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  is_active: boolean
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SchoolDepartmentMemberRole = 'coordinador'
+
+export interface SchoolDepartmentMember {
+  id: string
+  department_id: string
+  profile_id: string
+  member_role: SchoolDepartmentMemberRole
+  is_active: boolean
+  created_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SchoolAvalDocument {
+  id: string
+  department_id: string
+  title: string
+  description: string | null
+  observations: string | null
+  storage_bucket: string
+  storage_path: string
+  file_name: string
+  mime_type: string
+  file_size: number
+  uploaded_by_profile_id: string | null
+  uploaded_by_name: string | null
+  is_archived: boolean
+  archived_at: string | null
+  archived_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}

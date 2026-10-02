@@ -6,7 +6,8 @@ import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { createUserAccount } from '../lib/api/users'
-import { ROLE_DEFINITIONS } from '../types/roles'
+import { INFORMATICA_ONLY_ASSIGNABLE_ROLES, ROLE_DEFINITIONS } from '../types/roles'
+import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
 import type { Region, ScopeType, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -46,11 +47,14 @@ export function UsuarioFormPage() {
 
   // Roles que el usuario actual puede asignar al crear (misma matriz que
   // valida la Edge Function admin-create-user). informatica_r4/
-  // integrante_informatica: todos. director_escuela: todos menos
-  // informática. jefe_cuerpo_activo: solo el set fijo de roles de cuartel.
+  // integrante_informatica: todos. director_escuela: todos menos los de
+  // Informática y los que dan acceso a Avales regionales (coordinador/
+  // secretario de Escuela, coordinador de departamento interno: esos los
+  // asigna solo Informática). jefe_cuerpo_activo: solo el set fijo de roles
+  // de cuartel.
   const assignableRoles = useMemo(() => {
     if (isInformatica) return ROLE_DEFINITIONS
-    if (isDirectorEscuela) return ROLE_DEFINITIONS.filter((r) => !INFORMATICA_ROLES.includes(r.key))
+    if (isDirectorEscuela) return ROLE_DEFINITIONS.filter((r) => !INFORMATICA_ONLY_ASSIGNABLE_ROLES.includes(r.key))
     if (isJefeCuerpoActivo) return ROLE_DEFINITIONS.filter((r) => JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES.includes(r.key))
     return []
   }, [isInformatica, isDirectorEscuela, isJefeCuerpoActivo])
@@ -360,20 +364,7 @@ export function UsuarioFormPage() {
 
         <div className="field">
           <label>Roles</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {assignableRoles.map((role) => (
-              <button
-                key={role.key}
-                type="button"
-                onClick={() => toggleRole(role.key)}
-                className={`btn ${selectedRoles.includes(role.key) ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '6px 12px', fontSize: 12 }}
-                title={role.description}
-              >
-                {role.label}
-              </button>
-            ))}
-          </div>
+          <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
         </div>
 
         {error && <p className="field-error">{error}</p>}

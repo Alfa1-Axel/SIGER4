@@ -17,7 +17,8 @@ import {
   updateUserAccount,
 } from '../lib/api/users'
 import { DeleteUserConfirmModal } from '../components/ui/DeleteUserConfirmModal'
-import { ROLE_DEFINITIONS } from '../types/roles'
+import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCHOOL_AVALES_ROLES } from '../types/roles'
+import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
 import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -33,8 +34,10 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
 
 // Roles que jefe_cuerpo_activo nunca puede ver/editar en este formulario, ni
 // siquiera de su propio cuartel (mismo PRIVILEGED_TARGET_ROLES que valida
-// server-side supabase/functions/admin-update-user/index.ts).
-const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional']
+// server-side supabase/functions/admin-update-user/index.ts). Incluye los
+// roles de Avales regionales: si no, un jefe_cuerpo_activo podría resetear la
+// contraseña de un usuario de Escuela de su cuartel y entrar a los avales.
+const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional', ...SCHOOL_AVALES_ROLES]
 
 export function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -474,24 +477,17 @@ export function UsuarioDetallePage() {
                 Este usuario es Informática R4 (superadmin). Solo otro Informática R4 puede modificar sus roles.
               </p>
             )}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {ROLE_DEFINITIONS.map((role) => {
-                const active = roles.some((r) => r.role === role.key)
-                return (
-                  <button
-                    key={role.key}
-                    type="button"
-                    disabled={rolesScopesLocked}
-                    onClick={() => handleToggleRole(role.key)}
-                    className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: 12 }}
-                    title={role.description}
-                  >
-                    {role.label}
-                  </button>
-                )
-              })}
-            </div>
+            {/* Roles retirados (ej. administrativo) solo aparecen si este usuario
+                todavía los tiene, para poder identificarlos y quitarlos. */}
+            <RoleGroupedPicker
+              roles={[...ROLE_DEFINITIONS, ...RETIRED_ROLE_DEFINITIONS.filter((def) => roles.some((r) => r.role === def.key))]}
+              selected={roles.map((r) => r.role)}
+              onToggle={handleToggleRole}
+              disabled={rolesScopesLocked}
+            />
+            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
+              El departamento de un "Coordinador de departamento interno" se asigna en Escuela → Avales regionales → Departamentos.
+            </p>
           </div>
 
           <div className="section-header">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { EscuelaTabs } from '../components/EscuelaTabs'
 import { fetchCourses } from '../lib/api/courses'
 import type { Course } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -24,6 +25,7 @@ export function EscuelaPage() {
 
   return (
     <AppShell title="Escuela">
+      <EscuelaTabs />
       <div className="card" style={{ marginBottom: 20 }}>
         <img
           src="/logos/logo-escuela.png"

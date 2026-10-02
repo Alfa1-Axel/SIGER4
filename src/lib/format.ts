@@ -10,3 +10,11 @@ export function truncateDecimals(value: number, decimals = 1): number {
 export function formatPercent(value: number, decimals = 1): string {
   return `${truncateDecimals(value, decimals)}%`
 }
+
+// Tamaño de archivo legible: "820 B", "34 KB", "1.2 MB".
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}

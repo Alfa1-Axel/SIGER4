@@ -8,6 +8,7 @@ import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
+import { SchoolAvalesRoute } from './components/layout/SchoolAvalesRoute'
 import { LoginPage } from './pages/LoginPage'
 import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
 import { PanelPage } from './pages/PanelPage'
@@ -24,6 +25,10 @@ import { AsistenciaFormPage } from './pages/AsistenciaFormPage'
 import { IntervencionFormPage } from './pages/IntervencionFormPage'
 import { EscuelaPage } from './pages/EscuelaPage'
 import { CursoFormPage } from './pages/CursoFormPage'
+import { AvalesPage } from './pages/AvalesPage'
+import { AvalFormPage } from './pages/AvalFormPage'
+import { AvalesDepartamentosPage } from './pages/AvalesDepartamentosPage'
+import { RolesPage } from './pages/RolesPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
@@ -87,8 +92,13 @@ export default function App() {
         <Route path="/escuela" element={<ProtectedRoute><EscuelaPage /></ProtectedRoute>} />
         <Route path="/escuela/nuevo" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
+        <Route path="/escuela/avales" element={<SchoolAvalesRoute><AvalesPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/nuevo" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/departamentos" element={<SchoolAvalesRoute><AvalesDepartamentosPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/:id/editar" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
         <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
+        <Route path="/roles" element={<ProtectedRoute><RolesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<UserManagerRoute><UsuariosPage /></UserManagerRoute>} />
         <Route path="/usuarios/nuevo" element={<UserCreatorRoute><UsuarioFormPage /></UserCreatorRoute>} />
         <Route path="/usuarios/:id" element={<UserManagerRoute><UsuarioDetallePage /></UserManagerRoute>} />

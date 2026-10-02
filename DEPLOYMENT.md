@@ -18,9 +18,9 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
 - [ ] **Variables de entorno del frontend**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y
       `VITE_VAPID_PUBLIC_KEY` configuradas en Vercel (Production, Preview y Development) — nunca la
       `service_role` ni la clave privada VAPID.
-- [ ] **Buckets de Storage**: `station-media` y `avatars` (públicos), `documents` (privado) —
-      se crean solos al correr las migraciones 0017/0019, pero conviene confirmar en **Storage**
-      que existen y tienen la visibilidad correcta.
+- [ ] **Buckets de Storage**: `station-media` y `avatars` (públicos), `documents` y
+      `school-avales` (privados) — se crean solos al correr las migraciones 0017/0019/0095, pero
+      conviene confirmar en **Storage** que existen y tienen la visibilidad correcta.
 - [ ] **Notificaciones push desplegadas** (opcional pero recomendado): claves VAPID generadas,
       `VAPID_PRIVATE_KEY`/`VAPID_PUBLIC_KEY` como secretos de la Edge Function `send-push`,
       `VITE_VAPID_PUBLIC_KEY` en el frontend, función desplegada. Ver sección 1.8. Sin esto, el
@@ -7374,3 +7374,236 @@ buscaba esas filas.
    reciben el push (privacidad: nunca debe llegar a usuarios fuera del alcance).
 8. Con la app cerrada en el celular (no solo en segundo plano): repetir 4-6 y confirmar que el
    push físico llega igual sin la PWA abierta.
+
+## 53. Escuela: Avales regionales por departamento interno + roles agrupados por tipo (2026-10-02) — migraciones 0094-0095
+
+Dos mejoras en la misma tanda:
+
+1. **Avales regionales**: sección nueva dentro de Escuela para cargar documentos de avales,
+   organizados por **departamento interno de Escuela** (Fuego, Forestal, FASME, ...). No son los
+   Departamentos Regionales del módulo `/departamentos` (tabla `departments`): es una estructura
+   aparte, con permisos propios.
+2. **Roles agrupados por tipo/nivel**: los roles dejan de mostrarse como una fila plana de botones.
+   Ahora se agrupan (Informática, Escuela, Departamento interno de Escuela, Región, Cuartel, Otros)
+   con descripción, alcance y permisos principales de cada uno.
+
+### 53.1 Modelo de datos
+
+No existía infraestructura reutilizable: `documents` tiene alcance territorial (región/subsede/
+cuartel/usuario) y una policy de lectura que no encaja con "solo los de tu departamento interno", y
+`departments` son los Departamentos Regionales. Se crearon tablas nuevas:
+
+| Tabla | Para qué |
+|---|---|
+| `school_departments` | Departamentos internos de Escuela: `name`, `slug` (inmutable, para URLs), `description`, `is_active`. No se borran: se desactivan. Inactivo = se consulta, pero no admite cargas nuevas. |
+| `school_department_members` | Quién coordina qué departamento (`member_role = 'coordinador'`, `is_active`). Se escribe solo vía RPC. |
+| `school_avales_documents` | Metadata de cada aval: título, descripción, observaciones, departamento, `storage_bucket`/`storage_path`, nombre original, MIME, tamaño, quién cargó (`uploaded_by_profile_id` + `uploaded_by_name`), `is_archived`/`archived_at`/`archived_by_profile_id`, `created_at`/`updated_at`. |
+
+Se cargan los 3 departamentos iniciales (Fuego, Forestal, FASME) en la propia migración `0095`. No
+hace falta crearlos a mano. Los departamentos nuevos se crean desde la app.
+
+Roles nuevos en el enum `role_key` (migración `0094`, separada porque Postgres no deja usar un valor
+de enum en la misma transacción que lo agrega):
+
+- `coordinador_escuela` — Coordinador de Escuela.
+- `secretario_escuela` — Secretario de Escuela.
+- `coordinador_departamento_escuela` — Coordinador de departamento interno.
+
+Los roles nuevos **no** se sumaron a `is_escuela_role()`: esa función da escritura sobre cursos/
+calendario y lectura regional de cuarteles/perfiles/auditoría, que la matriz pedida no les da.
+
+### 53.2 Cómo se determina cada rol (helpers SQL)
+
+| Helper | Regla |
+|---|---|
+| `is_informatica_r4()` (existente) | `informatica_r4` o `integrante_informatica`, perfil activo. Ve y carga en todos los departamentos. |
+| `is_super_admin()` (existente) | Solo `informatica_r4`, perfil activo. |
+| `can_manage_school_avales()` | `= is_super_admin()`. Editar metadata, archivar/desarchivar, eliminar avales, administrar departamentos y coordinadores. |
+| `is_school_coordinator()` | `has_role('coordinador_escuela')`. |
+| `is_school_secretary()` | `has_role('secretario_escuela')`. |
+| `is_school_department_coordinator(dep)` | Rol `coordinador_departamento_escuela` **y** membresía activa como coordinador de ese departamento. Ninguna de las dos sola alcanza. |
+| `can_view_all_school_avales()` | Informática, coordinador o secretario de Escuela. |
+| `can_view_school_avales_department(dep)` | `can_view_all_school_avales()` o coordinador activo de ese departamento. |
+| `can_upload_school_avales_department(dep)` | Mismas reglas que ver, y el departamento tiene que estar activo. |
+| `my_school_department_ids()` | Departamentos que coordina el usuario actual. |
+
+Todos respetan `profiles.is_active` (vía `has_role()`/`current_profile_id()`): un usuario
+desactivado pierde el acceso al instante.
+
+**Decisión a revisar**: "Informática/admin supremo" se interpretó así: **ver y cargar** = Informática
+completa (`informatica_r4` + `integrante_informatica`, igual que el resto del sistema), **editar/
+archivar/eliminar y administrar departamentos** = solo `informatica_r4` (mínimo permiso). Si
+`integrante_informatica` también tiene que poder administrar, se cambia `is_super_admin()` por
+`is_informatica_r4()` dentro de `can_manage_school_avales()`: todas las policies del módulo pasan por
+esa función (y en el frontend, `canManage` en `src/hooks/useSchoolAvalesAccess.ts`).
+
+### 53.3 Matriz final de permisos — Avales regionales
+
+| Rol | Ver | Cargar | Editar metadata | Archivar | Eliminar | Alcance |
+|---|---|---|---|---|---|---|
+| informatica_r4 | Sí (incluidos archivados) | Sí | Sí | Sí | Sí | Todos los departamentos |
+| integrante_informatica | Sí | Sí | No | No | No | Todos los departamentos |
+| coordinador_escuela | Sí | Sí | No | No | No | Todos los departamentos |
+| secretario_escuela | Sí | Sí | No | No | No | Todos los departamentos |
+| coordinador_departamento_escuela | Sí | Sí | No | No | No | Solo su(s) departamento(s) |
+| Cualquier otro rol (incluidos director_escuela e instructor) | No | No | No | No | No | Sin acceso |
+
+`director_escuela` e `instructor` no figuraban en la matriz pedida, así que quedaron sin acceso
+(mínimo permiso). Si el Director tiene que ver los avales, se suma su rol en
+`can_view_all_school_avales()`.
+
+Documentos archivados: solo los ve `informatica_r4`. Para el resto desaparecen del listado y su
+archivo deja de poder descargarse.
+
+### 53.4 RLS y Storage
+
+- **RLS** activado en las 3 tablas, policies solo `to authenticated`, y `revoke all ... from anon`.
+  - `school_departments`: select por `can_view_school_avales_department(id)`; insert/update solo
+    `can_manage_school_avales()`; sin delete.
+  - `school_department_members`: select para Informática o la propia fila; **sin policies de
+    escritura**: solo las RPC `assign_school_department_coordinator()` /
+    `remove_school_department_coordinator()` (SECURITY DEFINER, exigen `can_manage_school_avales()`).
+    Asignar también agrega el rol `coordinador_departamento_escuela`; quitar a alguien de su último
+    departamento le quita el rol.
+  - `school_avales_documents`: select = admin supremo, o no archivado + departamento visible; insert
+    = puede cargar en ese departamento, a su propio nombre, sin archivar, con la ruta atada a ese
+    departamento y a ese documento; update/delete = solo admin supremo.
+- **Triggers de integridad**: al registrar un aval se fuerza `uploaded_by` al usuario real, se
+  verifica que el archivo exista de verdad en Storage y se toman tamaño/MIME reales de la metadata
+  de Storage (no del cliente). Archivo, ruta, tamaño, MIME y quién cargó son inmutables, incluso
+  para el admin. Fecha y autor del archivado los fija el servidor.
+- **Bucket privado `school-avales`**: 20 MB, mismos tipos MIME que `documents` (PDF, Word, Excel,
+  PNG, JPG, WEBP, HEIC/HEIF). Ruta: `<department_id>/<document_id>/<archivo-sanitizado>`. Se usa el
+  id del departamento (no el slug sugerido) porque es inmutable; igual, **la seguridad no depende
+  del path**:
+  - `school_avales_storage_select`: solo archivos con documento registrado, no archivado, de un
+    departamento visible (o admin supremo). Conocer la URL o la ruta exacta no alcanza.
+  - `school_avales_storage_insert`: ruta exacta y permiso de carga en ese departamento activo.
+  - `school_avales_storage_delete`: admin supremo. Además, quien subió un archivo puede borrarlo
+    solo si quedó sin documento (carga interrumpida), para limpiarlo.
+  - Sin policy de update: ningún archivo se reemplaza ni se mueve.
+- Descarga: URLs firmadas de 5 minutos.
+- Flujo de carga sin filas "pending" (a diferencia de Documentos): primero se sube el archivo,
+  después se registra la fila. Si el registro falla, el frontend borra el archivo recién subido.
+
+### 53.5 Auditoría
+
+Carga, edición de metadata, archivo/desarchivo y eliminación de avales, altas/cambios de
+departamentos y asignaciones de coordinadores quedan en `audit_logs` vía `audit_row_change()`
+(sin cambios en esa función). Como estas tablas no tienen territorio, se ajustó
+`audit_logs_select_regional`: excluye las 3 tablas de Avales, porque su condición
+"`region_id is null`" le habría mostrado a `secretario_regional` títulos y nombres de archivo que la
+matriz no le da. La auditoría de Avales queda visible solo para Informática. No se audita la
+descarga: no había patrón de auditoría de descargas en el sistema.
+
+No se agregaron notificaciones.
+
+### 53.6 Roles agrupados
+
+Los roles son un enum de Postgres sin tabla propia, y la metadata visual ya vivía en
+`ROLE_DEFINITIONS` (`src/types/roles.ts`), que tenía un campo `scope` sin uso. Se usó ese mismo
+lugar en vez de una migración nueva: cada rol ahora tiene `category`, `scope` (ampliado),
+`scopeLabel` y `permissions` (resumen de la matriz 31.4 y de esta sección). No cambia ningún
+permiso real.
+
+Agrupación: **Informática** (informatica_r4, integrante_informatica) · **Escuela Regional**
+(director_escuela, instructor, coordinador_escuela, secretario_escuela) · **Departamento interno
+de Escuela** (coordinador_departamento_escuela) · **Región** (secretario_regional) · **Cuartel**
+(presidente_cuartel, jefe_cuerpo_activo, usuario_carga_cuartel, secretario_comision) · **Otros**
+(invitado, y `administrativo` como rol retirado, que solo aparece si un usuario todavía lo tiene).
+Subsede y Sistema no tienen roles propios: son niveles de alcance, explicados en la guía.
+
+Dónde se ve:
+- **Nuevo usuario** y **Detalle de usuario**: selector agrupado con descripción y alcance.
+- **Ajustes**: los roles propios con su grupo, función y alcance.
+- **`/roles`** (nueva, cualquier usuario): guía completa con niveles de alcance, roles por grupo,
+  permisos principales y, para quien tiene acceso, los departamentos internos (con sus
+  coordinadores, solo para Informática). Enlazada desde Usuarios, los selectores de rol y Ajustes.
+
+Asignación de los roles nuevos: solo Informática. `admin-create-user` rechaza que `director_escuela`
+cree usuarios con roles de Avales, y `admin-update-user` trata a los roles nuevos como privilegiados
+(un `jefe_cuerpo_activo` no puede resetear la contraseña de un usuario de Escuela de su cuartel).
+
+### 53.7 Rutas nuevas
+
+| Ruta | Quién | Qué |
+|---|---|---|
+| `/escuela/avales` | Roles con acceso | Listado por departamento (chips con conteo), búsqueda, ver/descargar; admin supremo: editar, archivar/desarchivar, eliminar, ver archivados |
+| `/escuela/avales/nuevo` | Roles con acceso, desde PC | Carga: departamento, título, descripción, observaciones, archivo |
+| `/escuela/avales/:id/editar` | informatica_r4 | Editar metadata (título, descripción, observaciones, departamento) |
+| `/escuela/avales/departamentos` | informatica_r4 | Crear/editar/desactivar departamentos, asignar/quitar coordinadores |
+| `/roles` | Cualquier usuario | Guía de roles y permisos |
+
+Escuela muestra pestañas **Cursos / Avales regionales** solo a quien tiene acceso; para el resto,
+Escuela se ve igual que antes. Entrar por URL directa sin permiso muestra un mensaje claro, y aunque
+se salteara la pantalla, la base no devuelve nada. La carga queda solo desde PC, igual que en
+Documentos (sección 21); ver y descargar funciona en el celular.
+
+### 53.8 Qué correr en Supabase
+
+1. SQL Editor → correr **solo** `0094_school_roles_enum.sql` y ejecutar.
+2. SQL Editor → en una ejecución nueva, correr `0095_school_avales_module.sql`. Si se corre antes de
+   la 0094, falla con el mensaje "Falta correr 0094...".
+3. Redesplegar las Edge Functions de usuarios (sin flags nuevos):
+   ```
+   npx supabase functions deploy admin-create-user
+   npx supabase functions deploy admin-update-user
+   ```
+   `admin-update-user` es necesaria por seguridad (protege a los usuarios de Escuela frente a
+   `jefe_cuerpo_activo`); `admin-create-user`, para poder crear usuarios con los roles nuevos desde
+   "Nuevo usuario".
+4. Verificar en **Storage** que existe el bucket `school-avales` y que es **privado**.
+5. Asignar roles: Coordinador/Secretario de Escuela desde `/usuarios/:id`; coordinadores de
+   departamento desde Escuela → Avales regionales → Departamentos (asigna el rol solo).
+
+Verificación previa hecha en esta tanda: las migraciones 0001-0095 se reprodujeron en un Postgres 16
+local con stubs de `auth`/`storage`, y se corrieron ~70 pruebas de RLS/Storage simulando cada rol de
+la matriz (todas OK). Esa réplica no incluye la Storage API real ni el Dashboard, por eso el
+checklist manual sigue siendo necesario.
+
+### 53.9 Checklist manual
+
+Preparar usuarios de prueba: uno `informatica_r4`, uno `coordinador_escuela`, uno
+`secretario_escuela`, tres coordinadores de departamento (Fuego, Forestal, FASME) y uno común (por
+ejemplo `presidente_cuartel`).
+
+- [ ] Informática ve todos los departamentos y documentos.
+- [ ] Informática puede cargar en todos.
+- [ ] Informática puede editar metadata.
+- [ ] Informática puede archivar/desarchivar y eliminar (el archivo también desaparece de Storage).
+- [ ] Coordinador de Escuela ve todos los departamentos.
+- [ ] Coordinador de Escuela puede cargar en todos.
+- [ ] Coordinador de Escuela no ve botones de editar/archivar/eliminar.
+- [ ] Secretario de Escuela ve todos los departamentos.
+- [ ] Secretario de Escuela puede cargar en todos.
+- [ ] Secretario de Escuela no puede eliminar.
+- [ ] Coordinador de Fuego ve solo Fuego.
+- [ ] Coordinador de Forestal ve solo Forestal.
+- [ ] Coordinador de FASME ve solo FASME.
+- [ ] Coordinador de departamento solo puede elegir su departamento al cargar.
+- [ ] Coordinador de departamento no puede editar, archivar ni eliminar.
+- [ ] Usuario común no ve la pestaña Avales en Escuela.
+- [ ] Usuario común que entra a `/escuela/avales` ve "No tenés permiso".
+- [ ] Usuario común no puede descargar por URL directa: copiar como admin una URL firmada
+      vencida (más de 5 minutos) y confirmar que falla; y probar
+      `<SUPABASE_URL>/storage/v1/object/public/school-avales/<ruta>` → error (bucket privado).
+- [ ] RLS bloquea desde la API: con el token de un usuario común,
+      `GET <SUPABASE_URL>/rest/v1/school_avales_documents?select=*` devuelve `[]`, y
+      `GET <SUPABASE_URL>/rest/v1/school_departments?select=*` devuelve `[]`.
+- [ ] Departamento inactivo: desactivar FASME, confirmar que su coordinador lo sigue viendo pero no
+      puede cargar; reactivarlo.
+- [ ] Quitar al coordinador de FASME desde Departamentos → deja de ver Avales y pierde el rol.
+- [ ] Carga funciona (PDF y una imagen) y muestra nombre, tamaño, quién cargó y fecha.
+- [ ] Descarga funciona y baja con el nombre original.
+- [ ] Auditoría (como Informática): aparecen la carga, la edición, el archivado y la eliminación.
+      Como `secretario_regional`, no aparece nada de Avales.
+- [ ] `/roles` y "Nuevo usuario" muestran los roles agrupados por tipo, con descripción y alcance.
+- [ ] Como `director_escuela`, "Nuevo usuario" no ofrece los roles de Avales.
+
+### 53.10 Observación fuera de alcance
+
+Al reproducir las migraciones en limpio, `0093_push_diagnostics_territorial_scope.sql` falla en
+`get_own_push_diagnostics(integer)` con "cannot change return type of existing function": cambia el
+`RETURNS TABLE` sin `drop function if exists` previo. Si en producción se aplicó con un drop manual,
+no hay nada que hacer; si no, esa función quedó en su versión anterior. No se tocó (push fuera de
+alcance de esta tanda).

@@ -2283,6 +2283,10 @@ la entrega (navegador/OS del celular, fuera del control de la aplicación).
 
 ## 21. Carga de documentos desde mobile/PWA: pausada, decisión de producto (2026-08)
 
+> **Actualización (2026-10-02):** la pausa se levantó. La carga desde el celular volvió a estar
+> habilitada en Avales, Documentos y fotos; ver la sección 56.6. Lo que sigue queda como registro
+> del diagnóstico.
+
 **Decisión**: la carga y edición de archivos de Documentos queda disponible **solo desde
 escritorio** hasta nuevo aviso. En mobile/PWA se puede seguir viendo, descargando, buscando y
 administrando carpetas/papelera normalmente — lo único deshabilitado es elegir/subir/reemplazar el
@@ -4131,8 +4135,14 @@ de lectura de `stations_select_scope` para todos los roles (ver Panel).
 |---|---|---|---|---|
 | informatica_r4 / integrante_informatica | Sí | Sí | Sí, cualquier departamento | Todo el sistema |
 | secretario_regional | Sí | No | Sí, integrantes manuales e informes de actividad de cualquier departamento | Todo el sistema (ver nota) |
-| Cualquier rol que sea coordinador de un departamento | Sí | No | Sí, ese departamento | Ese departamento |
+| Cualquier rol que sea coordinador de un departamento | Sí | No | Sí, ese departamento (no puede cambiar el coordinador) | Ese departamento |
 | Resto de roles | Sí | No | No | Solo lectura |
+
+**Coordinador y Avales (desde `0097`, sección 56):** el coordinador de un departamento
+(`departments.coordinator_profile_id`) ve y carga los avales regionales de ese departamento en
+Escuela, sin rol ni asignación extra. Por eso crear y eliminar departamentos, y elegir el
+coordinador, es solo de Informática también en RLS. El nombre del departamento es único (sin
+distinguir mayúsculas ni espacios).
 
 **Integrantes manuales e Informes de actividad**: además de admin y coordinador, **cualquier miembro
 con cuenta** del departamento puede crear/editar (department_members no distingue roles internos —
@@ -4171,6 +4181,15 @@ región").
 
 #### Auditoría
 
+**Vigente desde `0097` (2026-10-02, sección 56.4):**
+
+| Rol | Acceso | Módulos visibles | Ve datos técnicos (JSON) | Alcance |
+|---|---|---|---|---|
+| informatica_r4 | Sí | Todos | Sí | Todo el sistema |
+| **Cualquier otro rol** (incluido integrante_informatica) | **No — sin acceso** (ni menú, ni URL, ni API) | — | — | — |
+
+La tabla de abajo es el esquema anterior, de `0062` a `0096`, y se conserva como historial:
+
 | Rol | Acceso | Módulos visibles | Ve datos técnicos (JSON) | Alcance |
 |---|---|---|---|---|
 | informatica_r4 / integrante_informatica | Sí | Todos | Sí | Todo el sistema |
@@ -4179,8 +4198,8 @@ región").
 | jefe_cuerpo_activo / presidente_cuartel / secretario_comision / usuario_carga_cuartel | Sí | Set acotado (cuarteles, personal, vehículos, documentos, asistencia/intervenciones, calendario, roles/scope) | No | Su cuartel/subsede |
 | **invitado** | **No — sin acceso** | — | — | — |
 
-Cualquier rol que coordine o sea miembro de un departamento suma los módulos de Departamentos a su set
-visible, acotado a sus propios departamentos.
+En ese esquema anterior, cualquier rol que coordinara o fuera miembro de un departamento sumaba los
+módulos de Departamentos a su set visible, acotado a sus propios departamentos.
 
 *Resuelto (2026-08-13):* hasta antes de la migración `0076`, `director_escuela`/`instructor`
 compartían la policy RLS `audit_logs_select_regional` con `secretario_regional` vía
@@ -7377,6 +7396,11 @@ buscaba esas filas.
 
 ## 53. Escuela: Avales regionales por departamento interno + roles agrupados por tipo (2026-10-02) — migraciones 0094-0095
 
+> **Actualización:** los departamentos internos de Escuela se unificaron con `departments` en la
+> sección 55. El coordinador de departamento ya no usa el rol `coordinador_departamento_escuela` ni
+> `school_department_members`: desde la sección 56 es `departments.coordinator_profile_id`. La
+> matriz de permisos de 53.3 sigue vigente.
+
 Dos mejoras en la misma tanda:
 
 1. **Avales regionales**: sección nueva dentro de Escuela para cargar documentos de avales,
@@ -7541,7 +7565,8 @@ cree usuarios con roles de Avales, y `admin-update-user` trata a los roles nuevo
 Escuela muestra pestañas **Cursos / Avales regionales** solo a quien tiene acceso; para el resto,
 Escuela se ve igual que antes. Entrar por URL directa sin permiso muestra un mensaje claro, y aunque
 se salteara la pantalla, la base no devuelve nada. La carga queda solo desde PC, igual que en
-Documentos (sección 21); ver y descargar funciona en el celular.
+Documentos (sección 21); ver y descargar funciona en el celular. *(Desde la sección 56.6 la carga
+funciona también desde el celular.)*
 
 ### 53.8 Qué correr en Supabase
 
@@ -7743,6 +7768,10 @@ horizontales de página; la tabla de Auditoría en mobile desplaza dentro de su 
 
 ### 55.2 Modelo resultante
 
+> **Actualización:** `school_department_members`, el rol `coordinador_departamento_escuela` y la
+> pantalla Coordinadores de Avales se retiraron en la sección 56: el coordinador de Avales es el de
+> la sección Departamentos.
+
 - **Fuente única:** `departments`. Crear, renombrar, desactivar o eliminar un departamento se hace
   solo en la sección Departamentos, con sus permisos de siempre.
 - `school_avales_documents.department_id` → `departments(id)`, `on delete restrict`: un
@@ -7838,3 +7867,262 @@ Checklist manual:
 - [ ] Intentar eliminar un departamento con avales → mensaje claro, no se elimina.
 - [ ] El logo de la Escuela se ve en Cursos, Avales, Cargar aval y Coordinadores, en claro y oscuro,
       escritorio y mobile.
+
+## 56. Coordinador único desde Departamentos, Auditoría solo para informatica_r4 y carga desde el celular (2026-10-02) — migración 0097
+
+### 56.1 Causa del error al asignar coordinadores desde Escuela
+
+- **Dos fuentes para el mismo dato.** Desde `0095`, para que alguien fuera coordinador de un
+  departamento en Avales hacían falta dos asignaciones de Escuela: el rol
+  `coordinador_departamento_escuela` y una fila en `school_department_members`. Eran independientes
+  de `departments.coordinator_profile_id`, el coordinador que muestra y edita la sección
+  Departamentos. Por eso quien ya era coordinador en Departamentos no aparecía en Avales y había que
+  "asignarlo de nuevo" desde Escuela → Coordinadores.
+- **Error al asignar.** `0096` cambió los ids de departamento de `school_departments` a
+  `departments`. Si el frontend de `0096` se publica antes de correr esa migración, la pantalla manda
+  ids de `departments` a la versión de `0095` de `assign_school_department_coordinator()`. Esa
+  versión los busca en `school_departments` y responde "El departamento indicado no existe.". Además,
+  `list_school_avales_departments()` todavía no existe (PostgREST `PGRST202`), y la pantalla mostraba
+  un error genérico.
+
+Las dos cosas se resuelven eliminando la segunda fuente: ya no hay nada que asignar desde Escuela.
+`errors.ts` ahora traduce `PGRST202`/`PGRST205`/`42883`/`42P01` a "Esta función necesita una
+actualización de la base de datos que todavía no se aplicó", en vez de un error genérico.
+
+### 56.2 Modelo resultante
+
+- **Fuente única del coordinador:** `departments.coordinator_profile_id`, el mismo campo de la
+  sección Departamentos. Quien figura ahí ve y carga los avales de ese departamento, sin rol ni
+  asignación extra.
+- `is_school_department_coordinator(department_id)` lee solo ese campo. `can_view_school_avales_department()`
+  y `can_upload_school_avales_department()` no cambian de firma: siguen usando
+  `is_school_department_coordinator()`, y por eso pasan a reconocer al coordinador de Departamentos.
+  Las policies de `school_avales_documents` y de Storage (`school-avales`) no se tocaron.
+- `school_department_members`: los coordinadores activos pasan a `departments.coordinator_profile_id`
+  (ver 56.3) y la tabla se elimina junto con `assign_school_department_coordinator()`,
+  `remove_school_department_coordinator()` y `my_school_department_ids()`.
+- Rol `coordinador_departamento_escuela`: se borran todas sus asignaciones (`user_roles`) y deja de
+  ofrecerse en la app. Figura como "rol retirado" solo si algún usuario lo conservara. El valor
+  sigue en el enum `role_key`, porque Postgres no permite quitarlo sin recrear el tipo, pero ninguna
+  función ni policy lo consulta.
+- `school_departments` ya se había eliminado en `0096`.
+- `list_school_avales_departments()` devuelve además `coordinator_profile_id`, `coordinator_name` e
+  `is_my_department`. Es SECURITY DEFINER solo para poder leer el nombre del coordinador. El filtro
+  de visibilidad sigue siendo `can_view_school_avales_department()`, y no tiene grant a `anon`.
+- **departments, alta y baja solo para Informática.** La policy `for all` de `0042` dejaba que
+  cualquier usuario creara un departamento nombrándose coordinador. Ahora eso le daría acceso a
+  Avales, así que:
+  - `insert` y `delete` quedan para `is_informatica_r4()`;
+  - `update` queda para Informática o el coordinador, que no puede cambiar el coordinador (`with check`).
+- **Nombres únicos:** índice `departments_name_unique_idx` sobre `lower(btrim(name))`. Si al correr
+  `0097` ya hubiera nombres repetidos, el índice no se crea y la migración avisa cuáles son
+  (WARNING). Hay que unificarlos a mano y volver a correrla. Las pantallas de alta y edición avisan
+  antes de guardar.
+
+La matriz de Avales no cambia:
+
+| Quién | Ve | Carga |
+|---|---|---|
+| informatica_r4 / integrante_informatica | Todos los departamentos | Todos (editar, archivar y eliminar: solo informatica_r4) |
+| coordinador_escuela / secretario_escuela | Todos los departamentos | Todos |
+| Coordinador de un departamento (sección Departamentos) | Solo el suyo | Solo el suyo |
+| Resto | Nada (ni por URL ni por API) | Nada |
+
+### 56.3 Migración de datos (0097)
+
+- Por cada departamento **sin** coordinador en Departamentos, el coordinador activo que tenía en
+  Escuela pasa a ser su coordinador.
+- Si el departamento **ya tenía** otro coordinador en Departamentos, manda Departamentos. La
+  asignación de Escuela se descarta y su borrado queda en `audit_logs`. La migración informa cuántas
+  asignaciones movió y cuántas descartó (NOTICE).
+- `delete from school_department_members` corre antes del `drop table` para que cada fila quede
+  auditada.
+- El borrado del rol retirado suspende `trg_protect_super_admin_user_roles` solo durante ese
+  `delete`, porque en una migración no hay sesión de usuario. Después lo vuelve a activar.
+- Requiere `0096`: si falta, la migración se detiene con un mensaje claro. Se puede correr de nuevo
+  sin efecto y funciona en un proyecto nuevo (`0094` → `0097` seguidas).
+
+### 56.4 Auditoría: solo informatica_r4
+
+- **Base:** se eliminan todas las policies de lectura de `audit_logs`, tanto las regionales, de
+  subsede, de cuartel y de Escuela como la de `integrante_informatica`. Queda solo
+  `audit_logs_select_super_admin` (`using (is_super_admin())`) y se revoca todo a `anon`. Con eso,
+  una consulta directa a la API desde cualquier otro rol devuelve 0 filas. La escritura no cambia:
+  sigue entrando por los triggers SECURITY DEFINER y `record_manual_audit_event()`.
+- **Frontend:**
+  - `/auditoria` usa `SuperAdminRoute`. Por URL directa, cualquier otro rol ve "No tenés acceso a
+    esta sección" con un botón para volver al inicio. Antes se redirigía sin explicación.
+  - El menú muestra Auditoría solo a informatica_r4.
+  - El Panel muestra "Actividad reciente" solo a informatica_r4.
+  - `AuditoriaPage` ya no recorta por rol ni por módulo.
+- `send_weekly_admin_summary()` (cron, SECURITY DEFINER, sin grant a usuarios) sigue contando altas y
+  bajas de usuarios desde `audit_logs` para el resumen semanal de Informática. Son solo totales, no
+  da acceso a los registros.
+- Guías: `/roles` y la matriz 31.4 dicen "Único rol con acceso a Auditoría" para informatica_r4.
+
+### 56.5 Protección de coordinadores frente a jefe_cuerpo_activo
+
+Antes, `admin-update-user` impedía que un `jefe_cuerpo_activo` editara a un usuario con el rol
+`coordinador_departamento_escuela`. Esa protección evitaba, por ejemplo, que reseteara su
+contraseña y entrara a los avales con esa cuenta. Como el rol ya no existe, la Edge Function ahora
+consulta `departments.coordinator_profile_id`: quien coordina un departamento solo lo edita
+Informática. `UsuarioDetallePage` aplica el mismo bloqueo en pantalla. **Requiere redeploy de
+`admin-update-user`.**
+
+### 56.6 Carga de archivos desde el celular (revierte la sección 21)
+
+La pausa de la sección 21 se levanta: Avales, Documentos y las fotos de perfil y de cuartel se
+pueden subir desde el celular.
+
+- La causa principal que motivó la pausa ya estaba corregida: la recarga automática del service
+  worker mientras el selector nativo estaba abierto (sección 19 y `vite.config.ts`, `registerType:
+  'prompt'`).
+- Un componente nuevo, `FilePicker`, se usa en Subir aval y Subir documento:
+  - el `<input type="file">` es nativo y se abre desde un `<label>`, sin `click()` programático;
+  - "Elegir archivo" usa `accept` con los MIME y extensiones admitidos;
+  - "Sacar foto" usa `accept="image/*"` y `capture="environment"`, y solo aparece en pantallas
+    táctiles;
+  - valida tipo, tamaño y archivo vacío apenas se elige, con mensajes concretos ("pesa 21 MB y el
+    máximo es 20 MB", "no es un formato admitido", HEIC con instrucciones);
+  - muestra los estados: sin archivo, listo para subir, subiendo y error.
+- **Si Android recarga la página** mientras el selector está abierto (falta de memoria en algunos
+  equipos), el formulario se recupera solo:
+  - un borrador en `sessionStorage` (`useSessionDraft`) conserva título, descripción y demás campos;
+  - aparece el aviso "El celular recargó la página mientras elegías el archivo. Elegilo de nuevo
+    para continuar.".
+- **Fotos de perfil y de cuartel** (`ImagePicker`): misma validación inmediata. Los formatos que
+  muestra salen de los tipos admitidos de cada uso; el logo de cuartel acepta además SVG.
+- **Errores de Storage traducidos:** "No tenés permiso para subir o ver este archivo", "Ese tipo de
+  archivo no se admite", "El archivo supera el tamaño máximo" y "No hay conexión con el servidor".
+- Storage y RLS no cambiaron: siguen los mismos buckets, límites, `allowed_mime_types` y policies.
+- `src/lib/device.ts` (`isMobileUserAgent`) se eliminó y ya no se usa en ningún lado.
+
+Tipos probados desde Android/Chrome (emulado):
+
+| Caso | Resultado |
+|---|---|
+| PDF desde el selector de archivos | Sube y vuelve al listado con aviso |
+| JPG desde la cámara | Igual |
+| ZIP (tipo no admitido) | Se rechaza al elegirlo |
+| PDF de 21 MB (máximo 20 MB) | Se rechaza al elegirlo |
+| Archivo de 0 bytes | Se rechaza al elegirlo |
+| HEIC en Avales y Documentos | Se admite (está en `allowed_mime_types` de ambos buckets) |
+| Enviar sin archivo | Error que indica qué tocar |
+| "Quitar" el archivo elegido | Vuelve a "Todavía no elegiste un archivo" |
+| Foto de perfil HEIC o de 6 MB | Se rechaza con instrucciones |
+| Logo de cuartel SVG | Se admite |
+
+### 56.7 Cambios de pantallas y textos
+
+- **Escuela / Avales:**
+  - ya no existe la pantalla Coordinadores: `/escuela/avales/coordinadores` y
+    `/escuela/avales/departamentos` redirigen a Avales;
+  - cada departamento muestra su coordinador real ("Coordinador: X (vos)");
+  - Informática tiene el botón "Departamentos y coordinadores", que lleva a la sección Departamentos;
+  - el botón "Subir aval" se muestra también en mobile;
+  - Subir aval tiene este orden: departamento (con su coordinador), archivo, título (se completa con
+    el nombre del archivo), descripción y observaciones.
+- **Departamentos:**
+  - título y subtítulo explican que es la única lista y que la usa Avales;
+  - Informática tiene el botón "Nuevo departamento";
+  - aparecen "Sin coordinador" y la marca "Tu departamento";
+  - el estado vacío ofrece "Crear el primer departamento";
+  - hay avisos de éxito al crear, guardar y eliminar;
+  - el campo Coordinador tiene ayuda ("Es la única asignación necesaria: no hace falta darle ningún
+    rol");
+  - quien no tiene permiso ve una explicación en lugar de un formulario.
+- **Usuarios:**
+  - la ficha muestra "Departamentos que coordina", con enlace a cada uno, y el aviso "Datos
+    guardados";
+  - Nuevo usuario tiene cuatro secciones (Datos de la persona, Acceso, Ubicación y alcance, Roles),
+    ayuda en cada una y errores que dicen en qué paso está el problema.
+- **Documentos:**
+  - el archivo va primero;
+  - el botón dice "Subir documento" / "Subiendo archivo…";
+  - al volver a la carpeta aparece "se subió correctamente";
+  - la carpeta vacía ofrece "Subir el primer documento".
+- **Accesos denegados:**
+  - Auditoría, Reportes, Usuarios, Nuevo usuario, Avales, Nuevo departamento y Subir documento
+    explican quién tiene acceso y ofrecen volver, en vez de redirigir o mostrar una página en
+    blanco;
+  - `GuardedRoute`, `SuperAdminRoute` y `AccessDenied` son componentes reutilizables.
+- **Menú lateral:** se agrupa en Gestión, Administración y Cuenta. La Administración se muestra
+  solo si hay algo para administrar.
+- **Avisos de éxito tras navegar:** `useNavigationNotice` y `SuccessNotice` se reutilizan en Avales,
+  Carpetas y Departamentos.
+- **`/roles`:** se agrega una sección Departamentos con la explicación de la función de coordinador
+  y la lista de departamentos con su coordinador (para quien tiene acceso a Avales).
+
+### 56.8 Qué correr
+
+1. SQL Editor → `0097_avales_coordinator_from_departments_and_audit_super_admin.sql`, después de
+   `0096`. Revisar los NOTICE/WARNING: cuántas asignaciones se movieron o descartaron, y si quedaron
+   nombres de departamento repetidos.
+2. `supabase functions deploy admin-update-user`.
+3. Desplegar el frontend **después** del paso 1: el frontend nuevo espera las columnas nuevas de
+   `list_school_avales_departments()`. Si se publica antes, Avales muestra "Esta función necesita
+   una actualización de la base de datos…".
+
+Sin cambios en Storage, en push/PWA ni en las demás Edge Functions.
+
+### 56.9 Verificación
+
+Postgres 16 local con stubs de `auth`/`storage`, sobre la base de la sección 55 con datos sembrados,
+con 38 pruebas en total:
+
+- **Datos:**
+  - Fuego y FASME pasan de Escuela a Departamentos;
+  - Forestal conserva el coordinador que ya tenía en Departamentos;
+  - no queda nadie con el rol retirado;
+  - el descarte queda en auditoría.
+- **Avales:**
+  - el coordinador de Forestal en Departamentos, sin ningún rol de Escuela, ve y carga solo Forestal,
+    incluido su archivo en Storage;
+  - cambiar el coordinador en Departamentos le quita el acceso al anterior y se lo da al nuevo;
+  - Coordinador y Secretario de Escuela ven todos;
+  - el usuario común no ve nada.
+- **Departamentos:**
+  - un usuario común no puede crear un departamento nombrándose coordinador;
+  - el coordinador no puede cederlo;
+  - `integrante_informatica` sí crea, y lo creado aparece en Avales;
+  - "  FUEGO " se rechaza por repetido.
+- **Auditoría:**
+  - informatica_r4 la ve;
+  - `integrante_informatica`, `secretario_regional`, Coordinador y Secretario de Escuela, un
+    coordinador de departamento, un jefe y un usuario común ven 0 filas;
+  - `anon` recibe "permission denied".
+- **Corridas de la migración:**
+  - la segunda corrida no tiene efecto;
+  - en un proyecto nuevo funciona;
+  - con nombres repetidos avisa y no falla.
+
+Capturas automáticas (escritorio 1366 px y mobile 390 px, claro y oscuro, backend simulado):
+168 pantallas, sin errores de página ni scroll horizontal. La carga desde mobile se probó con los
+casos de 56.6.
+
+Checklist manual:
+
+- [ ] Asignar un coordinador a Fuego en Departamentos → ese usuario ve Escuela → Avales → Fuego y
+      puede subir un aval, sin ningún paso más.
+- [ ] Cambiar el coordinador de Fuego → el anterior deja de ver Avales.
+- [ ] Coordinador y Secretario de Escuela ven y cargan en todos; Informática ve y administra todos.
+- [ ] Usuario común: sin pestaña Avales; por URL ve el mensaje de acceso denegado.
+- [ ] Crear "fuego" en Departamentos con "Fuego" existente → aviso de repetido.
+- [ ] `/auditoria` con integrante_informatica, secretario_regional, Escuela, coordinador, jefe y
+      usuario común → "No tenés acceso a esta sección"; sin ítem en el menú.
+- [ ] Jefe de Cuerpo Activo no puede editar a un usuario de su cuartel que coordina un departamento.
+- [ ] Desde un Android real (Chrome y, si se usa, el navegador de Xiaomi): subir un aval en PDF,
+      otro sacando una foto, y un documento; elegir un archivo de más de 20 MB → mensaje claro.
+- [ ] Foto de perfil desde el celular (galería y cámara).
+- [ ] Logo de la Escuela en Cursos, Avales y Subir aval, en claro y oscuro, escritorio y mobile.
+
+### 56.10 Riesgos y pendientes
+
+- **Android real.** La carga se probó en Chrome con emulación de Android (input nativo, `capture`,
+  validaciones y envío completo), no en un equipo físico. Antes de anunciarlo hay que hacer la
+  prueba del checklist en un Android real, sobre todo en Xiaomi/MIUI (sección 21.1). Si se repitiera
+  la pérdida de archivo, ahora queda a la vista: el aviso de recarga y el borrador recuperado.
+- **Orden de despliegue:** primero `0097`, después el frontend (56.8).
+- **Nombres repetidos previos:** si `0097` avisa repetidos, el índice único no existe hasta
+  unificarlos y volver a correrla.
+- El valor `coordinador_departamento_escuela` sigue en el enum `role_key` (sin uso).

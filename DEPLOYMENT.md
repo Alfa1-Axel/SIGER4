@@ -7389,6 +7389,10 @@ Dos mejoras en la misma tanda:
 
 ### 53.1 Modelo de datos
 
+> **Actualizado en la sección 55:** la tabla `school_departments` descripta acá se unificó con
+> `departments` (migración `0096`). Los departamentos de Avales son los mismos de la sección
+> Departamentos.
+
 No existía infraestructura reutilizable: `documents` tiene alcance territorial (región/subsede/
 cuartel/usuario) y una policy de lectura que no encaja con "solo los de tu departamento interno", y
 `departments` son los Departamentos Regionales. Se crearon tablas nuevas:
@@ -7725,3 +7729,112 @@ carga, papelera y estado de carga), calendario y alta de evento, notificaciones,
 (listado, alta y detalle), roles, auditoría, inventario, departamentos, reportes y los formularios
 de curso y personal. También el drawer mobile, los modales y el foco de teclado. Sin desbordes
 horizontales de página; la tabla de Auditoría en mobile desplaza dentro de su propio contenedor.
+
+## 55. Departamentos únicos para Avales y logo de la Escuela (2026-10-02) — migración 0096
+
+### 55.1 Qué se corrigió
+
+- **Departamentos duplicados.** La migración `0095` había creado `school_departments`, una lista de
+  departamentos propia de Escuela, separada de `departments` (la tabla que administra la sección
+  Departamentos). Fuego, Forestal, FASME o cualquier otro departamento podían existir dos veces, con
+  ids distintos, y un departamento creado en un lado no aparecía en el otro.
+- **Logo de Escuela.** El módulo Escuela mostraba `public/logos/logo-escuela.png`, que desde
+  2026-08-20 es el sello general de SIGER4 (ver `public/logos/README.md`), no el logo de la Escuela.
+
+### 55.2 Modelo resultante
+
+- **Fuente única:** `departments`. Crear, renombrar, desactivar o eliminar un departamento se hace
+  solo en la sección Departamentos, con sus permisos de siempre.
+- `school_avales_documents.department_id` → `departments(id)`, `on delete restrict`: un
+  departamento con avales no se puede eliminar, sí desactivar.
+- `school_department_members.department_id` → `departments(id)`, `on delete cascade`. Sigue
+  siendo la asignación de Escuela: rol `coordinador_departamento_escuela` + fila activa en esta
+  tabla. Es independiente de `departments.coordinator_profile_id` (coordinador del departamento en
+  la sección Departamentos), que no da acceso a Avales.
+- `school_departments` se eliminó, con sus policies y triggers. Las filas históricas de
+  `audit_logs` con esa tabla se conservan.
+- Nueva función `list_school_avales_departments()` (security invoker): devuelve los departamentos
+  que el usuario ve dentro de Avales, según `can_view_school_avales_department()`.
+- `can_upload_school_avales_department()` y `assign_school_department_coordinator()` ahora leen
+  `departments`. Un departamento desactivado en la sección Departamentos deja de admitir cargas.
+
+`departments` mantiene su RLS de siempre: cualquier usuario autenticado puede leer la lista de
+departamentos, igual que antes. Eso no da acceso a ningún aval: qué departamentos ve cada rol dentro
+de Avales, y qué documentos y archivos puede leer o cargar, sigue saliendo de los helpers y policies
+de `0095`. La matriz de permisos de la sección 53.3 no cambia.
+
+### 55.3 Migración de datos
+
+`0096_avales_use_system_departments.sql` funciona igual si `0095` ya estaba aplicada con datos o si
+se corren `0094`, `0095` y `0096` seguidas en un proyecto nuevo. Se puede volver a correr sin efecto.
+
+- Cada fila de `school_departments` se empareja con un departamento existente por nombre, sin
+  distinguir mayúsculas ni espacios en los extremos. Si hay varios, se toma el activo más antiguo.
+- Sin coincidencia, se crea en `departments` conservando el mismo id, así sus avales y
+  coordinadores no cambian.
+- Con coincidencia, los avales y coordinadores se reasignan al id existente. No se pierde ningún
+  documento ni ninguna asignación. `updated_at` de los avales no cambia, y la reasignación queda en
+  auditoría.
+- La ruta del archivo en Storage no cambia: los permisos salen de `department_id`, nunca de la
+  ruta, así que los archivos siguen accesibles con los mismos permisos.
+
+Fuego, Forestal y FASME quedan en `departments` una sola vez. Si alguno ya existía en la sección
+Departamentos, se reutiliza ese.
+
+### 55.4 Pantallas
+
+- **Escuela (todas sus pantallas):** encabezado de módulo con el logo `Logo escuela.png`
+  (`alt="Logo Escuela"`), el nombre de la Escuela y las pestañas Cursos / Avales regionales. El logo
+  se versiona en `src/assets/Logo escuela.png`, copia exacta del original de la raíz, que sigue
+  excluido de git. Se muestra a 56px (48px en mobile), en un cuadro fijo con `object-fit: contain`:
+  no se recorta, no se deforma y se ve nítido en pantallas de alta densidad.
+- **Avales:** los filtros listan los departamentos de la tabla única. El filtro en la URL usa el id
+  del departamento (`?departamento=<id>`), que ya no tiene slug. Los departamentos inactivos solo
+  aparecen si tienen avales.
+- **Coordinadores de Avales** (`/escuela/avales/coordinadores`, antes `/escuela/avales/departamentos`,
+  que redirige): solo asigna y quita coordinadores de Avales. Ya no crea ni edita departamentos:
+  enlaza a la sección Departamentos ("Ir a Departamentos", "Nuevo departamento", "Ver en
+  Departamentos").
+- **Detalle de departamento:** quien ve ese departamento en Avales tiene un acceso directo a sus
+  avales. Eliminar un departamento con avales muestra un mensaje claro en lugar de fallar en
+  silencio.
+- Textos de roles y guía `/roles`: el rol pasa a llamarse "Coordinador de departamento (Escuela)", y
+  ya no se habla de departamentos "internos" separados.
+
+### 55.5 Qué correr
+
+1. SQL Editor → `0096_avales_use_system_departments.sql`, después de `0094` y `0095`.
+2. Sin Edge Functions nuevas ni redeploy. Sin cambios en Storage.
+3. Desplegar el frontend.
+
+### 55.6 Verificación
+
+Se reprodujeron las migraciones en un Postgres 16 local con stubs de `auth`/`storage`:
+
+- **Proyecto con `0095` aplicada y datos:** un "Forestal" previo en Departamentos, un departamento
+  creado solo en Escuela, coordinadores y avales con archivo. 20 verificaciones de datos: sin
+  duplicados, Forestal fusionado con el existente, los demás con su id original, avales y
+  coordinadores conservados, `storage_path` y `updated_at` sin cambios. Segunda corrida sin efecto.
+- **Proyecto nuevo** (`0094` → `0095` → `0096`): quedan Fuego, Forestal y FASME en `departments`.
+- **Matriz de permisos sobre la base unificada**, 40 pruebas en total:
+  - Informática y Coordinador/Secretario de Escuela ven todos los departamentos en Avales.
+  - Los coordinadores de Fuego, Forestal y FASME ven solo el suyo.
+  - El usuario común y anon no ven nada, ni con la ruta exacta del archivo.
+  - Un departamento creado en Departamentos aparece en Avales.
+  - Un departamento desactivado no admite cargas.
+  - Un departamento con avales no se puede eliminar.
+  - La auditoría de Avales no es visible para `secretario_regional`.
+
+Checklist manual:
+
+- [ ] Crear un departamento en Departamentos → aparece en Avales (Informática/Coordinador de
+      Escuela) y en Coordinadores de Avales.
+- [ ] "Nuevo departamento" desde Coordinadores de Avales abre el alta de la sección Departamentos.
+- [ ] En Departamentos, Fuego/Forestal/FASME figuran una sola vez.
+- [ ] Coordinador de Fuego / Forestal / FASME ve solo su departamento en Avales.
+- [ ] Coordinador y Secretario de Escuela ven todos; Informática ve y administra todos.
+- [ ] Usuario común no ve la pestaña Avales ni accede por URL o API.
+- [ ] Desactivar un departamento en Departamentos → en Avales se consulta pero no admite cargas.
+- [ ] Intentar eliminar un departamento con avales → mensaje claro, no se elimina.
+- [ ] El logo de la Escuela se ve en Cursos, Avales, Cargar aval y Coordinadores, en claro y oscuro,
+      escritorio y mobile.

@@ -78,11 +78,12 @@ export function DepartamentoDetallePage() {
   const [reports, setReports] = useState<DepartmentActivityReport[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [detailsSaved, setDetailsSaved] = useState(false)
 
   // Acceso directo a los avales regionales de este departamento: el
   // departamento es una sola entidad, la misma que usa Escuela. Se muestra
   // solo si el usuario lo ve dentro de Avales (Informática, Coordinador o
-  // Secretario de Escuela, o coordinador de Avales de este departamento).
+  // Secretario de Escuela, o el coordinador de este departamento).
   const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   const [showAvalesLink, setShowAvalesLink] = useState(false)
   useEffect(() => {
@@ -293,18 +294,27 @@ export function DepartamentoDetallePage() {
     event.preventDefault()
     if (!id) return
     setError(null)
+    setDetailsSaved(false)
+    if (!name.trim()) return setError('El departamento necesita un nombre.')
     setSavingDetails(true)
     try {
       await updateDepartment(id, {
-        name,
+        name: name.trim(),
         description: description || null,
         coordinator_profile_id: isAdmin ? coordinatorProfileId || null : department?.coordinator_profile_id ?? null,
         contact_info: contactInfo || null,
         is_active: isActive,
       })
       await reload()
+      setDetailsSaved(true)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar los cambios.'))
+      // 23505: índice único de nombre (0097).
+      const code = (err as { code?: string } | null)?.code
+      setError(
+        code === '23505'
+          ? 'Ya existe otro departamento con ese nombre. Elegí un nombre distinto.'
+          : describeSupabaseError(err, 'No pudimos guardar los cambios. Reintentá en unos segundos.'),
+      )
     } finally {
       setSavingDetails(false)
     }
@@ -316,7 +326,7 @@ export function DepartamentoDetallePage() {
     setError(null)
     try {
       await deleteDepartment(id)
-      navigate('/departamentos')
+      navigate('/departamentos', { state: { notice: `Se eliminó el departamento "${department?.name ?? ''}".` } })
     } catch (err) {
       // 23503: el departamento tiene avales regionales cargados (FK restrict,
       // 0096). Se puede desactivar, pero no eliminar mientras tenga avales.
@@ -467,7 +477,7 @@ export function DepartamentoDetallePage() {
           {isAdmin && (
             <div className="field">
               <label htmlFor="coordinator">Coordinador</label>
-              <select id="coordinator" value={coordinatorProfileId} onChange={(e) => setCoordinatorProfileId(e.target.value)}>
+              <select id="coordinator" value={coordinatorProfileId} onChange={(e) => setCoordinatorProfileId(e.target.value)} aria-describedby="coordinator-help">
                 <option value="">Sin asignar</option>
                 {profiles.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -475,7 +485,16 @@ export function DepartamentoDetallePage() {
                   </option>
                 ))}
               </select>
+              <p id="coordinator-help" className="field-help">
+                El coordinador ve y sube los avales regionales de este departamento en Escuela. Es la única asignación
+                necesaria: no hace falta darle ningún rol.
+              </p>
             </div>
+          )}
+          {!isAdmin && (
+            <p className="field-help" style={{ marginTop: -4, marginBottom: 16 }}>
+              Sos el coordinador de este departamento. Para cambiar de coordinador, pedíselo a Informática.
+            </p>
           )}
           <div className="field">
             <label htmlFor="contactInfo">Contacto (opcional)</label>
@@ -490,6 +509,11 @@ export function DepartamentoDetallePage() {
           <button type="submit" className="btn btn-primary btn-block" disabled={savingDetails}>
             {savingDetails ? 'Guardando…' : 'Guardar cambios'}
           </button>
+          {detailsSaved && (
+            <p className="field-help" role="status" style={{ color: 'var(--color-success)', textAlign: 'center', marginTop: 8 }}>
+              Cambios guardados.
+            </p>
+          )}
           {isAdmin && (
             <button type="button" className="btn btn-danger-outline btn-block" style={{ marginTop: 8 }} onClick={handleDelete}>
               Eliminar departamento
@@ -499,6 +523,11 @@ export function DepartamentoDetallePage() {
       ) : (
         <div className="card-solid" style={{ marginBottom: 20 }}>
           {department.description && <p style={{ fontSize: 13, marginBottom: 8 }}>{department.description}</p>}
+          <p style={{ fontSize: 13, marginBottom: 8 }}>
+            {department.coordinator_profile_id
+              ? `Coordinador: ${profiles.find((p) => p.id === department.coordinator_profile_id)?.full_name ?? 'asignado'}`
+              : 'Sin coordinador asignado'}
+          </p>
           {department.contact_info && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
               <span>Contacto:</span>

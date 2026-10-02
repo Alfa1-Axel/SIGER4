@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
+import { AccessDenied } from '../components/ui/AccessDenied'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
@@ -115,8 +116,16 @@ export function UsuarioFormPage() {
     event.preventDefault()
     setError(null)
 
+    if (!fullName.trim()) {
+      setError('Falta el nombre completo (paso 1).')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError('Revisá el email (paso 1): es el usuario con el que la persona va a iniciar sesión.')
+      return
+    }
     if (selectedRoles.length === 0) {
-      setError('Seleccioná al menos un rol para el usuario.')
+      setError('Elegí al menos un rol (paso 4).')
       return
     }
 
@@ -145,8 +154,8 @@ export function UsuarioFormPage() {
     setSubmitting(true)
     try {
       await createUserAccount({
-        full_name: fullName,
-        email,
+        full_name: fullName.trim(),
+        email: email.trim(),
         rank: rank || null,
         region_id: isJefeCuerpoActivo ? null : regionId || null,
         station_id: isJefeCuerpoActivo ? currentProfile?.station_id ?? null : stationId || null,
@@ -170,16 +179,18 @@ export function UsuarioFormPage() {
 
   if (!canCreateUsers) {
     return (
-      <AppShell title="Nuevo Usuario">
-        <h1 className="page-title">Sin permiso</h1>
-        <p className="page-subtitle">No tenés permiso para crear usuarios.</p>
+      <AppShell title="Nuevo usuario">
+        <AccessDenied
+          title="No podés crear usuarios"
+          message="Crean usuarios Informática, el Director de Escuela y el Jefe de Cuerpo Activo (solo para su cuartel). Si necesitás una cuenta nueva, pedísela a alguno de ellos."
+        />
       </AppShell>
     )
   }
 
   if (createdPassword) {
     return (
-      <AppShell title="Nuevo Usuario">
+      <AppShell title="Nuevo usuario">
         <h1 className="page-title">Usuario creado</h1>
         <p className="page-subtitle">
           La cuenta de <strong>{fullName}</strong> ({email}) ya está activa. Compartile esta
@@ -207,167 +218,206 @@ export function UsuarioFormPage() {
   }
 
   return (
-    <AppShell title="Nuevo Usuario">
-      <h1 className="page-title">Nuevo Usuario</h1>
+    <AppShell title="Nuevo usuario">
+      <Link to="/usuarios" className="back-link">
+        ← Volver a Usuarios
+      </Link>
+      <h1 className="page-title">Nuevo usuario</h1>
       <p className="page-subtitle">
-        Cargá los datos institucionales. Se genera una contraseña temporal para que la persona
-        ingrese por primera vez.
+        Completá los cuatro pasos. La persona entra con una contraseña temporal y el sistema le pide cambiarla.
         {isJefeCuerpoActivo && ' Como Jefe de Cuerpo Activo, solo podés crear usuarios de tu propio cuartel.'}
       </p>
 
-      <form onSubmit={handleSubmit} className="card-solid">
-        <div className="field">
-          <label htmlFor="fullName">Nombre completo</label>
-          <input id="fullName" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre Apellido" />
-        </div>
-
-        <div className="field">
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="usuario@bomberos.gob.ar"
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="rank">Rango / Jerarquía (opcional)</label>
-          <input id="rank" value={rank} onChange={(e) => setRank(e.target.value)} placeholder="Bombero, Oficial, etc." />
-        </div>
-
-        <div className="field">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <label htmlFor="password" style={{ marginBottom: 0 }}>
-              Contraseña temporal
-            </label>
-            <button type="button" className="link-muted" style={{ fontSize: 12 }} onClick={handleGeneratePassword}>
-              Generar automáticamente
-            </button>
-          </div>
-          <input
-            id="password"
-            type="text"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Mínimo 8 caracteres"
-            autoComplete="new-password"
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="confirmPassword">Confirmar contraseña</label>
-          <input
-            id="confirmPassword"
-            type="text"
-            required
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Repetí la contraseña"
-            autoComplete="new-password"
-          />
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
-          El usuario deberá cambiar esta contraseña la primera vez que ingrese: no va a poder usar el
-          resto del sistema hasta hacerlo.
-        </p>
-
-        {!isJefeCuerpoActivo && (
+      <form onSubmit={handleSubmit} className="card-solid" noValidate>
+        <fieldset className="form-section">
+          <legend className="form-section-title">1. Datos de la persona</legend>
+          <p className="form-section-help">Nombre y email con los que va a figurar en SIGER4.</p>
           <div className="field">
-            <label htmlFor="region">Región</label>
-            <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-              <option value="">Sin asignar</option>
-              {regions.map((region) => (
-                <option key={region.id} value={region.id}>
-                  {region.name}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="fullName">Nombre completo</label>
+            <input id="fullName" required value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nombre Apellido" />
           </div>
-        )}
 
-        {!isJefeCuerpoActivo && (
           <div className="field">
-            <label htmlFor="station">Cuartel (opcional)</label>
-            <select id="station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
-              <option value="">Sin asignar</option>
-              {stations.map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="field">
-          <label>Alcance</label>
-          {isJefeCuerpoActivo ? (
-            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-              {stations.find((s) => s.id === currentProfile?.station_id)?.name ?? 'Tu cuartel'}
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="usuario@bomberos.gob.ar"
+              autoComplete="off"
+              aria-describedby="email-help"
+            />
+            <p id="email-help" className="field-help">
+              Es el usuario para iniciar sesión.
             </p>
-          ) : (
-            <>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                {SCOPE_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setScopeType(option.value)}
-                    className="chip"
-                    aria-pressed={scopeType === option.value}
-                  >
-                    {option.label}
-                  </button>
+          </div>
+
+          <div className="field">
+            <label htmlFor="rank">Rango / Jerarquía (opcional)</label>
+            <input id="rank" value={rank} onChange={(e) => setRank(e.target.value)} placeholder="Bombero, Oficial, etc." />
+          </div>
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend className="form-section-title">2. Acceso</legend>
+          <p className="form-section-help">Contraseña temporal para el primer ingreso. Compartila por un canal seguro.</p>
+
+          <div className="field">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label htmlFor="password" style={{ marginBottom: 0 }}>
+                Contraseña temporal
+              </label>
+              <button type="button" className="link-muted" style={{ fontSize: 12 }} onClick={handleGeneratePassword}>
+                Generar automáticamente
+              </button>
+            </div>
+            <input
+              id="password"
+              type="text"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="confirmPassword">Confirmar contraseña</label>
+            <input
+              id="confirmPassword"
+              type="text"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repetí la contraseña"
+              autoComplete="new-password"
+            />
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+            El usuario deberá cambiar esta contraseña la primera vez que ingrese: no va a poder usar el
+            resto del sistema hasta hacerlo.
+          </p>
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend className="form-section-title">3. Ubicación y alcance</legend>
+          <p className="form-section-help">
+            {isJefeCuerpoActivo
+              ? 'La cuenta queda en tu cuartel y ve solo la información de tu cuartel.'
+              : 'Dónde está la persona y qué información puede ver: el alcance limita los datos que le muestra cada sección.'}
+          </p>
+
+          {!isJefeCuerpoActivo && (
+            <div className="field">
+              <label htmlFor="region">Región</label>
+              <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {regions.map((region) => (
+                  <option key={region.id} value={region.id}>
+                    {region.name}
+                  </option>
                 ))}
-              </div>
-
-              {scopeType === 'region' && (
-                <select value={scopeRegionId} onChange={(e) => setScopeRegionId(e.target.value)}>
-                  <option value="">Seleccionar región</option>
-                  {regions.map((region) => (
-                    <option key={region.id} value={region.id}>
-                      {region.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {scopeType === 'subsede' && (
-                <select value={scopeSubsedeId} onChange={(e) => setScopeSubsedeId(e.target.value)}>
-                  <option value="">Seleccionar subsede</option>
-                  {subsedes.map((subsede) => (
-                    <option key={subsede.id} value={subsede.id}>
-                      {subsede.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {scopeType === 'station' && (
-                <select value={scopeStationId} onChange={(e) => setScopeStationId(e.target.value)}>
-                  <option value="">Seleccionar cuartel</option>
-                  {stations.map((station) => (
-                    <option key={station.id} value={station.id}>
-                      {station.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </>
+              </select>
+            </div>
           )}
-        </div>
 
-        <div className="field">
-          <label>Roles</label>
-          <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
-        </div>
+          {!isJefeCuerpoActivo && (
+            <div className="field">
+              <label htmlFor="station">Cuartel (opcional)</label>
+              <select id="station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                {stations.map((station) => (
+                  <option key={station.id} value={station.id}>
+                    {station.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-        {error && <p className="field-error">{error}</p>}
+          <div className="field">
+            <span className="field-label">Alcance</span>
+            {isJefeCuerpoActivo ? (
+              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                {stations.find((s) => s.id === currentProfile?.station_id)?.name ?? 'Tu cuartel'}
+              </p>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {SCOPE_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setScopeType(option.value)}
+                      className="chip"
+                      aria-pressed={scopeType === option.value}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+
+                {scopeType === 'region' && (
+                  <select value={scopeRegionId} onChange={(e) => setScopeRegionId(e.target.value)}>
+                    <option value="">Seleccionar región</option>
+                    {regions.map((region) => (
+                      <option key={region.id} value={region.id}>
+                        {region.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {scopeType === 'subsede' && (
+                  <select value={scopeSubsedeId} onChange={(e) => setScopeSubsedeId(e.target.value)}>
+                    <option value="">Seleccionar subsede</option>
+                    {subsedes.map((subsede) => (
+                      <option key={subsede.id} value={subsede.id}>
+                        {subsede.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {scopeType === 'station' && (
+                  <select value={scopeStationId} onChange={(e) => setScopeStationId(e.target.value)}>
+                    <option value="">Seleccionar cuartel</option>
+                    {stations.map((station) => (
+                      <option key={station.id} value={station.id}>
+                        {station.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </>
+            )}
+          </div>
+
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend className="form-section-title">4. Roles</legend>
+          <p className="form-section-help">
+            Qué puede hacer. Elegí al menos uno. Para que alguien coordine un departamento no hace falta un rol: se lo
+            asigna en Departamentos.{' '}
+            <Link to="/roles" className="link-muted">
+              Ver qué permite cada rol
+            </Link>
+          </p>
+          <div className="field">
+            <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
+          </div>
+        </fieldset>
+
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        )}
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
           {submitting ? 'Creando…' : 'Crear usuario'}

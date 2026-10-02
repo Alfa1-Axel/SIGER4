@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { NAV_ITEMS } from './navigation'
+import { NAV_ITEMS, NAV_SECTIONS } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -23,12 +23,8 @@ interface SidebarProps {
 // la clase "open"; se cierra solo al elegir una opción, tocar el botón de
 // cierre, o el backdrop (manejado por AppShell).
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { profile, signOut, isAdmin, roles } = useAuth()
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (item.hideForRoles?.some((r) => roles.includes(r))) return false
-    if (item.showForRoles) return isAdmin || item.showForRoles.some((r) => roles.includes(r))
-    return !item.adminOnly || isAdmin
-  })
+  const { profile, signOut, isAdmin, isSuperAdmin, hasRole } = useAuth()
+  const visibleItems = NAV_ITEMS.filter((item) => !item.visible || item.visible({ isAdmin, isSuperAdmin, hasRole }))
 
   return (
     <aside className={`app-sidebar${open ? ' open' : ''}`}>
@@ -42,21 +38,30 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </button>
       </div>
 
-      <nav className="sidebar-nav">
-        {visibleItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            // end: un ítem cuya ruta es prefijo de otro ítem (Usuarios /
-            // Nuevo Usuario) no debe quedar activo en la ruta del otro.
-            end={NAV_ITEMS.some((other) => other.to !== item.to && other.to.startsWith(`${item.to}/`))}
-            onClick={onClose}
-            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
-          >
-            <Icon name={item.icon} size={18} />
-            {item.label}
-          </NavLink>
-        ))}
+      <nav className="sidebar-nav" aria-label="Menú principal">
+        {NAV_SECTIONS.map((section) => {
+          const items = visibleItems.filter((item) => item.section === section)
+          if (items.length === 0) return null
+          return (
+            <div key={section} className="sidebar-section">
+              <span className="sidebar-section-title">{section}</span>
+              {items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  // end: un ítem cuya ruta es prefijo de otro ítem (Usuarios /
+                  // Nuevo usuario) no debe quedar activo en la ruta del otro.
+                  end={NAV_ITEMS.some((other) => other.to !== item.to && other.to.startsWith(`${item.to}/`))}
+                  onClick={onClose}
+                  className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                >
+                  <Icon name={item.icon} size={18} />
+                  {item.label}
+                </NavLink>
+              ))}
+            </div>
+          )
+        })}
       </nav>
 
       <div className="sidebar-footer">

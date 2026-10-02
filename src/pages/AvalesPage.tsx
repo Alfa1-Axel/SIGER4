@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { EscuelaHeader } from '../components/EscuelaHeader'
 import { Icon } from '../components/ui/Icon'
+import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { deleteSchoolAvalDocument, fetchAvalesDepartments, fetchSchoolAvalDocuments, setSchoolAvalArchived } from '../lib/api/schoolAvales'
 import { getSchoolAvalSignedUrl } from '../lib/api/storage'
 import { describeSupabaseError } from '../lib/api/errors'
 import { formatBytes } from '../lib/format'
-import { isMobileUserAgent } from '../lib/device'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
-import type { Department, SchoolAvalDocument } from '../types/database'
+import type { AvalesDepartment, SchoolAvalDocument } from '../types/database'
+import { useAuth } from '../hooks/useAuth'
 
 type BusyAction = 'open' | 'download' | 'archive' | 'delete'
 
@@ -28,18 +30,16 @@ function formatDate(value: string): string {
 // recibe además los archivados. Las acciones de edición/archivo/eliminación
 // solo se muestran a informatica_r4 (la base las rechaza para el resto).
 export function AvalesPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { canViewAll, canManage } = useSchoolAvalesAccess()
-  const isMobile = isMobileUserAgent()
+  const { isAdmin } = useAuth()
 
-  const [allDepartments, setAllDepartments] = useState<Department[]>([])
+  const [allDepartments, setAllDepartments] = useState<AvalesDepartment[]>([])
   const [documents, setDocuments] = useState<SchoolAvalDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(() => (location.state as { notice?: string } | null)?.notice ?? null)
+  const [notice, setNotice] = useNavigationNotice()
   const [query, setQuery] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [busy, setBusy] = useState<{ id: string; action: BusyAction } | null>(null)
@@ -61,14 +61,6 @@ export function AvalesPage() {
       active = false
     }
   }, [reloadKey])
-
-  // El aviso de "documento cargado" llega por state de navegación: se limpia
-  // del historial para que no reaparezca al volver atrás.
-  useEffect(() => {
-    if ((location.state as { notice?: string } | null)?.notice) {
-      navigate(`${location.pathname}${location.search}`, { replace: true, state: null })
-    }
-  }, [location.pathname, location.search, location.state, navigate])
 
   // Los departamentos inactivos (desactivados en la sección Departamentos)
   // solo se muestran si tienen avales: se pueden consultar, no admiten
@@ -198,40 +190,27 @@ export function AvalesPage() {
         <div>
           <h1 className="page-title">Avales regionales</h1>
           <p className="page-subtitle">
-            Documentos de avales organizados por departamento. Son los mismos departamentos de la sección Departamentos.
-            {!canViewAll && ' Ves solo los departamentos que coordinás.'}
+            Avales de la Escuela organizados por departamento. Ver, descargar y subir desde la computadora o el celular.
+            {!canViewAll && ' Ves solo el departamento que coordinás.'}
           </p>
         </div>
         <div className="page-header-actions">
-          {canManage && (
-            <Link to="/escuela/avales/coordinadores" className="btn btn-outlined">
-              <Icon name="user" size={16} />
-              Coordinadores
+          {isAdmin && (
+            <Link to="/departamentos" className="btn btn-outlined">
+              <Icon name="building" size={16} />
+              Departamentos y coordinadores
             </Link>
           )}
-          {!loading && uploadableDepartments.length > 0 && !isMobile && (
+          {!loading && uploadableDepartments.length > 0 && (
             <Link to={uploadHref} className="btn btn-primary">
               <Icon name="plus" size={16} />
-              Cargar documento
+              Subir aval
             </Link>
           )}
         </div>
       </div>
 
-      {!loading && uploadableDepartments.length > 0 && isMobile && (
-        <p className="field-help" style={{ marginBottom: 16 }}>
-          La carga de documentos está disponible solo desde PC. Desde el celular podés ver y descargar.
-        </p>
-      )}
-
-      {notice && (
-        <div className="alert alert-success" role="status">
-          <span className="alert-content">{notice}</span>
-          <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Cerrar aviso" onClick={() => setNotice(null)} style={{ color: 'inherit' }}>
-            <Icon name="close" size={14} />
-          </button>
-        </div>
-      )}
+      {notice && <SuccessNotice message={notice} onClose={() => setNotice(null)} />}
 
       {actionError && (
         <div className="alert alert-danger" role="alert">{actionError}</div>
@@ -254,7 +233,7 @@ export function AvalesPage() {
         <div className="empty-state">
           {canViewAll
             ? 'Todavía no hay departamentos activos. Se crean en la sección Departamentos.'
-            : 'No tenés departamentos asignados en Avales. Pedile a Informática R4 que te asigne como coordinador de tu departamento.'}
+            : 'No figurás como coordinador de ningún departamento. Si deberías, pedile a Informática que te asigne en la sección Departamentos.'}
         </div>
       )}
 
@@ -293,8 +272,21 @@ export function AvalesPage() {
               Este departamento está inactivo en la sección Departamentos: sus avales se pueden consultar, pero no admite cargas nuevas.
             </p>
           )}
-          {selectedDepartment?.description && (
-            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 0 }}>{selectedDepartment.description}</p>
+          {selectedDepartment && (
+            <p className="field-help" style={{ marginBottom: 12, fontSize: 13 }}>
+              {selectedDepartment.description && <>{selectedDepartment.description} · </>}
+              {selectedDepartment.coordinator_name
+                ? <>Coordinador: <strong>{selectedDepartment.coordinator_name}</strong>{selectedDepartment.is_my_department ? ' (vos)' : ''}</>
+                : 'Sin coordinador asignado'}
+              {isAdmin && (
+                <>
+                  {' · '}
+                  <Link to={`/departamentos/${selectedDepartment.id}`} className="link-muted">
+                    Cambiar en Departamentos
+                  </Link>
+                </>
+              )}
+            </p>
           )}
 
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>

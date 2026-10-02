@@ -5,7 +5,6 @@ import { Icon } from '../components/ui/Icon'
 import { fetchDocuments, fetchDocumentFolders, fetchPendingDocuments, cleanupPendingDocuments } from '../lib/api/documents'
 import type { DocumentFolder, DocumentRecord } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { isMobileUserAgent } from '../lib/device'
 import { describeSupabaseError } from '../lib/api/errors'
 
 // Vista por carpetas: cada carpeta activa es una tarjeta que lleva a
@@ -25,9 +24,8 @@ export function DocumentosPage() {
   const [error, setError] = useState<string | null>(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
-  // Carga de archivos disponible solo en escritorio (ver DEPLOYMENT.md) — no
-  // afecta "Crear carpeta" (no involucra ningún input de archivo).
-  const canUploadFiles = canManageFolders && !isMobileUserAgent()
+  // La carga funciona desde escritorio y celular (DEPLOYMENT.md sección 56).
+  const canUploadFiles = canManageFolders
 
   const unfiledCount = documents.filter((doc) => !doc.folder_id).length
 
@@ -167,16 +165,10 @@ export function DocumentosPage() {
               <Link to="/documentos/carpetas/nueva" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
                 Crear carpeta
               </Link>
-              {canUploadFiles ? (
+              {canUploadFiles && (
                 <Link to="/documentos/nuevo" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
-                  Cargar archivo
+                  Subir documento
                 </Link>
-              ) : (
-                canManageFolders && isMobileUserAgent() && (
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '4px 8px', margin: 0, maxWidth: 220 }}>
-                    Cargar archivos está disponible solo desde PC.
-                  </p>
-                )
               )}
             </div>
           )}

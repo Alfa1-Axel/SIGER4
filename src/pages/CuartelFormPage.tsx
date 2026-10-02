@@ -380,6 +380,7 @@ export function CuartelFormPage() {
             shape="rounded"
             width={72}
             height={72}
+            allowedTypes={['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']}
           />
 
           <ImagePicker

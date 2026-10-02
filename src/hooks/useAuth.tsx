@@ -13,8 +13,14 @@ interface AuthContextValue {
   profile: Profile | null
   roles: RoleKey[]
   scopes: UserScope[]
+  // Departamentos que coordina en la sección Departamentos (fuente única
+  // del coordinador; da acceso a sus Avales regionales).
+  coordinatedDepartmentIds: string[]
   loading: boolean
   isAdmin: boolean
+  // Solo informatica_r4 (is_super_admin() en la base): Auditoría y acciones
+  // reservadas al administrador supremo.
+  isSuperAdmin: boolean
   // true mientras se detecto que el perfil esta desactivado y se esta
   // cerrando la sesion; ProtectedRoute lo usa para mostrar un mensaje claro
   // antes de redirigir al login, en vez de un error crudo o una pantalla en
@@ -33,6 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [userRoles, setUserRoles] = useState<UserRole[]>([])
   const [scopes, setScopes] = useState<UserScope[]>([])
+  const [coordinatedDepartmentIds, setCoordinatedDepartmentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [deactivated, setDeactivated] = useState(false)
 
@@ -52,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(null)
         setUserRoles([])
         setScopes([])
+        setCoordinatedDepartmentIds([])
         setLoading(false)
       }
     })
@@ -91,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setProfile(null)
             setUserRoles([])
             setScopes([])
+        setCoordinatedDepartmentIds([])
             setLoading(false)
             void supabase.auth.signOut()
             return
@@ -98,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(ctx.profile)
           setUserRoles(ctx.roles)
           setScopes(ctx.scopes)
+          setCoordinatedDepartmentIds(ctx.coordinatedDepartmentIds)
         }
         setLoading(false)
       })
@@ -121,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const roles = useMemo(() => userRoles.map((r) => r.role), [userRoles])
   const isAdmin = useMemo(() => roles.some((r) => ADMIN_ROLES.includes(r)), [roles])
+  const isSuperAdmin = useMemo(() => roles.includes('informatica_r4'), [roles])
 
   const value: AuthContextValue = {
     session,
@@ -128,8 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     roles,
     scopes,
+    coordinatedDepartmentIds,
     loading,
     isAdmin,
+    isSuperAdmin,
     deactivated,
     async signIn(email, password) {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
@@ -150,12 +163,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setProfile(null)
           setUserRoles([])
           setScopes([])
+        setCoordinatedDepartmentIds([])
           await supabase.auth.signOut()
           return
         }
         setProfile(ctx.profile)
         setUserRoles(ctx.roles)
         setScopes(ctx.scopes)
+          setCoordinatedDepartmentIds(ctx.coordinatedDepartmentIds)
       }
     },
   }

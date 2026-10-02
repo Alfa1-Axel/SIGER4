@@ -501,19 +501,17 @@ export interface MapReferencePoint {
   updated_at: string
 }
 
-export type SchoolDepartmentMemberRole = 'coordinador'
-
-// Coordinador de Avales regionales de un departamento (tabla departments,
-// la misma de la sección Departamentos).
-export interface SchoolDepartmentMember {
+// Departamento tal como lo ve Avales regionales: la fila de departments
+// (sección Departamentos) más el nombre de su coordinador.
+export interface AvalesDepartment {
   id: string
-  department_id: string
-  profile_id: string
-  member_role: SchoolDepartmentMemberRole
+  name: string
+  description: string | null
   is_active: boolean
-  created_by_profile_id: string | null
-  created_at: string
-  updated_at: string
+  coordinator_profile_id: string | null
+  coordinator_name: string | null
+  // true si el usuario actual es el coordinador de este departamento.
+  is_my_department: boolean
 }
 
 export interface SchoolAvalDocument {

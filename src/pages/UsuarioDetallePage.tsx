@@ -16,6 +16,7 @@ import {
   updateProfile,
   updateUserAccount,
 } from '../lib/api/users'
+import { fetchCoordinatedDepartments } from '../lib/api/departments'
 import { DeleteUserConfirmModal } from '../components/ui/DeleteUserConfirmModal'
 import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCHOOL_AVALES_ROLES } from '../types/roles'
 import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
@@ -37,6 +38,8 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
 // server-side supabase/functions/admin-update-user/index.ts). Incluye los
 // roles de Avales regionales: si no, un jefe_cuerpo_activo podría resetear la
 // contraseña de un usuario de Escuela de su cuartel y entrar a los avales.
+// Lo mismo vale para quien coordina un departamento (ver
+// coordinatedDepartments más abajo).
 const PRIVILEGED_TARGET_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica', 'director_escuela', 'instructor', 'secretario_regional', ...SCHOOL_AVALES_ROLES]
 
 export function UsuarioDetallePage() {
@@ -57,6 +60,7 @@ export function UsuarioDetallePage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [coordinatedDepartments, setCoordinatedDepartments] = useState<{ id: string; name: string }[]>([])
 
   const [fullName, setFullName] = useState('')
   const [rank, setRank] = useState('')
@@ -72,6 +76,7 @@ export function UsuarioDetallePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [basicsSaved, setBasicsSaved] = useState(false)
 
   const [newPassword, setNewPassword] = useState('')
   const [resettingPassword, setResettingPassword] = useState(false)
@@ -84,8 +89,9 @@ export function UsuarioDetallePage() {
 
   async function reload() {
     if (!id) return
-    const data = await fetchProfileWithRoles(id)
+    const [data, coordinated] = await Promise.all([fetchProfileWithRoles(id), fetchCoordinatedDepartments(id).catch(() => [])])
     if (!data) return
+    setCoordinatedDepartments(coordinated)
     setProfile(data.profile)
     setRoles(data.roles)
     setScopes(data.scopes)
@@ -98,12 +104,19 @@ export function UsuarioDetallePage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), id ? fetchProfileWithRoles(id) : null]).then(
-      ([regionsData, subsedesData, stationsData, profileData]) => {
+    Promise.all([
+      fetchRegions(),
+      fetchSubsedes(),
+      fetchStations(),
+      id ? fetchProfileWithRoles(id) : null,
+      id ? fetchCoordinatedDepartments(id).catch(() => []) : [],
+    ]).then(
+      ([regionsData, subsedesData, stationsData, profileData, coordinatedData]) => {
         if (!active) return
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
+        setCoordinatedDepartments(coordinatedData)
         if (profileData) {
           setProfile(profileData.profile)
           setRoles(profileData.roles)
@@ -126,6 +139,7 @@ export function UsuarioDetallePage() {
     if (!id) return
     setSaving(true)
     setError(null)
+    setBasicsSaved(false)
     try {
       if (isJefeCuerpoActivo) {
         // profiles_update_self/profiles_write_admin (RLS) no le dan a
@@ -143,6 +157,7 @@ export function UsuarioDetallePage() {
         })
       }
       await reload()
+      setBasicsSaved(true)
     } catch (err) {
       setError(describeSupabaseError(err, 'No pudimos guardar los cambios.'))
     } finally {
@@ -291,7 +306,7 @@ export function UsuarioDetallePage() {
   // admin-update-user server-side — usuarios de otro cuartel, o con un rol
   // privilegiado (informática/regional/escuela), ni siquiera se muestran.
   if (isJefeCuerpoActivo) {
-    const targetHasPrivilegedRole = roles.some((r) => PRIVILEGED_TARGET_ROLES.includes(r.role))
+    const targetHasPrivilegedRole = roles.some((r) => PRIVILEGED_TARGET_ROLES.includes(r.role)) || coordinatedDepartments.length > 0
     const targetIsOwnStation = !!currentProfile?.station_id && profile.station_id === currentProfile.station_id
     if (!targetIsOwnStation || targetHasPrivilegedRole) {
       return (
@@ -391,6 +406,11 @@ export function UsuarioDetallePage() {
         <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSaveBasics}>
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
+        {basicsSaved && (
+          <p className="field-help" role="status" style={{ color: 'var(--color-success)', marginTop: 8 }}>
+            Datos guardados.
+          </p>
+        )}
       </div>
 
       {isAdmin && (
@@ -483,8 +503,26 @@ export function UsuarioDetallePage() {
               onToggle={handleToggleRole}
               disabled={rolesScopesLocked}
             />
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
-              El departamento de un "Coordinador de departamento (Escuela)" se asigna en Escuela → Avales regionales → Coordinadores.
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Departamentos que coordina</h2>
+          </div>
+          <div className="card-solid" style={{ marginBottom: 20 }}>
+            {coordinatedDepartments.length > 0 ? (
+              <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
+                {coordinatedDepartments.map((d) => (
+                  <li key={d.id}>
+                    <Link to={`/departamentos/${d.id}`}>{d.name}</Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p style={{ margin: '0 0 10px' }}>No coordina ningún departamento.</p>
+            )}
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
+              El coordinador se elige en cada departamento (sección Departamentos). Con eso ya ve y sube los avales de
+              su departamento en Escuela: no hace falta ningún rol ni otra asignación.
             </p>
           </div>
 

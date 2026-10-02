@@ -1,21 +1,22 @@
 import { useAuth } from './useAuth'
 import { SCHOOL_AVALES_ROLES } from '../types/roles'
 
-// Espejo de UI de los helpers SQL de Avales (0095_school_avales_module.sql).
-// Solo decide qué mostrar: la autorización real la hacen RLS y las policies
-// de Storage.
-//   - hasAccess: puede entrar a la sección (Informática, coordinador/
-//     secretario de Escuela, coordinador de departamento asignado en Avales).
+// Espejo de UI de los helpers SQL de Avales (0095 y 0097). Solo decide qué
+// mostrar: la autorización real la hacen RLS y las policies de Storage.
+//   - hasAccess: puede entrar a la sección: Informática, Coordinador o
+//     Secretario de Escuela, o coordinador de algún departamento en la
+//     sección Departamentos.
 //   - canViewAll: ve todos los departamentos (can_view_all_school_avales()).
-//   - canManage: edita, archiva, elimina avales y asigna sus coordinadores
-//     (can_manage_school_avales() = is_super_admin() = solo informatica_r4).
-//     Los departamentos en sí se administran en la sección Departamentos.
+//   - canManage: edita, archiva y elimina avales (can_manage_school_avales()
+//     = is_super_admin() = solo informatica_r4). Los departamentos y sus
+//     coordinadores se administran en la sección Departamentos.
 export function useSchoolAvalesAccess() {
-  const { isAdmin, hasRole } = useAuth()
-  const canViewAll = isAdmin || hasRole('coordinador_escuela', 'secretario_escuela')
+  const { isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds } = useAuth()
+  const canViewAll = isAdmin || hasRole(...SCHOOL_AVALES_ROLES)
   return {
-    hasAccess: isAdmin || hasRole(...SCHOOL_AVALES_ROLES),
+    hasAccess: canViewAll || coordinatedDepartmentIds.length > 0,
     canViewAll,
-    canManage: hasRole('informatica_r4'),
+    canManage: isSuperAdmin,
+    coordinatedDepartmentIds,
   }
 }

@@ -22,10 +22,10 @@ export type RoleKey =
   | 'administrativo'
   | 'invitado'
 
-// Grupo visual de cada rol (tipo/nivel). "departamento_escuela" agrupa la
-// coordinación de Avales por departamento: el departamento es el de la tabla
-// única departments (sección Departamentos); la asignación es de Escuela.
-export type RoleCategory = 'informatica' | 'escuela' | 'departamento_escuela' | 'region' | 'cuartel' | 'otros'
+// Grupo visual de cada rol (tipo/nivel). El coordinador de un departamento
+// no es un rol: es el campo "Coordinador" de la sección Departamentos (ver
+// DEPARTMENT_COORDINATOR_INFO más abajo).
+export type RoleCategory = 'informatica' | 'escuela' | 'region' | 'cuartel' | 'otros'
 
 export interface RoleCategoryDefinition {
   key: RoleCategory
@@ -44,11 +44,6 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
     key: 'escuela',
     label: 'Escuela Regional',
     description: 'Cursos, capacitaciones y gestión de la Escuela Regional.',
-  },
-  {
-    key: 'departamento_escuela',
-    label: 'Departamentos (coordinación en Escuela)',
-    description: 'Coordinación de un departamento en Avales regionales (Fuego, Forestal, FASME, etc.). Los departamentos son los mismos de la sección Departamentos.',
   },
   {
     key: 'region',
@@ -75,7 +70,7 @@ export const SCOPE_LEVELS: { label: string; description: string }[] = [
   { label: 'Subsede', description: 'Los cuarteles de una subsede. Se asigna como alcance del usuario, no hay roles exclusivos de subsede.' },
   { label: 'Cuartel', description: 'Un solo cuartel: el propio del usuario.' },
   { label: 'Escuela', description: 'Escuela Regional: cursos, capacitaciones y avales.' },
-  { label: 'Departamento', description: 'Un departamento de la sección Departamentos (Fuego, Forestal, FASME...). Para Avales, lo asigna Informática R4.' },
+  { label: 'Departamento', description: 'Un departamento de la sección Departamentos (Fuego, Forestal, FASME...). Su coordinador ve y carga los avales de ese departamento.' },
 ]
 
 export interface RoleDefinition {
@@ -83,9 +78,8 @@ export interface RoleDefinition {
   label: string
   description: string
   category: RoleCategory
-  // Nivel de alcance del rol (campo histórico, ampliado con
-  // "departamento_escuela" para los coordinadores de departamento en Avales).
-  scope: 'system' | 'regional' | 'escuela' | 'departamento_escuela' | 'cuartel'
+  // Nivel de alcance del rol.
+  scope: 'system' | 'regional' | 'escuela' | 'cuartel'
   // Alcance en lenguaje institucional, para mostrar junto al rol.
   scopeLabel: string
   // Permisos principales, resumidos de la matriz final de permisos
@@ -109,8 +103,8 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Ve, carga y edita en todos los módulos y cuarteles.',
       'Gestiona usuarios, roles y alcances. Es el único que puede eliminar usuarios y modificar a otro Informática R4.',
       'Purga definitiva de documentos y configuración del sistema.',
-      'Avales regionales: ve y carga en todos los departamentos, y es el único que edita, archiva o elimina avales y asigna sus coordinadores.',
-      'Auditoría completa, con datos técnicos.',
+      'Avales regionales: ve y carga en todos los departamentos, y es el único que edita, archiva o elimina avales.',
+      'Único rol con acceso a Auditoría.',
     ],
     assignable: true,
   },
@@ -126,7 +120,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Gestiona usuarios, roles y alcances, excepto a usuarios Informática R4.',
       'Notificaciones manuales solo dentro de su región.',
       'Avales regionales: ve y carga en todos los departamentos. No edita, archiva ni elimina.',
-      'Auditoría completa, con datos técnicos.',
+      'Sin acceso a Auditoría (exclusiva de Dpto. Informática y Estadística R4).',
     ],
     assignable: true,
   },
@@ -194,21 +188,6 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     assignable: true,
   },
   {
-    key: 'coordinador_departamento_escuela',
-    label: 'Coordinador de departamento (Escuela)',
-    description: 'Coordina en Avales regionales un departamento del sistema (Fuego, Forestal, FASME, etc.).',
-    category: 'departamento_escuela',
-    scope: 'departamento_escuela',
-    scopeLabel: 'Solo su(s) departamento(s) asignado(s)',
-    permissions: [
-      'Avales regionales: ve y carga documentos solo de su propio departamento.',
-      'No ve documentos de otros departamentos.',
-      'No edita, archiva ni elimina avales.',
-      'El departamento lo asigna Informática R4 en Escuela → Avales regionales → Coordinadores. Sin departamento asignado, el rol no da acceso a nada.',
-    ],
-    assignable: true,
-  },
-  {
     key: 'secretario_regional',
     label: 'Secretario Regional',
     description: 'Gestión administrativa a nivel regional.',
@@ -220,7 +199,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Documentos y carpetas de su región (sin purga definitiva).',
       'Calendario regional, Inventario Regional y aprobación de préstamos.',
       'Departamentos Regionales: integrantes manuales e informes de actividad.',
-      'Reportes regionales y auditoría de su región.',
+      'Reportes regionales.',
     ],
     assignable: true,
   },
@@ -235,7 +214,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Edita datos del cuartel, personal, vehículos, asistencia e intervenciones de su cuartel.',
       'Documentos, carpetas e historial institucional de su cuartel.',
       'Calendario de su cuartel y solicitudes de préstamo.',
-      'Auditoría de su cuartel. Sin acceso a Reportes.',
+      'Sin acceso a Reportes.',
     ],
     assignable: true,
   },
@@ -302,6 +281,16 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
 // casos, nunca para asignarlo.
 export const RETIRED_ROLE_DEFINITIONS: RoleDefinition[] = [
   {
+    key: 'coordinador_departamento_escuela',
+    label: 'Coordinador de departamento (rol retirado)',
+    description: 'Rol retirado: el coordinador de un departamento ahora es el que figura en la sección Departamentos. Si un usuario todavía lo tiene, se puede quitar.',
+    category: 'otros',
+    scope: 'escuela',
+    scopeLabel: 'Sin uso',
+    permissions: ['No da ningún permiso desde la migración 0097.'],
+    assignable: false,
+  },
+  {
     key: 'administrativo',
     label: 'Administrativo (rol retirado)',
     description: 'Rol retirado: ya no se asigna. Si un usuario todavía lo tiene, conviene quitárselo.',
@@ -347,9 +336,26 @@ export function groupRolesByCategory(roles: RoleDefinition[]): RoleGroup[] {
 // admin del frontend (isAdmin en useAuth) coincida con lo que RLS ya permite.
 export const ADMIN_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']
 
-// Roles que dan acceso a Avales regionales (además de Informática). Ver
-// 0095_school_avales_module.sql.
-export const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela', 'coordinador_departamento_escuela']
+// Roles que dan acceso a TODOS los departamentos de Avales regionales
+// (además de Informática). El coordinador de un departamento también entra,
+// pero solo a su departamento, y no por rol: por ser el coordinador en la
+// sección Departamentos (ver 0097).
+export const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela']
+
+// El coordinador de departamento no es un rol asignable: se describe acá para
+// la guía de roles.
+export const DEPARTMENT_COORDINATOR_INFO = {
+  label: 'Coordinador de departamento',
+  description:
+    'No es un rol: es la persona que figura como "Coordinador" de un departamento en la sección Departamentos (Fuego, Forestal, FASME, etc.).',
+  scopeLabel: 'Solo el departamento que coordina',
+  permissions: [
+    'Edita los datos e integrantes de su departamento en la sección Departamentos.',
+    'Avales regionales: ve y carga documentos solo de su departamento.',
+    'No edita, archiva ni elimina avales.',
+    'Lo asigna Informática al crear o editar el departamento.',
+  ],
+}
 
 // Roles que solo Informática puede asignar al crear un usuario (espejo de
 // INFORMATICA_ONLY_ROLES en supabase/functions/admin-create-user/index.ts):

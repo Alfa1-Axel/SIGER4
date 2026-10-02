@@ -456,6 +456,25 @@ h3 {
   padding: 4px 0;
 }
 
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-section + .sidebar-section {
+  margin-top: 12px;
+}
+
+.sidebar-section-title {
+  padding: 4px 10px 2px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 .sidebar-link {
   display: flex;
   align-items: center;
@@ -1284,6 +1303,100 @@ input[type='file']::file-selector-button:hover {
   background: var(--color-surface-hover);
 }
 
+.field .field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* ---------- Selector de archivos (FilePicker) ---------- */
+
+.file-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px dashed var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.file-picker--selected {
+  border-style: solid;
+  border-color: var(--color-success-border);
+  background: var(--color-success-soft);
+}
+
+.file-picker--disabled {
+  opacity: 0.6;
+}
+
+.file-picker-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.file-picker-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.file-picker-name {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.file-picker-name span {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.file-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-picker-actions .btn {
+  white-space: nowrap;
+}
+
+.file-picker-remove {
+  flex-shrink: 0;
+}
+
+/* El input real queda oculto; el foco de teclado se muestra en su label. */
+.sr-only-file-input:focus-visible + label {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.file-picker-actions label.btn[aria-disabled=true] {
+  pointer-events: none;
+}
+
+/* "Sacar foto" solo tiene sentido en pantallas táctiles (celular, tablet). */
+@media (pointer: fine) {
+  .file-picker-camera {
+    display: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .file-picker-actions .btn {
+    flex: 1 1 140px;
+  }
+}
+
 .field-error {
   font-size: 13px;
   color: var(--color-danger);
@@ -1451,6 +1564,80 @@ input[type='file']::file-selector-button:hover {
   padding: 32px 16px;
   color: var(--color-text-secondary);
   font-size: 14px;
+}
+
+.access-denied {
+  max-width: 480px;
+  margin: 32px auto;
+  padding: 28px 24px;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.access-denied-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.access-denied-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.access-denied-message {
+  margin: 0 0 18px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+/* Bloques de un formulario largo (ej. Nuevo usuario): título + campos. */
+.form-section {
+  border: 0;
+  margin: 0 0 8px;
+  padding: 0;
+  min-width: 0;
+}
+
+.form-section + .form-section {
+  border-top: 1px solid var(--color-border);
+  padding-top: 18px;
+}
+
+/* float + width: la leyenda se comporta como un título común, debajo del
+   separador, en vez de quedar montada sobre el borde del fieldset. */
+.form-section-title {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.form-section-help {
+  clear: both;
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+/* Estado vacío con acción: texto + botón para el próximo paso. */
+.empty-state-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
 }
 
 .loading-state {

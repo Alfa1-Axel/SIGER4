@@ -15,7 +15,7 @@ import { fetchProfiles } from '../lib/api/users'
 import { fetchCourses } from '../lib/api/courses'
 import { fetchDocuments } from '../lib/api/documents'
 import { fetchInventoryItems } from '../lib/api/inventory'
-import { fetchDepartments, fetchMyDepartmentIds } from '../lib/api/departments'
+import { fetchDepartments } from '../lib/api/departments'
 import type { Profile, Region, Station, Subsede } from '../types/database'
 import {
   buildEventSummary,
@@ -25,55 +25,6 @@ import {
   type EntityLookup,
 } from '../lib/audit/humanize'
 import { describeSupabaseError } from '../lib/api/errors'
-import { useAuth } from '../hooks/useAuth'
-
-// Tablas visibles en Auditoría según el rol — RLS ya acota las FILAS por
-// territorio (región/subsede/cuartel); esto acota además qué MÓDULOS puede
-// ver cada rol, independiente del territorio (ej. un jefe_cuerpo_activo no
-// debe ver auditoría de Departamentos ni de Inventario Regional, aunque RLS
-// le devolviera esas filas). informatica_r4/integrante_informatica no tienen
-// entrada acá: ven todo (allowedTableNames = null, sin restricción).
-const JEFE_CUERPO_ACTIVO_TABLES = [
-  'stations',
-  'profiles',
-  'user_roles',
-  'user_scopes',
-  'vehicles',
-  'personnel',
-  'documents',
-  'document_versions',
-  'attendance_summaries',
-  'intervention_summaries',
-  'station_history_events',
-  'calendar_events',
-]
-
-const ESCUELA_TABLES = ['courses', 'course_stations', 'calendar_events', 'profiles', 'user_roles']
-
-const SECRETARIO_REGIONAL_TABLES = [
-  'stations',
-  'subsedes',
-  'profiles',
-  'user_roles',
-  'user_scopes',
-  'vehicles',
-  'personnel',
-  'documents',
-  'document_versions',
-  'attendance_summaries',
-  'intervention_summaries',
-  'station_history_events',
-  'calendar_events',
-  'courses',
-  'departments',
-  'department_members',
-  'department_activity_reports',
-  'department_manual_members',
-  'inventory_items',
-  'inventory_loan_requests',
-]
-
-const DEPARTMENT_TABLES = ['departments', 'department_members', 'department_activity_reports', 'department_manual_members']
 
 function actionBadgeClass(action: string): string {
   const a = action.toLowerCase()
@@ -143,7 +94,7 @@ function TechnicalJson({ oldValue, newValue }: { oldValue: unknown; newValue: un
   )
 }
 
-function AuditLogDetail({ log, lookup, showTechnical }: { log: AuditLogRow; lookup: EntityLookup; showTechnical: boolean }) {
+function AuditLogDetail({ log, lookup }: { log: AuditLogRow; lookup: EntityLookup }) {
   const diffs = useMemo(
     () => buildFieldDiff(log.old_value as Record<string, unknown> | null, log.new_value as Record<string, unknown> | null, lookup),
     [log, lookup],
@@ -199,73 +150,15 @@ function AuditLogDetail({ log, lookup, showTechnical }: { log: AuditLogRow; look
         </div>
       )}
 
-      {showTechnical && <TechnicalJson oldValue={log.old_value} newValue={log.new_value} />}
+      <TechnicalJson oldValue={log.old_value} newValue={log.new_value} />
     </div>
   )
 }
 
 export function AuditoriaPage() {
-  const { profile, isAdmin, hasRole } = useAuth()
-  // invitado es "solo lectura limitado" (ver ROLE_DEFINITIONS) -- ver el
-  // historial completo de auditoría de su cuartel (diffs old/new de cada
-  // cambio) excede ese alcance. El sidebar ya lo ocultaba (hideForRoles en
-  // navigation.ts) pero la ruta y la RLS (audit_logs_select_station/_subsede,
-  // migración 0063) no lo excluían -- se cierra acá en los tres niveles.
-  const canAccess = !hasRole('invitado')
-  // informatica_r4/integrante_informatica ven todo, sin restricción de
-  // tabla — el resto de los roles solo ve los módulos institucionalmente
-  // relevantes para su rol (RLS ya acota el territorio de cada fila; esto
-  // acota además qué módulos puede ver). Un usuario puede calzar en más de
-  // un set (ej. secretario_regional que además coordina un departamento) —
-  // se unen todos los que apliquen.
-  const isJefeCuerpoActivo = hasRole('jefe_cuerpo_activo')
-  const isEscuela = hasRole('director_escuela', 'instructor')
-  const isSecretarioRegional = hasRole('secretario_regional')
-  const isTechnicalViewer = isAdmin
-  const [myDepartmentIds, setMyDepartmentIds] = useState<string[] | null>(null)
-  const [myDepartmentIdsError, setMyDepartmentIdsError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (isAdmin || !profile?.id) {
-      setMyDepartmentIds(null)
-      return
-    }
-    let active = true
-    setMyDepartmentIdsError(null)
-    fetchMyDepartmentIds(profile.id)
-      .then((ids) => active && setMyDepartmentIds(ids))
-      .catch((err) => {
-        if (!active) return
-        // Sin esto, un fallo de red transitorio acá dejaba a un
-        // coordinador/miembro de departamento viendo cero eventos de
-        // Departamentos en la auditoría, indistinguible de "no tiene
-        // departamentos asignados" — no había ni log ni aviso visible.
-        console.warn('[SIGER4] No se pudieron cargar los departamentos del usuario para Auditoría:', err)
-        setMyDepartmentIds([])
-        setMyDepartmentIdsError('No pudimos verificar tus departamentos: puede que falten eventos de Departamentos en la lista de abajo. Reintentá recargando la página.')
-      })
-    return () => {
-      active = false
-    }
-  }, [isAdmin, profile?.id])
-
-  const isDepartmentMember = !isAdmin && Boolean(myDepartmentIds?.length)
-
-  // null = sin restricción (informática). Si el rol no calza en ningún set
-  // conocido (ej. presidente_cuartel, secretario_comision — RLS igual los
-  // deja pasar con alcance de cuartel), se le muestra el mismo set acotado
-  // que jefe_cuerpo_activo, el más chico entre los definidos, en vez de
-  // dejarlo sin restricción por descarte.
-  const allowedTableNames = useMemo<string[] | null>(() => {
-    if (isAdmin) return null
-    const sets: string[][] = []
-    if (isJefeCuerpoActivo) sets.push(JEFE_CUERPO_ACTIVO_TABLES)
-    if (isEscuela) sets.push(ESCUELA_TABLES)
-    if (isSecretarioRegional) sets.push(SECRETARIO_REGIONAL_TABLES)
-    if (isDepartmentMember) sets.push(DEPARTMENT_TABLES)
-    if (sets.length === 0) sets.push(JEFE_CUERPO_ACTIVO_TABLES)
-    return [...new Set(sets.flat())]
-  }, [isAdmin, isJefeCuerpoActivo, isEscuela, isSecretarioRegional, isDepartmentMember])
+  // Solo informatica_r4 llega acá (SuperAdminRoute) y la RLS de audit_logs
+  // solo le devuelve filas a is_super_admin() (0097): no hay recorte por rol
+  // ni por módulo, se ve todo, incluidos los datos técnicos.
 
   const [logs, setLogs] = useState<AuditLogRow[]>([])
   const [page, setPage] = useState(0)
@@ -298,8 +191,8 @@ export function AuditoriaPage() {
       fetchSubsedes(),
       fetchStations(),
       fetchProfiles(),
-      fetchDistinctAuditActions(allowedTableNames),
-      fetchDistinctAuditTables(allowedTableNames),
+      fetchDistinctAuditActions(),
+      fetchDistinctAuditTables(),
       fetchCourses().catch(() => []),
       fetchDocuments().catch(() => []),
       fetchInventoryItems().catch(() => []),
@@ -325,7 +218,7 @@ export function AuditoriaPage() {
         setEntityNames(names)
       })
       .catch(() => undefined)
-  }, [allowedTableNames])
+  }, [])
 
   const lookup = useMemo(() => (uuid: string) => entityNames.get(uuid) ?? null, [entityNames])
 
@@ -340,37 +233,9 @@ export function AuditoriaPage() {
       subsedeId: subsedeId || null,
       stationId: stationId || null,
       searchText: searchText || null,
-      allowedTableNames,
     }),
-    [dateFrom, dateTo, actorProfileId, action, tableName, regionId, subsedeId, stationId, searchText, allowedTableNames],
+    [dateFrom, dateTo, actorProfileId, action, tableName, regionId, subsedeId, stationId, searchText],
   )
-
-  // department_activity_reports/department_manual_members no tienen scope
-  // territorial en RLS (lectura abierta a cualquier autenticado, ver 0061/
-  // 0062) — un coordinador/miembro de departamento solo debe ver eventos de
-  // SUS departamentos, filtro que no se puede expresar en la query (no hay
-  // columna department_id en audit_logs, solo dentro de old_value/new_value)
-  // y se aplica acá, post-fetch. isSecretarioRegional/isAdmin ven todos los
-  // departamentos (alcance regional/total, sin este recorte).
-  const visibleLogs = useMemo(() => {
-    if (isAdmin || isSecretarioRegional) return logs
-    return logs.filter((log) => {
-      if (!DEPARTMENT_TABLES.includes(log.table_name)) return true
-      if (!isDepartmentMember) return false
-      const row = (log.new_value ?? log.old_value) as Record<string, unknown> | null
-      const deptId = log.table_name === 'departments' ? log.record_id : (row?.department_id as string | undefined)
-      return Boolean(deptId) && (myDepartmentIds ?? []).includes(deptId as string)
-    })
-  }, [logs, isAdmin, isSecretarioRegional, isDepartmentMember, myDepartmentIds])
-
-  // allowedTableNames puede cambiar de forma asíncrona después del primer
-  // render (mientras se resuelve fetchMyDepartmentIds, ver arriba) — si el
-  // usuario ya había avanzado de página antes de que eso termine, hay que
-  // volver a la primera página del resultado filtrado nuevo, o podría
-  // quedar en una página fuera de rango (vacía o salteando registros).
-  useEffect(() => {
-    setPage(0)
-  }, [allowedTableNames])
 
   useEffect(() => {
     let active = true
@@ -393,18 +258,10 @@ export function AuditoriaPage() {
     setPage(0)
   }
 
-  if (!canAccess) {
-    return (
-      <AppShell title="Auditoría">
-        <div className="empty-state">No tenés permisos para ver la auditoría del sistema.</div>
-      </AppShell>
-    )
-  }
-
   return (
     <AppShell title="Auditoría">
       <h1 className="page-title">Auditoría</h1>
-      <p className="page-subtitle">Bitácora institucional: quién hizo qué, cuándo, y sobre qué registro.</p>
+      <p className="page-subtitle">Quién hizo qué, cuándo y sobre qué registro. Exclusiva del Dpto. Informática y Estadística R4.</p>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -568,14 +425,11 @@ export function AuditoriaPage() {
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {myDepartmentIdsError && (
-        <div className="alert alert-danger" role="alert">{myDepartmentIdsError}</div>
-      )}
 
       {loading && <div className="loading-state" role="status">Cargando auditoría…</div>}
-      {!loading && visibleLogs.length === 0 && <div className="empty-state">No hay eventos de auditoría para estos filtros.</div>}
+      {!loading && logs.length === 0 && <div className="empty-state">No hay eventos de auditoría para estos filtros.</div>}
 
-      {visibleLogs.length > 0 && (
+      {logs.length > 0 && (
         <div className="table-wrap">
           <table className="data-table" style={{ minWidth: 760 }}>
             <thead>
@@ -591,7 +445,7 @@ export function AuditoriaPage() {
               </tr>
             </thead>
             <tbody>
-              {visibleLogs.map((log) => (
+              {logs.map((log) => (
                 <Fragment key={log.id}>
                   <tr>
                     <td className="col-nowrap">{formatDateTime(log.created_at)}</td>
@@ -618,7 +472,7 @@ export function AuditoriaPage() {
                   {expandedId === log.id && (
                     <tr>
                       <td colSpan={6} style={{ padding: 0 }}>
-                        <AuditLogDetail log={log} lookup={lookup} showTechnical={isTechnicalViewer} />
+                        <AuditLogDetail log={log} lookup={lookup} />
                       </td>
                     </tr>
                   )}

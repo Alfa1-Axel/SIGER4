@@ -24,7 +24,7 @@ function timeAgo(iso: string): string {
 }
 
 export function PanelPage() {
-  const { isAdmin, hasRole } = useAuth()
+  const { isAdmin, isSuperAdmin, hasRole } = useAuth()
   const canAccessReports = isAdmin || hasRole('director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [stations, setStations] = useState<Station[]>([])
@@ -234,26 +234,32 @@ export function PanelPage() {
         ))}
       </div>
 
-      <div className="section-header">
-        <h2 className="section-title">Actividad Reciente</h2>
-      </div>
-      <div className="card row-list">
-        {loading && <div className="loading-state" role="status">Cargando actividad…</div>}
-        {!loading && (summary?.recentActivity.length ?? 0) === 0 && (
-          <div className="empty-state">Sin actividad registrada todavía.</div>
-        )}
-        {summary?.recentActivity.map((log) => (
-          <div key={log.id} className="row-item">
-            <div style={{ minWidth: 0 }}>
-              <div className="row-item-title">{translateAction(log.action)}</div>
-              <div className="row-item-meta">{translateTable(log.table_name)}</div>
+      {/* La actividad reciente sale de la auditoría, que solo puede leer
+          informatica_r4 (0097): para el resto quedaría siempre vacía. */}
+      {isSuperAdmin && (
+        <>
+        <div className="section-header">
+          <h2 className="section-title">Actividad Reciente</h2>
+        </div>
+        <div className="card row-list">
+          {loading && <div className="loading-state" role="status">Cargando actividad…</div>}
+          {!loading && (summary?.recentActivity.length ?? 0) === 0 && (
+            <div className="empty-state">Sin actividad registrada todavía.</div>
+          )}
+          {summary?.recentActivity.map((log) => (
+            <div key={log.id} className="row-item">
+              <div style={{ minWidth: 0 }}>
+                <div className="row-item-title">{translateAction(log.action)}</div>
+                <div className="row-item-meta">{translateTable(log.table_name)}</div>
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                {timeAgo(log.created_at)}
+              </span>
             </div>
-            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-              {timeAgo(log.created_at)}
-            </span>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+        </>
+      )}
     </AppShell>
   )
 }

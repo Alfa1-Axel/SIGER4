@@ -3,6 +3,8 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import {
   fetchDocumentsByFolder,
   fetchDocumentFolderById,
@@ -15,7 +17,6 @@ import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import type { DocumentFolder, DocumentRecord, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { isMobileUserAgent } from '../lib/device'
 import { describeSupabaseError } from '../lib/api/errors'
 
 export function CarpetaDetallePage() {
@@ -59,11 +60,9 @@ export function CarpetaDetallePage() {
           )) ||
         (isStationRole && Boolean(folder.station_id) && folder.station_id === myStationId)
       : false)
-  // Carga/edición de archivos disponible solo en escritorio (ver
-  // DEPLOYMENT.md) — administrar la carpeta en sí (nombre/descripción,
-  // eliminar carpeta) no involucra ningún input de archivo y sigue
-  // disponible en mobile.
-  const canUploadFiles = canManageFolders && !isMobileUserAgent()
+  // La carga funciona desde escritorio y celular (DEPLOYMENT.md sección 56).
+  const canUploadFiles = canManageFolders
+  const [notice, setNotice] = useNavigationNotice()
 
   useEffect(() => {
     if (!id) return
@@ -207,11 +206,23 @@ export function CarpetaDetallePage() {
         </div>
       )}
 
+      {notice && <SuccessNotice message={notice} onClose={() => setNotice(null)} />}
+
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {documents.length === 0 && <div className="empty-state">No hay documentos en esta carpeta todavía.</div>}
+      {documents.length === 0 && (
+        <div className="empty-state empty-state-action">
+          <span>No hay documentos en esta carpeta todavía.</span>
+          {canUploadFiles && (
+            <Link to={isGeneral ? '/documentos/nuevo' : `/documentos/nuevo?folderId=${id}`} className="btn btn-primary">
+              <Icon name="plus" size={16} />
+              Subir el primer documento
+            </Link>
+          )}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {documents.map((doc) => (
@@ -266,11 +277,6 @@ export function CarpetaDetallePage() {
         >
           <Icon name="plus" size={20} />
         </Link>
-      )}
-      {canManageFolders && !canUploadFiles && isMobileUserAgent() && (
-        <p className="field-help" style={{ marginTop: 16, textAlign: 'center' }}>
-          Cargar archivos está disponible solo desde PC.
-        </p>
       )}
     </AppShell>
   )

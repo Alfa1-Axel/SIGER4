@@ -27,9 +27,43 @@ import { FIELD_LABELS } from '../audit/humanize'
 // errores de Postgres/RLS SIEMPRE se traducen primero sin importar este
 // parámetro -- es solo el último recurso para errores que no vienen de la
 // base o que no traen ningún mensaje propio.
+const NETWORK_MESSAGE = 'No hay conexión con el servidor. Revisá tu conexión a internet y volvé a intentar.'
+const PENDING_UPDATE_MESSAGE =
+  'Esta función necesita una actualización de la base de datos que todavía no se aplicó. Avisá al Dpto. de Informática y Estadística R4.'
+
+// Errores de red: fetch falla con TypeError ("Failed to fetch" en Chrome,
+// "Load failed" en Safari, "NetworkError..." en Firefox).
+function isNetworkError(err: unknown): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  if (!(err instanceof Error)) return false
+  return /failed to fetch|load failed|networkerror|network request failed/i.test(err.message)
+}
+
+// Errores de Supabase Storage (StorageApiError/StorageUnknownError): llegan
+// con mensajes en inglés. Se traducen los casos que el usuario puede
+// resolver; el resto cae en el mensaje de respaldo de cada pantalla.
+function describeStorageError(err: unknown): string | null {
+  if (!(err instanceof Error) || !/^Storage/.test(err.name)) return null
+  const text = err.message.toLowerCase()
+  if (text.includes('row-level security') || text.includes('unauthorized') || text.includes('not authorized')) {
+    return 'No tenés permiso para subir o ver este archivo.'
+  }
+  if (text.includes('mime') || text.includes('invalid_mime_type')) return 'Ese tipo de archivo no se admite en esta sección.'
+  if (text.includes('exceeded') || text.includes('too large') || text.includes('payload')) return 'El archivo supera el tamaño máximo permitido.'
+  if (text.includes('not found')) return 'El archivo no existe o fue eliminado.'
+  return null
+}
+
 export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un error inesperado. Intentá de nuevo.'): string {
+  if (isNetworkError(err)) return NETWORK_MESSAGE
+  const storageMessage = describeStorageError(err)
+  if (storageMessage) return storageMessage
   if (err instanceof PostgrestError) {
     if (err.code === '42501') return 'No tenés permisos para realizar esta acción.'
+    // Función o tabla que la app espera y la base todavía no tiene: falta
+    // correr una migración (PGRST202/PGRST205 de PostgREST, 42883/42P01 de
+    // Postgres). Mejor decirlo así que mostrar un error genérico.
+    if (err.code === 'PGRST202' || err.code === 'PGRST205' || err.code === '42883' || err.code === '42P01') return PENDING_UPDATE_MESSAGE
     if (err.code === 'PGRST116') {
       return 'No tenés permisos para realizar esta acción, o la solicitud ya no está en el estado esperado. Recargá la página e intentá de nuevo.'
     }

@@ -1,43 +1,59 @@
 import type { RoleKey } from '../../types/roles'
 
+export interface NavContext {
+  isAdmin: boolean
+  isSuperAdmin: boolean
+  hasRole: (...roles: RoleKey[]) => boolean
+}
+
+export type NavSection = 'Gestión' | 'Administración' | 'Cuenta'
+
 export interface NavItem {
   to: string
   label: string
   icon: string
-  adminOnly?: boolean
-  hideForRoles?: RoleKey[]
-  // Se muestra solo si el usuario tiene alguno de estos roles (además de
-  // isAdmin, que ya cubre adminOnly).
-  showForRoles?: RoleKey[]
+  section: NavSection
+  // Sin visible(), el ítem se muestra a cualquier usuario autenticado. La
+  // visibilidad es solo comodidad: cada ruta tiene su guarda y la base su RLS.
+  visible?: (ctx: NavContext) => boolean
 }
 
+const canManageUsers = (ctx: NavContext) => ctx.isAdmin || ctx.hasRole('jefe_cuerpo_activo')
+
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/panel', label: 'Panel', icon: 'grid' },
-  { to: '/cuarteles', label: 'Cuarteles', icon: 'building' },
-  { to: '/mapa', label: 'Mapa Regional', icon: 'mapPin' },
-  { to: '/calendario', label: 'Calendario', icon: 'calendar' },
-  { to: '/escuela', label: 'Escuela', icon: 'school' },
-  // Acceso total: informatica_r4/integrante_informatica (isAdmin). Alcance
-  // regional/subsede/cuartel: director_escuela, secretario_regional. Solo su
-  // propio cuartel: jefe_cuerpo_activo, usuario_carga_cuartel. El resto de
-  // roles no ve Reportes (ver ReportsRoute para la guarda real de acceso).
+  { to: '/panel', label: 'Panel', icon: 'grid', section: 'Gestión' },
+  { to: '/cuarteles', label: 'Cuarteles', icon: 'building', section: 'Gestión' },
+  { to: '/mapa', label: 'Mapa Regional', icon: 'mapPin', section: 'Gestión' },
+  { to: '/calendario', label: 'Calendario', icon: 'calendar', section: 'Gestión' },
+  { to: '/escuela', label: 'Escuela', icon: 'school', section: 'Gestión' },
+  { to: '/documentos', label: 'Documentos', icon: 'file', section: 'Gestión' },
+  { to: '/departamentos', label: 'Departamentos', icon: 'building', section: 'Gestión' },
+  { to: '/inventario', label: 'Inventario', icon: 'tag', section: 'Gestión' },
+  // Misma regla que ReportsRoute.
   {
     to: '/reportes',
     label: 'Reportes',
     icon: 'chart',
-    showForRoles: ['director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel'],
+    section: 'Gestión',
+    visible: (ctx) => ctx.isAdmin || ctx.hasRole('director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel'),
   },
-  { to: '/documentos', label: 'Documentos', icon: 'file' },
-  { to: '/inventario', label: 'Inventario', icon: 'tag' },
-  { to: '/departamentos', label: 'Departamentos', icon: 'building' },
-  { to: '/auditoria', label: 'Auditoría', icon: 'clipboardList', hideForRoles: ['invitado'] },
-  // /usuarios ya no es adminOnly: jefe_cuerpo_activo también entra, pero ve
-  // el listado filtrado a su propio cuartel (ver UsuariosPage/UserManagerRoute).
-  { to: '/usuarios', label: 'Usuarios', icon: 'user', showForRoles: ['jefe_cuerpo_activo'] },
-  // director_escuela no ve el listado /usuarios (sigue exclusivo de
-  // informatica_r4/integrante_informatica/jefe_cuerpo_activo), pero conserva
-  // el acceso directo a "Nuevo Usuario" (puede crear usuarios de Escuela/
-  // formación, ver UserCreatorRoute).
-  { to: '/usuarios/nuevo', label: 'Nuevo Usuario', icon: 'user', showForRoles: ['director_escuela'] },
-  { to: '/ajustes', label: 'Ajustes', icon: 'settings' },
+  // Listado de usuarios: Informática y jefe_cuerpo_activo (filtrado a su
+  // cuartel). Ver UserManagerRoute.
+  { to: '/usuarios', label: 'Usuarios', icon: 'user', section: 'Administración', visible: canManageUsers },
+  // Acceso directo solo para quien puede crear usuarios pero no ve el
+  // listado (director_escuela): el resto lo tiene en Usuarios.
+  {
+    to: '/usuarios/nuevo',
+    label: 'Nuevo usuario',
+    icon: 'plus',
+    section: 'Administración',
+    visible: (ctx) => ctx.hasRole('director_escuela') && !canManageUsers(ctx),
+  },
+  // Solo informatica_r4 (is_super_admin() en la base, ver 0097).
+  { to: '/auditoria', label: 'Auditoría', icon: 'clipboardList', section: 'Administración', visible: (ctx) => ctx.isSuperAdmin },
+  { to: '/notificaciones', label: 'Notificaciones', icon: 'bell', section: 'Cuenta' },
+  { to: '/ajustes', label: 'Mi perfil y ajustes', icon: 'settings', section: 'Cuenta' },
+  { to: '/roles', label: 'Roles y permisos', icon: 'info', section: 'Cuenta' },
 ]
+
+export const NAV_SECTIONS: NavSection[] = ['Gestión', 'Administración', 'Cuenta']

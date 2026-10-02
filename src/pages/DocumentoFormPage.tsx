@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { fetchRegions } from '../lib/api/regions'
@@ -7,10 +7,12 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
 import { addDocumentVersion, createDocument, fetchDocumentById, fetchDocumentVersions, updateDocument, updateDocumentStoragePath } from '../lib/api/documents'
-import { inferMimeType, isDocumentMimeAllowed, uploadDocumentFile } from '../lib/api/storage'
+import { isDocumentMimeAllowed, uploadDocumentFile } from '../lib/api/storage'
+import { FilePicker } from '../components/ui/FilePicker'
+import { AccessDenied } from '../components/ui/AccessDenied'
+import { useSessionDraft } from '../hooks/useSessionDraft'
 import type { DocumentVersion, Profile, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { isMobileUserAgent } from '../lib/device'
 import { describeSupabaseError } from '../lib/api/errors'
 
 type DocScopeTarget = 'region' | 'subsede' | 'station' | 'profile'
@@ -22,24 +24,19 @@ const DOC_SCOPE_OPTIONS: { value: DocScopeTarget; label: string }[] = [
   { value: 'profile', label: 'Usuario específico' },
 ]
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
+const DOCUMENT_ACCEPT = 'application/pdf,.pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif'
+
+interface DocumentDraft {
+  title: string
+  category: string
+  description: string
 }
 
-function fileExtension(fileName: string): string {
-  const match = fileName.match(/\.([a-zA-Z0-9]{1,10})$/)
-  return match ? match[1].toLowerCase() : '(sin extensión)'
-}
-
-// La carga de documentos (nueva o edición) quedó disponible solo en
-// escritorio (ver DEPLOYMENT.md) — en los Android donde reproducía el bug,
-// el input de archivo no era confiable dentro de esta ruta de React por una
-// causa que no se pudo aislar pese a varias rondas de diagnóstico, y no vale
-// la pena mantener workarounds/vías alternativas a costa de la simplicidad
-// del formulario. Consultar y descargar documentos SÍ sigue disponible en
-// mobile (ver DocumentosPage/CarpetaDetallePage).
+// Alta y edición de documentos, desde escritorio o celular. El archivo se
+// elige con FilePicker (archivo o foto). Si Android recarga la app mientras
+// el selector está abierto, el borrador de sessionStorage conserva título,
+// tipo y descripción (ver useSessionDraft / DEPLOYMENT.md sección 56).
 export function DocumentoFormPage() {
   const { id } = useParams<{ id: string }>()
   const isEditing = Boolean(id)
@@ -78,6 +75,20 @@ export function DocumentoFormPage() {
   const visibleScopeOptions = stationLocked ? DOC_SCOPE_OPTIONS.filter((o) => o.value === 'station') : DOC_SCOPE_OPTIONS
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const draftValue = useMemo<DocumentDraft>(() => ({ title, category, description }), [title, category, description])
+  const { readDraft, clearDraft } = useSessionDraft<DocumentDraft>(`documento-nuevo:${folderIdFromQuery ?? 'general'}`, draftValue, !isEditing)
+  const [restoredDraft, setRestoredDraft] = useState(false)
+
+  useEffect(() => {
+    if (isEditing) return
+    const draft = readDraft()
+    if (draft && (draft.title || draft.category || draft.description)) {
+      setTitle(draft.title)
+      setCategory(draft.category)
+      setDescription(draft.description)
+      setRestoredDraft(true)
+    }
+  }, [isEditing, readDraft])
   const [existingStoragePath, setExistingStoragePath] = useState<string | null>(null)
   const [existingFolderId, setExistingFolderId] = useState<string | null>(null)
 
@@ -143,26 +154,15 @@ export function DocumentoFormPage() {
     }
   }, [id])
 
-  if (isMobileUserAgent()) {
-    return (
-      <AppShell title="Documentos">
-        <div className="empty-state">
-          <p style={{ marginBottom: 12 }}>
-            La carga de documentos está disponible solo desde PC. Desde el celular podés ver y descargar documentos, pero no
-            cargar archivos.
-          </p>
-          <Link to="/documentos" className="btn btn-outlined">
-            Volver a Documentos
-          </Link>
-        </div>
-      </AppShell>
-    )
-  }
-
   if (!canCreate) {
     return (
       <AppShell title="Documentos">
-        <div className="empty-state">No tenés permisos para cargar documentos.</div>
+        <AccessDenied
+          title="No podés cargar documentos"
+          message="Cargar documentos es de Informática, el Secretario Regional y los roles de cuartel (para su cuartel). Podés ver y descargar los documentos de tu alcance."
+          backTo="/documentos"
+          backLabel="Volver a Documentos"
+        />
       </AppShell>
     )
   }
@@ -183,33 +183,36 @@ export function DocumentoFormPage() {
     return Boolean(profileId)
   }
 
-  function handleFileInputChange(e: ChangeEvent<HTMLInputElement>) {
-    const selected = e.target.files?.[0] ?? null
-    e.target.value = ''
-    if (!selected) return
-
-    const inferredMime = inferMimeType(selected)
-    if (!isDocumentMimeAllowed(inferredMime)) {
-      setError(
-        `Tipo de archivo no permitido (${selected.name}): ${inferredMime || 'no se pudo determinar el tipo'}. ` +
-          'Formatos aceptados: PDF, Word, Excel, PNG, JPG, WEBP, HEIC.',
-      )
-      setSelectedFile(null)
-      return
-    }
-
+  function handleFileChange(file: File | null) {
+    setSelectedFile(file)
     setError(null)
-    setSelectedFile(selected)
+    if (file && !title.trim()) {
+      setTitle(
+        file.name
+          .replace(/\.[a-zA-Z0-9]{1,10}$/, '')
+          .replace(/[_-]+/g, ' ')
+          .trim()
+          .slice(0, 200),
+      )
+    }
+  }
+
+  function handleDiscardDraft() {
+    clearDraft()
+    setTitle('')
+    setCategory('')
+    setDescription('')
+    setRestoredDraft(false)
   }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
 
-    if (!title.trim()) return setError('Ingresá un título para el documento.')
-    if (!category.trim()) return setError('Ingresá el tipo de documento.')
-    if (!scopeIsReady()) return setError('Completá el alcance (región, subsede, cuartel o usuario) del documento.')
-    if (!isEditing && !selectedFile) return setError('Elegí un archivo para el documento.')
+    if (!isEditing && !selectedFile) return setError('Falta el archivo: tocá "Elegir archivo" (o "Sacar foto" desde el celular).')
+    if (!title.trim()) return setError('Escribí un título para reconocer el documento en el listado.')
+    if (!category.trim()) return setError('Indicá el tipo de documento (por ejemplo: Circular, Acta, Manual).')
+    if (!scopeIsReady()) return setError('Elegí para quién es el documento: región, subsede, cuartel o usuario.')
 
     setSubmitting(true)
     try {
@@ -224,7 +227,9 @@ export function DocumentoFormPage() {
           const path = await uploadDocumentFile(id, selectedFile)
           await updateDocumentStoragePath(id, path)
         }
-        navigate(existingFolderId ? `/documentos/carpetas/${existingFolderId}` : '/documentos/carpetas/general')
+        navigate(existingFolderId ? `/documentos/carpetas/${existingFolderId}` : '/documentos/carpetas/general', {
+          state: { notice: selectedFile ? 'Se guardaron los cambios y el archivo nuevo.' : 'Se guardaron los cambios.' },
+        })
       } else {
         const created = await createDocument({
           ...input,
@@ -233,24 +238,71 @@ export function DocumentoFormPage() {
         })
         const path = await uploadDocumentFile(created.id, selectedFile!)
         await updateDocumentStoragePath(created.id, path)
-        navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general')
+        clearDraft()
+        navigate(folderIdFromQuery ? `/documentos/carpetas/${folderIdFromQuery}` : '/documentos/carpetas/general', {
+          state: { notice: `"${title.trim()}" se subió correctamente.` },
+        })
       }
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el documento.'))
+      setError(describeSupabaseError(err, 'No pudimos guardar el documento. Reintentá en unos segundos.'))
     } finally {
       setSubmitting(false)
     }
   }
 
+  // Alta: el archivo va primero (el título se completa con su nombre).
+  // Edición: va al final, como reemplazo opcional.
+  const fileField = (
+    <>
+      <FilePicker
+        id="documento-file"
+        label={isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo'}
+        file={selectedFile}
+        onChange={handleFileChange}
+        accept={DOCUMENT_ACCEPT}
+        isAllowedType={isDocumentMimeAllowed}
+        maxBytes={MAX_DOCUMENT_BYTES}
+        formatsLabel="PDF, Word, Excel o foto (JPG, PNG, WEBP, HEIC)"
+        allowCamera
+        disabled={submitting}
+      />
+      {isEditing && !selectedFile && existingStoragePath && existingStoragePath !== 'pending' && (
+        <p className="field-help" style={{ marginTop: -8, marginBottom: 16 }}>
+          Ya tiene un archivo. Elegí uno nuevo solo si querés reemplazarlo: el actual queda en el historial de versiones.
+        </p>
+      )}
+    </>
+  )
+
   return (
-    <AppShell title={isEditing ? 'Editar Documento' : 'Nuevo Documento'}>
-      <h1 className="page-title">{isEditing ? 'Editar Documento' : 'Nuevo Documento'}</h1>
-      <p className="page-subtitle">Cargá documentación institucional para el alcance que corresponda.</p>
+    <AppShell title={isEditing ? 'Editar documento' : 'Subir documento'}>
+      <Link
+        to={(isEditing ? existingFolderId : folderIdFromQuery) ? `/documentos/carpetas/${isEditing ? existingFolderId : folderIdFromQuery}` : '/documentos'}
+        className="back-link"
+      >
+        ← Volver a Documentos
+      </Link>
+      <h1 className="page-title">{isEditing ? 'Editar documento' : 'Subir documento'}</h1>
+      <p className="page-subtitle">
+        {isEditing
+          ? 'Cambiá los datos del documento o subí una versión nueva del archivo.'
+          : 'Elegí el archivo (o sacale una foto), ponele un título y elegí para quién es. Funciona desde la computadora o el celular.'}
+      </p>
 
       {loading ? (
         <div className="loading-state" role="status">Cargando datos del documento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid" noValidate>
+          {restoredDraft && (
+            <div className="alert alert-info" role="status">
+              <span className="alert-content">Recuperamos los datos que habías escrito. Revisalos y elegí el archivo.</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={handleDiscardDraft} style={{ color: 'inherit' }}>
+                Empezar de cero
+              </button>
+            </div>
+          )}
+          {!isEditing && fileField}
+
           <div className="field">
             <label htmlFor="title">Título</label>
             <input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Circular N°12" />
@@ -333,26 +385,16 @@ export function DocumentoFormPage() {
             )}
           </div>
 
-          <div className="field">
-            <label htmlFor="file">{isEditing ? 'Reemplazar archivo (opcional)' : 'Archivo'}</label>
-            <input id="file" type="file" onChange={handleFileInputChange} />
-            {selectedFile && (
-              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 6 }}>
-                {selectedFile.name} · {formatBytes(selectedFile.size)} · {fileExtension(selectedFile.name)}
-              </p>
-            )}
-            {isEditing && !selectedFile && existingStoragePath && existingStoragePath !== 'pending' && (
-              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                Ya tiene un archivo cargado. Elegí uno nuevo solo si querés reemplazarlo (el actual queda en el historial de
-                versiones).
-              </p>
-            )}
-          </div>
+          {isEditing && fileField}
 
-          {error && <p className="field-error">{error}</p>}
+          {error && (
+            <div className="alert alert-danger" role="alert">
+              {error}
+            </div>
+          )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Guardar documento'}
+            {submitting ? (selectedFile ? 'Subiendo archivo…' : 'Guardando…') : isEditing ? 'Guardar cambios' : 'Subir documento'}
           </button>
 
           {versions.length > 0 && (

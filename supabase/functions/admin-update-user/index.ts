@@ -28,8 +28,9 @@
 //   - jefe_cuerpo_activo: autoridad operativa máxima de SU cuartel. Puede
 //     editar nombre/email/contraseña/activar-desactivar/flag de cambio de
 //     contraseña de usuarios de su MISMO station_id únicamente, y nunca de
-//     alguien con rol informática/regional/escuela (sin importar el
-//     cuartel). NUNCA puede tocar roles, scope, cuartel o región de nadie —
+//     alguien con rol informática/regional/escuela ni de quien coordine un
+//     departamento (sin importar el cuartel). NUNCA puede tocar roles,
+//     scope, cuartel o región de nadie —
 //     eso sigue exclusivo de informatica_r4/integrante_informatica.
 //   - Cualquier otro rol: sin permiso, 403.
 //
@@ -232,13 +233,23 @@ Deno.serve(async (req: Request) => {
         'secretario_regional',
         'coordinador_escuela',
         'secretario_escuela',
-        'coordinador_departamento_escuela',
       ]
       if (!actorProfile.station_id || targetProfile.station_id !== actorProfile.station_id) {
         return jsonResponse({ error: 'Solo podés editar usuarios de tu propio cuartel.' }, 403)
       }
       if ([...targetRoleSet].some((r) => PRIVILEGED_TARGET_ROLES.includes(r))) {
         return jsonResponse({ error: 'No tenés permiso para editar a este usuario.' }, 403)
+      }
+      // Desde 0097 el coordinador de un departamento no tiene un rol propio:
+      // es departments.coordinator_profile_id, y eso le da acceso a los
+      // avales de su departamento. Misma protección que los roles de arriba.
+      const { count: coordinatedCount, error: coordinatedError } = await supabaseAdmin
+        .from('departments')
+        .select('id', { count: 'exact', head: true })
+        .eq('coordinator_profile_id', targetProfile.id)
+      if (coordinatedError) return logAndRespond('resolver departamentos del objetivo', coordinatedError, 'No pudimos verificar los permisos del usuario a editar.')
+      if ((coordinatedCount ?? 0) > 0) {
+        return jsonResponse({ error: 'Este usuario coordina un departamento: solo Informática R4 puede editarlo.' }, 403)
       }
       if (body.roles || body.scope || body.region_id !== undefined || body.station_id !== undefined) {
         return jsonResponse({ error: 'Como Jefe de Cuerpo Activo no podés cambiar roles, alcance, cuartel o región. Pedile a Informática R4 que lo haga.' }, 403)

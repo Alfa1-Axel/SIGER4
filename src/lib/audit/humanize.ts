@@ -27,7 +27,7 @@ export const TABLE_LABELS: Record<string, string> = {
   department_manual_members: 'Integrantes manuales de departamento',
   system_settings: 'Configuración del sistema',
   school_departments: 'Departamentos de Escuela (lista anterior, unificada)',
-  school_department_members: 'Coordinadores de Avales por departamento',
+  school_department_members: 'Coordinadores de Avales por departamento (lista anterior, unificada)',
   school_avales_documents: 'Avales regionales (Escuela)',
 }
 

@@ -9,6 +9,7 @@ import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { SchoolAvalesRoute } from './components/layout/SchoolAvalesRoute'
+import { SuperAdminRoute } from './components/layout/SuperAdminRoute'
 import { LoginPage } from './pages/LoginPage'
 import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
 import { PanelPage } from './pages/PanelPage'
@@ -27,7 +28,6 @@ import { EscuelaPage } from './pages/EscuelaPage'
 import { CursoFormPage } from './pages/CursoFormPage'
 import { AvalesPage } from './pages/AvalesPage'
 import { AvalFormPage } from './pages/AvalFormPage'
-import { AvalesCoordinadoresPage } from './pages/AvalesCoordinadoresPage'
 import { RolesPage } from './pages/RolesPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
@@ -94,8 +94,10 @@ export default function App() {
         <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
         <Route path="/escuela/avales" element={<SchoolAvalesRoute><AvalesPage /></SchoolAvalesRoute>} />
         <Route path="/escuela/avales/nuevo" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
-        <Route path="/escuela/avales/coordinadores" element={<SchoolAvalesRoute><AvalesCoordinadoresPage /></SchoolAvalesRoute>} />
-        <Route path="/escuela/avales/departamentos" element={<Navigate to="/escuela/avales/coordinadores" replace />} />
+        {/* Rutas viejas de administración de departamentos/coordinadores de
+            Escuela: ahora se administran solo en la sección Departamentos. */}
+        <Route path="/escuela/avales/coordinadores" element={<Navigate to="/escuela/avales" replace />} />
+        <Route path="/escuela/avales/departamentos" element={<Navigate to="/escuela/avales" replace />} />
         <Route path="/escuela/avales/:id/editar" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
         <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
@@ -111,7 +113,7 @@ export default function App() {
         <Route path="/documentos/carpetas/nueva" element={<ProtectedRoute><CarpetaFormPage /></ProtectedRoute>} />
         <Route path="/documentos/papelera" element={<ProtectedRoute><PapeleraDocumentosPage /></ProtectedRoute>} />
         <Route path="/documentos/carpetas/:id" element={<ProtectedRoute><CarpetaDetallePage /></ProtectedRoute>} />
-        <Route path="/auditoria" element={<ProtectedRoute><AuditoriaPage /></ProtectedRoute>} />
+        <Route path="/auditoria" element={<SuperAdminRoute title="Auditoría"><AuditoriaPage /></SuperAdminRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
         <Route path="/cuarteles/:stationId/historial/nuevo" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />

@@ -416,8 +416,8 @@ export function AjustesPage() {
   }
 
   return (
-    <AppShell title="Mi Perfil">
-      <h1 className="page-title">Mi Perfil</h1>
+    <AppShell title="Mi perfil y ajustes">
+      <h1 className="page-title">Mi perfil y ajustes</h1>
       <p className="page-subtitle">Tus datos personales, rol y alcance dentro del sistema.</p>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
         SIGER4 v{__SIGER4_APP_VERSION__}
@@ -1048,9 +1048,9 @@ export function AjustesPage() {
           <img src="/logos/logo-escuela.png" alt="SIGER4" style={{ height: 40, borderRadius: 'var(--radius-lg)' }} />
           <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 'var(--radius-lg)' }} />
         </div>
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
-          La carga de documentos (Documentos → Cargar archivo) está disponible solo desde PC. Desde el
-          celular podés ver y descargar documentos normalmente.
+        <p className="field-help" style={{ margin: 0 }}>
+          SIGER4 funciona desde la computadora y el celular, también para subir documentos y fotos. Si el
+          celular recarga la página mientras elegís un archivo, tus datos se conservan: solo hay que elegirlo de nuevo.
         </p>
       </div>
 

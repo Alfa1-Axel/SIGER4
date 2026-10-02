@@ -185,24 +185,24 @@ export function AvalesPage() {
     <AppShell title="Avales regionales">
       <EscuelaTabs />
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
+      <div className="page-header">
+        <div>
           <h1 className="page-title">Avales regionales</h1>
           <p className="page-subtitle">
             Documentos de avales organizados por departamento interno de Escuela.
             {!canViewAll && ' Ves solo los departamentos que coordinás.'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="page-header-actions">
           {canManage && (
-            <Link to="/escuela/avales/departamentos" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }}>
-              <Icon name="settings" size={14} />
+            <Link to="/escuela/avales/departamentos" className="btn btn-outlined">
+              <Icon name="settings" size={16} />
               Departamentos
             </Link>
           )}
           {!loading && uploadableDepartments.length > 0 && !isMobile && (
-            <Link to={uploadHref} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>
-              <Icon name="plus" size={14} />
+            <Link to={uploadHref} className="btn btn-primary">
+              <Icon name="plus" size={16} />
               Cargar documento
             </Link>
           )}
@@ -210,27 +210,25 @@ export function AvalesPage() {
       </div>
 
       {!loading && uploadableDepartments.length > 0 && isMobile && (
-        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8 }}>
+        <p className="field-help" style={{ marginBottom: 16 }}>
           La carga de documentos está disponible solo desde PC. Desde el celular podés ver y descargar.
         </p>
       )}
 
       {notice && (
-        <div className="card" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: 'var(--color-success)' }}>{notice}</span>
-          <button type="button" className="btn btn-outlined btn-icon" aria-label="Cerrar aviso" onClick={() => setNotice(null)}>
+        <div className="alert alert-success" role="status">
+          <span className="alert-content">{notice}</span>
+          <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Cerrar aviso" onClick={() => setNotice(null)} style={{ color: 'inherit' }}>
             <Icon name="close" size={14} />
           </button>
         </div>
       )}
 
       {actionError && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{actionError}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{actionError}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando avales…</div>}
+      {loading && <div className="loading-state" role="status">Cargando avales…</div>}
 
       {!loading && loadError && (
         <div className="empty-state">
@@ -258,7 +256,7 @@ export function AvalesPage() {
               <button
                 type="button"
                 aria-pressed={!selectedDepartment}
-                className={`btn ${!selectedDepartment ? 'btn-primary' : 'btn-secondary'}`}
+                className="chip"
                 onClick={() => selectDepartment(ALL_DEPARTMENTS)}
               >
                 Todos ({documents.filter((d) => !d.is_archived).length})
@@ -271,7 +269,7 @@ export function AvalesPage() {
                   key={department.id}
                   type="button"
                   aria-pressed={isSelected}
-                  className={`btn ${isSelected ? 'btn-primary' : 'btn-secondary'}`}
+                  className="chip"
                   onClick={() => selectDepartment(department.slug)}
                 >
                   {department.name} ({activeCountByDepartment.get(department.id) ?? 0})
@@ -282,7 +280,7 @@ export function AvalesPage() {
           </div>
 
           {selectedDepartment && !selectedDepartment.is_active && (
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 0 }}>
+            <p className="field-help" style={{ marginBottom: 12 }}>
               Este departamento está inactivo: sus avales se pueden consultar, pero no admite cargas nuevas.
             </p>
           )}
@@ -301,7 +299,7 @@ export function AvalesPage() {
               />
             </div>
             {canManage && (
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              <label className="check-row">
                 <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
                 Mostrar archivados ({archivedCount})
               </label>
@@ -365,7 +363,7 @@ export function AvalesPage() {
                         </button>
                         <button
                           type="button"
-                          className="btn btn-outlined btn-icon-sm"
+                          className="btn btn-danger-outline btn-icon-sm"
                           disabled={isBusy}
                           onClick={() => handleDelete(doc)}
                           aria-label="Eliminar definitivamente"

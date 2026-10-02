@@ -42,29 +42,20 @@ export function PendingItemsSection() {
       <div className="section-header">
         <h2 className="section-title">Pendientes</h2>
       </div>
-      <div className="card" style={{ marginBottom: 20, padding: items.length > 0 ? 0 : undefined }}>
-        {loading && <div className="empty-state">Cargando pendientes…</div>}
+      <div className={`card${items.length > 0 ? ' row-list' : ''}`} style={{ marginBottom: 20 }}>
+        {loading && <div className="loading-state" role="status">Cargando pendientes…</div>}
         {error && <p className="field-error">{error}</p>}
         {!loading && !error && items.length === 0 && (
           <div className="empty-state">No hay pendientes importantes.</div>
         )}
         {!loading &&
           !error &&
-          items.map((item, i) => (
+          items.map((item) => (
             <Link
               key={item.itemKey}
               to={item.linkPath}
-              className="list-item"
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                gap: 12,
-                padding: '12px 16px',
-                borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
+              className="row-item"
+              style={{ alignItems: 'flex-start' }}
             >
               <div style={{ minWidth: 0 }}>
                 <h3 className="list-item-title" style={{ margin: 0 }}>

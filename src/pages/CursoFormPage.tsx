@@ -138,7 +138,7 @@ export function CursoFormPage() {
       <p className="page-subtitle">Cursos y capacitaciones de la Escuela Regional.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del curso…</div>
+        <div className="loading-state" role="status">Cargando datos del curso…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -224,8 +224,8 @@ export function CursoFormPage() {
                   key={station.id}
                   type="button"
                   onClick={() => toggleStation(station.id)}
-                  className={`btn ${selectedStationIds.includes(station.id) ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 12px', fontSize: 12 }}
+                  className="chip"
+                  aria-pressed={selectedStationIds.includes(station.id)}
                 >
                   {station.name}
                 </button>
@@ -241,8 +241,8 @@ export function CursoFormPage() {
                   key={option.value}
                   type="button"
                   onClick={() => setStatus(option.value)}
-                  className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
+                  className="chip"
+                  aria-pressed={status === option.value}
                 >
                   {option.label}
                 </button>

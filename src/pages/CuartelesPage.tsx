@@ -81,8 +81,8 @@ export function CuartelesPage() {
             key={status}
             type="button"
             onClick={() => setStatusFilter(status)}
-            className={`btn ${statusFilter === status ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 14px', fontSize: 13 }}
+            className="chip"
+            aria-pressed={statusFilter === status}
           >
             {status === 'todos' ? 'Todos' : STATUS_LABEL[status]}
           </button>
@@ -93,8 +93,8 @@ export function CuartelesPage() {
         <button
           type="button"
           onClick={() => setSubsedeFilter('todas')}
-          className={`btn ${subsedeFilter === 'todas' ? 'btn-primary' : 'btn-secondary'}`}
-          style={{ padding: '6px 14px', fontSize: 13 }}
+          className="chip"
+          aria-pressed={subsedeFilter === 'todas'}
         >
           Todas las subsedes
         </button>
@@ -103,8 +103,8 @@ export function CuartelesPage() {
             key={subsede.id}
             type="button"
             onClick={() => setSubsedeFilter(subsede.id)}
-            className={`btn ${subsedeFilter === subsede.id ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '6px 14px', fontSize: 13 }}
+            className="chip"
+            aria-pressed={subsedeFilter === subsede.id}
           >
             {subsede.name}
           </button>
@@ -112,12 +112,10 @@ export function CuartelesPage() {
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando cuarteles…</div>}
+      {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
       {!loading && filtered.length === 0 && (
         <div className="empty-state">No se encontraron cuarteles con ese criterio.</div>
       )}
@@ -146,7 +144,7 @@ export function CuartelesPage() {
                 <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
                   {station.address ?? station.zone ?? 'Sin dirección registrada'}
                 </p>
-                <p style={{ margin: '2px 0 0', fontSize: 11, color: 'var(--color-text-muted)' }}>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
                   {station.subsede_id ? subsedeById.get(station.subsede_id)?.name ?? 'Subsede desconocida' : 'Sin subsede'}
                 </p>
               </div>
@@ -165,17 +163,17 @@ export function CuartelesPage() {
             >
               <div>
                 <div style={{ fontWeight: 700 }}>{String(station.personnel_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>PERSONAL</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>PERSONAL</div>
               </div>
               <div>
                 <div style={{ fontWeight: 700 }}>{String(station.vehicles_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>VEHÍCULOS</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>VEHÍCULOS</div>
               </div>
               <div>
-                <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>
+                <div style={{ fontWeight: 700, color: 'var(--color-link)' }}>
                   {station.response_time_minutes != null ? `${station.response_time_minutes}min` : '—'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>RESPUESTA</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>RESPUESTA</div>
               </div>
             </div>
           </Link>

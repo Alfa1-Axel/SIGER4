@@ -1,145 +1,183 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
+
+/* ============================================================
+   SIGER4 - Sistema de diseño
+   ============================================================
+   Dirección visual: institucional sobria. Superficies neutras frías,
+   un solo color de acción (azul institucional, tomado del azul del
+   logo SIGER4) y el rojo institucional reservado para marcas y alertas
+   puntuales. Los colores de estado (éxito, advertencia, peligro,
+   información) se usan solo para comunicar estado, nunca como
+   decoración.
+
+   Reglas del sistema:
+   - Todo color sale de un token de esta sección. No usar hex/rgb sueltos
+     en componentes ni en estilos inline.
+   - Todo par texto/fondo cumple WCAG AA (4.5:1) en ambos temas; el borde
+     de los campos de formulario cumple 3:1 contra la superficie.
+   - Radios moderados (4/6/8 px). Sombras solo en elementos flotantes
+     (modales, drawer, menús); las tarjetas se separan con borde.
+   - El modo oscuro es una elección manual del usuario (botón del header,
+     ver useTheme.ts): redefine los mismos tokens, nunca clases propias. */
 
 :root {
-  /* Paleta institucional SIGER4, según capturas de Stitch */
-  --color-primary: #d32f2f;
-  --color-primary-dark: #b71c1c;
-  --color-primary-darker: #7f0000;
-  --color-primary-light: #ef9a9a;
-  --color-primary-lighter: #ffcdd2;
+  /* Superficies y bordes */
+  --color-bg-app: #f3f5f7;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f9fb;
+  --color-surface-hover: #f0f3f6;
+  --color-surface-pressed: #e6eaef;
+  --color-border: #dfe3e8;
+  --color-border-strong: #c3cad3;
+  --color-input-border: #8c96a3;
 
-  /* Color dedicado del anillo de foco (outline), separado de
-     --color-primary-light: esa variable es un TINTE del primario (se
-     redefine oscuro en dark mode porque ahí se usa como fondo sutil de
-     elementos, ver --color-primary-lighter en badges) — no sirve como color
-     de foco, que necesita ser claro/vivo en ambos temas para contrastar
-     contra el fondo que tenga detrás. En claro coincide con el valor que ya
-     tenía --color-primary-light (mismo aspecto de siempre); en dark mode se
-     redefine más abajo. */
-  --color-focus-ring: #ef9a9a;
+  /* Texto */
+  --color-text-primary: #18212d;
+  --color-text-secondary: #4a5566;
+  --color-text-muted: #667080;
+  --color-text-disabled: #8b939e;
 
-  --color-secondary: #0f172a;
-  --color-secondary-light: #334155;
-  --color-secondary-lighter: #94a3b8;
+  /* Acción principal (azul institucional) */
+  --color-primary: #284f86;
+  --color-primary-hover: #203f6c;
+  --color-primary-soft: #e8eef6;
+  --color-primary-soft-text: #1f3f6b;
+  --color-on-primary: #ffffff;
+  --color-link: #284f86;
 
-  --color-tertiary: #f8fafc;
+  /* Acento institucional (rojo): marca y avisos puntuales */
+  --color-accent: #b3261e;
+  --color-accent-fill: #b3261e;
 
-  --color-neutral: #89726f;
+  /* Estados */
+  --color-success: #1f6e45;
+  --color-success-soft: #e5f3eb;
+  --color-success-border: #b9dcc7;
+  --color-warning: #8a5300;
+  --color-warning-soft: #fcf1d9;
+  --color-warning-border: #ecd39a;
+  --color-danger: #b42318;
+  --color-danger-fill: #b42318;
+  --color-danger-hover: #951c13;
+  --color-danger-soft: #fcebea;
+  --color-danger-border: #f1c3bf;
+  --color-info: #245289;
+  --color-info-soft: #e7f0f9;
+  --color-info-border: #bdd2ea;
 
-  --color-bg-app: #fdecea;
-  --color-bg-card: #ffffff;
-  --color-bg-card-soft: #fdecea;
-  --color-border: #f3d4d1;
+  /* Foco, deshabilitado, overlays */
+  --color-focus-ring: #3b6fb5;
+  --color-focus-ring-soft: rgba(59, 111, 181, 0.22);
+  --color-disabled-bg: #eef1f4;
+  --color-overlay: rgba(16, 22, 30, 0.5);
+  /* Visor de fotos y velos sobre imágenes: oscuros en ambos temas. */
+  --color-overlay-strong: rgba(10, 14, 19, 0.88);
+  --color-scrim: rgba(10, 14, 19, 0.4);
+  --color-on-overlay: #ffffff;
+  --color-on-accent: #ffffff;
+  --color-on-danger: #ffffff;
 
-  --color-text-primary: #1c1917;
-  --color-text-secondary: #78716c;
-  --color-text-muted: #a8a29e;
-  --color-text-on-primary: #ffffff;
+  /* Mapa: colores categóricos de puntos de referencia. Son fijos en ambos
+     temas porque se dibujan sobre las teselas del mapa, que siempre son
+     claras. Apagados, pero distinguibles entre sí. */
+  --map-ref-ruta: #b7791f;
+  --map-ref-industrial: #6b5ca5;
+  --map-ref-rio: #2b7bb9;
+  --map-ref-riesgo: #b42318;
+  --map-ref-estrategico: #2f855a;
+  --map-ref-otro: #6b7280;
+  --map-marker-outline: #1b222c;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667080' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
-  --color-success: #16a34a;
-  --color-warning: #d97706;
-  --color-danger: #d32f2f;
-
-  --color-badge-success-bg: #dcfce7;
-  --color-badge-success-text: #166534;
-  --color-badge-warning-bg: #fef3c7;
-  --color-badge-warning-text: #92400e;
-  --color-badge-info-bg: #e0e7ff;
-  --color-badge-info-text: var(--color-secondary);
-
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Tipografía */
+  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  /* Forma */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-full: 999px;
 
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
-  --shadow-elevated: 0 8px 24px rgba(15, 23, 42, 0.12);
+  /* Elevación: solo para elementos flotantes */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16);
 
-  --sidebar-width: 248px;
+  /* Medidas */
+  --control-height: 36px;
+  --control-height-sm: 30px;
+  --sidebar-width: 240px;
   --header-height: 56px;
-  --footer-height: 40px;
 
   color-scheme: light;
 }
 
-/* Modo oscuro: elección manual del usuario (botón sol/luna en el header, ver
-   useTheme.ts) — nunca se activa solo por prefers-color-scheme del sistema
-   operativo. Paleta basada en slate (misma familia que --color-secondary,
-   #0f172a, del design system SIGER4 Core) en vez de negro puro, para que
-   cards/inputs/tablas mantengan jerarquía visual y buen contraste. El rojo
-   institucional se aclara levemente para no perder legibilidad sobre fondos
-   oscuros. */
 :root[data-theme='dark'] {
-  --color-primary: #ef5350;
-  --color-primary-dark: #d32f2f;
-  --color-primary-darker: #ffcdd2;
-  --color-primary-light: #7f1d1d;
-  /* --color-primary-light (#7f1d1d) es oscuro a propósito en dark mode --
-     ahí funciona como fondo sutil, no como color de foco. El anillo de foco
-     necesita ser claro para contrastar contra --color-bg-card (#1e2c4d)/
-     --color-bg-card-soft (#141d33): mismo rojo vivo que ya usa
-     --color-primary acá, que ya se prueba con buen contraste en toda la UI
-     de dark mode (texto, íconos, bordes). */
-  --color-focus-ring: #ef5350;
-  --color-primary-lighter: #4c1d1d;
+  --color-bg-app: #0e1217;
+  --color-surface: #151a21;
+  --color-surface-subtle: #1a2029;
+  --color-surface-hover: #212833;
+  --color-surface-pressed: #283140;
+  --color-border: #28303b;
+  --color-border-strong: #3a4451;
+  --color-input-border: #5c6775;
 
-  --color-secondary-light: #cbd5e1;
-  --color-secondary-lighter: #64748b;
+  --color-text-primary: #e4e8ee;
+  --color-text-secondary: #b1bac6;
+  --color-text-muted: #8f99a6;
+  --color-text-disabled: #6b7480;
 
-  /* En modo claro --color-bg-card (blanco puro) es MAS CLARO que
-     --color-bg-card-soft (rosado), asi que .card-solid/.kpi-card (que usan
-     bg-card) quedan "elevadas" y se distinguen tanto de .card como del fondo
-     de pagina. Los valores anteriores de dark mode invertian esa relacion
-     (bg-card mas oscura que bg-card-soft, 1.14:1 de contraste entre ambas y
-     1.17:1 contra bg-app -- practicamente indistinguibles), por eso las KPI
-     cards y demas .card-solid se veian "pegadas" al fondo. Restaurado el
-     mismo orden que el modo claro. */
-  --color-bg-app: #0b1220;
-  --color-bg-card: #1e2c4d;
-  --color-bg-card-soft: #141d33;
-  --color-border: #2c3e5e;
+  --color-primary: #3b67a3;
+  --color-primary-hover: #4774b2;
+  --color-primary-soft: #1c2a3d;
+  --color-primary-soft-text: #b9cfee;
+  --color-on-primary: #ffffff;
+  --color-link: #93b5e2;
 
-  --color-text-primary: #f1f5f9;
-  --color-text-secondary: #b6c2d4;
-  --color-text-muted: #7f8fa8;
-  --color-text-on-primary: #0b1220;
+  --color-accent: #e05a52;
+  --color-accent-fill: #c0392b;
 
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-danger: #ef5350;
+  --color-success: #5fbf8a;
+  --color-success-soft: #16291f;
+  --color-success-border: #24543a;
+  --color-warning: #e0a84a;
+  --color-warning-soft: #2d2412;
+  --color-warning-border: #5c4520;
+  --color-danger: #ef7b72;
+  --color-danger-fill: #b8352c;
+  --color-danger-hover: #c8433a;
+  --color-danger-soft: #321a1a;
+  --color-danger-border: #5e2b2a;
+  --color-info: #93b5e2;
+  --color-info-soft: #1a2635;
+  --color-info-border: #2c4466;
 
-  --color-badge-success-bg: #14532d;
-  --color-badge-success-text: #bbf7d0;
-  --color-badge-warning-bg: #78350f;
-  --color-badge-warning-text: #fde68a;
-  --color-badge-info-bg: #1e3a5f;
-  --color-badge-info-text: #bfdbfe;
+  --color-focus-ring: #7fa6dc;
+  --color-focus-ring-soft: rgba(127, 166, 220, 0.3);
+  --color-disabled-bg: #1f252e;
+  --color-overlay: rgba(0, 0, 0, 0.6);
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238f99a6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
 
   color-scheme: dark;
 }
+
+/* ============================================================
+   Base
+   ============================================================ */
 
 * {
   box-sizing: border-box;
 }
 
-/* html/body/#root con overflow:hidden + overscroll-behavior:none, ademas
-   del overflow:hidden que ya tenia .app-shell (mas abajo): sin esto, un
-   scroll agresivo (rubber-band/bounce nativo de iOS, o simplemente el
-   redondeo de subpixeles del viewport) puede arrastrar el DOCUMENTO entero
-   -- no .app-content, el <body> -- aunque .app-shell en si nunca desborde,
-   porque nada les impedia moverse a ELLOS. Antes html/body solo tenian
-   height:100% (una capacidad, no una restriccion) y #root tenia
-   min-height:100vh (puede CRECER de mas si el contenido de algun hijo se
-   pasa), asi que el navegador quedaba libre de generar su propio scroll de
-   documento por encima del shell interno -- eso es lo que se percibia como
-   "header se oculta, footer se mueve, toda la pantalla scrollea" al hacer
-   scroll fuerte. */
+/* html/body/#root con overflow:hidden + overscroll-behavior:none: el
+   único contenedor con scroll es .app-content (y .sidebar-nav). Sin esto,
+   un scroll agresivo (rubber-band de iOS, redondeo de subpíxeles) puede
+   arrastrar el documento entero por encima del shell. */
 html,
 body {
   margin: 0;
@@ -151,9 +189,12 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   background: var(--color-bg-app);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -176,14 +217,34 @@ img {
   display: block;
 }
 
-/* ---------- Layout shell ---------- */
+h1,
+h2,
+h3 {
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
 
-/* height: 100vh (no min-height) a proposito: el shell ocupa EXACTAMENTE la
-   ventana, nunca crece con el contenido -- eso es lo que permite que
-   sidebar y main-column sean cada uno su propio contenedor de scroll
-   independiente en vez de compartir el scroll del documento. overflow:
-   hidden ademas evita un scroll fantasma del body cuando algun hijo se
-   pasa por redondeo de subpixeles. */
+::selection {
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   Layout shell
+   ============================================================ */
+
+/* height: 100vh (no min-height): el shell ocupa exactamente la ventana;
+   sidebar y columna principal tienen cada uno su propio scroll. */
 .app-shell {
   display: flex;
   height: 100vh;
@@ -191,42 +252,24 @@ img {
   overflow: hidden;
 }
 
-/* En escritorio el sidebar es una columna fija de altura completa. El
-   <aside> EN SI no scrollea (sin overflow-y acá) -- lo que scrollea es
-   SOLO .sidebar-nav, adentro (ver mas abajo), para que la marca/logo de
-   arriba y el pie con "Cerrar sesion" de abajo queden siempre fijos y
-   visibles sin importar cuantos items tenga el menu. En mobile/tablet
-   (<900px) se convierte en un drawer off-canvas: position fixed, corrido
-   fuera de pantalla con translateX, se desliza al agregar .open -- mismo
-   criterio de scroll interno aplica ahi tambien, sin cambios adicionales
-   porque ya es el mismo <aside>. */
-/* Escala de z-index del sistema (ver también el bloque "Mapa Regional
-   (Leaflet)" más abajo): contenido normal / mapa 0-10 < header 100 <
-   backdrop del drawer mobile 9000 < drawer/sidebar mobile 9010 < modales
-   10000 < banners de sistema encima de un modal 10010. En desktop
-   .app-sidebar NO es position:fixed (columna normal de la grilla), así que
-   su z-index no compite con nada; en mobile pasa a fixed + drawer, ver
-   media query más abajo, donde SÍ importa que gane a cualquier contenido
-   con position fija de la página (el mapa Leaflet en particular). */
+/* Escala de z-index del sistema: contenido / mapa 0-10 < header 100 <
+   backdrop del drawer mobile 9000 < drawer mobile 9010 < modales 10000 <
+   banners de sistema 10010-10020. En desktop .app-sidebar es una columna
+   normal (no fixed); en mobile pasa a drawer fijo (ver media query). */
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
   height: 100vh;
-  padding: 20px 16px;
+  padding: 16px 12px;
   transition: transform 0.2s ease;
 }
 
-/* Columna principal: header y footer quedan fijos dentro de esta columna
-   (no position:fixed -- flex-shrink:0 alcanza porque la columna en si ya
-   tiene altura fija via .app-shell), y SOLO .app-content adentro scrollea.
-   min-height: 0 es necesario para que un hijo flex con overflow pueda
-   angostarse por debajo de su contenido en vez de forzar a la columna
-   entera a crecer (bug clasico de flexbox: sin esto, el overflow-y de
-   .app-content no tiene efecto y el scroll se escapa al documento). */
+/* min-height: 0 permite que .app-content (hijo flex con overflow) se
+   achique por debajo de su contenido y sea él quien scrollea. */
 .app-main-column {
   flex: 1;
   min-width: 0;
@@ -242,27 +285,75 @@ img {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 0 16px;
   border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   position: relative;
   z-index: 100;
 }
 
-/* Unico contenedor con scroll propio de la columna principal -- el header
-   y el footer, al ser hermanos flex con flex-shrink:0, quedan fijos arriba
-   y abajo sin necesidad de position:fixed (que sacaria al footer del flujo
-   y exigiria calcular un padding-bottom a mano en cada pantalla). El
-   padding-bottom extra asegura que el ultimo elemento de cualquier pantalla
-   (ej. un FAB flotante, un boton "Guardar") nunca quede pegado/tapado por
-   el borde del contenedor. */
+.app-header-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-header-logo {
+  height: 24px;
+  width: 24px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.app-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.header-badge {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-surface);
+  background: var(--color-accent-fill);
+  color: var(--color-on-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* Único contenedor con scroll de la columna principal: header y footer
+   quedan fijos sin position:fixed. */
 .app-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 16px;
-  padding-bottom: 32px;
-  max-width: 1440px;
+  padding-bottom: 40px;
+  max-width: 1280px;
   width: 100%;
   margin: 0 auto;
 }
@@ -271,134 +362,122 @@ img {
   display: none;
 }
 
+.btn.hamburger-button,
+.btn.sidebar-close-button {
+  display: none;
+}
+
 @media (max-width: 899px) {
-  /* .app-sidebar y .sidebar-drawer-backdrop se renderizan con
-     createPortal(..., document.body) (ver Sidebar.tsx/AppShell.tsx) --
-     quedan como hijos directos de <body>, fuera del árbol de .app-shell/
-     .app-content, así que ningún ancestro de "contenido normal" (el mapa
-     Leaflet incluido) puede encerrarlos en un stacking context propio que
-     los deje por debajo pese al z-index. Esto es lo que corrige de raíz
-     el bug: antes, aunque el z-index numérico fuera mayor, un ancestro
-     con position/transform en el árbol del contenido podía crear un
-     stacking context que capturaba al backdrop/drawer -- con portal ya no
-     hay ancestro compartido con el contenido, compiten directo en la raíz
-     del documento. z-index igual se deja alto (9000/9010) como refuerzo,
-     no como única defensa. */
+  /* .app-sidebar y .sidebar-drawer-backdrop se montan con createPortal en
+     document.body (ver Sidebar.tsx/AppShell.tsx): sin ancestro compartido
+     con el contenido, ningún stacking context de la página (el mapa
+     Leaflet) puede quedar por encima del drawer. */
   .app-sidebar {
     position: fixed;
     top: 0;
     left: 0;
     transform: translateX(-100%);
     z-index: 9010;
+    width: min(280px, 86vw);
   }
   .app-sidebar.open {
     transform: translateX(0);
-    box-shadow: var(--shadow-elevated);
+    box-shadow: var(--shadow-lg);
   }
   .sidebar-drawer-backdrop.open {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.5);
+    background: var(--color-overlay);
     z-index: 9000;
   }
-  .hamburger-button {
+  .btn.hamburger-button,
+  .btn.sidebar-close-button {
     display: inline-flex;
   }
 }
 
 @media (min-width: 900px) {
-  /* En desktop el sidebar es una columna normal de la grilla (no fixed),
-     así que necesita volver a tener un z-index bajo y explícito: sin
-     esto, en el portal a document.body (ver arriba) quedaría compitiendo
-     en el stacking context raíz igual que en mobile, por encima de
-     modales (10000) si alguno decidiera abrirse con un z-index menor. */
   .app-sidebar {
     position: relative;
     z-index: 10;
   }
-}
-
-@media (min-width: 900px) {
   .app-content {
-    padding: 24px 32px;
-  }
-  .hamburger-button {
-    display: none;
+    padding: 24px 32px 48px;
   }
 }
 
-/* ---------- Sidebar ---------- */
+/* ============================================================
+   Sidebar
+   ============================================================ */
 
 .sidebar-brand-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.sidebar-close-button {
-  display: none;
-}
-
-@media (max-width: 899px) {
-  .sidebar-close-button {
-    display: inline-flex;
-  }
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .sidebar-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px 20px;
+  padding: 4px 6px;
+  min-width: 0;
 }
 
 .sidebar-brand img {
-  height: 32px;
-  width: 32px;
-  border-radius: var(--radius-sm);
+  height: 30px;
+  width: 30px;
+  border-radius: var(--radius-md);
   object-fit: cover;
+  flex-shrink: 0;
 }
 
 .sidebar-brand span {
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--color-primary);
+  letter-spacing: 0.01em;
+  color: var(--color-text-primary);
 }
 
-/* min-height: 0 + overflow-y: auto es lo que hace que ESTE elemento (y no
-   el <aside> entero, ni el documento) sea el que scrollea cuando el menu
-   tiene mas items de los que entran en la altura disponible -- sin
-   min-height: 0, un hijo flex nunca se angosta por debajo de su contenido
-   y el overflow-y no tiene ningun efecto (mismo motivo que .app-content /
-   .app-main-column mas arriba). El scroll de acá NUNCA mueve
-   .sidebar-brand-row ni .sidebar-footer (hermanos flex con flex-shrink: 0
-   implícito al no ser flex-grow), que quedan siempre visibles arriba y
-   abajo, "Cerrar sesión" incluido. */
+/* Solo .sidebar-nav scrollea: la marca y el pie con "Cerrar sesión"
+   quedan siempre visibles. */
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  padding: 4px 0;
 }
 
 .sidebar-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.sidebar-link svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
 }
 
 .sidebar-link:hover {
-  background: var(--color-bg-card-soft);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
 .sidebar-link:focus-visible {
@@ -407,9 +486,13 @@ img {
 }
 
 .sidebar-link.active {
-  background: var(--color-primary-lighter);
-  color: var(--color-primary-darker);
-  font-weight: 700;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
+  font-weight: 600;
+}
+
+.sidebar-link.active svg {
+  color: var(--color-primary-soft-text);
 }
 
 .sidebar-footer {
@@ -420,47 +503,181 @@ img {
   gap: 8px;
 }
 
-/* ---------- Footer institucional ---------- */
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Footer institucional
+   ============================================================ */
 
 .app-footer {
   flex-shrink: 0;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
-  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   border-top: 1px solid var(--color-border);
-  background: var(--color-bg-card);
+  background: var(--color-surface);
 }
 
-/* ---------- Cards ---------- */
+/* ============================================================
+   Encabezados de página y secciones
+   ============================================================ */
 
-/* overflow-wrap:anywhere a nivel de card es la base de la solución
-   sistémica contra texto largo: cualquier texto libre del usuario
-   (observaciones, direcciones, contact_info, nombres) que se renderice
-   sin envolver en una clase más específica igual queda contenido acá,
-   en vez de depender de que cada pantalla nueva recuerde agregarlo. */
-.card {
-  background: var(--color-bg-card-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 18px 20px;
-  box-shadow: var(--shadow-card);
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.page-header > :first-child {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.page-header .page-subtitle {
+  margin-bottom: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
   overflow-wrap: anywhere;
 }
 
+.page-subtitle {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  margin: 0 0 20px;
+  overflow-wrap: anywhere;
+}
+
+/* gap + flex-shrink:0 en el último hijo: un título largo nunca saca de
+   la fila al link/botón de la derecha. */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 24px 0 10px;
+}
+
+.section-header:first-child {
+  margin-top: 0;
+}
+
+.section-header > *:last-child {
+  flex-shrink: 0;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+
+.back-link:hover {
+  color: var(--color-link);
+}
+
+.back-link:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.link-muted {
+  font-size: 13px;
+  color: var(--color-link);
+  text-decoration: none;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+
+button.link-muted {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.link-muted:hover {
+  text-decoration: underline;
+}
+
+.link-muted:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Tarjetas y paneles
+   ============================================================ */
+
+/* overflow-wrap:anywhere a nivel de tarjeta: cualquier texto libre largo
+   (observaciones, direcciones, emails) queda contenido. */
+.card,
 .card-solid {
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  padding: 18px 20px;
-  box-shadow: var(--shadow-card);
+  padding: 16px 20px;
   overflow-wrap: anywhere;
 }
 
-/* Cuando .card/.card-solid se usan como <Link> (listados de Cuarteles,
-   Inventario, Documentos, etc.), sin esto dependían del outline nativo del
-   navegador -- inconsistente entre navegadores y sin relación con la
-   identidad visual del resto de los estados de foco de la app. */
+a.card,
+a.card-solid {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+a.card:hover,
+a.card-solid:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-subtle);
+}
+
 a.card:focus-visible,
 a.card-solid:focus-visible {
   outline: 2px solid var(--color-focus-ring);
@@ -468,69 +685,98 @@ a.card-solid:focus-visible {
 }
 
 @media (max-width: 599px) {
-  /* Cards de listado (Documentos/Carpetas/Notificaciones) mas compactas en
-     mobile: menos padding, radio mas chico, para que quepa mas informacion
-     legible por pantalla sin la sensacion "cargada" de tarjetas enormes
-     apiladas. Formularios (que tambien usan .card-solid) igual se ven bien
-     con este padding reducido — no hace falta una clase separada. */
+  .card,
   .card-solid {
     padding: 12px 14px;
-    border-radius: var(--radius-md);
   }
 }
 
 .card-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
+/* Lista de filas dentro de un panel (Panel, Usuarios, eventos). */
+.row-list {
+  padding: 0;
+  overflow: hidden;
+}
+
+.row-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-border);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+}
+
+.row-item:first-child {
+  border-top: none;
+}
+
+a.row-item:hover {
+  background: var(--color-surface-hover);
+}
+
+a.row-item:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.row-item-title {
+  font-weight: 600;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.row-item-meta {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- KPIs ---------- */
+
 .kpi-card {
-  background: var(--color-bg-card);
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
 }
 
 .kpi-value {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1.15;
-  /* --color-text-primary, no --color-secondary: esa ultima esta pensada
-     como texto oscuro fijo (#0f172a) y nunca se redefine en dark mode (la
-     usan tambien .btn-inverted/.offline-banner como FONDO con texto blanco
-     fijo, asi que aclararla ahi habria roto esos dos). --color-text-primary
-     ya es el token correcto para texto legible sobre .kpi-card en ambos
-     temas. */
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
   color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .kpi-label {
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 12px;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
   font-weight: 600;
 }
 
-/* ---------- Barra simple (una sola serie, sin librería de gráficos) ---------- */
-/* Usado en estadísticas livianas (ej. actividad de Departamentos): una fila
-   por categoría, barra horizontal con "track" de fondo + relleno
-   proporcional al valor máximo del conjunto, más el valor en texto al
-   costado (nunca un número dentro de cada barra individual — se lee mejor
-   afuera, alineado). Un solo hue (--color-primary): es una sola serie, no
-   hace falta leyenda. Extremo redondeado del lado del dato, igual que
-   cualquier barra con datos reales (nunca ambos extremos cuadrados). */
+/* ---------- Barra simple (una serie, sin librería de gráficos) ---------- */
+
 .simple-bar-row {
   display: grid;
   grid-template-columns: minmax(90px, 140px) 1fr auto;
   align-items: center;
   gap: 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .simple-bar-track {
-  background: var(--color-border);
+  background: var(--color-surface-pressed);
   border-radius: var(--radius-full);
   height: 8px;
   overflow: hidden;
@@ -558,25 +804,52 @@ a.card-solid:focus-visible {
   text-align: right;
 }
 
-/* ---------- Buttons ---------- */
+/* ---------- Progreso ---------- */
+
+.progress-track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-pressed);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+}
+
+.progress-fill.secondary {
+  background: var(--color-border-strong);
+}
+
+/* ============================================================
+   Botones
+   ============================================================
+   Variantes: primary (acción principal, una por vista), outlined
+   (acción secundaria), secondary (neutra rellena), ghost (acción de
+   baja jerarquía), danger (destructiva confirmada) y danger-outline
+   (destructiva en listados). Tamaños: base 36px, .btn-sm 30px; en
+   pantallas táctiles suben a 40/36px para que sean cómodos de tocar. */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border: none;
-  border-radius: var(--radius-sm);
-  padding: 10px 18px;
+  gap: 6px;
+  min-height: var(--control-height);
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
-  transition: filter 0.15s ease, background-color 0.15s ease;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  user-select: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .btn:focus-visible {
@@ -584,35 +857,92 @@ a.card-solid:focus-visible {
   outline-offset: 2px;
 }
 
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn svg {
+  flex-shrink: 0;
+}
+
 .btn-primary {
   background: var(--color-primary);
-  color: var(--color-text-on-primary);
+  color: var(--color-on-primary);
 }
 
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(0.95);
+  background: var(--color-primary-hover);
 }
 
 .btn-secondary {
-  background: var(--color-primary-lighter);
-  color: var(--color-primary-darker);
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
 }
 
-.btn-inverted {
-  background: var(--color-secondary);
-  color: #fff;
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-pressed);
 }
 
 .btn-outlined {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+
+.btn-outlined:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.btn-ghost {
   background: transparent;
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.btn-danger {
+  background: var(--color-danger-fill);
+  color: var(--color-on-danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-hover);
+}
+
+.btn-danger-outline {
+  background: var(--color-surface);
+  color: var(--color-danger);
+  border-color: var(--color-danger-border);
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+}
+
+.btn-sm {
+  min-height: var(--control-height-sm);
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .btn-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
+  width: var(--control-height);
+  height: var(--control-height);
+  min-height: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-icon.btn-sm,
+.btn-icon-sm {
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
+  min-height: 0;
   padding: 0;
 }
 
@@ -620,12 +950,351 @@ a.card-solid:focus-visible {
   width: 100%;
 }
 
-/* Input de archivo real, SIEMPRE presente en el DOM (nunca desmontado ni con
-   key dinámica) pero oculto visualmente sin sacarlo del flujo de
-   accesibilidad/interacción — patrón estándar "sr-only", deliberadamente
-   distinto de display:none, que en algunos casos puede afectar si el
-   navegador considera al elemento realmente interactivo. El label
-   asociado (htmlFor) es el único punto de interacción visible real. */
+@media (pointer: coarse) {
+  .btn {
+    min-height: 40px;
+  }
+  .btn-sm {
+    min-height: 36px;
+  }
+  .btn-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .btn-icon.btn-sm,
+  .btn-icon-sm {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Botón de acción flotante ("+"). Única excepción al radio moderado: es
+   circular para distinguirse del contenido. Queda por encima del pie
+   institucional para no taparlo. */
+.fab {
+  position: fixed;
+  bottom: calc(52px + env(safe-area-inset-bottom));
+  right: 20px;
+  z-index: 25;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+}
+
+.fab-menu {
+  position: fixed;
+  bottom: calc(52px + env(safe-area-inset-bottom));
+  right: 20px;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.fab-menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.fab-menu-panel .btn {
+  justify-content: flex-start;
+}
+
+/* ---------- Toggles segmentados y filtros (chips) ---------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-height-sm);
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.chip:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.chip[aria-pressed='true'] {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  color: var(--color-primary-soft-text);
+  font-weight: 600;
+}
+
+.chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (pointer: coarse) {
+  .chip {
+    min-height: 36px;
+  }
+}
+
+.filter-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+/* ---------- Pestañas de sección ---------- */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.tab.active {
+  color: var(--color-link);
+  border-bottom-color: var(--color-primary);
+}
+
+/* ============================================================
+   Formularios
+   ============================================================ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+  min-width: 0;
+}
+
+.field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+/* Estilo base de controles para cualquier formulario, dentro o fuera de
+   .field (filtros, buscadores, selects sueltos). :where() deja la
+   especificidad en cero: cualquier clase propia lo sobreescribe. */
+:where(
+    input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
+    select,
+    textarea
+  ) {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  min-height: var(--control-height);
+  padding: 7px 12px;
+  max-width: 100%;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+:where(select) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+}
+
+:where(textarea) {
+  min-height: 80px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+:where(input, select, textarea)::placeholder {
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+
+:where(input, select, textarea):hover:not(:disabled):not(:focus) {
+  border-color: var(--color-text-muted);
+}
+
+:where(input, select, textarea):focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-soft);
+}
+
+:where(input, select, textarea):disabled {
+  background-color: var(--color-disabled-bg);
+  color: var(--color-text-disabled);
+  border-color: var(--color-border-strong);
+  cursor: not-allowed;
+}
+
+:where(input, select, textarea)[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--color-primary);
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+input[type='checkbox']:focus-visible,
+input[type='radio']:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Carga de archivos: zona clara con el botón del selector integrado. */
+input[type='file']:not(.sr-only-file-input) {
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed var(--color-input-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+input[type='file']:not(.sr-only-file-input):hover {
+  border-color: var(--color-primary);
+}
+
+input[type='file']:not(.sr-only-file-input):focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+input[type='file']::file-selector-button {
+  margin-right: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+input[type='file']::file-selector-button:hover {
+  background: var(--color-surface-hover);
+}
+
+.field-error {
+  font-size: 13px;
+  color: var(--color-danger);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.field-help {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.search-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-md);
+  min-height: var(--control-height);
+  padding: 0 12px;
+  color: var(--color-text-muted);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.search-input:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-soft);
+}
+
+.search-input input {
+  border: none;
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+  flex: 1;
+  min-width: 0;
+  min-height: calc(var(--control-height) - 2px);
+  padding: 0;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+/* Oculto visualmente pero accesible para lectores de pantalla. El input
+   de archivo real usa el mismo patrón, distinto de display:none a
+   propósito. */
+.sr-only,
 .sr-only-file-input {
   position: absolute;
   width: 1px;
@@ -638,117 +1307,169 @@ a.card-solid:focus-visible {
   border: 0;
 }
 
-/* Botón de acción flotante ("+"): posición fija a distancia normal del borde
-   en cualquier tamaño de pantalla (ya no hay navegación inferior de la cual
-   esquivar). */
-.fab {
-  position: fixed;
-  bottom: calc(20px + env(safe-area-inset-bottom));
-  right: 20px;
-  z-index: 25;
-}
-
-/* ---------- Forms ---------- */
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-
-.field label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-}
-
-.field input,
-.field select,
-.field textarea {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-  background: var(--color-bg-card);
-  color: var(--color-text-primary);
-  font-family: inherit;
-}
-
-.field input:focus,
-.field select:focus,
-.field textarea:focus {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-  border-color: var(--color-primary);
-}
-
-.field-error {
-  font-size: 12px;
-  color: var(--color-danger);
-}
-
-.search-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--color-bg-card-soft);
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  color: var(--color-text-muted);
-}
-
-.search-input input {
-  border: none;
-  background: transparent;
-  outline: none;
-  flex: 1;
-  font-size: 14px;
-  color: var(--color-text-primary);
-}
-
-/* ---------- Badges / tags ---------- */
+/* ============================================================
+   Badges
+   ============================================================
+   Siempre con texto: el color refuerza, nunca es la única señal. */
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.5;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 
 .badge-success {
-  background: var(--color-badge-success-bg);
-  color: var(--color-badge-success-text);
+  background: var(--color-success-soft);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
 }
 
 .badge-warning {
-  background: var(--color-badge-warning-bg);
-  color: var(--color-badge-warning-text);
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
 }
 
 .badge-danger {
-  background: var(--color-primary-lighter);
-  color: var(--color-primary-darker);
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
 }
 
 .badge-info {
-  background: var(--color-badge-info-bg);
-  color: var(--color-badge-info-text);
+  background: var(--color-info-soft);
+  border-color: var(--color-info-border);
+  color: var(--color-info);
 }
 
-/* ---------- List items (Documentos, Carpetas, Notificaciones) ----------
-   Patron compartido de fila compacta para listados de tarjetas: en
-   desktop es una fila (icono/indicador + texto + acciones a la derecha),
-   en mobile (<600px) las acciones bajan a una segunda fila de ancho
-   completo en vez de angostar el texto o desbordar. Titulo y descripcion
-   siempre truncan por CSS (line-clamp), nunca dependen de que el
-   contenido "adivine" cuanto lugar tiene. Reemplaza los layouts inline
-   ad-hoc que tenia cada pantalla (una fuente de verdad para el patron). */
+/* ============================================================
+   Alertas, estados vacíos y de carga
+   ============================================================ */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.alert-danger {
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.alert-success {
+  background: var(--color-success-soft);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+
+.alert-warning {
+  background: var(--color-warning-soft);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+
+.alert-info {
+  background: var(--color-info-soft);
+  border-color: var(--color-info-border);
+  color: var(--color-info);
+}
+
+.alert-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 16px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.loading-state::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-primary);
+  animation: spin 0.7s linear infinite;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Marcador de contenido mientras carga (ej. valores de KPI). */
+.skeleton {
+  display: inline-block;
+  min-width: 48px;
+  height: 1em;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-surface-hover) 25%, var(--color-surface-pressed) 50%, var(--color-surface-hover) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+  vertical-align: middle;
+}
+
+@keyframes skeleton-pulse {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================================
+   Listados (Documentos, Avales, Carpetas, Notificaciones)
+   ============================================================
+   En desktop es una fila (ícono + texto + acciones); en mobile las
+   acciones bajan a una segunda fila de ancho completo. Título y
+   descripción truncan por CSS. */
 
 .list-item {
   display: flex;
@@ -766,8 +1487,8 @@ a.card-solid:focus-visible {
   width: 36px;
   height: 36px;
   border-radius: var(--radius-md);
-  background: var(--color-bg-card-soft);
-  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
 }
 
 .list-item-dot {
@@ -787,7 +1508,7 @@ a.card-solid:focus-visible {
 .list-item-title {
   margin: 0;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -799,9 +1520,9 @@ a.card-solid:focus-visible {
 
 .list-item-subtitle {
   margin: 3px 0 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--color-text-secondary);
-  line-height: 1.4;
+  line-height: 1.45;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -813,10 +1534,10 @@ a.card-solid:focus-visible {
 .list-item-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px 10px;
   flex-wrap: wrap;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
 }
 
@@ -828,16 +1549,16 @@ a.card-solid:focus-visible {
 }
 
 .list-item-actions .btn {
-  padding: 6px 10px;
-  font-size: 12px;
+  min-height: var(--control-height-sm);
+  padding: 0 10px;
+  font-size: 13px;
   white-space: nowrap;
 }
 
 .list-item-actions .btn-icon-sm {
-  width: 30px;
-  height: 30px;
+  width: var(--control-height-sm);
+  height: var(--control-height-sm);
   padding: 0;
-  border-radius: var(--radius-sm);
 }
 
 @media (max-width: 599px) {
@@ -847,42 +1568,155 @@ a.card-solid:focus-visible {
   .list-item-actions {
     flex-basis: 100%;
     justify-content: flex-end;
+    flex-wrap: wrap;
     margin-top: 4px;
     padding-top: 8px;
     border-top: 1px solid var(--color-border);
+  }
+  .list-item-actions .btn,
+  .list-item-actions .btn-icon-sm {
+    min-height: 36px;
+    min-width: 36px;
   }
   .list-item-actions .btn span.btn-label-full {
     display: none;
   }
 }
 
-/* ---------- Progress ---------- */
+/* ============================================================
+   Tablas
+   ============================================================ */
 
-.progress-track {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--color-border);
-  overflow: hidden;
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
-.progress-fill {
-  height: 100%;
-  border-radius: var(--radius-full);
-  background: var(--color-primary);
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
 }
 
-.progress-fill.secondary {
-  background: var(--color-secondary-light);
+.data-table th {
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-subtle);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
 }
 
-/* ---------- Login ---------- */
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
 
-/* height:100% (no min-height) + overflow-y:auto propio: #root ahora tiene
-   overflow:hidden fijo (ver mas arriba, fix de scroll agresivo), asi que
-   esta pantalla necesita su PROPIO scroll interno para pantallas chicas con
-   contenido largo (ej. un mensaje de error largo) en vez de depender de que
-   el documento pueda crecer -- mismo criterio que .app-content en el shell
-   autenticado, aplicado aca para la pantalla de login. */
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover td {
+  background: var(--color-surface-hover);
+}
+
+.data-table .col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.data-table .col-nowrap {
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Modales
+   ============================================================ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: var(--color-overlay);
+}
+
+.modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 20px;
+  overflow-wrap: anywhere;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.modal-body {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+@media (max-width: 599px) {
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    max-width: none;
+    max-height: 90vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
+  }
+  .modal-actions {
+    flex-direction: column-reverse;
+  }
+  .modal-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ============================================================
+   Login
+   ============================================================ */
+
+/* Scroll propio: #root tiene overflow:hidden fijo. */
 .login-page {
   height: 100%;
   overflow-y: auto;
@@ -892,7 +1726,7 @@ a.card-solid:focus-visible {
   justify-content: center;
   gap: 16px;
   background: var(--color-bg-app);
-  padding: 24px;
+  padding: 24px 16px;
 }
 
 .login-page .app-footer {
@@ -902,11 +1736,12 @@ a.card-solid:focus-visible {
 
 .login-card {
   width: 100%;
-  max-width: 400px;
-  background: var(--color-bg-card);
+  max-width: 380px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-elevated);
-  padding: 32px 28px;
+  box-shadow: var(--shadow-md);
+  padding: 28px 24px;
 }
 
 .login-logos {
@@ -914,21 +1749,21 @@ a.card-solid:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .login-logos img {
-  height: 56px;
-  width: 56px;
-  border-radius: var(--radius-sm);
+  height: 52px;
+  width: 52px;
+  border-radius: var(--radius-md);
   object-fit: cover;
 }
 
 .login-title {
   text-align: center;
   font-size: 20px;
-  font-weight: 800;
-  color: var(--color-primary);
+  font-weight: 700;
+  color: var(--color-text-primary);
   margin: 0 0 4px;
 }
 
@@ -939,85 +1774,17 @@ a.card-solid:focus-visible {
   margin: 0 0 24px;
 }
 
-/* ---------- Misc ---------- */
+/* ============================================================
+   Contacto, avatares y utilidades de texto
+   ============================================================ */
 
-.page-title {
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0 0 4px;
-  overflow-wrap: anywhere;
-}
-
-.page-subtitle {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  margin: 0 0 20px;
-  overflow-wrap: anywhere;
-}
-
-.section-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary);
-  margin: 0;
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-
-/* justify-content:space-between empuja el segundo hijo (botón/link "+
-   Agregar") al extremo -- pero si el título es un .section-title largo,
-   sin gap+flex-shrink:0 en el botón ese título lo puede sacar de la fila
-   por completo. gap asegura separación mínima siempre; el título ya tiene
-   min-width:0 arriba para poder truncarse/wrappear antes de empujar. */
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.section-header > *:last-child {
-  flex-shrink: 0;
-}
-
-.link-muted {
-  font-size: 12px;
-  color: var(--color-primary);
-  text-decoration: none;
-  font-weight: 600;
-}
-
-.link-muted:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
-/* ---------- Utilidades genéricas para texto dinámico largo ----------
-   Cualquier dato que venga del usuario o de afuera (URLs, emails,
-   nombres, observaciones, direcciones) puede llegar sin espacios donde
-   el navegador pueda cortar -- sin esto, una sola palabra larga desborda
-   su contenedor y arrastra la card/fila entera, generando scroll
-   horizontal. Estas clases son la solución sistémica: se aplican en
-   .contact-link/.contact-value/.list-item ya por defecto, y quedan acá
-   sueltas para usarlas en cualquier lugar nuevo (tablas, modales,
-   observaciones, etc.) sin repetir las reglas. */
-
-/* Para texto que puede tener 1 sola línea larga sin espacios (una URL,
-   un email): permite el corte DENTRO de la palabra si hace falta, pero
-   solo como último recurso (normal primero, luego espacios, recién
-   después corta la palabra) -- por eso overflow-wrap:anywhere y no
-   word-break:break-all, que cortaría siempre en el límite exacto del
-   contenedor incluso cuando alcanzaría con envolver por un espacio. */
+/* Para texto que puede ser una sola palabra larga (URL, email). */
 .text-break {
   overflow-wrap: anywhere;
   word-break: break-word;
   min-width: 0;
 }
 
-/* Trunca a una sola línea con "…" -- para filas angostas (badges, celdas
-   de tabla, títulos de una sola línea) donde ni el wrap es una opción. */
 .text-truncate {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1025,9 +1792,6 @@ a.card-solid:focus-visible {
   min-width: 0;
 }
 
-/* Corta a 2 líneas con "…", igual que .list-item-title/-subtitle
-   (mismo mecanismo, reutilizable fuera de listas: descripciones,
-   observaciones, notas libres en cards/detalle). */
 .text-clamp-2 {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1037,36 +1801,25 @@ a.card-solid:focus-visible {
   overflow-wrap: anywhere;
 }
 
-/* Para un elemento inline/inline-flex (ej. un link) que vive dentro de
-   un contenedor flex/grid: sin min-width:0 un hijo flex nunca se achica
-   por debajo de su contenido intrínseco, así que un texto largo lo
-   empuja y desborda la fila entera aunque el contenedor tenga
-   overflow-wrap. Combina ambas correcciones para el caso típico
-   "ícono + texto" que puede ser arbitrariamente largo. */
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+
+/* Elemento inline-flex dentro de flex/grid que no debe empujar la fila. */
 .safe-inline {
   display: inline-flex;
   max-width: 100%;
   min-width: 0;
 }
 
-/* Para el contenedor de una card/fila que agrupa texto dinámico: fuerza
-   que nunca se mida por el ancho de su contenido (evita que un hijo
-   largo agrande la card entera) y contiene cualquier desborde
-   remanente. Usar en el wrapper directo del texto largo, no en la card
-   completa (no debe recortar sombras/badges que sobresalen a propósito). */
 .safe-card-content {
   min-width: 0;
   max-width: 100%;
   overflow-wrap: anywhere;
 }
 
-/* Datos de contacto accionables (tel/mailto/wa.me/https/Maps). Institucional
-   y discreto -- ni el azul de navegador por defecto ni un botón grande;
-   ícono + texto con el color primario del tema, subrayado solo al pasar el
-   mouse. min-height 32px para que el touch target sea cómodo en mobile sin
-   verse como un botón. max-width/min-width/overflow-wrap: un email o URL
-   sin label corto (auto-detectado, ej. contact_info libre) puede ser
-   arbitrariamente largo -- nunca debe empujar la card que lo contiene. */
+/* Datos de contacto accionables (tel/mailto/wa.me/https/Maps): ícono +
+   texto con el color de link, subrayado solo al pasar el mouse. */
 .contact-link {
   display: inline-flex;
   align-items: center;
@@ -1074,9 +1827,9 @@ a.card-solid:focus-visible {
   min-height: 32px;
   max-width: 100%;
   min-width: 0;
-  color: var(--color-primary);
+  color: var(--color-link);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
   border-radius: var(--radius-sm);
 }
 
@@ -1092,7 +1845,6 @@ a.card-solid:focus-visible {
 
 .contact-link svg {
   flex-shrink: 0;
-  opacity: 0.85;
 }
 
 .contact-link span {
@@ -1101,78 +1853,58 @@ a.card-solid:focus-visible {
 }
 
 .contact-value {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text-secondary);
   overflow-wrap: anywhere;
   max-width: 100%;
 }
 
-/* Variante para usar sobre fondos oscuros/imágenes (ej. banner de portada
-   de cuartel) donde --color-primary no tiene contraste suficiente. */
+/* Sobre fotos (portada de cuartel), donde el color de link no contrasta. */
 .contact-link--inverted {
-  color: #fff;
-}
-
-.contact-link--inverted svg {
-  opacity: 1;
+  color: var(--color-on-overlay);
 }
 
 .contact-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
   max-width: 100%;
 }
 
 .avatar {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-full);
   object-fit: cover;
-  background: var(--color-border);
+  background: var(--color-surface-pressed);
+  flex-shrink: 0;
+}
+
+.avatar-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
 }
 
 .offline-banner {
   flex-shrink: 0;
-  background: var(--color-secondary);
-  color: #fff;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border-bottom: 1px solid var(--color-warning-border);
   text-align: center;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   padding: 6px 12px;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 32px 16px;
-  color: var(--color-text-muted);
-  font-size: 13px;
-}
+/* ============================================================
+   Novedades del sistema (AppUpdateBanner)
+   ============================================================ */
 
-.spinner {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* ---------- Novedades del sistema (AppUpdateBanner) ---------- */
-
-/* z-index por encima de todo lo demás en el sistema (ver escala junto a
-   .app-sidebar más arriba: mapa 0-10, header 100, drawer 9000-9010,
-   modales 10000) — es un modal real, tiene que ganarle a cualquier
-   elemento con posición fija de cualquier pantalla, drawer mobile
-   incluido. No bloquea scroll del body a propósito (ver AppUpdateBanner.tsx:
-   "no debe bloquear el uso del sistema" es un requisito explícito, aunque
-   visualmente se vea como un modal centrado). */
+/* Por encima de todo (es un modal real), sin bloquear el uso del sistema. */
 .app-update-overlay {
   position: fixed;
   inset: 0;
@@ -1189,13 +1921,14 @@ a.card-solid:focus-visible {
   width: 100%;
   max-width: 420px;
   margin-bottom: 16px;
-  animation: app-update-in 0.25s ease;
+  box-shadow: var(--shadow-lg);
+  animation: app-update-in 0.2s ease;
 }
 
 @keyframes app-update-in {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -1205,7 +1938,6 @@ a.card-solid:focus-visible {
 
 @media (min-width: 900px) {
   .app-update-overlay {
-    align-items: flex-end;
     justify-content: flex-end;
     padding: 24px;
   }
@@ -1225,9 +1957,9 @@ a.card-solid:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
   color: var(--color-text-secondary);
@@ -1235,25 +1967,30 @@ a.card-solid:focus-visible {
 }
 
 .app-update-close:hover {
-  background: var(--color-bg-card-soft);
+  background: var(--color-surface-hover);
+}
+
+.app-update-close:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
 }
 
 .app-update-title {
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 2px;
 }
 
 .app-update-date {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--color-text-muted);
   margin: 0 0 10px;
   text-transform: capitalize;
 }
 
 .app-update-description {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text-secondary);
   margin: 0 0 12px;
 }
@@ -1261,7 +1998,7 @@ a.card-solid:focus-visible {
 .app-update-changes {
   margin: 0 0 16px;
   padding-left: 18px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--color-text-primary);
   display: flex;
   flex-direction: column;
@@ -1272,11 +2009,8 @@ a.card-solid:focus-visible {
   display: flex;
 }
 
-/* Banner fino, no bloqueante, para avisar que hay una versión nueva del
-   service worker esperando (ver SwUpdateBanner.tsx) — a diferencia de
-   .app-update-overlay (anuncio de feature, modal centrado abajo), este es
-   una barra angosta arriba de todo, con menor prioridad visual pero
-   siempre visible mientras no se descarte o se aplique la actualización. */
+/* Barra fina, no bloqueante: hay una versión nueva del service worker
+   esperando (ver SwUpdateBanner.tsx). */
 .sw-update-banner {
   position: fixed;
   top: 0;
@@ -1287,9 +2021,9 @@ a.card-solid:focus-visible {
   align-items: center;
   gap: 10px;
   padding: 8px 16px;
-  background: var(--color-primary-dark);
-  color: #fff;
-  font-size: 12px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 13px;
 }
 
 .sw-update-banner-text {
@@ -1301,33 +2035,161 @@ a.card-solid:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-full);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
   border: none;
   background: transparent;
-  color: #fff;
+  color: var(--color-on-primary);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .sw-update-banner-dismiss:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--color-primary-hover);
 }
 
-/* ---------- Mapa Regional (Leaflet) ----------
-   Leaflet crea panes/controles con z-index propios (200-1000, ver
-   leaflet.css) pensados para ocupar toda la pantalla; el drawer mobile
-   tiene que ganarles siempre. Acá el mapa vive dentro de un .card acotado
-   (no pantalla completa), así que se topean con !important: sin esto,
-   leaflet.css (importado en MapaRegionalPage.tsx, un chunk que Vite puede
-   cargar/aplicar después de este archivo global) define z-index en
-   selectores de la MISMA especificidad (una sola clase cada uno --
-   .leaflet-marker-pane, .leaflet-popup-pane, .leaflet-control, etc.), y en
-   un empate de especificidad gana el que se aplica último, no importa cuál
-   "debería" ganar por intención. !important saca a este bloque de esa
-   pelea de raíz -- es la única forma de garantizar el orden sin depender
-   de en qué chunk terminó cada regla. */
+/* ============================================================
+   Escuela, Avales y Roles
+   ============================================================ */
+
+.role-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.role-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.role-group-title {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.role-group-description {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.role-group-options {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+
+.role-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 0;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.role-option:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.role-option:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.role-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.role-option--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.role-option--selected:hover:not(:disabled) {
+  background: var(--color-primary-soft);
+}
+
+.role-option-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-input-border);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-on-primary);
+}
+
+.role-option--selected .role-option-check {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.role-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.role-option-label {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.role-option-description {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.role-option-scope {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.role-card {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.role-permissions {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   Mapa Regional (Leaflet)
+   ============================================================
+   Leaflet define z-index propios (200-1000) pensados para pantalla
+   completa; acá el mapa vive dentro de un panel acotado y el drawer
+   mobile tiene que ganarle siempre. !important saca este bloque de la
+   pelea de orden de carga con leaflet.css (misma especificidad). */
 .leaflet-pane,
 .leaflet-tile-pane,
 .leaflet-overlay-pane,
@@ -1349,25 +2211,19 @@ a.card-solid:focus-visible {
 }
 
 @media (max-width: 899px) {
-  /* Cinturón de seguridad además del portal del drawer (ver Sidebar.tsx/
-     AppShell.tsx): con el drawer abierto, el mapa completo se apaga
-     visual y funcionalmente -- no solo pointer-events (que no alcanzaba
-     por sí solo en producción: no evita que el pane siga pintándose por
-     encima si algún ancestro genera un stacking context inesperado).
-     visibility:hidden saca el mapa del árbol de render visual sin
-     desmontarlo (no pierde estado/posición) y además corta cualquier
-     interacción, sin depender de que pointer-events alcance en todos los
-     navegadores. body.drawer-open lo setea AppShell.tsx al abrir/cerrar
-     el drawer. */
+  /* Con el drawer abierto el mapa se apaga visual y funcionalmente
+     (body.drawer-open lo setea AppShell.tsx). */
   body.drawer-open .leaflet-container {
     visibility: hidden !important;
     pointer-events: none !important;
   }
 }
 
-/* Nombres/descripciones cargados por el usuario (cuarteles y puntos de
-   referencia) no tienen límite de longitud en el form -- sin esto, una
-   palabra larga sin espacios puede desbordar el popup en vez de cortarse. */
+.leaflet-container {
+  font-family: var(--font-sans);
+  border-radius: var(--radius-lg);
+}
+
 .leaflet-popup-content {
   overflow-wrap: anywhere;
 }
@@ -1376,158 +2232,4 @@ a.card-solid:focus-visible {
 .map-reference-marker {
   background: transparent;
   border: none;
-}
-
-/* ---------- Sub-navegación de módulo (Escuela: Cursos / Avales) ---------- */
-.module-tabs {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.module-tabs .btn {
-  padding: 6px 14px;
-  font-size: 13px;
-}
-
-/* ---------- Chips de filtro (departamentos de Avales) ---------- */
-.filter-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.filter-chips .btn {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-/* ---------- Roles agrupados por tipo/nivel ----------
-   Usado en Nuevo usuario, Detalle de usuario, Ajustes y la guía /roles:
-   cada grupo (Informática, Escuela, Departamento interno, Región, Cuartel,
-   Otros) con sus roles como opciones con descripción y alcance. */
-.role-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.role-group-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 8px;
-}
-
-.role-group-title {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--color-text-secondary);
-}
-
-.role-group-description {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-
-.role-group-options {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-}
-
-.role-option {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  text-align: left;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-card);
-  color: var(--color-text-primary);
-  font-family: inherit;
-  cursor: pointer;
-  min-width: 0;
-}
-
-.role-option:hover:not(:disabled) {
-  border-color: var(--color-primary);
-}
-
-.role-option:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.role-option:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.role-option--selected {
-  border-color: var(--color-primary);
-  background: var(--color-bg-card-soft);
-}
-
-.role-option-check {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  border-radius: 5px;
-  border: 1.5px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-on-primary);
-}
-
-.role-option--selected .role-option-check {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.role-option-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.role-option-label {
-  font-size: 13px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.role-option-description {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: 1.35;
-}
-
-.role-option-scope {
-  font-size: 11px;
-  color: var(--color-text-muted);
-}
-
-.role-card {
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-card);
-  min-width: 0;
-}
-
-.role-permissions {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  line-height: 1.45;
 }

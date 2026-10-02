@@ -21,7 +21,7 @@ export function SwUpdateBanner() {
     <div className="sw-update-banner" role="status">
       <Icon name="magic" size={16} />
       <span className="sw-update-banner-text">Hay una actualización de SIGER4 disponible.</span>
-      <button type="button" className="btn btn-primary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => applySwUpdate()}>
+      <button type="button" className="btn btn-primary btn-sm" onClick={() => applySwUpdate()}>
         Actualizar ahora
       </button>
       <button type="button" className="sw-update-banner-dismiss" aria-label="Cerrar" onClick={() => setVisible(false)}>

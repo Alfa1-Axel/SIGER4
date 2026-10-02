@@ -31,32 +31,19 @@ export function NotificationDetailModal({ notification, typeLabel, scopeLabel, o
       aria-modal="true"
       aria-label={notification.title}
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10000,
-        padding: 24,
-      }}
+      className="modal-overlay"
     >
-      <div
-        className="card-solid"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 480, width: '100%', maxHeight: '85vh', overflowY: 'auto' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
-          <h2 style={{ margin: 0, fontSize: 16, lineHeight: 1.35 }}>{notification.title}</h2>
-          <button type="button" className="btn btn-icon btn-outlined" style={{ padding: 4, flexShrink: 0 }} onClick={onClose} aria-label="Cerrar">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header" style={{ marginBottom: 12 }}>
+          <h2 className="modal-title">{notification.title}</h2>
+          <button type="button" className="btn btn-icon btn-sm btn-ghost" onClick={onClose} aria-label="Cerrar">
             <Icon name="close" size={16} />
           </button>
         </div>
 
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
           <span className="badge badge-info">{typeLabel}</span>
-          <span className={`badge ${notification.is_read ? 'badge-info' : 'badge-warning'}`}>
+          <span className={`badge ${notification.is_read ? '' : 'badge-warning'}`}>
             {notification.is_read ? 'Leída' : 'No leída'}
           </span>
         </div>
@@ -65,7 +52,7 @@ export function NotificationDetailModal({ notification, typeLabel, scopeLabel, o
           <p style={{ fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: 12 }}>{notification.body}</p>
         )}
 
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span>{new Date(notification.created_at).toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })}</span>
           {scopeLabel && <span>Alcance: {scopeLabel}</span>}
         </div>

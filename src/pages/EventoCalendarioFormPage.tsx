@@ -203,7 +203,7 @@ export function EventoCalendarioFormPage() {
       <p className="page-subtitle">Cargá un evento institucional, de cuartel, de Escuela o un vencimiento.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del evento…</div>
+        <div className="loading-state" role="status">Cargando datos del evento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -259,8 +259,8 @@ export function EventoCalendarioFormPage() {
                         key={option}
                         type="button"
                         onClick={() => setScopeTarget(option)}
-                        className={`btn ${scopeTarget === option ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '6px 12px', fontSize: 12 }}
+                        className="chip"
+                        aria-pressed={scopeTarget === option}
                       >
                         {option === 'region' ? 'Regional' : option === 'subsede' ? 'Subsede' : 'Cuartel'}
                       </button>

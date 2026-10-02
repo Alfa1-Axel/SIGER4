@@ -146,7 +146,7 @@ export function InventarioFormPage() {
       <p className="page-subtitle">Inventario regional compartido entre cuarteles.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos…</div>
+        <div className="loading-state" role="status">Cargando datos…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -241,8 +241,8 @@ export function InventarioFormPage() {
                   key={value}
                   type="button"
                   onClick={() => setStatus(value as InventoryStatus)}
-                  className={`btn ${status === value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
+                  className="chip"
+                  aria-pressed={status === value}
                 >
                   {label}
                 </button>

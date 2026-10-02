@@ -139,7 +139,7 @@ export function InformeDepartamentoFormPage() {
   if (loading) {
     return (
       <AppShell title="Informe de actividad">
-        <div className="empty-state">Cargando…</div>
+        <div className="loading-state" role="status">Cargando…</div>
       </AppShell>
     )
   }
@@ -191,8 +191,8 @@ export function InformeDepartamentoFormPage() {
                 key={value}
                 type="button"
                 onClick={() => setActivityType(value)}
-                className={`btn ${activityType === value ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '6px 14px', fontSize: 13 }}
+                className="chip"
+                aria-pressed={activityType === value}
               >
                 {label}
               </button>

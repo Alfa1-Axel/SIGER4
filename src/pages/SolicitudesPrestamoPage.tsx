@@ -87,9 +87,7 @@ export function SolicitudesPrestamoPage() {
       <p className="page-subtitle">Préstamos del Inventario Regional: pendientes, aprobadas, retiradas y devueltas.</p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -111,7 +109,7 @@ export function SolicitudesPrestamoPage() {
         </select>
       </div>
 
-      {loading && <div className="empty-state">Cargando solicitudes…</div>}
+      {loading && <div className="loading-state" role="status">Cargando solicitudes…</div>}
       {!loading && filtered.length === 0 && <div className="empty-state">No hay solicitudes que coincidan.</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

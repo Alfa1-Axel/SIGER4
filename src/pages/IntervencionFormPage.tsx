@@ -128,7 +128,7 @@ export function IntervencionFormPage() {
       <p className="page-subtitle">Resumen de intervenciones del cuartel para un período determinado.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del resumen…</div>
+        <div className="loading-state" role="status">Cargando datos del resumen…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -161,8 +161,8 @@ export function IntervencionFormPage() {
                   key={option.value}
                   type="button"
                   onClick={() => setTimeOfDay((current) => (current === option.value ? '' : option.value))}
-                  className={`btn ${timeOfDay === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
+                  className="chip"
+                  aria-pressed={timeOfDay === option.value}
                 >
                   {option.label}
                 </button>

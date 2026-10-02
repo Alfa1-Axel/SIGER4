@@ -30,7 +30,7 @@ export function Lightbox({ src, alt, onClose }: LightboxProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(15, 23, 42, 0.88)',
+        background: 'var(--color-overlay-strong)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -42,7 +42,7 @@ export function Lightbox({ src, alt, onClose }: LightboxProps) {
         type="button"
         onClick={onClose}
         aria-label="Cerrar"
-        className="btn btn-icon btn-inverted"
+        className="btn btn-icon btn-outlined"
         style={{ position: 'fixed', top: 16, right: 16, zIndex: 101 }}
       >
         <Icon name="close" size={18} />
@@ -55,8 +55,8 @@ export function Lightbox({ src, alt, onClose }: LightboxProps) {
           maxWidth: '100%',
           maxHeight: '100%',
           objectFit: 'contain',
-          borderRadius: 8,
-          boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
         }}
       />
     </div>,

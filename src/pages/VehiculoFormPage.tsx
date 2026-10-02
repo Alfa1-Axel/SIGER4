@@ -183,7 +183,7 @@ export function VehiculoFormPage() {
       )}
 
       {loading ? (
-        <div className="empty-state">Cargando datos del vehículo…</div>
+        <div className="loading-state" role="status">Cargando datos del vehículo…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -273,8 +273,8 @@ export function VehiculoFormPage() {
                     key={option.value}
                     type="button"
                     onClick={() => setStatus(option.value)}
-                    className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 14px', fontSize: 13 }}
+                    className="chip"
+                    aria-pressed={status === option.value}
                   >
                     {option.label}
                   </button>

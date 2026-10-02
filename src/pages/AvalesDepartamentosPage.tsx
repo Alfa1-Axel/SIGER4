@@ -203,7 +203,7 @@ export function AvalesDepartamentosPage() {
   return (
     <AppShell title="Departamentos internos">
       <EscuelaTabs />
-      <Link to="/escuela/avales" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/escuela/avales" className="back-link">
         ← Volver a Avales
       </Link>
       <h1 className="page-title">Departamentos internos de Escuela</h1>
@@ -218,9 +218,7 @@ export function AvalesDepartamentosPage() {
         </div>
       )}
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div className="section-header">
@@ -230,7 +228,7 @@ export function AvalesDepartamentosPage() {
         <div className="field">
           <label htmlFor="newName">Nombre</label>
           <input id="newName" maxLength={80} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Rescate" />
-          {newSlug && <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Identificador: {newSlug} (no se puede cambiar después)</span>}
+          {newSlug && <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>Identificador: {newSlug} (no se puede cambiar después)</span>}
         </div>
         <div className="field">
           <label htmlFor="newDescription">Descripción (opcional)</label>
@@ -245,7 +243,7 @@ export function AvalesDepartamentosPage() {
         <h2 className="section-title">Departamentos y coordinadores</h2>
       </div>
 
-      {loading && <div className="empty-state">Cargando departamentos…</div>}
+      {loading && <div className="loading-state" role="status">Cargando departamentos…</div>}
       {!loading && loadError && (
         <div className="empty-state">
           <p className="field-error" style={{ marginBottom: 12 }}>
@@ -302,19 +300,18 @@ export function AvalesDepartamentosPage() {
                           {department.is_active ? 'Activo' : 'Inactivo'}
                         </span>
                       </h3>
-                      <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>Identificador: {department.slug}</div>
+                      <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 2 }}>Identificador: {department.slug}</div>
                       {department.description && (
                         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '6px 0 0' }}>{department.description}</p>
                       )}
                     </div>
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button type="button" className="btn btn-outlined" style={{ padding: '6px 10px' }} onClick={() => startEditing(department)} aria-label="Editar departamento">
+                      <button type="button" className="btn btn-outlined btn-sm" onClick={() => startEditing(department)} aria-label="Editar departamento">
                         <Icon name="edit" size={14} />
                       </button>
                       <button
                         type="button"
-                        className="btn btn-outlined"
-                        style={{ padding: '6px 10px', fontSize: 12 }}
+                        className="btn btn-outlined btn-sm"
                         disabled={isSaving}
                         onClick={() => handleToggleActive(department)}
                       >
@@ -353,8 +350,7 @@ export function AvalesDepartamentosPage() {
                           {missingRole && profile?.is_active && (
                             <button
                               type="button"
-                              className="btn btn-outlined"
-                              style={{ padding: '4px 10px', fontSize: 12 }}
+                              className="btn btn-outlined btn-sm"
                               disabled={isSaving}
                               onClick={() => handleAssign(department, member.profile_id)}
                             >
@@ -363,8 +359,7 @@ export function AvalesDepartamentosPage() {
                           )}
                           <button
                             type="button"
-                            className="btn btn-outlined"
-                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            className="btn btn-outlined btn-sm"
                             disabled={isSaving}
                             onClick={() => handleRemove(department, member)}
                           >
@@ -395,7 +390,7 @@ export function AvalesDepartamentosPage() {
                       {isSaving ? 'Guardando…' : 'Asignar'}
                     </button>
                   </div>
-                  <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '6px 0 0' }}>
                     Al asignar, el usuario recibe también el rol "Coordinador de departamento interno". Al quitarlo de su último
                     departamento, el rol se le quita.
                   </p>

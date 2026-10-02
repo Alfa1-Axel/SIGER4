@@ -419,7 +419,7 @@ export function AjustesPage() {
     <AppShell title="Mi Perfil">
       <h1 className="page-title">Mi Perfil</h1>
       <p className="page-subtitle">Tus datos personales, rol y alcance dentro del sistema.</p>
-      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
+      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
         SIGER4 v{__SIGER4_APP_VERSION__}
       </p>
 
@@ -428,7 +428,7 @@ export function AjustesPage() {
           {profile?.avatar_url ? (
             <img src={profile.avatar_url} alt={profile.full_name} className="avatar" style={{ width: 48, height: 48 }} />
           ) : (
-            <div className="btn btn-icon btn-inverted" style={{ width: 48, height: 48 }}>
+            <div className="avatar avatar-placeholder" style={{ width: 48, height: 48 }}>
               <Icon name="user" size={22} />
             </div>
           )}
@@ -488,7 +488,7 @@ export function AjustesPage() {
         </div>
 
         <ImagePicker label="Foto de perfil (opcional)" currentUrl={profile?.avatar_url} onFileSelected={setAvatarFile} />
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
           La imagen se recorta automáticamente en formato cuadrado, centrada. Para mejores resultados, usá una foto
           donde tu rostro esté centrado.
         </p>
@@ -628,7 +628,7 @@ export function AjustesPage() {
           {testingNotification ? 'Probando…' : isAdmin ? 'Probar push server-side' : 'Probar mi notificación'}
         </button>
         {isAdmin && (
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Crea una notificación real y espera a que el dispatcher server-side (no el navegador) confirme el envío del push —
             prueba lo mismo que recibirías con la app cerrada.
           </p>
@@ -683,7 +683,7 @@ export function AjustesPage() {
           </p>
         )}
         {testNotificationResult === 'ok' && push.status === 'ready' && !push.subscribed && (
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             Notificaciones push desactivadas en este dispositivo: no vas a recibir el push aunque el servidor lo envíe.
           </p>
         )}
@@ -696,7 +696,7 @@ export function AjustesPage() {
             para distinguir "el backend envió" de "la PWA recibió": el
             backend nunca puede saber esto por sí solo. */}
         {push.status === 'ready' && localPushDiagnosticLoaded && (
-          <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: 'var(--color-surface-muted, rgba(0,0,0,0.03))' }}>
+          <div style={{ marginTop: 12, padding: 10, borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-subtle)' }}>
             <p style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Último push recibido en este dispositivo</p>
             {!localPushDiagnostic && (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
@@ -724,7 +724,7 @@ export function AjustesPage() {
                 {testPushResult?.attempted &&
                   testPushResult.notificationId &&
                   localPushDiagnostic.notification_id === testPushResult.notificationId && (
-                    <div style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: 12 }}>
                       {/* Solo se muestra cuando el push local registrado ES el de esta
                           prueba (mismo notification_id) -- evita comparar contra un push
                           viejo que no tiene nada que ver con la prueba recién hecha. */}
@@ -737,7 +737,7 @@ export function AjustesPage() {
                   testPushResult.ok &&
                   testPushResult.sent > 0 &&
                   localPushDiagnostic.notification_id !== testPushResult.notificationId && (
-                    <div style={{ color: 'var(--color-danger)', fontSize: 11 }}>
+                    <div style={{ color: 'var(--color-danger)', fontSize: 12 }}>
                       El servidor confirmó el envío de esta prueba, pero el service worker de este dispositivo todavía no
                       registró haberla recibido. Probá "Actualizar" en unos segundos, o esto puede indicar que el push no
                       llegó al navegador.
@@ -748,7 +748,7 @@ export function AjustesPage() {
             <button
               type="button"
               className="btn btn-outlined"
-              style={{ fontSize: 11, padding: '4px 10px', marginTop: 8 }}
+              style={{ fontSize: 12, padding: '4px 10px', marginTop: 8 }}
               onClick={() => void loadLocalPushDiagnostic()}
             >
               Actualizar
@@ -787,7 +787,7 @@ export function AjustesPage() {
                     {pushDiagnosticsRows.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {pushDiagnosticsRows.map((row) => (
-                          <div key={row.notification_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
+                          <div key={row.notification_id} style={{ fontSize: 12, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
                             <div style={{ fontWeight: 600 }}>
                               {row.notification_title}{' '}
                               <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: 10 }}>
@@ -819,7 +819,7 @@ export function AjustesPage() {
                       Suscripciones de todos los usuarios ({pushSubscriptionsAdmin.length})
                     </p>
                     {pushSubscriptionCountsByProfile.length > 0 && (
-                      <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginBottom: 8 }}>
+                      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 8 }}>
                         Por usuario: {pushSubscriptionCountsByProfile.map((c) => `${c.profile_full_name} (${c.subscription_count})`).join(', ')}
                       </p>
                     )}
@@ -829,7 +829,7 @@ export function AjustesPage() {
                     {pushSubscriptionsAdmin.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                         {pushSubscriptionsAdmin.map((row) => (
-                          <div key={row.subscription_id} style={{ fontSize: 11, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
+                          <div key={row.subscription_id} style={{ fontSize: 12, borderBottom: '1px solid var(--color-border)', paddingBottom: 6 }}>
                             <div style={{ fontWeight: 600 }}>{row.profile_full_name}</div>
                             <div style={{ color: 'var(--color-text-muted)' }}>
                               {row.endpoint_short} · {row.user_agent ?? 'sin user agent'}
@@ -852,7 +852,7 @@ export function AjustesPage() {
                         <p style={{ fontSize: 12, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>
                           Infraestructura del dispatcher
                         </p>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
                           <div>
                             project_url:{' '}
                             <strong style={{ color: pushInfraDiagnostics.project_url_configured ? 'var(--color-success)' : 'var(--color-danger)' }}>
@@ -922,14 +922,13 @@ export function AjustesPage() {
                           <div style={{ marginTop: 8 }}>
                             <button
                               type="button"
-                              className="btn btn-outlined"
-                              style={{ fontSize: 12, padding: '6px 12px' }}
+                              className="btn btn-outlined btn-sm"
                               onClick={handleRunAuthTest}
                               disabled={runningAuthTest}
                             >
                               {runningAuthTest ? 'Probando…' : 'Probar autorización'}
                             </button>
-                            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
                               Llama a send-push-system con un ID inexistente (nunca manda un push real) para confirmar
                               en el momento si el secreto está sincronizado, sin esperar a la próxima notificación.
                             </p>
@@ -1031,7 +1030,7 @@ export function AjustesPage() {
               {clearingCache ? 'Limpiando…' : 'Actualizar app / limpiar caché'}
             </button>
             {clearCacheError && <p className="field-error" style={{ marginTop: 8 }}>{clearCacheError}</p>}
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 8 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 8 }}>
               Si esto no alcanza, cerrá la PWA por completo (deslizarla fuera de la lista de apps
               recientes en Android, no solo minimizarla) y volvé a abrirla.
             </p>
@@ -1046,10 +1045,10 @@ export function AjustesPage() {
           Institucional
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-          <img src="/logos/logo-escuela.png" alt="SIGER4" style={{ height: 40, borderRadius: 8 }} />
-          <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 8 }} />
+          <img src="/logos/logo-escuela.png" alt="SIGER4" style={{ height: 40, borderRadius: 'var(--radius-lg)' }} />
+          <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" style={{ height: 40, borderRadius: 'var(--radius-lg)' }} />
         </div>
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
           La carga de documentos (Documentos → Cargar archivo) está disponible solo desde PC. Desde el
           celular podés ver y descargar documentos normalmente.
         </p>

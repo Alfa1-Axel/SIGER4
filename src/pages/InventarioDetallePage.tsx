@@ -66,7 +66,7 @@ export function InventarioDetallePage() {
   if (loading) {
     return (
       <AppShell title="Elemento">
-        <div className="empty-state">Cargando elemento…</div>
+        <div className="loading-state" role="status">Cargando elemento…</div>
       </AppShell>
     )
   }
@@ -83,14 +83,12 @@ export function InventarioDetallePage() {
 
   return (
     <AppShell title="Inventario Regional">
-      <Link to="/inventario" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/inventario" className="back-link">
         ← Volver a Inventario
       </Link>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
@@ -136,12 +134,12 @@ export function InventarioDetallePage() {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
         {canRequestThisItem && (
-          <Link to={`/inventario/${item.id}/solicitudes/nueva`} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 13 }}>
+          <Link to={`/inventario/${item.id}/solicitudes/nueva`} className="btn btn-primary btn-sm">
             Solicitar
           </Link>
         )}
         {canEdit && (
-          <Link to={`/inventario/${item.id}/editar`} className="btn btn-outlined" style={{ padding: '8px 16px', fontSize: 13 }}>
+          <Link to={`/inventario/${item.id}/editar`} className="btn btn-outlined btn-sm">
             <Icon name="edit" size={14} />
             Editar
           </Link>

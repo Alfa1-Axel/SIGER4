@@ -101,7 +101,7 @@ export function EventoCalendarioDetallePage() {
   if (loading) {
     return (
       <AppShell title="Evento">
-        <div className="empty-state">Cargando evento…</div>
+        <div className="loading-state" role="status">Cargando evento…</div>
       </AppShell>
     )
   }
@@ -116,7 +116,7 @@ export function EventoCalendarioDetallePage() {
 
   return (
     <AppShell title="Evento">
-      <Link to="/calendario" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/calendario" className="back-link">
         ← Volver a Calendario
       </Link>
 
@@ -131,9 +131,7 @@ export function EventoCalendarioDetallePage() {
       </p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
@@ -163,16 +161,16 @@ export function EventoCalendarioDetallePage() {
 
       {canManage && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Link to={`/calendario/${event.id}/editar`} className="btn btn-outlined" style={{ padding: '8px 16px', fontSize: 13 }}>
+          <Link to={`/calendario/${event.id}/editar`} className="btn btn-outlined btn-sm">
             <Icon name="edit" size={14} />
             Editar
           </Link>
           {event.status === 'programado' && (
-            <button type="button" className="btn btn-outlined" style={{ padding: '8px 16px', fontSize: 13 }} disabled={updating} onClick={handleCancel}>
+            <button type="button" className="btn btn-outlined btn-sm" disabled={updating} onClick={handleCancel}>
               Cancelar evento
             </button>
           )}
-          <button type="button" className="btn btn-outlined" style={{ padding: '8px 16px', fontSize: 13 }} onClick={handleDelete}>
+          <button type="button" className="btn btn-danger-outline btn-sm" onClick={handleDelete}>
             <Icon name="trash" size={14} />
             Eliminar
           </button>

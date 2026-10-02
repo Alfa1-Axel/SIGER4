@@ -33,26 +33,17 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
 
   return (
     <header className="app-header">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button
-          type="button"
-          className="btn btn-icon btn-outlined hamburger-button"
-          aria-label="Abrir menú"
-          onClick={onOpenMenu}
-        >
+      <div className="app-header-lead">
+        <button type="button" className="btn btn-icon btn-ghost hamburger-button" aria-label="Abrir menú" onClick={onOpenMenu}>
           <Icon name="menu" size={18} />
         </button>
-        <img
-          src="/logos/logo-informatica.png"
-          alt="Dpto. Informática y Estadística R4"
-          style={{ height: 24, width: 24, borderRadius: 6, objectFit: 'cover' }}
-        />
-        <strong style={{ fontSize: 14 }}>{title}</strong>
+        <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" className="app-header-logo" />
+        <span className="app-header-title">{title}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div className="app-header-actions">
         <button
           type="button"
-          className="btn btn-icon btn-outlined"
+          className="btn btn-icon btn-ghost"
           aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           title={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           onClick={toggleTheme}
@@ -61,41 +52,21 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         </button>
         <button
           type="button"
-          className="btn btn-icon btn-outlined"
-          aria-label="Notificaciones"
+          className="btn btn-icon btn-ghost"
+          aria-label={unreadCount > 0 ? `Notificaciones (${unreadCount} sin leer)` : 'Notificaciones'}
+          title="Notificaciones"
           onClick={() => navigate('/notificaciones')}
           style={{ position: 'relative' }}
         >
           <Icon name="bell" size={18} />
-          {unreadCount > 0 && (
-            <span
-              style={{
-                position: 'absolute',
-                top: -2,
-                right: -2,
-                minWidth: 16,
-                height: 16,
-                borderRadius: '50%',
-                background: 'var(--color-primary)',
-                color: '#fff',
-                fontSize: 10,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0 3px',
-              }}
-            >
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
+          {unreadCount > 0 && <span className="header-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
         </button>
         {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt={profile.full_name} className="avatar" />
+          <img src={profile.avatar_url} alt={profile.full_name} className="avatar" style={{ marginLeft: 4 }} />
         ) : (
-          <div className="btn btn-icon btn-inverted" aria-label={profile?.full_name ?? 'Usuario'}>
+          <span className="avatar avatar-placeholder" style={{ marginLeft: 4 }} aria-label={profile?.full_name ?? 'Usuario'} role="img">
             <Icon name="user" size={16} />
-          </div>
+          </span>
         )}
       </div>
     </header>

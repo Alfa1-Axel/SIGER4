@@ -143,7 +143,7 @@ export function PersonalFormPage() {
       )}
 
       {loading ? (
-        <div className="empty-state">Cargando datos del personal…</div>
+        <div className="loading-state" role="status">Cargando datos del personal…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -209,8 +209,8 @@ export function PersonalFormPage() {
                     key={option.value}
                     type="button"
                     onClick={() => setStatus(option.value)}
-                    className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 14px', fontSize: 13 }}
+                    className="chip"
+                    aria-pressed={status === option.value}
                   >
                     {option.label}
                   </button>

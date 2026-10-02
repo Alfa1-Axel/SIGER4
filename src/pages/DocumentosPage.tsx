@@ -84,7 +84,7 @@ export function DocumentosPage() {
           <p className="page-subtitle">Documentación institucional organizada por carpetas: circulares, actas, manuales y más.</p>
         </div>
         {canManageFolders && (
-          <Link to="/documentos/papelera" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+          <Link to="/documentos/papelera" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
             <Icon name="trash" size={14} />
             Papelera
           </Link>
@@ -99,10 +99,10 @@ export function DocumentosPage() {
               interrumpida) — no son visibles para el resto de los usuarios.
             </span>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setShowPendingList((prev) => !prev)}>
+              <button type="button" className="btn btn-outlined btn-sm" onClick={() => setShowPendingList((prev) => !prev)}>
                 {showPendingList ? 'Ocultar' : 'Ver detalle'}
               </button>
-              <button type="button" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12 }} disabled={cleaningUp} onClick={handleCleanupPending}>
+              <button type="button" className="btn btn-outlined btn-sm" disabled={cleaningUp} onClick={handleCleanupPending}>
                 {cleaningUp ? 'Limpiando…' : 'Limpiar pendientes de +24hs'}
               </button>
             </div>
@@ -121,12 +121,10 @@ export function DocumentosPage() {
       )}
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando carpetas…</div>}
+      {loading && <div className="loading-state" role="status">Cargando carpetas…</div>}
 
       {!loading && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -163,19 +161,19 @@ export function DocumentosPage() {
       )}
 
       {canManageFolders && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24 }}>
+        <div className="fab-menu">
           {showAddMenu && (
-            <div className="card-solid" style={{ marginBottom: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <Link to="/documentos/carpetas/nueva" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
+            <div className="fab-menu-panel" role="menu">
+              <Link to="/documentos/carpetas/nueva" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
                 Crear carpeta
               </Link>
               {canUploadFiles ? (
-                <Link to="/documentos/nuevo" className="btn btn-outlined" style={{ justifyContent: 'flex-start' }} onClick={() => setShowAddMenu(false)}>
+                <Link to="/documentos/nuevo" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
                   Cargar archivo
                 </Link>
               ) : (
                 canManageFolders && isMobileUserAgent() && (
-                  <p style={{ fontSize: 11, color: 'var(--color-text-muted)', padding: '4px 8px', margin: 0, maxWidth: 220 }}>
+                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', padding: '4px 8px', margin: 0, maxWidth: 220 }}>
                     Cargar archivos está disponible solo desde PC.
                   </p>
                 )
@@ -185,8 +183,9 @@ export function DocumentosPage() {
           <button
             type="button"
             className="btn btn-primary btn-icon"
-            style={{ borderRadius: '50%', width: 56, height: 56 }}
+            style={{ borderRadius: 'var(--radius-full)', width: 52, height: 52, boxShadow: 'var(--shadow-md)' }}
             aria-label="Agregar"
+            aria-expanded={showAddMenu}
             onClick={() => setShowAddMenu((prev) => !prev)}
           >
             <Icon name="plus" size={20} />

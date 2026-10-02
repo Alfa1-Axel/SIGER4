@@ -257,7 +257,7 @@ export function ReportesPage() {
         {reportDef.needsDepartment ? (
           <div className="field">
             <label htmlFor="departmentFilter">
-              Departamento <span style={{ color: 'var(--color-primary)' }}>*</span>
+              Departamento <span style={{ color: 'var(--color-link)' }}>*</span>
             </label>
             <select id="departmentFilter" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">Seleccionar departamento</option>
@@ -268,7 +268,7 @@ export function ReportesPage() {
               ))}
             </select>
             {isDepartmentCoordinator && (
-              <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
                 Solo podés generar reportes de los departamentos que coordinás.
               </p>
             )}
@@ -318,7 +318,7 @@ export function ReportesPage() {
                     ))}
                   </select>
                   {isEscuelaRegional && (
-                    <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
                       Solo podés generar reportes de tu propia región.
                     </p>
                   )}
@@ -327,7 +327,7 @@ export function ReportesPage() {
             )}
             <div className="field" style={{ flex: 1, minWidth: 160 }}>
               <label htmlFor="stationFilter">
-                Cuartel {reportDef.needsStation && <span style={{ color: 'var(--color-primary)' }}>*</span>}
+                Cuartel {reportDef.needsStation && <span style={{ color: 'var(--color-link)' }}>*</span>}
               </label>
               <select id="stationFilter" value={stationId} onChange={(e) => setStationId(e.target.value)} disabled={isStationOnly}>
                 {!isStationOnly && <option value="">{reportDef.needsStation ? 'Seleccionar cuartel' : 'Todos'}</option>}
@@ -338,7 +338,7 @@ export function ReportesPage() {
                 ))}
               </select>
               {isStationOnly && (
-                <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
                   Solo podés generar reportes de tu propio cuartel.
                 </p>
               )}

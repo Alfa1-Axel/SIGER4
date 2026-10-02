@@ -126,7 +126,7 @@ export function EventoHistoricoFormPage() {
       </p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del evento…</div>
+        <div className="loading-state" role="status">Cargando datos del evento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">

@@ -271,7 +271,7 @@ export function UsuarioFormPage() {
             autoComplete="new-password"
           />
         </div>
-        <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+        <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
           El usuario deberá cambiar esta contraseña la primera vez que ingrese: no va a poder usar el
           resto del sistema hasta hacerlo.
         </p>
@@ -318,8 +318,8 @@ export function UsuarioFormPage() {
                     key={option.value}
                     type="button"
                     onClick={() => setScopeType(option.value)}
-                    className={`btn ${scopeType === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                    style={{ padding: '6px 12px', fontSize: 12 }}
+                    className="chip"
+                    aria-pressed={scopeType === option.value}
                   >
                     {option.label}
                   </button>

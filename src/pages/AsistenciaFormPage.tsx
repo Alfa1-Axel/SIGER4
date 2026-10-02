@@ -109,7 +109,7 @@ export function AsistenciaFormPage() {
       <p className="page-subtitle">Resumen de asistencia del cuartel para un período determinado.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del resumen…</div>
+        <div className="loading-state" role="status">Cargando datos del resumen…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">

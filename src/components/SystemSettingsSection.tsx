@@ -161,7 +161,7 @@ export function SystemSettingsSection() {
                 onChange={(e) => setProjectUrl(e.target.value)}
                 placeholder="https://tu-proyecto.supabase.co"
               />
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 8px' }}>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 8px' }}>
                 No es un dato secreto (viaja igual en cada request). Estado actual:{' '}
                 {settings.find((s) => s.key === 'project_url')?.configured ? 'configurado' : 'sin configurar'}.
               </p>
@@ -189,7 +189,7 @@ export function SystemSettingsSection() {
                 onChange={(e) => setCronSecretInput(e.target.value)}
                 placeholder={cronSecretRow?.configured ? 'Dejar en blanco para no cambiarlo — escribí uno nuevo para reemplazarlo' : 'Pegá acá el mismo valor que configuraste como CRON_SHARED_SECRET'}
               />
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '4px 0 8px' }}>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 8px' }}>
                 Nunca se muestra el valor guardado, ni siquiera acá — solo si está configurado o no.
                 Tiene que ser exactamente el mismo string que el secreto <code>CRON_SHARED_SECRET</code>{' '}
                 de la Edge Function <code>send-push-system</code> (<code>npx supabase secrets set

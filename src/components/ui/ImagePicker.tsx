@@ -55,7 +55,7 @@ export function ImagePicker({ label, currentUrl, onFileSelected, shape = 'circle
             <Icon name="user" size={Math.round(Math.min(width, height) * 0.4)} />
           )}
         </div>
-        <label className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, cursor: 'pointer' }}>
+        <label className="btn btn-outlined btn-sm">
           <Icon name="edit" size={14} />
           Cambiar imagen
           <input

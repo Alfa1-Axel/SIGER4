@@ -30,13 +30,13 @@ const DEFAULT_ZOOM = 8
 // Ícono propio en vez de los PNG por defecto de Leaflet (que requieren
 // configurar rutas de assets a mano con Vite y quedan rotos si no se hace) --
 // mismo mecanismo visual que el resto de los íconos de la app (SVG inline),
-// en el rojo institucional para que se lea como "pin de SIGER4", no como un
-// pin genérico de mapa.
+// en el rojo institucional (token --color-accent-fill) para que se lea como
+// "pin de SIGER4", no como un pin genérico de mapa.
 const stationDivIcon = L.divIcon({
   className: 'map-station-marker',
-  html: `<svg width="30" height="42" viewBox="0 0 24 24" fill="#D32F2F" stroke="#7f0000" stroke-width="0.5">
+  html: `<svg width="30" height="42" viewBox="0 0 24 24" style="fill: var(--color-accent-fill); stroke: var(--map-marker-outline)" stroke-width="0.5">
     <path d="M12 0C7 0 3 4 3 9c0 6.5 9 15 9 15s9-8.5 9-15c0-5-4-9-9-9Z"/>
-    <circle cx="12" cy="9" r="3.4" fill="#fff"/>
+    <circle cx="12" cy="9" r="3.4" style="fill: var(--color-on-accent)"/>
   </svg>`,
   iconSize: [30, 42],
   iconAnchor: [15, 42],
@@ -48,12 +48,12 @@ const stationDivIcon = L.divIcon({
 // por tipo en vez de agregar 6 íconos SVG nuevos -- v1 simple, sin inflar el
 // set de íconos de la app por una sola pantalla.
 const REFERENCE_TYPE_COLOR: Record<MapReferencePointType, string> = {
-  ruta: '#F59E0B',
-  parque_industrial: '#7C3AED',
-  rio: '#0EA5E9',
-  zona_riesgo: '#DC2626',
-  punto_estrategico: '#059669',
-  otro: '#6B7280',
+  ruta: 'var(--map-ref-ruta)',
+  parque_industrial: 'var(--map-ref-industrial)',
+  rio: 'var(--map-ref-rio)',
+  zona_riesgo: 'var(--map-ref-riesgo)',
+  punto_estrategico: 'var(--map-ref-estrategico)',
+  otro: 'var(--map-ref-otro)',
 }
 
 const REFERENCE_TYPE_LABEL: Record<MapReferencePointType, string> = {
@@ -71,7 +71,7 @@ function referenceDivIcon(type: MapReferencePointType) {
   const color = REFERENCE_TYPE_COLOR[type]
   return L.divIcon({
     className: 'map-reference-marker',
-    html: `<svg width="24" height="24" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" transform="rotate(45 12 12)" fill="${color}" stroke="#1c1917" stroke-width="1.2"/></svg>`,
+    html: `<svg width="24" height="24" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" transform="rotate(45 12 12)" style="fill: ${color}; stroke: var(--map-marker-outline)" stroke-width="1.2"/></svg>`,
     iconSize: [24, 24],
     iconAnchor: [12, 12],
     popupAnchor: [0, -12],
@@ -96,7 +96,7 @@ function StationPopupContent({ station }: { station: StationWithSubsede }) {
       </div>
       {station.address && <div style={{ fontSize: 12, marginBottom: 4 }}>{station.address}</div>}
       {station.map_notes && (
-        <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontStyle: 'italic', marginBottom: 6 }}>
+        <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontStyle: 'italic', marginBottom: 6 }}>
           {station.map_notes}
         </div>
       )}
@@ -147,10 +147,10 @@ function ReferencePopupContent({
       )}
       {canManage && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-          <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onEdit}>
+          <button type="button" className="btn btn-outlined btn-sm" onClick={onEdit}>
             Editar
           </button>
-          <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onToggleActive}>
+          <button type="button" className="btn btn-outlined btn-sm" onClick={onToggleActive}>
             {point.is_active ? 'Desactivar' : 'Reactivar'}
           </button>
           {/* Borrado físico: solo informatica_r4/integrante_informatica -- la
@@ -160,7 +160,7 @@ function ReferencePopupContent({
               error, simplemente no borra nada -- el punto reaparecería tras
               recargar sin ninguna explicación). */}
           {canDelete && (
-            <button type="button" className="btn btn-outlined" style={{ padding: '4px 8px', fontSize: 11 }} onClick={onDelete}>
+            <button type="button" className="btn btn-outlined btn-sm" onClick={onDelete}>
               Eliminar
             </button>
           )}
@@ -391,16 +391,14 @@ export function MapaRegionalPage() {
           </p>
         </div>
         {canManagePoints && (
-          <button type="button" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={openCreateForm}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={openCreateForm}>
             + Punto de referencia
           </button>
         )}
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       {!loading && (
@@ -431,7 +429,7 @@ export function MapaRegionalPage() {
         </div>
       )}
 
-      {loading && <div className="empty-state">Cargando mapa…</div>}
+      {loading && <div className="loading-state" role="status">Cargando mapa…</div>}
 
       {!loading && (
         <>
@@ -573,7 +571,7 @@ export function MapaRegionalPage() {
                     <option value="station">Un cuartel</option>
                   </select>
                   {!isAdmin && (
-                    <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+                    <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
                       Como secretario regional, solo podés cargar puntos dentro de tu propia región (podés acotarlos además a una subsede o cuartel puntual).
                     </p>
                   )}

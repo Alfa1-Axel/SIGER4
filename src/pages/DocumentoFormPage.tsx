@@ -248,7 +248,7 @@ export function DocumentoFormPage() {
       <p className="page-subtitle">Cargá documentación institucional para el alcance que corresponda.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del documento…</div>
+        <div className="loading-state" role="status">Cargando datos del documento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid" noValidate>
           <div className="field">
@@ -278,8 +278,8 @@ export function DocumentoFormPage() {
                       key={option.value}
                       type="button"
                       onClick={() => setScopeTarget(option.value)}
-                      className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                      style={{ padding: '6px 12px', fontSize: 12 }}
+                      className="chip"
+                      aria-pressed={scopeTarget === option.value}
                     >
                       {option.label}
                     </button>
@@ -342,7 +342,7 @@ export function DocumentoFormPage() {
               </p>
             )}
             {isEditing && !selectedFile && existingStoragePath && existingStoragePath !== 'pending' && (
-              <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+              <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
                 Ya tiene un archivo cargado. Elegí uno nuevo solo si querés reemplazarlo (el actual queda en el historial de
                 versiones).
               </p>

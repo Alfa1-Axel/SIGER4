@@ -90,7 +90,7 @@ export function SolicitudPrestamoFormPage() {
   return (
     <AppShell title="Solicitar préstamo">
       {item && (
-        <Link to={`/inventario/${item.id}`} className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+        <Link to={`/inventario/${item.id}`} className="back-link">
           ← Volver al elemento
         </Link>
       )}
@@ -98,7 +98,7 @@ export function SolicitudPrestamoFormPage() {
       <p className="page-subtitle">{item ? item.name : 'Inventario Regional'}</p>
 
       {loading ? (
-        <div className="empty-state">Cargando…</div>
+        <div className="loading-state" role="status">Cargando…</div>
       ) : !item ? (
         <div className="empty-state">No se encontró el elemento solicitado.</div>
       ) : item.status !== 'disponible' ? (

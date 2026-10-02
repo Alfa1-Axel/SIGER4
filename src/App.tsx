@@ -77,7 +77,7 @@ export default function App() {
           path="/mapa"
           element={
             <ProtectedRoute>
-              <Suspense fallback={<div className="empty-state">Cargando mapa…</div>}>
+              <Suspense fallback={<div className="loading-state" role="status">Cargando mapa…</div>}>
                 <MapaRegionalPage />
               </Suspense>
             </ProtectedRoute>

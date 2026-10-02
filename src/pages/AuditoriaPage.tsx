@@ -99,7 +99,7 @@ function TechnicalJson({ oldValue, newValue }: { oldValue: unknown; newValue: un
   const [open, setOpen] = useState(false)
   return (
     <div style={{ marginTop: 10 }}>
-      <button type="button" className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="btn btn-outlined btn-sm" onClick={() => setOpen((v) => !v)}>
         {open ? 'Ocultar datos técnicos' : 'Ver datos técnicos'}
       </button>
       {open && (
@@ -109,13 +109,14 @@ function TechnicalJson({ oldValue, newValue }: { oldValue: unknown; newValue: un
               flex: 1,
               minWidth: 200,
               margin: 0,
-              fontSize: 11,
+              fontSize: 12,
               padding: 8,
-              borderRadius: 6,
+              borderRadius: 'var(--radius-md)',
               overflowX: 'auto',
               maxHeight: 220,
-              background: 'rgba(211, 47, 47, 0.06)',
-              border: '1px solid rgba(211, 47, 47, 0.25)',
+              background: 'var(--color-danger-soft)',
+              border: '1px solid var(--color-danger-border)',
+              color: 'var(--color-text-primary)',
             }}
           >
             {oldValue ? JSON.stringify(oldValue, null, 2) : 'Sin datos'}
@@ -125,13 +126,14 @@ function TechnicalJson({ oldValue, newValue }: { oldValue: unknown; newValue: un
               flex: 1,
               minWidth: 200,
               margin: 0,
-              fontSize: 11,
+              fontSize: 12,
               padding: 8,
-              borderRadius: 6,
+              borderRadius: 'var(--radius-md)',
               overflowX: 'auto',
               maxHeight: 220,
-              background: 'rgba(34, 197, 94, 0.08)',
-              border: '1px solid rgba(34, 197, 94, 0.3)',
+              background: 'var(--color-success-soft)',
+              border: '1px solid var(--color-success-border)',
+              color: 'var(--color-text-primary)',
             }}
           >
             {newValue ? JSON.stringify(newValue, null, 2) : 'Sin datos'}
@@ -149,7 +151,7 @@ function AuditLogDetail({ log, lookup, showTechnical }: { log: AuditLogRow; look
   )
 
   return (
-    <div style={{ padding: '12px 16px', background: 'var(--color-bg-card-soft)', borderTop: '1px solid var(--color-border)' }}>
+    <div style={{ padding: '12px 16px', background: 'var(--color-surface-subtle)', borderTop: '1px solid var(--color-border)' }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 10, fontSize: 12, color: 'var(--color-text-secondary)' }}>
         <span>
           <strong>Regional:</strong> {log.region?.name ?? '—'}
@@ -173,22 +175,22 @@ function AuditLogDetail({ log, lookup, showTechnical }: { log: AuditLogRow; look
         </p>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
+          <table className="data-table" style={{ minWidth: 480, fontSize: 13 }}>
             <thead>
-              <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                <th style={{ padding: '6px 8px' }}>Campo</th>
-                <th style={{ padding: '6px 8px' }}>Antes</th>
-                <th style={{ padding: '6px 8px' }}>Después</th>
+              <tr>
+                <th>Campo</th>
+                <th>Antes</th>
+                <th>Después</th>
               </tr>
             </thead>
             <tbody>
               {diffs.map((diff) => (
-                <tr key={diff.field} style={{ borderTop: '1px solid var(--color-border)', fontSize: 12 }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{diff.label}</td>
-                  <td style={{ padding: '6px 8px', color: '#B91C1C', background: diff.changed ? 'rgba(211, 47, 47, 0.06)' : undefined }}>
+                <tr key={diff.field}>
+                  <td style={{ fontWeight: 600 }}>{diff.label}</td>
+                  <td style={{ color: diff.changed ? 'var(--color-danger)' : undefined, background: diff.changed ? 'var(--color-danger-soft)' : undefined }}>
                     {diff.before}
                   </td>
-                  <td style={{ padding: '6px 8px', color: '#15803D', background: diff.changed ? 'rgba(34, 197, 94, 0.08)' : undefined }}>
+                  <td style={{ color: diff.changed ? 'var(--color-success)' : undefined, background: diff.changed ? 'var(--color-success-soft)' : undefined }}>
                     {diff.after}
                   </td>
                 </tr>
@@ -568,53 +570,50 @@ export function AuditoriaPage() {
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       {myDepartmentIdsError && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{myDepartmentIdsError}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{myDepartmentIdsError}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando auditoría…</div>}
+      {loading && <div className="loading-state" role="status">Cargando auditoría…</div>}
       {!loading && visibleLogs.length === 0 && <div className="empty-state">No hay eventos de auditoría para estos filtros.</div>}
 
-      <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-        {visibleLogs.length > 0 && (
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+      {visibleLogs.length > 0 && (
+        <div className="table-wrap">
+          <table className="data-table" style={{ minWidth: 760 }}>
             <thead>
-              <tr style={{ textAlign: 'left', fontSize: 11, color: 'var(--color-text-muted)' }}>
-                <th style={{ padding: '10px 12px' }}>Fecha/hora</th>
-                <th style={{ padding: '10px 12px' }}>Evento</th>
-                <th style={{ padding: '10px 12px' }}>Acción</th>
-                <th style={{ padding: '10px 12px' }}>Módulo</th>
-                <th style={{ padding: '10px 12px' }}>Alcance</th>
-                <th style={{ padding: '10px 12px' }} />
+              <tr>
+                <th>Fecha/hora</th>
+                <th>Evento</th>
+                <th>Acción</th>
+                <th>Módulo</th>
+                <th>Alcance</th>
+                <th className="col-actions">
+                  <span className="sr-only">Acciones</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {visibleLogs.map((log) => (
                 <Fragment key={log.id}>
-                  <tr style={{ borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
-                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>{formatDateTime(log.created_at)}</td>
-                    <td style={{ padding: '10px 12px', maxWidth: 320, overflowWrap: 'anywhere' }}>
+                  <tr>
+                    <td className="col-nowrap">{formatDateTime(log.created_at)}</td>
+                    <td style={{ maxWidth: 360, overflowWrap: 'anywhere' }}>
                       {buildEventSummary(log.actor?.full_name ?? null, log.action, log.table_name, entityDisplayName(log))}
                     </td>
-                    <td style={{ padding: '10px 12px' }}>
+                    <td>
                       <span className={`badge ${actionBadgeClass(log.action)}`}>{translateAction(log.action)}</span>
                     </td>
-                    <td style={{ padding: '10px 12px' }}>{translateTable(log.table_name)}</td>
-                    <td style={{ padding: '10px 12px', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                    <td>{translateTable(log.table_name)}</td>
+                    <td className="text-secondary col-nowrap">
                       {log.station?.name ?? log.subsede?.name ?? log.region?.name ?? '—'}
                     </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <td className="col-actions">
                       <button
                         type="button"
-                        className="btn btn-outlined"
-                        style={{ padding: '4px 10px', fontSize: 12 }}
+                        className="btn btn-outlined btn-sm"
                         onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
                       >
                         {expandedId === log.id ? 'Ocultar' : 'Ver detalle'}
@@ -632,8 +631,8 @@ export function AuditoriaPage() {
               ))}
             </tbody>
           </table>
-        )}
-      </div>
+        </div>
+      )}
 
       {(page > 0 || hasMore) && (
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 16 }}>

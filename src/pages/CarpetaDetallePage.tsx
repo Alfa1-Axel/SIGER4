@@ -150,7 +150,7 @@ export function CarpetaDetallePage() {
   if (loading) {
     return (
       <AppShell title="Carpeta">
-        <div className="empty-state">Cargando carpeta…</div>
+        <div className="loading-state" role="status">Cargando carpeta…</div>
       </AppShell>
     )
   }
@@ -165,7 +165,7 @@ export function CarpetaDetallePage() {
 
   return (
     <AppShell title={folder?.name ?? 'General'}>
-      <Link to="/documentos" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/documentos" className="back-link">
         ← Volver a Documentos
       </Link>
 
@@ -196,10 +196,10 @@ export function CarpetaDetallePage() {
           </div>
           {canManageFolders && folder && (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-outlined" style={{ padding: '6px 10px' }} onClick={() => setEditingFolder(true)}>
+              <button type="button" className="btn btn-outlined btn-sm" onClick={() => setEditingFolder(true)}>
                 <Icon name="edit" size={14} />
               </button>
-              <button type="button" className="btn btn-outlined" style={{ padding: '6px 10px' }} onClick={handleDeleteFolder}>
+              <button type="button" className="btn btn-danger-outline btn-sm" onClick={handleDeleteFolder}>
                 <Icon name="trash" size={14} />
               </button>
             </div>
@@ -208,9 +208,7 @@ export function CarpetaDetallePage() {
       )}
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       {documents.length === 0 && <div className="empty-state">No hay documentos en esta carpeta todavía.</div>}
@@ -246,7 +244,7 @@ export function CarpetaDetallePage() {
                   )}
                   <button
                     type="button"
-                    className="btn btn-outlined btn-icon-sm"
+                    className="btn btn-danger-outline btn-icon-sm"
                     disabled={trashingId === doc.id}
                     onClick={() => handleTrash(doc)}
                     aria-label="Eliminar"
@@ -270,7 +268,7 @@ export function CarpetaDetallePage() {
         </Link>
       )}
       {canManageFolders && !canUploadFiles && isMobileUserAgent() && (
-        <p style={{ position: 'fixed', bottom: 24, right: 24, left: 24, textAlign: 'right', fontSize: 11, color: 'var(--color-text-muted)', margin: 0 }}>
+        <p className="field-help" style={{ marginTop: 16, textAlign: 'center' }}>
           Cargar archivos está disponible solo desde PC.
         </p>
       )}

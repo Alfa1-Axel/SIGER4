@@ -274,7 +274,7 @@ export function UsuarioDetallePage() {
   if (loading) {
     return (
       <AppShell title="Usuario">
-        <div className="empty-state">Cargando usuario…</div>
+        <div className="loading-state" role="status">Cargando usuario…</div>
       </AppShell>
     )
   }
@@ -320,7 +320,7 @@ export function UsuarioDetallePage() {
 
   return (
     <AppShell title="Usuario">
-      <Link to="/usuarios" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/usuarios" className="back-link">
         ← Volver a Usuarios
       </Link>
 
@@ -342,9 +342,7 @@ export function UsuarioDetallePage() {
       )}
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div className="section-header">
@@ -432,7 +430,7 @@ export function UsuarioDetallePage() {
                 autoComplete="new-password"
               />
             </div>
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
               El usuario deberá cambiar esta contraseña la próxima vez que ingrese.
             </p>
             {passwordResetDone && <p style={{ fontSize: 12, color: 'var(--color-success)', marginBottom: 8 }}>Contraseña actualizada.</p>}
@@ -485,7 +483,7 @@ export function UsuarioDetallePage() {
               onToggle={handleToggleRole}
               disabled={rolesScopesLocked}
             />
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '10px 0 0' }}>
               El departamento de un "Coordinador de departamento interno" se asigna en Escuela → Avales regionales → Departamentos.
             </p>
           </div>
@@ -513,8 +511,7 @@ export function UsuarioDetallePage() {
                 </span>
                 <button
                   type="button"
-                  className="btn btn-outlined"
-                  style={{ padding: '4px 10px', fontSize: 12, flexShrink: 0 }}
+                  className="btn btn-outlined btn-sm" style={{ flexShrink: 0 }}
                   disabled={rolesScopesLocked}
                   onClick={() => handleRemoveScope(scope.id)}
                 >
@@ -595,13 +592,13 @@ export function UsuarioDetallePage() {
           <div className="section-header" style={{ marginTop: 24 }}>
             <h2 className="section-title">Zona de riesgo</h2>
           </div>
-          <div className="card-solid" style={{ marginBottom: 20, borderColor: 'var(--color-danger)' }}>
+          <div className="card-solid" style={{ marginBottom: 20, borderColor: 'var(--color-danger-border)' }}>
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
               Elimina la cuenta de acceso, el perfil, los roles y los alcances de este usuario. No se puede deshacer. Los
               registros institucionales (auditoría, documentos, informes, etc.) que lo referencian se preservan, sin el
               vínculo al usuario borrado.
             </p>
-            <button type="button" className="btn btn-outlined btn-block" onClick={() => setShowDeleteConfirm(true)}>
+            <button type="button" className="btn btn-danger-outline btn-block" onClick={() => setShowDeleteConfirm(true)}>
               Eliminar usuario
             </button>
           </div>

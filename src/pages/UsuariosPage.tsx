@@ -52,7 +52,7 @@ export function UsuariosPage() {
             {isJefeCuerpoActivo ? 'Usuarios de tu cuartel.' : 'Cuentas del sistema, roles y alcances asignados.'}
           </p>
         </div>
-        <Link to="/roles" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+        <Link to="/roles" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
           <Icon name="clipboardList" size={14} />
           Roles y permisos
         </Link>
@@ -68,28 +68,18 @@ export function UsuariosPage() {
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando usuarios…</div>}
+      {loading && <div className="loading-state" role="status">Cargando usuarios…</div>}
       {!loading && filtered.length === 0 && <div className="empty-state">No se encontraron usuarios.</div>}
 
-      <div className="card" style={{ padding: 0 }}>
-        {filtered.map((profile, i) => (
+      <div className="card row-list">
+        {filtered.map((profile) => (
           <Link
             key={profile.id}
             to={`/usuarios/${profile.id}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '14px 16px',
-              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-              textDecoration: 'none',
-              color: 'inherit',
-            }}
+            className="row-item"
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 14, overflowWrap: 'anywhere' }}>{profile.full_name}</div>

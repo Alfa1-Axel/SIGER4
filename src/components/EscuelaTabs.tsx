@@ -8,11 +8,11 @@ export function EscuelaTabs() {
   const { hasAccess } = useSchoolAvalesAccess()
   if (!hasAccess) return null
   return (
-    <nav className="module-tabs" aria-label="Secciones de Escuela">
-      <NavLink to="/escuela" end className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'btn-secondary'}`}>
+    <nav className="tabs" aria-label="Secciones de Escuela">
+      <NavLink to="/escuela" end className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
         Cursos
       </NavLink>
-      <NavLink to="/escuela/avales" className={({ isActive }) => `btn ${isActive ? 'btn-primary' : 'btn-secondary'}`}>
+      <NavLink to="/escuela/avales" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
         Avales regionales
       </NavLink>
     </nav>

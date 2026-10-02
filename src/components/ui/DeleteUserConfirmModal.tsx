@@ -51,30 +51,21 @@ export function DeleteUserConfirmModal({ fullName, onConfirm, onClose }: DeleteU
       aria-modal="true"
       aria-label="Eliminar usuario"
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10000,
-        padding: 24,
-      }}
+      className="modal-overlay"
     >
-      <div className="card-solid" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440, width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>Eliminar usuario</h2>
-          <button type="button" className="btn btn-icon btn-outlined" style={{ padding: 4 }} onClick={onClose} aria-label="Cerrar">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">Eliminar usuario</h2>
+          <button type="button" className="btn btn-icon btn-sm btn-ghost" onClick={onClose} aria-label="Cerrar">
             <Icon name="close" size={16} />
           </button>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+        <p className="modal-body" style={{ marginTop: 0, marginBottom: 8 }}>
           Esta acción eliminará el usuario del sistema: cuenta de acceso, roles y alcances. No se puede deshacer. Si el
           usuario tenía documentos personales dirigidos a él, esos documentos también se eliminan (el resto de los
           registros institucionales que lo referencian se preserva, sin el vínculo).
         </p>
-        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
+        <p className="modal-body" style={{ marginTop: 0, marginBottom: 12 }}>
           Para confirmar, escribí el nombre completo del usuario: <strong>{fullName}</strong>
         </p>
         <div className="field">
@@ -82,12 +73,12 @@ export function DeleteUserConfirmModal({ fullName, onConfirm, onClose }: DeleteU
           <input id="confirmName" required value={typedName} onChange={(e) => setTypedName(e.target.value)} autoFocus autoComplete="off" />
         </div>
         {error && <p className="field-error">{error}</p>}
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button type="button" className="btn btn-primary" disabled={submitting || !matches} onClick={handleConfirm}>
-            {submitting ? 'Eliminando…' : 'Eliminar usuario'}
-          </button>
+        <div className="modal-actions">
           <button type="button" className="btn btn-outlined" onClick={onClose} disabled={submitting}>
             Cancelar
+          </button>
+          <button type="button" className="btn btn-danger" disabled={submitting || !matches} onClick={handleConfirm}>
+            {submitting ? 'Eliminando…' : 'Eliminar usuario'}
           </button>
         </div>
       </div>

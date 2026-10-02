@@ -71,15 +71,13 @@ export function InventarioPage() {
             y material de práctica.
           </p>
         </div>
-        <Link to="/inventario/solicitudes" className="btn btn-outlined" style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>
+        <Link to="/inventario/solicitudes" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
           Solicitudes
         </Link>
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -105,7 +103,7 @@ export function InventarioPage() {
         </select>
       </div>
 
-      {loading && <div className="empty-state">Cargando inventario…</div>}
+      {loading && <div className="loading-state" role="status">Cargando inventario…</div>}
       {!loading && filtered.length === 0 && <div className="empty-state">No hay elementos que coincidan.</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -131,7 +129,7 @@ export function InventarioPage() {
               {item.description && (
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{item.description}</p>
               )}
-              <p style={{ margin: 0, fontSize: 11, color: 'var(--color-text-muted)' }}>
+              <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
                 {item.responsible_name && `Responsable: ${item.responsible_name}`}
                 {item.contact_info && ` · ${item.contact_info}`}
               </p>

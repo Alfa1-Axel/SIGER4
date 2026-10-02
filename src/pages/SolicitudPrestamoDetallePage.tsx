@@ -180,7 +180,7 @@ export function SolicitudPrestamoDetallePage() {
   if (loading) {
     return (
       <AppShell title="Solicitud de préstamo">
-        <div className="empty-state">Cargando solicitud…</div>
+        <div className="loading-state" role="status">Cargando solicitud…</div>
       </AppShell>
     )
   }
@@ -207,7 +207,7 @@ export function SolicitudPrestamoDetallePage() {
 
   return (
     <AppShell title="Solicitud de préstamo">
-      <Link to="/inventario/solicitudes" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/inventario/solicitudes" className="back-link">
         ← Volver a Solicitudes
       </Link>
 
@@ -237,9 +237,7 @@ export function SolicitudPrestamoDetallePage() {
       )}
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
@@ -291,13 +289,12 @@ export function SolicitudPrestamoDetallePage() {
 
       {isManager && request.status === 'pendiente' && !showRejectForm && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-          <button type="button" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: 13 }} disabled={updating} onClick={handleApprove}>
+          <button type="button" className="btn btn-primary btn-sm" disabled={updating} onClick={handleApprove}>
             Aprobar
           </button>
           <button
             type="button"
-            className="btn btn-outlined"
-            style={{ padding: '8px 16px', fontSize: 13 }}
+            className="btn btn-outlined btn-sm"
             disabled={updating}
             onClick={() => setShowRejectForm(true)}
           >
@@ -327,8 +324,7 @@ export function SolicitudPrestamoDetallePage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <button
             type="button"
-            className="btn btn-primary"
-            style={{ padding: '8px 16px', fontSize: 13 }}
+            className="btn btn-primary btn-sm"
             disabled={updating}
             onClick={() => setShowDeliveryForm(true)}
           >
@@ -358,8 +354,7 @@ export function SolicitudPrestamoDetallePage() {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
           <button
             type="button"
-            className="btn btn-primary"
-            style={{ padding: '8px 16px', fontSize: 13 }}
+            className="btn btn-primary btn-sm"
             disabled={updating}
             onClick={() => setShowReturnForm(true)}
           >
@@ -386,7 +381,7 @@ export function SolicitudPrestamoDetallePage() {
       )}
 
       {canCancel && !showRejectForm && !showDeliveryForm && !showReturnForm && (
-        <button type="button" className="btn btn-outlined" style={{ padding: '8px 16px', fontSize: 13 }} disabled={updating} onClick={handleCancel}>
+        <button type="button" className="btn btn-outlined btn-sm" disabled={updating} onClick={handleCancel}>
           Cancelar solicitud
         </button>
       )}

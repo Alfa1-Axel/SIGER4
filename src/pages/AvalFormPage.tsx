@@ -189,7 +189,7 @@ export function AvalFormPage() {
   return (
     <AppShell title={pageTitle}>
       <EscuelaTabs />
-      <Link to={backHref} className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to={backHref} className="back-link">
         ← Volver a Avales
       </Link>
       <h1 className="page-title">{pageTitle}</h1>
@@ -199,7 +199,7 @@ export function AvalFormPage() {
           : 'El documento queda guardado en el departamento interno que elijas.'}
       </p>
 
-      {loading && <div className="empty-state">Cargando…</div>}
+      {loading && <div className="loading-state" role="status">Cargando…</div>}
 
       {!loading && loadError && <div className="empty-state field-error">{loadError}</div>}
 
@@ -273,13 +273,13 @@ export function AvalFormPage() {
                   {file.name} · {formatBytes(file.size)}
                 </p>
               ) : (
-                <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>PDF, Word, Excel o imagen. Máximo 20 MB.</p>
+                <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>PDF, Word, Excel o imagen. Máximo 20 MB.</p>
               )}
             </div>
           )}
 
           {!isEditing && (
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -4, marginBottom: 12 }}>
               Una vez cargado, solo Informática R4 puede editar sus datos, archivarlo o eliminarlo.
             </p>
           )}

@@ -52,41 +52,30 @@ export function PanelPage() {
   }, [])
 
   return (
-    <AppShell title="Dashboard">
-      <div
-        className="card"
-        style={{ background: 'var(--color-primary-dark)', border: 'none', color: '#fff', marginBottom: 16, padding: '16px 20px' }}
-      >
-        {/* --color-primary-dark es rojo solido en los dos temas (#b71c1c
-            claro / #d32f2f oscuro) -- el blanco fijo sigue siendo correcto
-            en ambos, a diferencia de --color-secondary/.kpi-value que sí
-            dependían de un fondo que cambiaba de claro a oscuro. */}
-        <span className="badge badge-danger" style={{ background: 'rgba(255,255,255,0.2)', color: '#fff' }}>
-          ● Sistema en tiempo real
-        </span>
-        <h1 style={{ margin: '8px 0 4px', fontSize: 19 }}>Resumen Regional</h1>
-        <p style={{ margin: '0 0 14px', fontSize: 13, opacity: 0.9 }}>
-          Gestión centralizada de recursos, personal y alertas críticas para la región.
-        </p>
+    <AppShell title="Panel">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Resumen regional</h1>
+          <p className="page-subtitle">Recursos, personal, eventos y alertas de la región en un solo lugar.</p>
+        </div>
         {canAccessReports && (
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <Link to="/reportes" className="btn btn-inverted">
-              Nuevo Reporte
+          <div className="page-header-actions">
+            <Link to="/reportes" className="btn btn-primary">
+              <Icon name="chart" size={16} />
+              Nuevo reporte
             </Link>
           </div>
         )}
       </div>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div className="card-grid" style={{ marginBottom: 20 }}>
         <div className="kpi-card">
           <div className="kpi-label">Cuarteles</div>
-          <div className="kpi-value">{loading ? '—' : summary?.stationsCount ?? 0}</div>
+          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.stationsCount ?? 0}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Asistencia promedio</div>
@@ -98,15 +87,15 @@ export function PanelPage() {
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Intervenciones (período)</div>
-          <div className="kpi-value">{loading ? '—' : summary?.interventionsThisPeriod ?? 0}</div>
+          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.interventionsThisPeriod ?? 0}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Cursos activos</div>
-          <div className="kpi-value">{loading ? '—' : summary?.coursesActive ?? 0}</div>
+          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.coursesActive ?? 0}</div>
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Vehículos registrados</div>
-          <div className="kpi-value">{loading ? '—' : summary?.vehiclesRegistered ?? 0}</div>
+          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.vehiclesRegistered ?? 0}</div>
         </div>
       </div>
 
@@ -116,26 +105,26 @@ export function PanelPage() {
         <h2 className="section-title">Estado de Carga por Cuartel</h2>
       </div>
       <div className="card" style={{ marginBottom: 20 }}>
-        {loading && <div className="empty-state">Cargando estado de carga…</div>}
+        {loading && <div className="loading-state" role="status">Cargando estado de carga…</div>}
         {!loading && (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success)' }}>
                 {summary?.complianceCounts.verde ?? 0}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>AL DÍA</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>AL DÍA</div>
             </div>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>
                 {summary?.complianceCounts.amarillo ?? 0}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>PARCIAL</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>PARCIAL</div>
             </div>
             <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger)' }}>
                 {summary?.complianceCounts.rojo ?? 0}
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>
             </div>
           </div>
         )}
@@ -150,29 +139,20 @@ export function PanelPage() {
           Ver calendario
         </Link>
       </div>
-      <div className="card" style={{ marginBottom: 20, padding: 0 }}>
-        {loading && <div className="empty-state">Cargando eventos…</div>}
+      <div className="card row-list" style={{ marginBottom: 20 }}>
+        {loading && <div className="loading-state" role="status">Cargando eventos…</div>}
         {!loading && (summary?.upcomingEvents.length ?? 0) === 0 && (
           <div className="empty-state">No hay eventos próximos cargados en el calendario.</div>
         )}
-        {summary?.upcomingEvents.map((event, i) => (
+        {summary?.upcomingEvents.map((event) => (
           <Link
             key={event.id}
             to={`/calendario/${event.id}`}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 16px',
-              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-              textDecoration: 'none',
-              color: 'inherit',
-              gap: 12,
-            }}
+            className="row-item"
           >
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              <div className="row-item-title">{event.title}</div>
+              <div className="row-item-meta">
                 {new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
                 {!event.all_day && ` · ${new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}
               </div>
@@ -187,23 +167,14 @@ export function PanelPage() {
           <div className="section-header">
             <h2 className="section-title">Eventos de Hoy</h2>
           </div>
-          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
-            {summary?.todayEvents.map((event, i) => (
+          <div className="card row-list" style={{ marginBottom: 20 }}>
+            {summary?.todayEvents.map((event) => (
               <Link
                 key={event.id}
                 to={`/calendario/${event.id}`}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '12px 16px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                }}
+            className="row-item"
               >
-                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>{event.title}</span>
+                <span className="row-item-title" style={{ minWidth: 0 }}>{event.title}</span>
                 <span className="badge badge-warning" style={{ flexShrink: 0 }}>
                   {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -218,23 +189,14 @@ export function PanelPage() {
           <div className="section-header">
             <h2 className="section-title">Vencimientos Próximos</h2>
           </div>
-          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
-            {summary?.upcomingDeadlines.map((event, i) => (
+          <div className="card row-list" style={{ marginBottom: 20 }}>
+            {summary?.upcomingDeadlines.map((event) => (
               <Link
                 key={event.id}
                 to={`/calendario/${event.id}`}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '12px 16px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                }}
+            className="row-item"
               >
-                <span style={{ fontWeight: 600, fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>{event.title}</span>
+                <span className="row-item-title" style={{ minWidth: 0 }}>{event.title}</span>
                 <span className="badge badge-danger" style={{ flexShrink: 0 }}>
                   {new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
                 </span>
@@ -250,28 +212,20 @@ export function PanelPage() {
           Ver todos
         </Link>
       </div>
-      <div className="card" style={{ marginBottom: 20, padding: 0 }}>
-        {loading && <div className="empty-state">Cargando cuarteles…</div>}
+      <div className="card row-list" style={{ marginBottom: 20 }}>
+        {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
         {!loading && stations.length === 0 && (
           <div className="empty-state">Todavía no hay cuarteles cargados.</div>
         )}
-        {stations.slice(0, 5).map((station, i) => (
+        {stations.slice(0, 5).map((station) => (
           <Link
             key={station.id}
             to={`/cuarteles/${station.id}`}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '14px 16px',
-              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-              textDecoration: 'none',
-              color: 'inherit',
-            }}
+            className="row-item"
           >
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{station.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
+              <div className="row-item-title">{station.name}</div>
+              <div className="row-item-meta">
                 Personal: {station.personnel_count} · Unidades: {station.vehicles_count}
               </div>
             </div>
@@ -283,27 +237,18 @@ export function PanelPage() {
       <div className="section-header">
         <h2 className="section-title">Actividad Reciente</h2>
       </div>
-      <div className="card">
-        {loading && <div className="empty-state">Cargando actividad…</div>}
+      <div className="card row-list">
+        {loading && <div className="loading-state" role="status">Cargando actividad…</div>}
         {!loading && (summary?.recentActivity.length ?? 0) === 0 && (
           <div className="empty-state">Sin actividad registrada todavía.</div>
         )}
-        {summary?.recentActivity.map((log, i) => (
-          <div
-            key={log.id}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: i === 0 ? '0 0 12px' : '12px 0',
-              borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-            }}
-          >
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{translateAction(log.action)}</div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{translateTable(log.table_name)}</div>
+        {summary?.recentActivity.map((log) => (
+          <div key={log.id} className="row-item">
+            <div style={{ minWidth: 0 }}>
+              <div className="row-item-title">{translateAction(log.action)}</div>
+              <div className="row-item-meta">{translateTable(log.table_name)}</div>
             </div>
-            <span style={{ fontSize: 11, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
               {timeAgo(log.created_at)}
             </span>
           </div>

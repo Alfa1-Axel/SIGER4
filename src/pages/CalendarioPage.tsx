@@ -136,10 +136,10 @@ export function CalendarioPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <h1 className="page-title">Calendario</h1>
         <div style={{ display: 'flex', gap: 6 }}>
-          <button type="button" className={`btn ${view === 'mes' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setView('mes')}>
+          <button type="button" className="chip" aria-pressed={view === 'mes'} onClick={() => setView('mes')}>
             Mes
           </button>
-          <button type="button" className={`btn ${view === 'lista' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => setView('lista')}>
+          <button type="button" className="chip" aria-pressed={view === 'lista'} onClick={() => setView('lista')}>
             Listado
           </button>
         </div>
@@ -147,9 +147,7 @@ export function CalendarioPage() {
       <p className="page-subtitle">Eventos institucionales, regionales, de cuartel y de Escuela.</p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -176,15 +174,14 @@ export function CalendarioPage() {
         </select>
       </div>
 
-      {loading && <div className="empty-state">Cargando calendario…</div>}
+      {loading && <div className="loading-state" role="status">Cargando calendario…</div>}
 
       {!loading && view === 'mes' && (
         <>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <button
               type="button"
-              className="btn btn-outlined"
-              style={{ padding: '4px 10px' }}
+              className="btn btn-outlined btn-sm"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
               aria-label="Mes anterior"
             >
@@ -195,8 +192,7 @@ export function CalendarioPage() {
             </strong>
             <button
               type="button"
-              className="btn btn-outlined"
-              style={{ padding: '4px 10px' }}
+              className="btn btn-outlined btn-sm"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
               aria-label="Mes siguiente"
             >
@@ -207,7 +203,7 @@ export function CalendarioPage() {
           <div className="card" style={{ padding: 8, marginBottom: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
               {WEEKDAY_LABELS.map((label) => (
-                <div key={label} style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', padding: 4 }}>
+                <div key={label} style={{ textAlign: 'center', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', padding: 4 }}>
                   {label}
                 </div>
               ))}
@@ -226,9 +222,9 @@ export function CalendarioPage() {
                     style={{
                       minHeight: 44,
                       padding: '4px 2px',
-                      borderRadius: 8,
+                      borderRadius: 'var(--radius-lg)',
                       border: isSelected ? '2px solid var(--color-primary)' : isToday ? '1px solid var(--color-primary)' : '1px solid transparent',
-                      background: isSelected ? 'var(--color-primary-soft, rgba(211,47,47,0.08))' : 'transparent',
+                      background: isSelected ? 'var(--color-primary-soft)' : 'transparent',
                       opacity: inMonth ? 1 : 0.35,
                       cursor: 'pointer',
                       display: 'flex',
@@ -266,22 +262,13 @@ export function CalendarioPage() {
                   {selectedDay.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}
                 </h2>
               </div>
-              <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+              <div className="card row-list" style={{ marginBottom: 20 }}>
                 {selectedDayEvents.length === 0 && <div className="empty-state">Sin eventos este día.</div>}
-                {selectedDayEvents.map((event, i) => (
+                {selectedDayEvents.map((event) => (
                   <Link
                     key={event.id}
                     to={`/calendario/${event.id}`}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '12px 16px',
-                      borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                      gap: 12,
-                    }}
+                    className="row-item"
                   >
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>{event.title}</div>
@@ -303,22 +290,13 @@ export function CalendarioPage() {
       )}
 
       {!loading && view === 'lista' && (
-        <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+        <div className="card row-list" style={{ marginBottom: 20 }}>
           {filteredEvents.length === 0 && <div className="empty-state">Todavía no hay eventos cargados en el calendario.</div>}
-          {filteredEvents.map((event, i) => (
+          {filteredEvents.map((event) => (
             <Link
               key={event.id}
               to={`/calendario/${event.id}`}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '12px 16px',
-                borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                textDecoration: 'none',
-                color: 'inherit',
-                gap: 12,
-              }}
+              className="row-item"
             >
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{event.title}</div>

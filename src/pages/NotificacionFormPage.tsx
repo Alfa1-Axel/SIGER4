@@ -161,8 +161,8 @@ export function NotificacionFormPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setType(option.value)}
-                className={`btn ${type === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '6px 12px', fontSize: 12 }}
+                className="chip"
+                aria-pressed={type === option.value}
               >
                 {option.label}
               </button>
@@ -188,8 +188,8 @@ export function NotificacionFormPage() {
                 key={option.value}
                 type="button"
                 onClick={() => setScopeTarget(option.value)}
-                className={`btn ${scopeTarget === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ padding: '6px 12px', fontSize: 12 }}
+                className="chip"
+                aria-pressed={scopeTarget === option.value}
               >
                 {option.label}
               </button>

@@ -384,7 +384,7 @@ export function DepartamentoDetallePage() {
   if (loading) {
     return (
       <AppShell title="Departamento">
-        <div className="empty-state">Cargando departamento…</div>
+        <div className="loading-state" role="status">Cargando departamento…</div>
       </AppShell>
     )
   }
@@ -401,7 +401,7 @@ export function DepartamentoDetallePage() {
 
   return (
     <AppShell title={department.name}>
-      <Link to="/departamentos" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/departamentos" className="back-link">
         ← Volver a Departamentos
       </Link>
 
@@ -412,9 +412,7 @@ export function DepartamentoDetallePage() {
       </p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
       {canManage ? (
@@ -492,8 +490,7 @@ export function DepartamentoDetallePage() {
               {canManage && (
                 <button
                   type="button"
-                  className="btn btn-outlined"
-                  style={{ padding: '4px 8px', flexShrink: 0 }}
+                  className="btn btn-danger-outline btn-sm" style={{ flexShrink: 0 }}
                   onClick={() => handleRemoveMember(member.id)}
                   aria-label="Quitar miembro"
                 >
@@ -524,7 +521,7 @@ export function DepartamentoDetallePage() {
       <div className="section-header">
         <h2 className="section-title">Integrantes sin usuario</h2>
         {canLogActivity && !manualMemberForm && (
-          <button type="button" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }} onClick={startNewManualMember}>
+          <button type="button" className="btn btn-primary btn-sm" onClick={startNewManualMember}>
             <Icon name="plus" size={14} />
             Nuevo integrante
           </button>
@@ -655,8 +652,7 @@ export function DepartamentoDetallePage() {
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                     <button
                       type="button"
-                      className="btn btn-outlined"
-                      style={{ padding: '4px 8px' }}
+                      className="btn btn-outlined btn-sm"
                       onClick={() => startEditManualMember(member)}
                       aria-label="Editar integrante"
                     >
@@ -664,8 +660,7 @@ export function DepartamentoDetallePage() {
                     </button>
                     <button
                       type="button"
-                      className="btn btn-outlined"
-                      style={{ padding: '4px 8px' }}
+                      className="btn btn-outlined btn-sm"
                       onClick={() => handleToggleManualMemberActive(member)}
                       aria-label={member.is_active ? 'Desactivar integrante' : 'Reactivar integrante'}
                     >
@@ -692,7 +687,7 @@ export function DepartamentoDetallePage() {
       <div className="section-header">
         <h2 className="section-title">Actividad / Informes</h2>
         {canLogActivity && (
-          <Link to={`/departamentos/${department.id}/informes/nuevo`} className="btn btn-primary" style={{ padding: '6px 12px', fontSize: 12 }}>
+          <Link to={`/departamentos/${department.id}/informes/nuevo`} className="btn btn-primary btn-sm">
             <Icon name="plus" size={14} />
             Nuevo informe
           </Link>
@@ -841,7 +836,7 @@ export function DepartamentoDetallePage() {
                     {canDeleteReport && (
                       <button
                         type="button"
-                        className="btn btn-outlined btn-icon-sm"
+                        className="btn btn-danger-outline btn-icon-sm"
                         disabled={deletingReportId === report.id}
                         onClick={() => handleDeleteReport(report)}
                         aria-label="Eliminar"

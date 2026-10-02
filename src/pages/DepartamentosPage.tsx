@@ -41,12 +41,10 @@ export function DepartamentosPage() {
       <p className="page-subtitle">Áreas y departamentos de la Regional 4, sus coordinadores y miembros.</p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando departamentos…</div>}
+      {loading && <div className="loading-state" role="status">Cargando departamentos…</div>}
       {!loading && departments.length === 0 && <div className="empty-state">No hay departamentos cargados todavía.</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -63,7 +61,7 @@ export function DepartamentosPage() {
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{department.description}</p>
               )}
               {coordinatorName(department.coordinator_profile_id) && (
-                <p style={{ margin: 0, fontSize: 11, color: 'var(--color-text-muted)' }}>
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
                   Coordinador: {coordinatorName(department.coordinator_profile_id)}
                 </p>
               )}

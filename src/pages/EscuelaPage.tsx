@@ -30,7 +30,7 @@ export function EscuelaPage() {
         <img
           src="/logos/logo-escuela.png"
           alt="SIGER4"
-          style={{ height: 56, width: 56, borderRadius: 12, objectFit: 'cover', marginBottom: 12 }}
+          style={{ height: 56, width: 56, borderRadius: 'var(--radius-lg)', objectFit: 'cover', marginBottom: 12 }}
         />
         <h1 style={{ margin: 0, fontSize: 18 }}>Escuela Regional de Bomberos</h1>
         <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>
@@ -42,7 +42,7 @@ export function EscuelaPage() {
         <h2 className="section-title">Cursos Activos</h2>
       </div>
 
-      {loading && <div className="empty-state">Cargando cursos…</div>}
+      {loading && <div className="loading-state" role="status">Cargando cursos…</div>}
       {!loading && courses.length === 0 && (
         <div className="empty-state">Todavía no hay cursos cargados.</div>
       )}
@@ -51,7 +51,7 @@ export function EscuelaPage() {
         {courses.map((course) => {
           const content = (
             <>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
                 {course.category}
               </div>
               <h3 style={{ margin: '4px 0 12px', fontSize: 15 }}>{course.title}</h3>

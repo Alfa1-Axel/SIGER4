@@ -113,12 +113,10 @@ export function NotificacionesPage() {
       <p className="page-subtitle">Novedades y avisos para tu alcance institucional.</p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      {loading && <div className="empty-state">Cargando notificaciones…</div>}
+      {loading && <div className="loading-state" role="status">Cargando notificaciones…</div>}
       {!loading && notifications.length === 0 && (
         <div className="empty-state">No tenés notificaciones por el momento.</div>
       )}

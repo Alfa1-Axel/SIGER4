@@ -50,42 +50,29 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
       aria-modal="true"
       aria-label={title}
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 10000,
-        padding: 24,
-      }}
+      className="modal-overlay"
     >
-      <div
-        className="card-solid"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 420, width: '100%' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-          <h2 style={{ margin: 0, fontSize: 16 }}>{title}</h2>
-          <button type="button" className="btn btn-icon btn-outlined" style={{ padding: 4 }} onClick={onClose} aria-label="Cerrar">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2 className="modal-title">{title}</h2>
+          <button type="button" className="btn btn-icon btn-sm btn-ghost" onClick={onClose} aria-label="Cerrar">
             <Icon name="close" size={16} />
           </button>
         </div>
         {description && (
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>{description}</p>
+          <p className="modal-body" style={{ marginTop: 0, marginBottom: 12 }}>{description}</p>
         )}
         <div className="field">
           <label htmlFor="reason">Motivo</label>
           <textarea id="reason" required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
         </div>
         {error && <p className="field-error">{error}</p>}
-        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-          <button type="button" className="btn btn-primary" disabled={submitting} onClick={handleConfirm}>
-            {submitting ? 'Guardando…' : confirmLabel}
-          </button>
+        <div className="modal-actions">
           <button type="button" className="btn btn-outlined" onClick={onClose} disabled={submitting}>
             Cancelar
+          </button>
+          <button type="button" className="btn btn-primary" disabled={submitting} onClick={handleConfirm}>
+            {submitting ? 'Guardando…' : confirmLabel}
           </button>
         </div>
       </div>

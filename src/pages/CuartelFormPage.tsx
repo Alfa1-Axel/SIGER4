@@ -218,7 +218,7 @@ export function CuartelFormPage() {
       <p className="page-subtitle">Completá los datos institucionales del cuartel.</p>
 
       {loading ? (
-        <div className="empty-state">Cargando datos del cuartel…</div>
+        <div className="loading-state" role="status">Cargando datos del cuartel…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -302,7 +302,7 @@ export function CuartelFormPage() {
               />
             </div>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
             Para el Mapa Regional. Cargá ambas juntas, o dejalas vacías si no tenés la ubicación exacta
             — el cuartel va a seguir apareciendo en el resto del sistema igual, solo no se va a poder
             ubicar en el mapa.
@@ -334,7 +334,7 @@ export function CuartelFormPage() {
               onChange={(e) => setWhatsappPhone(e.target.value)}
               placeholder="0351 4123456"
             />
-            <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
+            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
               Puede ser distinto al teléfono fijo. Dejalo vacío si el cuartel no tiene WhatsApp.
             </p>
           </div>
@@ -390,7 +390,7 @@ export function CuartelFormPage() {
             width={160}
             height={90}
           />
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
+          <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 16 }}>
             Ambas imágenes se recortan automáticamente centradas, manteniendo su proporción sin deformarse.
           </p>
 
@@ -402,8 +402,8 @@ export function CuartelFormPage() {
                   key={option.value}
                   type="button"
                   onClick={() => setStatus(option.value)}
-                  className={`btn ${status === option.value ? 'btn-primary' : 'btn-secondary'}`}
-                  style={{ padding: '6px 14px', fontSize: 13 }}
+                  className="chip"
+                  aria-pressed={status === option.value}
                 >
                   {option.label}
                 </button>

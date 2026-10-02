@@ -143,7 +143,7 @@ export function PapeleraDocumentosPage() {
 
   return (
     <AppShell title="Papelera">
-      <Link to="/documentos" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}>
+      <Link to="/documentos" className="back-link">
         ← Volver a Documentos
       </Link>
 
@@ -154,9 +154,7 @@ export function PapeleraDocumentosPage() {
       </p>
 
       {error && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <p className="field-error">{error}</p>
-        </div>
+        <div className="alert alert-danger" role="alert">{error}</div>
       )}
       {info && (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -164,7 +162,7 @@ export function PapeleraDocumentosPage() {
         </div>
       )}
 
-      {loading && <div className="empty-state">Cargando papelera…</div>}
+      {loading && <div className="loading-state" role="status">Cargando papelera…</div>}
       {!loading && documents.length === 0 && <div className="empty-state">La papelera está vacía.</div>}
 
       {!loading && documents.length > 0 && (
@@ -198,7 +196,7 @@ export function PapeleraDocumentosPage() {
                   {canPurge && (
                     <button
                       type="button"
-                      className="btn btn-outlined"
+                      className="btn btn-danger-outline"
                       disabled={busyId === doc.id}
                       onClick={() => handlePurgeOne(doc)}
                     >
@@ -214,7 +212,7 @@ export function PapeleraDocumentosPage() {
       )}
 
       {canPurge && documents.length > 0 && (
-        <button type="button" className="btn btn-outlined btn-block" disabled={purgingAll} onClick={handlePurgeExpired}>
+        <button type="button" className="btn btn-danger-outline btn-block" disabled={purgingAll} onClick={handlePurgeExpired}>
           {purgingAll ? 'Purgando…' : 'Purgar vencidos ahora'}
         </button>
       )}

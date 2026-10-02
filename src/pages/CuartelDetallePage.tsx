@@ -399,14 +399,14 @@ export function CuartelDetallePage() {
           ← Volver a Cuarteles
         </Link>
         {canEdit && station && (
-          <Link to={`/cuarteles/${station.id}/editar`} className="btn btn-outlined" style={{ padding: '6px 14px', fontSize: 13 }}>
+          <Link to={`/cuarteles/${station.id}/editar`} className="btn btn-outlined btn-sm">
             <Icon name="edit" size={14} />
             Editar
           </Link>
         )}
       </div>
 
-      {loading && <div className="empty-state">Cargando información del cuartel…</div>}
+      {loading && <div className="loading-state" role="status">Cargando información del cuartel…</div>}
       {!loading && !station && <div className="empty-state">No se encontró el cuartel solicitado.</div>}
 
       {station && (
@@ -424,8 +424,9 @@ export function CuartelDetallePage() {
               backgroundImage: station.cover_image_url ? `url(${station.cover_image_url})` : undefined,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
-              color: station.cover_image_url ? '#fff' : undefined,
-              minHeight: 160,
+              color: station.cover_image_url ? 'var(--color-on-overlay)' : undefined,
+              minHeight: station.cover_image_url ? 180 : undefined,
+              boxShadow: station.cover_image_url ? 'inset 0 -90px 60px -30px var(--color-scrim)' : undefined,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-end',
@@ -439,7 +440,7 @@ export function CuartelDetallePage() {
                   <ZoomableImage
                     src={station.logo_url}
                     alt={`Logo ${station.name}`}
-                    style={{ height: 40, width: 40, borderRadius: 8, border: '2px solid #fff', overflow: 'hidden' }}
+                    style={{ height: 40, width: 40, borderRadius: 'var(--radius-lg)', border: '2px solid var(--color-surface)', overflow: 'hidden' }}
                   />
                 </div>
               )}
@@ -491,7 +492,7 @@ export function CuartelDetallePage() {
               </p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {complianceReasons(compliance).map((reason) => (
-                  <span key={reason} className="badge badge-info" style={{ fontSize: 11 }}>
+                  <span key={reason} className="badge badge-info" style={{ fontSize: 12 }}>
                     {reason}
                   </span>
                 ))}
@@ -651,21 +652,19 @@ export function CuartelDetallePage() {
                         )}
                         <button
                           type="button"
-                          className="btn btn-outlined"
-                          style={{ padding: '4px 8px', fontSize: 11 }}
+                          className="btn btn-outlined btn-sm"
                           onClick={() => handleTogglePersonnelHistory(person.id)}
                         >
                           {expandedPersonnelHistoryId === person.id ? 'Ocultar historial' : 'Ver historial'}
                         </button>
                         {canEdit && (
                           <>
-                            <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 8px' }}>
+                            <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined btn-sm">
                               <Icon name="edit" size={14} />
                             </Link>
                             <button
                               type="button"
-                              className="btn btn-outlined"
-                              style={{ padding: '4px 8px' }}
+                              className="btn btn-danger-outline btn-sm"
                               onClick={() => handlePersonnelDelete(person.id)}
                               aria-label="Eliminar"
                             >
@@ -718,7 +717,7 @@ export function CuartelDetallePage() {
               </Link>
             )}
           </div>
-          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+          <div className="card row-list" style={{ marginBottom: 20 }}>
             {vehicles.length === 0 && <div className="empty-state">No hay vehículos cargados para este cuartel.</div>}
             {vehicles.map((vehicle, i) => {
               const isDecommissioned = DECOMMISSION_STATUSES.includes(vehicle.status)
@@ -738,8 +737,7 @@ export function CuartelDetallePage() {
                     </span>
                     <button
                       type="button"
-                      className="btn btn-outlined"
-                      style={{ padding: '4px 8px', fontSize: 11 }}
+                      className="btn btn-outlined btn-sm"
                       onClick={() => handleToggleVehicleHistory(vehicle.id)}
                     >
                       {expandedVehicleHistoryId === vehicle.id ? 'Ocultar historial' : 'Ver historial'}
@@ -804,24 +802,16 @@ export function CuartelDetallePage() {
               </Link>
             )}
           </div>
-          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+          <div className="card row-list" style={{ marginBottom: 20 }}>
             {attendance.length === 0 && (
               <div className="empty-state">No hay resúmenes de asistencia cargados para este cuartel.</div>
             )}
-            {attendance.map((summary, i) => (
+            {attendance.map((summary) => (
               <Link
                 key={summary.id}
                 to={canEdit ? `/asistencia/${summary.id}/editar` : '#'}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  pointerEvents: canEdit ? 'auto' : 'none',
-                }}
+                className="row-item"
+                style={{ pointerEvents: canEdit ? 'auto' : 'none' }}
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>
@@ -844,24 +834,16 @@ export function CuartelDetallePage() {
               </Link>
             )}
           </div>
-          <div className="card" style={{ marginBottom: 20, padding: 0 }}>
+          <div className="card row-list" style={{ marginBottom: 20 }}>
             {interventions.length === 0 && (
               <div className="empty-state">No hay resúmenes de intervenciones cargados para este cuartel.</div>
             )}
-            {interventions.map((summary, i) => (
+            {interventions.map((summary) => (
               <Link
                 key={summary.id}
                 to={canEdit ? `/intervenciones/${summary.id}/editar` : '#'}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px 16px',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  pointerEvents: canEdit ? 'auto' : 'none',
-                }}
+                className="row-item"
+                style={{ pointerEvents: canEdit ? 'auto' : 'none' }}
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{summary.category}</div>
@@ -955,14 +937,13 @@ export function CuartelDetallePage() {
                       )}
                       {canEditHistory && (
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <Link to={`/historial/${event.id}/editar`} className="btn btn-outlined" style={{ padding: '4px 10px', fontSize: 12 }}>
+                          <Link to={`/historial/${event.id}/editar`} className="btn btn-outlined btn-sm">
                             <Icon name="edit" size={13} />
                             Editar
                           </Link>
                           <button
                             type="button"
-                            className="btn btn-outlined"
-                            style={{ padding: '4px 10px', fontSize: 12 }}
+                            className="btn btn-danger-outline btn-sm"
                             onClick={(e) => {
                               e.stopPropagation()
                               handleDeleteHistoryEvent(event.id)
@@ -983,25 +964,17 @@ export function CuartelDetallePage() {
           <div className="section-header">
             <h2 className="section-title">Actividad Reciente</h2>
           </div>
-          <div className="card" style={{ padding: recentActivityItems.length > 0 ? 0 : undefined }}>
+          <div className={`card${recentActivityItems.length > 0 ? ' row-list' : ''}`}>
             {recentActivityItems.length === 0 && (
               <div className="empty-state">
                 <Icon name="chart" size={20} />
                 <p>Todavía no hay asistencia, intervenciones, historial, documentos ni eventos cargados para este cuartel.</p>
               </div>
             )}
-            {recentActivityItems.map((item, i) => {
+            {recentActivityItems.map((item) => {
               const row = (
                 <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '12px 16px',
-                    borderTop: i === 0 ? 'none' : '1px solid var(--color-border)',
-                    textDecoration: 'none',
-                    color: 'inherit',
-                  }}
+                  className="row-item"
                 >
                   <Icon name={item.icon} size={16} />
                   <div style={{ minWidth: 0, flex: 1 }}>

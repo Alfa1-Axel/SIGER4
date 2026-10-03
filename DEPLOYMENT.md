@@ -4138,6 +4138,9 @@ de lectura de `stations_select_scope` para todos los roles (ver Panel).
 | Cualquier rol que sea coordinador de un departamento | Sí | No | Sí, ese departamento (no puede cambiar el coordinador) | Ese departamento |
 | Resto de roles | Sí | No | No | Solo lectura |
 
+**Informes y actas (desde `0098`, sección 57.1):** los ven y cargan Informática, el coordinador y
+los integrantes con cuenta del departamento; secretario_regional no los ve por su rol.
+
 **Coordinador y Avales (desde `0097`, sección 56):** el coordinador de un departamento
 (`departments.coordinator_profile_id`) ve y carga los avales regionales de ese departamento en
 Escuela, sin rol ni asignación extra. Por eso crear y eliminar departamentos, y elegir el
@@ -5027,8 +5030,9 @@ directo del diseño de permisos.
 - Corregidos los dos textos con "en Supabase" visibles al usuario (`PanelPage.tsx`,
   `EscuelaPage.tsx`) — mismo tipo de problema que "Actividad Reciente" (35.5), lenguaje técnico
   expuesto sin necesidad.
-- Confirmado sin resultados: sin menciones de IA/Gemini/ChatGPT visibles en ningún texto de
-  `src/pages/`/`src/components/` (fuera del label no-visible `analisis_ia_reporte`, ya documentado).
+- Confirmado sin resultados: sin menciones visibles del análisis automático de reportes retirado en
+  ningún texto de `src/pages/`/`src/components/` (fuera del label no-visible `analisis_ia_reporte`,
+  ya documentado).
 - Confirmado sin resultados: sin links muertos (`href="#"`, `to="#"`) ni botones sin función
   (`onClick={() => {}}`) en todo `src/pages/`/`src/components/`.
 - Confirmado sin resultados: sin texto "próximamente"/"en construcción" en ningún componente
@@ -5927,11 +5931,11 @@ próxima vez que se reemplace un logo (redimensionar a ~400×400px antes de subi
 
 ### 41.4 Seguridad del repositorio público
 
-**`.claude/`**: estaba trackeado (`.claude/settings.json`, con permisos de comandos y algunos
-fragmentos de rutas/comandos específicos de la máquina local — nada que sea una credencial, pero es
-configuración puramente local sin valor para el repo público). Sacado del tracking con
-`git rm --cached .claude/settings.json` (el archivo sigue existiendo en el disco local, solo deja de
-subirse) y agregado `.claude/` al `.gitignore` para que no vuelva a trackearse.
+**Configuración local del editor**: estaba trackeado un archivo de configuración local de
+herramientas de desarrollo, con permisos de comandos y algunos fragmentos de rutas de la máquina
+local — nada que sea una credencial, pero sin valor para el repo público. Se sacó del tracking con
+`git rm --cached` (el archivo sigue en el disco local) y se excluyó para que no vuelva a subirse
+(desde la sección 57.6, en `.git/info/exclude` de cada clon).
 
 **`.env`**: nunca estuvo trackeado — ya lo cubría el `.gitignore` desde antes. `.env.example` (sí
 trackeado, correcto) revisado: solo tiene placeholders (`tu-proyecto.supabase.co`, `tu-anon-key-publica`,
@@ -6405,8 +6409,7 @@ Nada que corregir.
 
 ### 45.6 Seguridad del repo público
 
-Revisado el estado de archivos versionados: `.claude/` correctamente en
-`.gitignore` (con comentario explicando por qué), `.env.example` solo tiene
+Revisado el estado de archivos versionados: la configuración local del editor excluida del repo, `.env.example` solo tiene
 placeholders, ningún `.env` real trackeado, `service_role`/
 `VAPID_PRIVATE_KEY` en las Edge Functions se leen siempre de
 `Deno.env.get(...)` (nunca hardcodeados), sin emails/UUIDs reales en los
@@ -8126,3 +8129,301 @@ Checklist manual:
 - **Nombres repetidos previos:** si `0097` avisa repetidos, el índice único no existe hasta
   unificarlos y volver a correrla.
 - El valor `coordinador_departamento_escuela` sigue en el enum `role_key` (sin uso).
+
+## 57. Informes y actas en Departamentos, "Regional", Inicio por rol, header, login y seguridad del repositorio (2026-10-03) — migración 0098
+
+### 57.1 Informes y actas en Departamentos
+
+Hasta acá un departamento solo podía **registrar actividad** (`department_activity_reports`, 0061):
+tipo, fecha, horas y asistentes, para estadísticas. Eso deja constancia de que hubo una reunión, pero
+no guarda el acta ni el respaldo. Ahora cada departamento tiene además **informes y actas**:
+
+- **Redactar informe:** el texto se escribe en SIGER4. Se le pueden sumar fotos, videos o archivos.
+- **Cargar informe o acta:** se sube el documento que ya existe (PDF, Word, Excel o una foto del
+  papel), con fotos o videos de respaldo y un resumen opcional.
+- Cada informe tiene tipo, título, fecha del informe o de la actividad, texto, observaciones,
+  autor, adjuntos, archivado y fechas de alta y edición. Los tipos son: Acta de reunión, Informe
+  operativo, Informe administrativo, Registro fotográfico, Documentación adjunta y Otro.
+
+**Dónde está:**
+
+| Pantalla | Qué hay |
+|---|---|
+| Departamentos | Botón **Nuevo informe** (Cargar informe o acta / Redactar informe) y "Últimos informes" de los departamentos que el usuario puede ver |
+| Detalle de un departamento | Botón **Nuevo** (Cargar informe o acta / Redactar informe / Registrar actividad) y la sección **Informes y actas**, primera en la página, con filtro por tipo y "Mostrar archivados" |
+| Detalle de un informe (`/departamentos/informes/:id`) | Texto, observaciones, documentos (Ver / Descargar con el nombre original), fotos en miniatura, videos con reproductor; Editar, Archivar y Eliminar según permiso |
+| Formulario (`/departamentos/informes/nuevo?modo=cargar\|redactar`) | Se puede pasar de un modo al otro sin perder lo escrito. Si queda un solo departamento posible, viene elegido |
+| Inicio | Acceso rápido "Cargar informe" para quien puede cargar |
+
+El registro de actividad sigue igual y pasa a llamarse **Registrar actividad** en todas las
+pantallas, para no confundirlo con los informes.
+
+**Archivos** (bucket privado `department-reports`, ruta
+`<department_id>/<report_id>/<file_id>/<nombre-sanitizado>`):
+
+| Tipo | Formatos | Máximo |
+|---|---|---|
+| Documentos | PDF, Word (doc/docx), Excel (xls/xlsx) | 20 MB |
+| Fotos | JPG, PNG, WEBP, HEIC/HEIF | 20 MB |
+| Videos | MP4, MOV, WEBM, 3GP | 50 MB |
+
+- Hasta 10 archivos por informe.
+- El tipo y el tamaño se validan al elegir el archivo y de nuevo en el bucket (`allowed_mime_types` y
+  `file_size_limit`). El tamaño y el MIME reales los toma la base de la metadata de Storage.
+- La descarga usa una URL firmada de 10 minutos con el nombre original del archivo.
+- 50 MB es también el límite de subida por defecto de un proyecto Supabase. Si se baja en Project
+  Settings → Storage, hay que bajar `DEPARTMENT_REPORT_VIDEO_MAX_BYTES` (`src/lib/api/storage.ts`) y
+  el `file_size_limit` del bucket.
+
+**Desde el celular:**
+
+- "Elegir archivos" (varios a la vez), "Sacar foto" (cámara trasera) y "Grabar video" (los dos
+  últimos solo en pantallas táctiles), con inputs nativos activados por `<label>`.
+- **Progreso real:** cada archivo se sube con `XMLHttpRequest` al mismo endpoint de Storage que
+  usa supabase-js, porque `fetch` no informa progreso. La pantalla muestra el porcentaje total, el
+  estado de cada archivo y "Subiendo archivos (2 de 3)".
+- Si Android recarga la página con el selector abierto, se recuperan los textos escritos y se avisa
+  que hay que volver a elegir los archivos.
+- **Si falla una parte:**
+  - si un archivo no sube, el informe se guarda igual y el detalle avisa cuáles faltan, para
+    agregarlos desde Editar;
+  - si en "Cargar" no sube ninguno y no hay texto, el informe se descarta y el formulario queda para
+    reintentar.
+
+**Permisos** (RLS + policies de Storage; la pantalla solo refleja lo mismo):
+
+| Quién | Ver y descargar | Cargar | Editar, archivar, adjuntos | Eliminar |
+|---|---|---|---|---|
+| informatica_r4 | Todos | Todos (activos) | Todos | Todos |
+| integrante_informatica | Todos | Todos (activos) | Todos | Solo los propios |
+| Coordinador del departamento | Su departamento | Su departamento | Su departamento | Solo los propios |
+| Integrante con cuenta (`department_members`) | Su departamento | Su departamento | Solo los propios | Solo los propios |
+| Resto (incluido secretario_regional) | Nada (ni URL, ni API, ni Storage) | — | — | — |
+
+Decisiones de mínimo permiso:
+
+- **secretario_regional** no ve informes por su rol, aunque sí sigue registrando actividad en
+  cualquier departamento (0061). Los informes pueden tener actas, nombres y fotos de personas. Si
+  tiene que verlos, el coordinador lo suma como integrante del departamento.
+- **El coordinador archiva, no elimina,** los informes ajenos. Eliminar es de quien lo cargó o de
+  informatica_r4.
+- Un **departamento inactivo** se consulta, pero no admite informes nuevos.
+- Un **departamento con informes** no se puede eliminar (`on delete restrict`, igual que con avales),
+  y la pantalla lo explica.
+- Por URL directa sin permiso, el detalle muestra "No encontramos el informe" y explica quién tiene
+  acceso. La base no devuelve el informe, ni sus adjuntos, ni los archivos.
+
+**Otros detalles:**
+
+- Auditoría: `department_reports` y `department_report_files` quedan auditadas. Solo las lee
+  informatica_r4 (0097).
+- **CSP:** se agregó `media-src 'self' blob: https://*.supabase.co` en `vercel.json`. Sin eso, el
+  navegador bloqueaba en producción la reproducción de videos con URL firmada de Storage. Las fotos
+  ya estaban permitidas por `img-src`.
+
+### 57.2 "Regional" en lugar de "Región"
+
+El nivel institucional se llama **Regional**. Se corrigieron todos los textos visibles:
+
+- etiquetas "Regional" en los formularios de cuartel, curso, inventario, usuario, alcance, mapa y
+  auditoría;
+- "Seleccionar Regional" en carpetas, documentos, eventos, notificaciones e inventario;
+- errores ("Elegí la Regional destino");
+- la guía de roles: categoría "Regional", nivel de alcance "Regional", "Su Regional",
+  "todas las Regionales";
+- Reportes, Mapa Regional, Ajustes y el texto del PDF consolidado.
+
+Los nombres técnicos (`region_id`, `scope_type = 'region'`, tablas) no cambian. Donde "regional" es
+adjetivo ("departamentos regionales", "Escuela Regional") se dejó como estaba.
+
+### 57.3 Inicio (pantalla al ingresar)
+
+El Panel pasa a ser **Inicio**, ordenado por lo que necesita cada rol:
+
+1. **Saludo**, fecha y los roles del usuario, incluido "Coordinador de Fuego" si coordina un
+   departamento.
+2. **Requiere atención:** los pendientes por rol de siempre (0075). Si no hay, dice "Todo al día".
+3. **Accesos rápidos según el rol:**
+   - Avales regionales y Cargar informe, si tiene acceso;
+   - Subir documento, si puede cargar, o Documentos, si no;
+   - Calendario y Notificaciones, con el número de no leídas;
+   - Generar reporte, Usuarios y Cuarteles, según permiso.
+4. **Notificaciones sin leer:** las últimas 3.
+5. **Hoy, Próximos eventos y Vencimientos próximos.**
+6. **Estado de la Regional** (cuarteles, asistencia, intervenciones, cursos, vehículos y carga por
+   cuartel), solo para roles con alcance territorial: Informática, Secretario Regional, Director de
+   Escuela, roles de cuartel e invitado. Para Escuela o la coordinación de un departamento era
+   ruido.
+7. **Actividad reciente,** solo para informatica_r4.
+
+En el menú, "Panel" pasa a llamarse "Inicio". La ruta `/panel` no cambia.
+
+### 57.4 Header
+
+- El logo del header y el de la barra lateral llevan al **Inicio** (`aria-label="Ir al inicio"`).
+- La foto o avatar, en el header y en la barra lateral, lleva directo a **Mi perfil y ajustes**
+  (`aria-label="Ir a mi perfil"`). No había menú de usuario que romper. "Cerrar sesión" sigue en la
+  barra lateral.
+- Son enlaces reales: funcionan con mouse, touch y teclado (Tab + Enter), con foco visible.
+
+### 57.5 Login, gestor de contraseñas y passkeys
+
+**Login:**
+
+- Botón para ver u ocultar la contraseña (`aria-pressed`) y aviso de Bloq Mayús.
+- `autocomplete="username"` y `"current-password"`, con `name` en ambos campos, para que el gestor
+  del navegador detecte, guarde y complete el acceso.
+- Opción "Recordar mi email en este dispositivo": guarda **solo el email** en `localStorage`
+  (`siger4:remembered-email`). Se puede desmarcar.
+- Errores claros: email o contraseña incorrectos, demasiados intentos, cuenta desactivada, sin
+  conexión.
+- Texto de ayuda para quien olvidó la contraseña (la restablece Informática).
+
+**Contraseñas:** la app **no guarda contraseñas en ningún lado**: ni localStorage, ni sessionStorage,
+ni IndexedDB, ni la base. Después de ingresar se ofrece guardar el acceso en el gestor del navegador
+(Credential Management API, `navigator.credentials.store`). Lo guarda y cifra el navegador, con
+confirmación del usuario. En el celular, ese gestor completa la contraseña con huella o rostro: es
+la vía de "biometría" disponible hoy, sin configuración adicional.
+
+**Passkeys:** implementadas, pero **apagadas por defecto**. Supabase Auth (`@supabase/supabase-js`
+2.110) trae `signInWithPasskey()` y `registerPasskey()` como **función experimental**. Con
+`VITE_PASSKEYS_ENABLED=true`:
+
+- el login muestra "Ingresar con huella, rostro o PIN";
+- Mi perfil y ajustes muestra "Ingreso con huella o rostro", para registrar el dispositivo y quitar
+  dispositivos registrados.
+
+Es WebAuthn estándar: la clave privada queda en el dispositivo y el servidor guarda solo la clave
+pública. Antes de activarlas hace falta:
+
+1. Habilitar passkeys en el proyecto de Supabase Auth (función experimental: depende de que el
+   proyecto la ofrezca).
+2. Configurar el dominio de producción como Site URL / URL permitida, para que el Relying Party de
+   WebAuthn coincida con el dominio donde corre SIGER4.
+3. Poner `VITE_PASSKEYS_ENABLED=true` en Vercel y redesplegar.
+4. Probar el alta desde Ajustes y el ingreso, en Android, iPhone y escritorio.
+
+Si el servidor no lo soporta, el login muestra un mensaje claro y sigue el ingreso con contraseña.
+No se probó contra un servidor real, porque requiere el paso 1.
+
+### 57.6 Seguridad del repositorio público
+
+Se revisaron los 263 archivos versionados y el historial completo: 278 commits, con las
+diferencias de cada uno.
+
+**Sin secretos.** No se encontraron:
+
+- claves privadas (PEM/SSH);
+- tokens JWT (ni `service_role` ni anon);
+- claves de API de terceros;
+- `VAPID_PRIVATE_KEY`, `CRON_SHARED_SECRET`, `JWT_SECRET` ni `SUPABASE_SERVICE_ROLE_KEY` con
+  valores reales. Los valores de `CRON_SHARED_SECRET` en este documento son de ejemplo.
+
+`.env` nunca se versionó; `.env.example` solo tiene valores de ejemplo. Las Edge Functions leen
+todos sus secretos con `Deno.env.get`.
+
+**No hay secretos que rotar.**
+
+**Público por diseño:**
+
+- **URL del proyecto Supabase,** en las secciones 33 y 50 y en `0073`, donde se inserta como dato funcional. Viaja
+  en cada bundle del frontend igual que la anon key, y la seguridad depende de RLS, no de ocultarla.
+- **Email institucional** del Dpto. de Informática como `VAPID_SUBJECT` de push.
+
+**Datos personales en el historial:** el email personal del desarrollador figura en commits viejos
+(scripts SQL de 2026-07, limpiados después) y como autor de los commits. No es un secreto. Para no
+seguir publicándolo, se puede usar el email `noreply` de GitHub como autor de los próximos commits.
+No se reescribió el historial.
+
+**Cambios:**
+
+- `.gitignore` ignora toda variante `.env.*` (salvo `.env.example`), archivos de claves (`*.pem`,
+  `*.key`, `*.p8`, `*.p12`, `*.pfx`), `.vercel` y `supabase/.branches`.
+- La configuración local del editor se excluye en `.git/info/exclude` de cada clon (no se versiona).
+- `.env.example` suma `VITE_PASSKEYS_ENABLED=false`.
+
+**Recomendado:** activar en GitHub *Secret scanning* y *Push protection* (Settings → Code security),
+para que un secreto subido por error se bloquee o avise al instante.
+
+### 57.7 Otras mejoras de UX
+
+- **Botones flotantes:** "Nuevo evento", "Nuevo usuario", "Nuevo curso", "Nuevo cuartel",
+  "Nuevo elemento", "Nueva notificación" y "Subir documento" muestran su texto en escritorio. En el
+  celular siguen redondos, solo con el ícono.
+- **Títulos más directos:** "Usuarios", "Cuarteles" y "Reportes", con subtítulos que dicen qué se
+  puede hacer.
+- **Estados vacíos con acción:** Calendario ("Cargar un evento"), Escuela ("Cargar el primer
+  curso"), informes, Notificaciones y búsquedas sin resultado.
+- **Registrar actividad:** acceso denegado explicado y aviso al guardar.
+- **Detalle de departamento:** acceso denegado explicado; el mensaje al intentar eliminar uno con
+  avales o informes lo dice.
+- **Avisos tras navegar:** pueden ser de éxito o de resultado parcial (`noticeTone`).
+
+### 57.8 Qué correr
+
+1. SQL Editor → `0098_department_reports.sql`, después de `0097`. Crea las tablas, los helpers, el
+   bucket `department-reports` y sus policies. Se puede correr de nuevo sin efecto.
+2. Desplegar el frontend. Incluye `vercel.json` con el nuevo `media-src`.
+3. Opcional: passkeys (57.5). Por defecto quedan apagadas y no hace falta configurar ninguna
+   variable nueva.
+
+Sin cambios en Edge Functions, push ni PWA.
+
+### 57.9 Verificación
+
+- **0098 en Postgres 16 local** (stubs de `auth` y `storage`), sobre la base de 0097 con datos:
+  42 pruebas, 0 fallas.
+  - El coordinador carga en su departamento y no en otro, y el autor lo fija la base.
+  - Los adjuntos toman tamaño, MIME y tipo reales. Se rechazan rutas con otro departamento, una
+    carpeta de adjunto ya usada o un id que no coincide.
+  - El integrante ve, lee archivos y carga, pero no edita ni borra lo ajeno.
+  - No ven nada ni leen archivos con la ruta exacta: usuario común, coordinador de otro
+    departamento, secretario_regional y Coordinador de Escuela.
+  - Informática ve todo. integrante_informatica carga, pero no elimina lo ajeno.
+  - El coordinador archiva, pero no elimina lo ajeno; no se puede mover un informe de
+    departamento; el autor elimina el suyo.
+  - Al dejar de ser integrante se pierde el acceso. Un departamento con informes no se elimina.
+  - anon no tiene acceso y todo queda auditado.
+  - La segunda corrida no tiene efecto y funciona en un proyecto nuevo.
+- **Flujos en navegador** (Chrome; Android emulado y escritorio; backend simulado): 33 pruebas, 0
+  fallas.
+  - Informe solo texto, acta PDF con foto de cámara, tres fotos (una HEIC) y Word con video, con
+    progreso visible.
+  - Validaciones de archivo faltante, tipo no admitido, PDF de 21 MB, video de 51 MB, archivo vacío
+    y título faltante.
+  - Header con logo, foto y teclado.
+  - Login: ver y ocultar contraseña, autocomplete, email recordado, contraseña incorrecta, y
+    verificación de que la contraseña no queda en el almacenamiento del navegador.
+- **Capturas:** escritorio y mobile, claro y oscuro, incluidos los Inicio de Informática, Escuela,
+  coordinador de departamento, jefe y usuario común.
+
+Checklist manual:
+
+- [ ] Correr `0098` y confirmar que el bucket `department-reports` es privado.
+- [ ] Coordinador: Nuevo → Cargar informe o acta → PDF desde el celular → aparece en "Informes y
+      actas" y se descarga con su nombre.
+- [ ] Redactar un informe de texto con dos fotos sacadas con la cámara.
+- [ ] Subir un video corto y reproducirlo en el detalle, en producción (confirma el `media-src`).
+- [ ] Usuario común: en el departamento ve el aviso de acceso; por URL a un informe ve "No
+      encontramos el informe".
+- [ ] Integrante con cuenta: ve y carga; no elimina informes ajenos.
+- [ ] Informática ve los informes de todos los departamentos.
+- [ ] Inicio con cada rol: accesos que correspondan y "Estado de la Regional" solo para roles
+      territoriales.
+- [ ] Logo → Inicio; foto → Mi perfil; en celular y con teclado.
+- [ ] Login en celular: ver contraseña, el navegador ofrece guardarla, "Recordar mi email".
+- [ ] Textos: ninguna pantalla dice "Región" para el nivel institucional.
+
+### 57.10 Riesgos y pendientes
+
+- **Carga en Android físico:** se probó con emulación de Chrome Android, no en un equipo real.
+  Mismo pendiente que en 56.10, ahora también para fotos y videos.
+- **Videos grandes con conexión lenta:** la subida no se reanuda si se corta, hay que reintentar el
+  archivo. Para videos de más de 50 MB haría falta subida resumible (TUS) y un plan de Supabase que
+  la admita.
+- **HEIC:** se sube y descarga bien, pero la mayoría de los navegadores fuera de Safari no muestran
+  la miniatura (se ve un ícono con el nombre).
+- **Passkeys:** listas pero apagadas, hasta habilitarlas y probarlas en el proyecto (57.5).
+- **Rol de Secretario Regional sobre los informes:** si institucionalmente tiene que ver todos los
+  informes, se puede sumar `is_regional_role()` a `can_view_department_reports()` en una migración
+  nueva.

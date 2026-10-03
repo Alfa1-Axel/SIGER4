@@ -47,9 +47,9 @@ export function UsuariosPage() {
     <AppShell title="Usuarios">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 className="page-title">Gestión de Usuarios</h1>
+          <h1 className="page-title">Usuarios</h1>
           <p className="page-subtitle">
-            {isJefeCuerpoActivo ? 'Usuarios de tu cuartel.' : 'Cuentas del sistema, roles y alcances asignados.'}
+            {isJefeCuerpoActivo ? 'Usuarios de tu cuartel. Tocá uno para editar sus datos o su contraseña.' : 'Cuentas del sistema con sus roles y alcances. Tocá una para editarla.'}
           </p>
         </div>
         <Link to="/roles" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
@@ -72,7 +72,7 @@ export function UsuariosPage() {
       )}
 
       {loading && <div className="loading-state" role="status">Cargando usuarios…</div>}
-      {!loading && filtered.length === 0 && <div className="empty-state">No se encontraron usuarios.</div>}
+      {!loading && filtered.length === 0 && <div className="empty-state">No encontramos usuarios con esa búsqueda. Probá con otro nombre o email.</div>}
 
       <div className="card row-list">
         {filtered.map((profile) => (
@@ -100,6 +100,7 @@ export function UsuariosPage() {
         aria-label="Nuevo usuario"
       >
         <Icon name="plus" size={20} />
+          <span className="fab-label">Nuevo usuario</span>
       </Link>
     </AppShell>
   )

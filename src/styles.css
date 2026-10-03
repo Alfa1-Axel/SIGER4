@@ -300,6 +300,35 @@ h3 {
   min-width: 0;
 }
 
+/* Logo del header y de la barra lateral: llevan al inicio. Foto: al perfil. */
+.app-header-home,
+.app-header-avatar-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.app-header-avatar-link {
+  margin-left: 4px;
+  border-radius: var(--radius-full);
+}
+
+.app-header-home:hover,
+.app-header-avatar-link:hover {
+  opacity: 0.85;
+}
+
+.app-header-home:focus-visible,
+.app-header-avatar-link:focus-visible,
+.sidebar-brand:focus-visible,
+.sidebar-user:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
 .app-header-logo {
   height: 24px;
   width: 24px;
@@ -427,6 +456,9 @@ h3 {
   gap: 10px;
   padding: 4px 6px;
   min-width: 0;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
 }
 
 .sidebar-brand img {
@@ -528,6 +560,14 @@ h3 {
   gap: 8px;
   padding: 4px 6px;
   min-width: 0;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.sidebar-user:hover,
+.sidebar-brand:hover {
+  background: var(--color-surface-hover);
 }
 
 .sidebar-user-name {
@@ -714,6 +754,70 @@ a.card-solid:focus-visible {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+/* Accesos rápidos del Inicio: tarjetas con ícono, título y una línea. */
+.quick-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  margin-bottom: 24px;
+}
+
+.quick-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.quick-action:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-hover);
+}
+
+.quick-action:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.quick-action-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.quick-action-text strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.quick-action-text span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 599px) {
+  .quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-action {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .quick-action-text span {
+    display: none;
+  }
 }
 
 /* Lista de filas dentro de un panel (Panel, Usuarios, eventos). */
@@ -999,6 +1103,25 @@ a.row-item:focus-visible {
   height: 52px;
   border-radius: var(--radius-full);
   box-shadow: var(--shadow-md);
+}
+
+/* En escritorio el botón flotante muestra su texto ("Nuevo evento"); en el
+   celular queda redondo, solo con el ícono (el texto sigue en aria-label). */
+.fab-label {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .fab {
+    width: auto;
+    padding: 0 20px 0 16px;
+    gap: 8px;
+  }
+
+  .fab .fab-label {
+    display: inline;
+    font-weight: 600;
+  }
 }
 
 .fab-menu {
@@ -1632,6 +1755,238 @@ input[type='file']::file-selector-button:hover {
   color: var(--color-text-secondary);
 }
 
+/* Dos campos lado a lado en escritorio; uno debajo del otro en el celular. */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+
+.form-row > .field {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.field-label-optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* Selector de modo (ej. "Redactar" / "Subir un archivo"). */
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Lista de adjuntos elegidos o ya cargados. */
+.attachment-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.attachment-list--boxed {
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Progreso de subida de archivos. */
+.upload-progress {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.upload-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.upload-progress progress {
+  width: 100%;
+  height: 8px;
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-pressed);
+  overflow: hidden;
+}
+
+.upload-progress progress::-webkit-progress-bar {
+  background: var(--color-surface-pressed);
+}
+
+.upload-progress progress::-webkit-progress-value {
+  background: var(--color-primary);
+}
+
+.upload-progress progress::-moz-progress-bar {
+  background: var(--color-primary);
+}
+
+.upload-progress-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.upload-progress-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upload-progress-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-progress-item--subido {
+  color: var(--color-success);
+}
+
+.upload-progress-item--error {
+  color: var(--color-danger);
+}
+
+/* Detalle de un informe. */
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.report-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.photo-tile {
+  position: relative;
+  display: block;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.photo-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.photo-tile-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.video-item video {
+  width: 100%;
+  max-height: 360px;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+
+/* Menú de acciones (botón "+ Nuevo" con opciones). */
+.action-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.action-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  min-width: 240px;
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+}
+
+.action-menu-list--left {
+  left: 0;
+  right: auto;
+}
+
+.action-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--radius-sm, 6px);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.action-menu-item:hover,
+.action-menu-item:focus-visible {
+  background: var(--color-surface-hover);
+}
+
+.action-menu-item small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 /* Estado vacío con acción: texto + botón para el próximo paso. */
 .empty-state-action {
   display: flex;
@@ -2005,6 +2360,64 @@ input[type='file']::file-selector-button:hover {
   font-size: 13px;
   color: var(--color-text-secondary);
   margin: 0 0 24px;
+}
+
+/* Campo de contraseña con botón para ver u ocultar. */
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  width: 100%;
+  padding-right: 44px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.password-toggle:hover {
+  color: var(--color-text-primary);
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-border);
+}
+
+.login-help {
+  margin: 18px 0 0;
+  font-size: 12px;
+  text-align: center;
+  color: var(--color-text-muted);
 }
 
 /* ============================================================

@@ -347,7 +347,7 @@ export function AuditoriaPage() {
 
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <div className="field" style={{ flex: 1, minWidth: 140 }}>
-            <label htmlFor="regionFilter">Región</label>
+            <label htmlFor="regionFilter">Regional</label>
             <select
               id="regionFilter"
               value={regionId}

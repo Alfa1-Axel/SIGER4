@@ -144,7 +144,7 @@ export function CalendarioPage() {
           </button>
         </div>
       </div>
-      <p className="page-subtitle">Eventos institucionales, regionales, de cuartel y de Escuela.</p>
+      <p className="page-subtitle">Eventos de la Regional, de tu cuartel y de la Escuela. Tocá un día para ver qué hay.</p>
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
@@ -291,7 +291,17 @@ export function CalendarioPage() {
 
       {!loading && view === 'lista' && (
         <div className="card row-list" style={{ marginBottom: 20 }}>
-          {filteredEvents.length === 0 && <div className="empty-state">Todavía no hay eventos cargados en el calendario.</div>}
+          {filteredEvents.length === 0 && (
+            <div className="empty-state empty-state-action">
+              <span>No hay eventos para mostrar con este filtro.</span>
+              {canCreate && (
+                <Link to="/calendario/nuevo" className="btn btn-outlined">
+                  <Icon name="plus" size={16} />
+                  Cargar un evento
+                </Link>
+              )}
+            </div>
+          )}
           {filteredEvents.map((event) => (
             <Link
               key={event.id}
@@ -316,6 +326,7 @@ export function CalendarioPage() {
       {canCreate && (
         <Link to="/calendario/nuevo" className="btn btn-primary btn-icon fab" aria-label="Nuevo evento">
           <Icon name="plus" size={20} />
+          <span className="fab-label">Nuevo evento</span>
         </Link>
       )}
     </AppShell>

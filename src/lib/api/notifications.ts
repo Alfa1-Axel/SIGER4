@@ -37,6 +37,18 @@ export async function fetchUnreadNotificationCount(): Promise<number> {
   return count ?? 0
 }
 
+// Últimas no leídas, para el Inicio.
+export async function fetchLatestUnreadNotifications(limit = 3): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('is_read', false)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as Notification[]
+}
+
 export async function markNotificationRead(id: string): Promise<void> {
   const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id)
   if (error) throw error

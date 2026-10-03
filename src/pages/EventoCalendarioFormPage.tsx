@@ -151,7 +151,7 @@ export function EventoCalendarioFormPage() {
     setError(null)
 
     if (!isScopeless) {
-      if (scopeTarget === 'region' && !regionId) return setError('Seleccioná la región destino.')
+      if (scopeTarget === 'region' && !regionId) return setError('Elegí la Regional destino.')
       if (scopeTarget === 'subsede' && !subsedeId) return setError('Seleccioná la subsede destino.')
       if (scopeTarget === 'station' && !stationLocked && !stationId) return setError('Seleccioná el cuartel destino.')
       if (scopeTarget === 'station' && stationLocked && !myStationId) {
@@ -268,7 +268,7 @@ export function EventoCalendarioFormPage() {
                   </div>
                   {scopeTarget === 'region' && (
                     <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-                      <option value="">Seleccionar región</option>
+                      <option value="">Seleccionar Regional</option>
                       {regions.map((r) => (
                         <option key={r.id} value={r.id}>
                           {r.name}

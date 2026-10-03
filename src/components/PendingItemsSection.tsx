@@ -40,13 +40,13 @@ export function PendingItemsSection() {
   return (
     <>
       <div className="section-header">
-        <h2 className="section-title">Pendientes</h2>
+        <h2 className="section-title">Requiere atención</h2>
       </div>
       <div className={`card${items.length > 0 ? ' row-list' : ''}`} style={{ marginBottom: 20 }}>
         {loading && <div className="loading-state" role="status">Cargando pendientes…</div>}
         {error && <p className="field-error">{error}</p>}
         {!loading && !error && items.length === 0 && (
-          <div className="empty-state">No hay pendientes importantes.</div>
+          <div className="empty-state">Todo al día: no hay pendientes que requieran tu atención.</div>
         )}
         {!loading &&
           !error &&

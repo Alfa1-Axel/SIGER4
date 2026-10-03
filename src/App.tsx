@@ -57,6 +57,8 @@ import { DepartamentosPage } from './pages/DepartamentosPage'
 import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
 import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
+import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
+import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
 
 export default function App() {
   return (
@@ -131,6 +133,10 @@ export default function App() {
         <Route path="/inventario/:id" element={<ProtectedRoute><InventarioDetallePage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
+        {/* Informes y actas de un departamento (0098). */}
+        <Route path="/departamentos/informes/nuevo" element={<ProtectedRoute><DepartamentoInformeFormPage /></ProtectedRoute>} />
+        <Route path="/departamentos/informes/:reportId" element={<ProtectedRoute><DepartamentoInformeDetallePage /></ProtectedRoute>} />
+        <Route path="/departamentos/informes/:reportId/editar" element={<ProtectedRoute><DepartamentoInformeFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:departmentId/informes/nuevo" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/informes/:id/editar" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />

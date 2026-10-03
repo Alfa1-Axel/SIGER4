@@ -63,8 +63,8 @@ export function CuartelesPage() {
 
   return (
     <AppShell title="Cuarteles">
-      <h1 className="page-title">Gestión de Cuarteles</h1>
-      <p className="page-subtitle">Listado de cuarteles dependientes de la Regional 4</p>
+      <h1 className="page-title">Cuarteles</h1>
+      <p className="page-subtitle">Los cuarteles de la Regional 4 con su personal, unidades y estado de carga.</p>
 
       <div className="search-input" style={{ marginBottom: 12 }}>
         <Icon name="search" size={16} />
@@ -117,7 +117,7 @@ export function CuartelesPage() {
 
       {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
       {!loading && filtered.length === 0 && (
-        <div className="empty-state">No se encontraron cuarteles con ese criterio.</div>
+        <div className="empty-state">No encontramos cuarteles con esa búsqueda o filtro.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -188,6 +188,7 @@ export function CuartelesPage() {
           aria-label="Nuevo cuartel"
         >
           <Icon name="plus" size={20} />
+          <span className="fab-label">Nuevo cuartel</span>
         </Link>
       )}
     </AppShell>

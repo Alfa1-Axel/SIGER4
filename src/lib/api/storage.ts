@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient'
+import { supabase, supabaseAnonKey, supabaseUrl } from '../supabaseClient'
 
 // Convención de paths: "<id>/<archivo>" — el primer segmento del path es lo
 // que las políticas de Storage usan (storage.foldername(name)[1]) para
@@ -59,6 +59,12 @@ const EXTENSION_TO_MIME: Record<string, string> = {
   webp: 'image/webp',
   heic: 'image/heic',
   heif: 'image/heif',
+  // Videos de celular: Android graba mp4 (a veces 3gp), iPhone mov.
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  mov: 'video/quicktime',
+  webm: 'video/webm',
+  '3gp': 'video/3gpp',
 }
 
 // Exportada (no solo de uso interno) para que la instrumentación de
@@ -266,4 +272,119 @@ export async function getSchoolAvalSignedUrl(storagePath: string, downloadName?:
     .createSignedUrl(storagePath, SCHOOL_AVALES_SIGNED_URL_SECONDS, downloadName ? { download: downloadName } : undefined)
   if (error || !data) throw new Error('El archivo no está disponible o no tenés permiso para verlo.')
   return data.signedUrl
+}
+
+// ---------------- Informes de Departamentos ----------------
+// Bucket privado "department-reports" (ver 0098_department_reports.sql).
+// Ruta: "<department_id>/<report_id>/<file_id>/<archivo-sanitizado>". La
+// policy de INSERT exige que el informe exista y que el usuario pueda
+// administrarlo; la de SELECT, que el archivo esté registrado en un
+// departamento que puede ver.
+const DEPARTMENT_REPORTS_BUCKET = 'department-reports'
+const DEPARTMENT_REPORT_SIGNED_URL_SECONDS = 10 * 60
+
+export const DEPARTMENT_REPORT_DOCUMENT_MAX_BYTES = 20 * 1024 * 1024
+// Igual al file_size_limit del bucket (50 MB).
+export const DEPARTMENT_REPORT_VIDEO_MAX_BYTES = 50 * 1024 * 1024
+
+const DEPARTMENT_REPORT_VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm', 'video/3gpp'])
+
+export function isDepartmentReportMimeAllowed(mimeType: string): boolean {
+  return DOCUMENT_MIME_TYPES.has(mimeType) || DEPARTMENT_REPORT_VIDEO_TYPES.has(mimeType)
+}
+
+export function departmentReportMaxBytes(mimeType: string): number {
+  return DEPARTMENT_REPORT_VIDEO_TYPES.has(mimeType) ? DEPARTMENT_REPORT_VIDEO_MAX_BYTES : DEPARTMENT_REPORT_DOCUMENT_MAX_BYTES
+}
+
+export function buildDepartmentReportFilePath(departmentId: string, reportId: string, fileId: string, file: File): string {
+  return `${departmentId}/${reportId}/${fileId}/${sanitizeFileName(file.name)}`
+}
+
+// Sube un archivo con progreso real (bytes enviados). supabase-js usa fetch,
+// que no informa progreso de subida; esto manda el mismo pedido (POST
+// multipart al endpoint de Storage, con la sesión del usuario) por
+// XMLHttpRequest. Los errores se devuelven con el mismo nombre que los de
+// storage-js para que describeSupabaseError los traduzca igual.
+export async function uploadDepartmentReportObject(
+  path: string,
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<{ contentType: string }> {
+  const contentType = inferMimeType(file)
+  if (!isDepartmentReportMimeAllowed(contentType)) {
+    throw new Error(`"${file.name}" no es un formato admitido.`)
+  }
+  if (file.size > departmentReportMaxBytes(contentType)) {
+    throw new Error(`"${file.name}" supera el tamaño máximo permitido.`)
+  }
+  const { data } = await supabase.auth.getSession()
+  const token = data.session?.access_token
+  if (!token) throw new Error('Tu sesión venció. Volvé a iniciar sesión.')
+
+  const body = new FormData()
+  body.append('cacheControl', '3600')
+  body.append('', withCorrectedMimeType(file, contentType))
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${supabaseUrl}/storage/v1/object/${DEPARTMENT_REPORTS_BUCKET}/${path}`)
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.setRequestHeader('apikey', supabaseAnonKey)
+    xhr.setRequestHeader('x-upsert', 'false')
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && onProgress) onProgress(event.loaded / event.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(1)
+        resolve()
+        return
+      }
+      let message = `Error ${xhr.status}`
+      try {
+        const parsed = JSON.parse(xhr.responseText) as { message?: string; error?: string }
+        message = parsed.message || parsed.error || message
+      } catch {
+        // respuesta sin JSON: queda el código HTTP
+      }
+      if (xhr.status === 413) message = 'Payload too large'
+      const err = new Error(message)
+      err.name = 'StorageApiError'
+      reject(err)
+    }
+    xhr.onerror = () => reject(new Error('Network request failed'))
+    xhr.onabort = () => reject(new Error('Network request failed'))
+    xhr.send(body)
+  })
+  return { contentType }
+}
+
+export async function removeDepartmentReportObjects(paths: string[]): Promise<void> {
+  if (paths.length === 0) return
+  const { error } = await supabase.storage.from(DEPARTMENT_REPORTS_BUCKET).remove(paths)
+  if (error) throw new Error('No pudimos borrar el archivo del almacenamiento. Reintentá en unos segundos.')
+}
+
+// downloadName: fuerza la descarga con el nombre original del archivo. Sin
+// él, el navegador lo abre si puede (PDF, imagen, video).
+export async function getDepartmentReportFileUrl(storagePath: string, downloadName?: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(DEPARTMENT_REPORTS_BUCKET)
+    .createSignedUrl(storagePath, DEPARTMENT_REPORT_SIGNED_URL_SECONDS, downloadName ? { download: downloadName } : undefined)
+  if (error || !data) throw new Error('El archivo no está disponible o no tenés permiso para verlo.')
+  return data.signedUrl
+}
+
+export async function getDepartmentReportFileUrls(storagePaths: string[]): Promise<Map<string, string>> {
+  const urls = new Map<string, string>()
+  if (storagePaths.length === 0) return urls
+  const { data, error } = await supabase.storage
+    .from(DEPARTMENT_REPORTS_BUCKET)
+    .createSignedUrls(storagePaths, DEPARTMENT_REPORT_SIGNED_URL_SECONDS)
+  if (error || !data) return urls
+  for (const item of data) {
+    if (item.path && item.signedUrl) urls.set(item.path, item.signedUrl)
+  }
+  return urls
 }

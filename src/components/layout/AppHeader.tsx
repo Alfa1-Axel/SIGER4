@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
@@ -37,7 +37,9 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         <button type="button" className="btn btn-icon btn-ghost hamburger-button" aria-label="Abrir menú" onClick={onOpenMenu}>
           <Icon name="menu" size={18} />
         </button>
-        <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" className="app-header-logo" />
+        <Link to="/panel" className="app-header-home" aria-label="Ir al inicio" title="Ir al inicio">
+          <img src="/logos/logo-informatica.png" alt="" className="app-header-logo" />
+        </Link>
         <span className="app-header-title">{title}</span>
       </div>
       <div className="app-header-actions">
@@ -61,13 +63,16 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
           <Icon name="bell" size={18} />
           {unreadCount > 0 && <span className="header-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
         </button>
-        {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt={profile.full_name} className="avatar" style={{ marginLeft: 4 }} />
-        ) : (
-          <span className="avatar avatar-placeholder" style={{ marginLeft: 4 }} aria-label={profile?.full_name ?? 'Usuario'} role="img">
-            <Icon name="user" size={16} />
-          </span>
-        )}
+        {/* La foto lleva directo al perfil (Mi perfil y ajustes). */}
+        <Link to="/ajustes" className="app-header-avatar-link" aria-label="Ir a mi perfil" title="Mi perfil">
+          {profile?.avatar_url ? (
+            <img src={profile.avatar_url} alt="" className="avatar" />
+          ) : (
+            <span className="avatar avatar-placeholder" aria-hidden="true">
+              <Icon name="user" size={16} />
+            </span>
+          )}
+        </Link>
       </div>
     </header>
   )

@@ -319,11 +319,11 @@ export function MapaRegionalPage() {
     // sea la suya). No puede dejar el punto "sin alcance" (scopeKind
     // 'ninguno'), porque eso lo haría visible a toda la app.
     if (!isAdmin && form.scopeKind === 'ninguno') {
-      setFormError('Como secretario regional, el punto tiene que tener alcance de tu región.')
+      setFormError('Como Secretario Regional, el punto tiene que tener alcance de tu Regional.')
       return
     }
     if (!isAdmin && form.regionId !== profile?.region_id) {
-      setFormError('Solo podés crear puntos dentro de tu propia región.')
+      setFormError('Solo podés crear puntos dentro de tu propia Regional.')
       return
     }
 
@@ -566,20 +566,20 @@ export function MapaRegionalPage() {
                     }}
                   >
                     {isAdmin && <option value="ninguno">Toda la Regional (sin restricción)</option>}
-                    <option value="region">Una región</option>
+                    <option value="region">Una Regional</option>
                     <option value="subsede">Una subsede</option>
                     <option value="station">Un cuartel</option>
                   </select>
                   {!isAdmin && (
                     <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                      Como secretario regional, solo podés cargar puntos dentro de tu propia región (podés acotarlos además a una subsede o cuartel puntual).
+                      Como Secretario Regional, solo podés cargar puntos dentro de tu propia Regional (podés acotarlos además a una subsede o cuartel puntual).
                     </p>
                   )}
                 </div>
 
                 {(form.scopeKind === 'region' || form.scopeKind === 'subsede' || form.scopeKind === 'station') && (
                   <div className="field">
-                    <label htmlFor="pointRegion">Región</label>
+                    <label htmlFor="pointRegion">Regional</label>
                     <select
                       id="pointRegion"
                       required
@@ -588,7 +588,7 @@ export function MapaRegionalPage() {
                       onChange={(e) => setForm((f) => ({ ...f, regionId: e.target.value, subsedeId: '', stationId: '' }))}
                     >
                       <option value="" disabled>
-                        Seleccionar región
+                        Seleccionar Regional
                       </option>
                       {regions.map((r) => (
                         <option key={r.id} value={r.id}>

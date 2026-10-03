@@ -5,13 +5,19 @@ import { Icon } from '../components/ui/Icon'
 import { PendingItemsSection } from '../components/PendingItemsSection'
 import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
+import { fetchDepartments } from '../lib/api/departments'
+import { fetchLatestUnreadNotifications, fetchUnreadNotificationCount } from '../lib/api/notifications'
 import type { DashboardSummary } from '../lib/api/dashboard'
-import type { Station } from '../types/database'
+import type { Notification, Station } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
 import { formatPercent } from '../lib/format'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
+import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
+import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
+import { roleLabel } from '../types/roles'
+import type { RoleKey } from '../types/roles'
 
 function timeAgo(iso: string): string {
   const diffMs = Date.parse(iso) ? Date.now() - Date.parse(iso) : 0
@@ -23,17 +29,61 @@ function timeAgo(iso: string): string {
   return `Hace ${Math.floor(hours / 24)}d`
 }
 
+function greeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Buen día'
+  if (hour < 20) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
+// Roles con alcance territorial (Regional, subsede o cuartel): para ellos
+// el estado de cuarteles, asistencia e intervenciones es parte del trabajo
+// diario. Para Escuela o la coordinación de un departamento es ruido.
+const TERRITORIAL_ROLES: RoleKey[] = [
+  'secretario_regional',
+  'director_escuela',
+  'jefe_cuerpo_activo',
+  'presidente_cuartel',
+  'usuario_carga_cuartel',
+  'secretario_comision',
+  'invitado',
+]
+
+const DOCUMENT_UPLOAD_ROLES: RoleKey[] = ['secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo']
+
+interface QuickAction {
+  to: string
+  label: string
+  description: string
+  icon: string
+  badge?: number
+}
+
+// Inicio: lo primero que ve cada usuario al ingresar. Responde, en este
+// orden: qué requiere atención, qué puede hacer (accesos según su rol), qué
+// llegó (notificaciones sin leer), qué viene (agenda) y, para los roles
+// territoriales, el estado de la Regional.
 export function PanelPage() {
-  const { isAdmin, isSuperAdmin, hasRole } = useAuth()
+  const { profile, roles, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds } = useAuth()
+  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
+  const { hasAnyAccess: hasReportsAccess } = useDepartmentReportsAccess()
+  // Mismo criterio que ReportsRoute.
   const canAccessReports = isAdmin || hasRole('director_escuela', 'secretario_regional', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
+  const canManageUsers = isAdmin || hasRole('jefe_cuerpo_activo')
+  const canUploadDocuments = isAdmin || hasRole(...DOCUMENT_UPLOAD_ROLES)
+  const showRegionalStatus = isAdmin || hasRole(...TERRITORIAL_ROLES)
+
   const [summary, setSummary] = useState<DashboardSummary | null>(null)
   const [stations, setStations] = useState<Station[]>([])
+  const [unread, setUnread] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [coordinatedNames, setCoordinatedNames] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchDashboardSummary(), fetchStations()])
+    Promise.all([fetchDashboardSummary(), showRegionalStatus ? fetchStations() : Promise.resolve([] as Station[])])
       .then(([summaryData, stationsData]) => {
         if (!active) return
         setSummary(summaryData)
@@ -41,100 +91,137 @@ export function PanelPage() {
       })
       .catch((err) => {
         if (!active) return
-        setError(describeSupabaseError(err, 'No pudimos cargar el panel regional.'))
+        setError(describeSupabaseError(err, 'No pudimos cargar el inicio. Reintentá en unos segundos.'))
       })
       .finally(() => {
         if (active) setLoading(false)
       })
+    Promise.all([fetchLatestUnreadNotifications(3), fetchUnreadNotificationCount()])
+      .then(([latest, count]) => {
+        if (!active) return
+        setUnread(latest)
+        setUnreadCount(count)
+      })
+      .catch(() => {
+        // Las notificaciones siguen disponibles en su sección.
+      })
     return () => {
       active = false
     }
-  }, [])
+  }, [showRegionalStatus])
+
+  useEffect(() => {
+    if (coordinatedDepartmentIds.length === 0) return
+    let active = true
+    fetchDepartments()
+      .then((list) => active && setCoordinatedNames(list.filter((d) => coordinatedDepartmentIds.includes(d.id)).map((d) => d.name)))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [coordinatedDepartmentIds])
+
+  // Accesos rápidos según el rol, en orden de uso esperado.
+  const actions: QuickAction[] = []
+  if (hasAvalesAccess) actions.push({ to: '/escuela/avales', label: 'Avales regionales', description: 'Ver y subir avales de Escuela', icon: 'school' })
+  if (hasReportsAccess) actions.push({ to: '/departamentos/informes/nuevo?modo=cargar', label: 'Cargar informe', description: 'Acta, informe o fotos de un departamento', icon: 'file' })
+  if (canUploadDocuments) actions.push({ to: '/documentos/nuevo', label: 'Subir documento', description: 'Circulares, actas y archivos', icon: 'download' })
+  else actions.push({ to: '/documentos', label: 'Documentos', description: 'Circulares, actas y archivos', icon: 'file' })
+  actions.push({ to: '/calendario', label: 'Calendario', description: 'Eventos y vencimientos', icon: 'calendar' })
+  actions.push({ to: '/notificaciones', label: 'Notificaciones', description: unreadCount ? `${unreadCount} sin leer` : 'Al día', icon: 'bell', badge: unreadCount })
+  if (canAccessReports) actions.push({ to: '/reportes', label: 'Generar reporte', description: 'PDF por cuartel, curso o departamento', icon: 'chart' })
+  if (canManageUsers) actions.push({ to: '/usuarios', label: 'Usuarios', description: 'Altas, roles y accesos', icon: 'user' })
+  if (showRegionalStatus) actions.push({ to: '/cuarteles', label: 'Cuarteles', description: 'Personal, unidades y estado', icon: 'building' })
+
+  const firstName = profile?.full_name?.split(' ')[0] ?? ''
+  const roleSummary = [
+    ...roles.filter((r) => r !== 'administrativo' && r !== 'coordinador_departamento_escuela').map((r) => roleLabel(r)),
+    ...(coordinatedNames.length ? [`Coordinador de ${coordinatedNames.join(', ')}`] : []),
+  ]
+  const todayRaw = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+  const today = todayRaw.charAt(0).toUpperCase() + todayRaw.slice(1)
 
   return (
-    <AppShell title="Panel">
+    <AppShell title="Inicio">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Resumen regional</h1>
-          <p className="page-subtitle">Recursos, personal, eventos y alertas de la región en un solo lugar.</p>
+          <h1 className="page-title">
+            {greeting()}
+            {firstName ? `, ${firstName}` : ''}
+          </h1>
+          <p className="page-subtitle">
+            {today}
+            {roleSummary.length > 0 && ` · ${roleSummary.slice(0, 3).join(' · ')}`}
+          </p>
         </div>
-        {canAccessReports && (
-          <div className="page-header-actions">
-            <Link to="/reportes" className="btn btn-primary">
-              <Icon name="chart" size={16} />
-              Nuevo reporte
-            </Link>
-          </div>
-        )}
       </div>
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      <div className="card-grid" style={{ marginBottom: 20 }}>
-        <div className="kpi-card">
-          <div className="kpi-label">Cuarteles</div>
-          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.stationsCount ?? 0}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Asistencia promedio</div>
-          <div className="kpi-value">
-            {loading || summary?.averageAttendanceRate == null
-              ? '—'
-              : formatPercent(summary.averageAttendanceRate)}
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Intervenciones (período)</div>
-          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.interventionsThisPeriod ?? 0}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Cursos activos</div>
-          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.coursesActive ?? 0}</div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-label">Vehículos registrados</div>
-          <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.vehiclesRegistered ?? 0}</div>
-        </div>
-      </div>
-
       <PendingItemsSection />
 
       <div className="section-header">
-        <h2 className="section-title">Estado de Carga por Cuartel</h2>
+        <h2 className="section-title">Accesos rápidos</h2>
       </div>
-      <div className="card" style={{ marginBottom: 20 }}>
-        {loading && <div className="loading-state" role="status">Cargando estado de carga…</div>}
-        {!loading && (
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success)' }}>
-                {summary?.complianceCounts.verde ?? 0}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>AL DÍA</div>
-            </div>
-            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>
-                {summary?.complianceCounts.amarillo ?? 0}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>PARCIAL</div>
-            </div>
-            <div style={{ flex: 1, minWidth: 100, textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger)' }}>
-                {summary?.complianceCounts.rojo ?? 0}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>
-            </div>
+      <nav className="quick-actions" aria-label="Accesos rápidos">
+        {actions.slice(0, 8).map((a) => (
+          <Link key={a.to} to={a.to} className="quick-action">
+            <span className="list-item-icon" style={{ position: 'relative' }}>
+              <Icon name={a.icon} size={18} />
+              {a.badge ? <span className="header-badge" style={{ top: -6, right: -6 }}>{a.badge > 9 ? '9+' : a.badge}</span> : null}
+            </span>
+            <span className="quick-action-text">
+              <strong>{a.label}</strong>
+              <span>{a.description}</span>
+            </span>
+          </Link>
+        ))}
+      </nav>
+
+      {unread.length > 0 && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Notificaciones sin leer</h2>
+            <Link to="/notificaciones" className="link-muted">
+              Ver todas{unreadCount > unread.length ? ` (${unreadCount})` : ''}
+            </Link>
           </div>
-        )}
-        <Link to="/cuarteles" className="link-muted" style={{ display: 'block', marginTop: 12, fontSize: 12 }}>
-          Ver detalle por cuartel →
-        </Link>
-      </div>
+          <div className="card row-list" style={{ marginBottom: 20 }}>
+            {unread.map((n) => (
+              <Link key={n.id} to="/notificaciones" className="row-item">
+                <div style={{ minWidth: 0 }}>
+                  <div className="row-item-title">{n.title}</div>
+                  {n.body && <div className="row-item-meta" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</div>}
+                </div>
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{timeAgo(n.created_at)}</span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!loading && (summary?.todayEvents.length ?? 0) > 0 && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Hoy</h2>
+          </div>
+          <div className="card row-list" style={{ marginBottom: 20 }}>
+            {summary?.todayEvents.map((event) => (
+              <Link key={event.id} to={`/calendario/${event.id}`} className="row-item">
+                <span className="row-item-title" style={{ minWidth: 0 }}>{event.title}</span>
+                <span className="badge badge-warning" style={{ flexShrink: 0 }}>
+                  {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
 
       <div className="section-header">
-        <h2 className="section-title">Próximos Eventos</h2>
+        <h2 className="section-title">Próximos eventos</h2>
         <Link to="/calendario" className="link-muted">
           Ver calendario
         </Link>
@@ -142,14 +229,10 @@ export function PanelPage() {
       <div className="card row-list" style={{ marginBottom: 20 }}>
         {loading && <div className="loading-state" role="status">Cargando eventos…</div>}
         {!loading && (summary?.upcomingEvents.length ?? 0) === 0 && (
-          <div className="empty-state">No hay eventos próximos cargados en el calendario.</div>
+          <div className="empty-state">No hay eventos próximos en el calendario.</div>
         )}
         {summary?.upcomingEvents.map((event) => (
-          <Link
-            key={event.id}
-            to={`/calendario/${event.id}`}
-            className="row-item"
-          >
+          <Link key={event.id} to={`/calendario/${event.id}`} className="row-item">
             <div style={{ minWidth: 0 }}>
               <div className="row-item-title">{event.title}</div>
               <div className="row-item-meta">
@@ -162,40 +245,14 @@ export function PanelPage() {
         ))}
       </div>
 
-      {!loading && (summary?.todayEvents.length ?? 0) > 0 && (
-        <>
-          <div className="section-header">
-            <h2 className="section-title">Eventos de Hoy</h2>
-          </div>
-          <div className="card row-list" style={{ marginBottom: 20 }}>
-            {summary?.todayEvents.map((event) => (
-              <Link
-                key={event.id}
-                to={`/calendario/${event.id}`}
-            className="row-item"
-              >
-                <span className="row-item-title" style={{ minWidth: 0 }}>{event.title}</span>
-                <span className="badge badge-warning" style={{ flexShrink: 0 }}>
-                  {event.all_day ? 'Todo el día' : new Date(event.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
       {!loading && (summary?.upcomingDeadlines.length ?? 0) > 0 && (
         <>
           <div className="section-header">
-            <h2 className="section-title">Vencimientos Próximos</h2>
+            <h2 className="section-title">Vencimientos próximos</h2>
           </div>
           <div className="card row-list" style={{ marginBottom: 20 }}>
             {summary?.upcomingDeadlines.map((event) => (
-              <Link
-                key={event.id}
-                to={`/calendario/${event.id}`}
-            className="row-item"
-              >
+              <Link key={event.id} to={`/calendario/${event.id}`} className="row-item">
                 <span className="row-item-title" style={{ minWidth: 0 }}>{event.title}</span>
                 <span className="badge badge-danger" style={{ flexShrink: 0 }}>
                   {new Date(event.starts_at).toLocaleDateString('es-AR', { dateStyle: 'medium' })}
@@ -206,58 +263,103 @@ export function PanelPage() {
         </>
       )}
 
-      <div className="section-header">
-        <h2 className="section-title">Estado de Cuarteles</h2>
-        <Link to="/cuarteles" className="link-muted">
-          Ver todos
-        </Link>
-      </div>
-      <div className="card row-list" style={{ marginBottom: 20 }}>
-        {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
-        {!loading && stations.length === 0 && (
-          <div className="empty-state">Todavía no hay cuarteles cargados.</div>
-        )}
-        {stations.slice(0, 5).map((station) => (
-          <Link
-            key={station.id}
-            to={`/cuarteles/${station.id}`}
-            className="row-item"
-          >
-            <div>
-              <div className="row-item-title">{station.name}</div>
-              <div className="row-item-meta">
-                Personal: {station.personnel_count} · Unidades: {station.vehicles_count}
+      {showRegionalStatus && (
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Estado de la Regional</h2>
+            <Link to="/cuarteles" className="link-muted">
+              Ver cuarteles
+            </Link>
+          </div>
+          <div className="card-grid" style={{ marginBottom: 12 }}>
+            <div className="kpi-card">
+              <div className="kpi-label">Cuarteles</div>
+              <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.stationsCount ?? 0}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Asistencia promedio</div>
+              <div className="kpi-value">
+                {loading || summary?.averageAttendanceRate == null ? '—' : formatPercent(summary.averageAttendanceRate)}
               </div>
             </div>
-            <Icon name="chevronRight" size={18} />
-          </Link>
-        ))}
-      </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Intervenciones (período)</div>
+              <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.interventionsThisPeriod ?? 0}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Cursos activos</div>
+              <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.coursesActive ?? 0}</div>
+            </div>
+            <div className="kpi-card">
+              <div className="kpi-label">Vehículos registrados</div>
+              <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.vehiclesRegistered ?? 0}</div>
+            </div>
+          </div>
+
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="kpi-label" style={{ marginBottom: 10 }}>
+              Carga de datos por cuartel
+            </div>
+            {loading && <div className="loading-state" role="status">Cargando estado de carga…</div>}
+            {!loading && (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 90, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-success)' }}>{summary?.complianceCounts.verde ?? 0}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>AL DÍA</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 90, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-warning)' }}>{summary?.complianceCounts.amarillo ?? 0}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>PARCIAL</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 90, textAlign: 'center' }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--color-danger)' }}>{summary?.complianceCounts.rojo ?? 0}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>DESACTUALIZADO</div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card row-list" style={{ marginBottom: 20 }}>
+            {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
+            {!loading && stations.length === 0 && <div className="empty-state">Todavía no hay cuarteles cargados.</div>}
+            {stations.slice(0, 5).map((station) => (
+              <Link key={station.id} to={`/cuarteles/${station.id}`} className="row-item">
+                <div>
+                  <div className="row-item-title">{station.name}</div>
+                  <div className="row-item-meta">
+                    Personal: {station.personnel_count} · Unidades: {station.vehicles_count}
+                  </div>
+                </div>
+                <Icon name="chevronRight" size={18} />
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* La actividad reciente sale de la auditoría, que solo puede leer
           informatica_r4 (0097): para el resto quedaría siempre vacía. */}
       {isSuperAdmin && (
         <>
-        <div className="section-header">
-          <h2 className="section-title">Actividad Reciente</h2>
-        </div>
-        <div className="card row-list">
-          {loading && <div className="loading-state" role="status">Cargando actividad…</div>}
-          {!loading && (summary?.recentActivity.length ?? 0) === 0 && (
-            <div className="empty-state">Sin actividad registrada todavía.</div>
-          )}
-          {summary?.recentActivity.map((log) => (
-            <div key={log.id} className="row-item">
-              <div style={{ minWidth: 0 }}>
-                <div className="row-item-title">{translateAction(log.action)}</div>
-                <div className="row-item-meta">{translateTable(log.table_name)}</div>
+          <div className="section-header">
+            <h2 className="section-title">Actividad reciente</h2>
+            <Link to="/auditoria" className="link-muted">
+              Ver auditoría
+            </Link>
+          </div>
+          <div className="card row-list">
+            {loading && <div className="loading-state" role="status">Cargando actividad…</div>}
+            {!loading && (summary?.recentActivity.length ?? 0) === 0 && <div className="empty-state">Sin actividad registrada todavía.</div>}
+            {summary?.recentActivity.map((log) => (
+              <div key={log.id} className="row-item">
+                <div style={{ minWidth: 0 }}>
+                  <div className="row-item-title">{translateAction(log.action)}</div>
+                  <div className="row-item-meta">{translateTable(log.table_name)}</div>
+                </div>
+                <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{timeAgo(log.created_at)}</span>
               </div>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                {timeAgo(log.created_at)}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
         </>
       )}
     </AppShell>

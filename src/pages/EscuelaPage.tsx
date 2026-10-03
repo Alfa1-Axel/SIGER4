@@ -31,7 +31,15 @@ export function EscuelaPage() {
 
       {loading && <div className="loading-state" role="status">Cargando cursos…</div>}
       {!loading && courses.length === 0 && (
-        <div className="empty-state">Todavía no hay cursos cargados.</div>
+        <div className="empty-state empty-state-action">
+          <span>Todavía no hay cursos cargados.</span>
+          {canEdit && (
+            <Link to="/escuela/nuevo" className="btn btn-primary">
+              <Icon name="plus" size={16} />
+              Cargar el primer curso
+            </Link>
+          )}
+        </div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -71,6 +79,7 @@ export function EscuelaPage() {
           aria-label="Nuevo curso"
         >
           <Icon name="plus" size={20} />
+          <span className="fab-label">Nuevo curso</span>
         </Link>
       )}
     </AppShell>

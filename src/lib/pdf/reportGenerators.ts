@@ -324,7 +324,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
   ])
 
   builder.addExecutiveSummary([
-    `La regional cuenta con ${data.stations.length} cuarteles dentro del alcance seleccionado.`,
+    `La Regional cuenta con ${data.stations.length} cuarteles dentro del alcance seleccionado.`,
     data.attendance.length
       ? `La asistencia promedio del período fue de ${pct(avgAttendance)}.`
       : 'Sin resúmenes de asistencia cargados en el período.',

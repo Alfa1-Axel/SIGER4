@@ -5,6 +5,8 @@ import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { ImagePicker } from '../components/ui/ImagePicker'
 import { SystemSettingsSection } from '../components/SystemSettingsSection'
+import { PasskeysSection } from '../components/PasskeysSection'
+import { passkeysAvailable } from '../lib/auth/loginHelpers'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { Link } from 'react-router-dom'
@@ -49,7 +51,7 @@ const SCOPE_LABELS: Record<string, string> = {
   personal: 'personal',
   cuartel: 'todo tu cuartel',
   subsede: 'toda tu subsede',
-  region: 'toda tu región',
+  region: 'toda tu Regional',
   sin_alcance: 'sin alcance',
 }
 
@@ -514,11 +516,11 @@ export function AjustesPage() {
       <form onSubmit={handleChangePassword} className="card-solid" style={{ marginBottom: 20 }}>
         <div className="field">
           <label htmlFor="newPassword">Nueva contraseña</label>
-          <input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="••••••••" />
+          <input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
         </div>
         <div className="field">
           <label htmlFor="confirmPassword">Confirmar contraseña</label>
-          <input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="••••••••" />
+          <input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repetí la contraseña" />
         </div>
 
         {passwordError && <p className="field-error">{passwordError}</p>}
@@ -528,6 +530,8 @@ export function AjustesPage() {
           {changingPassword ? 'Cambiando…' : 'Cambiar contraseña'}
         </button>
       </form>
+
+      {passkeysAvailable() && <PasskeysSection />}
 
       <div className="section-header">
         <h2 className="section-title">Notificaciones push</h2>

@@ -152,7 +152,7 @@ export function CursoFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="region">Región</label>
+            <label htmlFor="region">Regional</label>
             <select id="region" required value={regionId} onChange={(e) => setRegionId(e.target.value)}>
               {regions.map((region) => (
                 <option key={region.id} value={region.id}>

@@ -1,12 +1,12 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { NAV_ITEMS, NAV_SECTIONS } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
-function UserAvatar({ avatarUrl, fullName }: { avatarUrl: string | null | undefined; fullName: string }) {
-  if (avatarUrl) return <img src={avatarUrl} alt={fullName} className="avatar" style={{ width: 28, height: 28 }} />
+function UserAvatar({ avatarUrl }: { avatarUrl: string | null | undefined }) {
+  if (avatarUrl) return <img src={avatarUrl} alt="" className="avatar" style={{ width: 28, height: 28 }} />
   return (
-    <span className="avatar avatar-placeholder" style={{ width: 28, height: 28 }} role="img" aria-label={fullName}>
+    <span className="avatar avatar-placeholder" style={{ width: 28, height: 28 }} aria-hidden="true">
       <Icon name="user" size={14} />
     </span>
   )
@@ -29,10 +29,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   return (
     <aside className={`app-sidebar${open ? ' open' : ''}`}>
       <div className="sidebar-brand-row">
-        <div className="sidebar-brand">
-          <img src="/logos/logo-escuela.png" alt="SIGER4" />
+        <Link to="/panel" className="sidebar-brand" aria-label="SIGER4: ir al inicio" onClick={onClose}>
+          <img src="/logos/logo-escuela.png" alt="" />
           <span>SIGER4</span>
-        </div>
+        </Link>
         <button type="button" className="btn btn-icon btn-ghost sidebar-close-button" onClick={onClose} aria-label="Cerrar menú">
           <Icon name="close" size={18} />
         </button>
@@ -65,10 +65,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       </nav>
 
       <div className="sidebar-footer">
-        <div className="sidebar-user">
-          <UserAvatar avatarUrl={profile?.avatar_url} fullName={profile?.full_name ?? 'Usuario'} />
+        <Link to="/ajustes" className="sidebar-user" aria-label={`${profile?.full_name ?? 'Usuario'}: ir a mi perfil`} onClick={onClose}>
+          <UserAvatar avatarUrl={profile?.avatar_url} />
           <span className="sidebar-user-name">{profile?.full_name ?? 'Usuario'}</span>
-        </div>
+        </Link>
         <button type="button" className="btn btn-outlined btn-block" onClick={() => signOut()}>
           <Icon name="logout" size={16} />
           Cerrar sesión

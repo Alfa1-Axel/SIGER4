@@ -93,7 +93,7 @@ export function InventarioFormPage() {
       return
     }
     if (!regionId) {
-      setError('Seleccioná la región.')
+      setError('Elegí la Regional.')
       return
     }
 
@@ -183,9 +183,9 @@ export function InventarioFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="region">Región</label>
+            <label htmlFor="region">Regional</label>
             <select id="region" required value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-              <option value="">Seleccionar región</option>
+              <option value="">Seleccionar Regional</option>
               {regions.map((region) => (
                 <option key={region.id} value={region.id}>
                   {region.name}

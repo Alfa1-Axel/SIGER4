@@ -212,7 +212,7 @@ export function DocumentoFormPage() {
     if (!isEditing && !selectedFile) return setError('Falta el archivo: tocá "Elegir archivo" (o "Sacar foto" desde el celular).')
     if (!title.trim()) return setError('Escribí un título para reconocer el documento en el listado.')
     if (!category.trim()) return setError('Indicá el tipo de documento (por ejemplo: Circular, Acta, Manual).')
-    if (!scopeIsReady()) return setError('Elegí para quién es el documento: región, subsede, cuartel o usuario.')
+    if (!scopeIsReady()) return setError('Elegí para quién es el documento: Regional, subsede, cuartel o usuario.')
 
     setSubmitting(true)
     try {
@@ -340,7 +340,7 @@ export function DocumentoFormPage() {
 
                 {scopeTarget === 'region' && (
                   <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-                    <option value="">Seleccionar región</option>
+                    <option value="">Seleccionar Regional</option>
                     {regions.map((region) => (
                       <option key={region.id} value={region.id}>
                         {region.name}

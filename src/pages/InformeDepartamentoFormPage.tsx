@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
+import { AccessDenied } from '../components/ui/AccessDenied'
 import {
   createDepartmentActivityReport,
   fetchDepartmentActivityReportById,
@@ -106,9 +107,9 @@ export function InformeDepartamentoFormPage() {
     event.preventDefault()
     setError(null)
 
-    if (!title.trim()) return setError('Ingresá un título para el informe.')
+    if (!title.trim()) return setError('Escribí un título para la actividad, por ejemplo: "Capacitación de rescate vehicular".')
     if (!activityDate) return setError('Ingresá la fecha de la actividad.')
-    if (!resolvedDepartmentId) return setError('No pudimos determinar el departamento de este informe.')
+    if (!resolvedDepartmentId) return setError('No pudimos determinar el departamento de esta actividad.')
 
     setSubmitting(true)
     try {
@@ -128,9 +129,11 @@ export function InformeDepartamentoFormPage() {
       } else {
         await createDepartmentActivityReport({ ...input, created_by_profile_id: currentProfile?.id ?? null })
       }
-      navigate(`/departamentos/${resolvedDepartmentId}`)
+      navigate(`/departamentos/${resolvedDepartmentId}`, {
+        state: { notice: isEditing ? 'Se guardaron los cambios de la actividad.' : 'Actividad registrada. Ya suma en las estadísticas del departamento.' },
+      })
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el informe.'))
+      setError(describeSupabaseError(err, 'No pudimos guardar la actividad. Reintentá en unos segundos.'))
     } finally {
       setSubmitting(false)
     }
@@ -138,7 +141,7 @@ export function InformeDepartamentoFormPage() {
 
   if (loading) {
     return (
-      <AppShell title="Informe de actividad">
+      <AppShell title="Registro de actividad">
         <div className="loading-state" role="status">Cargando…</div>
       </AppShell>
     )
@@ -146,31 +149,40 @@ export function InformeDepartamentoFormPage() {
 
   if (!resolvedDepartmentId || !department) {
     return (
-      <AppShell title="Informe de actividad">
-        <div className="empty-state">No se encontró el departamento o el informe solicitado.</div>
+      <AppShell title="Registro de actividad">
+        <AccessDenied
+          title="No encontramos la actividad"
+          message="Puede que la hayan eliminado o que el departamento ya no exista."
+          backTo="/departamentos"
+          backLabel="Volver a Departamentos"
+        />
       </AppShell>
     )
   }
 
   if (!canLogActivity) {
     return (
-      <AppShell title="Informe de actividad">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} informes de este departamento.</div>
+      <AppShell title="Registro de actividad">
+        <AccessDenied
+          title={isEditing ? 'No podés editar esta actividad' : 'No podés registrar actividad acá'}
+          message="Registran actividad el coordinador del departamento, sus integrantes, el Secretario Regional e Informática."
+          backTo={`/departamentos/${resolvedDepartmentId}`}
+          backLabel={`Volver a ${department.name}`}
+        />
       </AppShell>
     )
   }
 
   return (
-    <AppShell title={isEditing ? 'Editar Informe' : 'Nuevo Informe'}>
-      <Link
-        to={`/departamentos/${resolvedDepartmentId}`}
-        className="link-muted"
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 16 }}
-      >
+    <AppShell title={isEditing ? 'Editar actividad' : 'Registrar actividad'}>
+      <Link to={`/departamentos/${resolvedDepartmentId}`} className="back-link">
         ← Volver a {department.name}
       </Link>
-      <h1 className="page-title">{isEditing ? 'Editar Informe' : 'Nuevo Informe'}</h1>
-      <p className="page-subtitle">Actividad de {department.name}.</p>
+      <h1 className="page-title">{isEditing ? 'Editar actividad' : 'Registrar actividad'}</h1>
+      <p className="page-subtitle">
+        Reunión, capacitación o práctica de {department.name}, con horas y asistentes para las estadísticas. Para guardar un
+        acta o un informe completo, usá "Cargar informe o acta".
+      </p>
 
       <form onSubmit={handleSubmit} className="card-solid" noValidate>
         <div className="field">
@@ -250,7 +262,7 @@ export function InformeDepartamentoFormPage() {
         {error && <p className="field-error">{error}</p>}
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-          {submitting ? 'Guardando…' : 'Guardar informe'}
+          {submitting ? 'Guardando…' : isEditing ? 'Guardar cambios' : 'Registrar actividad'}
         </button>
       </form>
     </AppShell>

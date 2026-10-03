@@ -153,7 +153,7 @@ export function DocumentosPage() {
             ))}
 
           {folders.filter((f) => f.is_active).length === 0 && (
-            <div className="empty-state">Todavía no hay carpetas creadas (aparte de "General").</div>
+            <div className="empty-state">Todavía no hay carpetas propias. Los documentos sin carpeta quedan en "General".</div>
           )}
         </div>
       )}

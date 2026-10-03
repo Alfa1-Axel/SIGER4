@@ -112,7 +112,7 @@ export function NotificacionFormPage() {
     setError(null)
 
     if (scopeTarget === 'region' && !regionId) {
-      setError('Seleccioná la región destino.')
+      setError('Elegí la Regional destino.')
       return
     }
     if (scopeTarget === 'subsede' && !subsedeId) {
@@ -198,7 +198,7 @@ export function NotificacionFormPage() {
 
           {scopeTarget === 'region' && (
             <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
-              <option value="">Seleccionar región</option>
+              <option value="">Seleccionar Regional</option>
               {regions.map((region) => (
                 <option key={region.id} value={region.id}>
                   {region.name}

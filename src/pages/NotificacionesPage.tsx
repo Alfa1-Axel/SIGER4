@@ -110,7 +110,7 @@ export function NotificacionesPage() {
   return (
     <AppShell title="Notificaciones">
       <h1 className="page-title">Notificaciones</h1>
-      <p className="page-subtitle">Novedades y avisos para tu alcance institucional.</p>
+      <p className="page-subtitle">Avisos del sistema, de tu Regional, tu cuartel o la Escuela. Tocá uno para leerlo completo.</p>
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
@@ -118,7 +118,7 @@ export function NotificacionesPage() {
 
       {loading && <div className="loading-state" role="status">Cargando notificaciones…</div>}
       {!loading && notifications.length === 0 && (
-        <div className="empty-state">No tenés notificaciones por el momento.</div>
+        <div className="empty-state">No tenés notificaciones. Cuando haya novedades para vos o tu cuartel, aparecen acá.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -171,6 +171,7 @@ export function NotificacionesPage() {
           aria-label="Nueva notificación"
         >
           <Icon name="plus" size={20} />
+          <span className="fab-label">Nueva notificación</span>
         </Link>
       )}
 

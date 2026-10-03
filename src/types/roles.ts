@@ -47,8 +47,8 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
   },
   {
     key: 'region',
-    label: 'Región',
-    description: 'Gestión administrativa con alcance sobre toda la región.',
+    label: 'Regional',
+    description: 'Gestión administrativa con alcance sobre toda la Regional.',
   },
   {
     key: 'cuartel',
@@ -65,8 +65,8 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
 // Niveles de alcance que usa el sistema. "Subsede" no tiene roles propios:
 // es un alcance (scope) que se le asigna a un usuario, no un tipo de rol.
 export const SCOPE_LEVELS: { label: string; description: string }[] = [
-  { label: 'Sistema (global)', description: 'Todo el sistema: todas las regiones, subsedes y cuarteles.' },
-  { label: 'Región', description: 'Todos los cuarteles y subsedes de la región.' },
+  { label: 'Sistema (global)', description: 'Todo el sistema: todas las Regionales, subsedes y cuarteles.' },
+  { label: 'Regional', description: 'Todos los cuarteles y subsedes de la Regional.' },
   { label: 'Subsede', description: 'Los cuarteles de una subsede. Se asigna como alcance del usuario, no hay roles exclusivos de subsede.' },
   { label: 'Cuartel', description: 'Un solo cuartel: el propio del usuario.' },
   { label: 'Escuela', description: 'Escuela Regional: cursos, capacitaciones y avales.' },
@@ -118,7 +118,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     permissions: [
       'Ve, carga y edita en los módulos operativos de todo el sistema.',
       'Gestiona usuarios, roles y alcances, excepto a usuarios Informática R4.',
-      'Notificaciones manuales solo dentro de su región.',
+      'Notificaciones manuales solo dentro de su Regional.',
       'Avales regionales: ve y carga en todos los departamentos. No edita, archiva ni elimina.',
       'Sin acceso a Auditoría (exclusiva de Dpto. Informática y Estadística R4).',
     ],
@@ -130,7 +130,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     description: 'Máxima autoridad de la Escuela Regional: cursos, capacitaciones e instructores.',
     category: 'escuela',
     scope: 'escuela',
-    scopeLabel: 'Su región (Escuela Regional)',
+    scopeLabel: 'Su Regional (Escuela Regional)',
     permissions: [
       'Crea y edita cursos y capacitaciones.',
       'Calendario: eventos de Escuela y Capacitación.',
@@ -147,12 +147,12 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     description: 'Dicta cursos y capacitaciones en la Escuela Regional.',
     category: 'escuela',
     scope: 'escuela',
-    scopeLabel: 'Su región (Escuela Regional)',
+    scopeLabel: 'Su Regional (Escuela Regional)',
     permissions: [
       'Crea y edita cursos y capacitaciones.',
       'Calendario: eventos de Escuela y Capacitación.',
       'Lectura regional de cuarteles y datos operativos (sin escritura).',
-      'Notificaciones manuales dentro de su región.',
+      'Notificaciones manuales dentro de su Regional.',
       'Sin acceso a Reportes ni a Avales regionales.',
     ],
     assignable: true,
@@ -190,13 +190,13 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   {
     key: 'secretario_regional',
     label: 'Secretario Regional',
-    description: 'Gestión administrativa a nivel regional.',
+    description: 'Gestión administrativa de toda la Regional.',
     category: 'region',
     scope: 'regional',
-    scopeLabel: 'Su región',
+    scopeLabel: 'Su Regional',
     permissions: [
-      'Crea y edita cuarteles, personal, vehículos, asistencia, intervenciones e historial de su región.',
-      'Documentos y carpetas de su región (sin purga definitiva).',
+      'Crea y edita cuarteles, personal, vehículos, asistencia, intervenciones e historial de su Regional.',
+      'Documentos y carpetas de su Regional (sin purga definitiva).',
       'Calendario regional, Inventario Regional y aprobación de préstamos.',
       'Departamentos Regionales: integrantes manuales e informes de actividad.',
       'Reportes regionales.',

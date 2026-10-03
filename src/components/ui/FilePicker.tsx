@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { ChangeEvent } from 'react'
 import { Icon } from './Icon'
 import { formatBytes } from '../../lib/format'
 import { inferMimeType } from '../../lib/api/storage'
+import { usePickerReload } from '../../hooks/usePickerReload'
 
 interface FilePickerProps {
   id: string
@@ -23,39 +24,14 @@ interface FilePickerProps {
   disabled?: boolean
 }
 
-const PICKER_FLAG_PREFIX = 'siger4:picker-open:'
-
-function readPickerFlag(id: string): boolean {
-  try {
-    const raw = sessionStorage.getItem(PICKER_FLAG_PREFIX + id)
-    if (!raw) return false
-    sessionStorage.removeItem(PICKER_FLAG_PREFIX + id)
-    return Date.now() - Number(raw) < 15 * 60 * 1000
-  } catch {
-    return false
-  }
-}
-
-function setPickerFlag(id: string, open: boolean) {
-  try {
-    if (open) sessionStorage.setItem(PICKER_FLAG_PREFIX + id, String(Date.now()))
-    else sessionStorage.removeItem(PICKER_FLAG_PREFIX + id)
-  } catch {
-    // Sin sessionStorage (modo privado): solo se pierde el aviso de recarga.
-  }
-}
-
 // Selector de archivos para escritorio y celular.
 //
 // Usa inputs nativos activados por <label> (sin click() programático), el
 // camino más compatible con los selectores de Android e iOS. El input queda
 // oculto visualmente pero accesible con teclado.
 //
-// Android puede cerrar la app en segundo plano mientras el selector está
-// abierto y recargarla al volver (ver DEPLOYMENT.md, sección 19): el archivo
-// elegido se pierde. Para que no sea un misterio, al abrir el selector se
-// deja una marca en sessionStorage; si la página vuelve a cargar con la marca
-// todavía puesta, se avisa que hay que elegir el archivo de nuevo.
+// Si Android recarga la página con el selector abierto, se avisa que hay
+// que elegir el archivo de nuevo (usePickerReload).
 export function FilePicker({
   id,
   label,
@@ -69,22 +45,10 @@ export function FilePicker({
   disabled = false,
 }: FilePickerProps) {
   const [error, setError] = useState<string | null>(null)
-  const [reloadedWhilePicking] = useState(() => readPickerFlag(id))
-
-  // Al volver del selector sin recarga (eligiendo o cancelando), la ventana
-  // recupera el foco: se limpia la marca.
-  useEffect(() => {
-    const clear = () => setPickerFlag(id, false)
-    window.addEventListener('focus', clear)
-    return () => {
-      window.removeEventListener('focus', clear)
-      // Salir del formulario dentro de la app no es una recarga.
-      clear()
-    }
-  }, [id])
+  const { reloadedWhilePicking, markOpen, clearMark } = usePickerReload(id)
 
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
-    setPickerFlag(id, false)
+    clearMark()
     const selected = e.target.files?.[0] ?? null
     e.target.value = ''
     if (!selected) return
@@ -112,8 +76,6 @@ export function FilePicker({
     setError(null)
     onChange(selected)
   }
-
-  const markOpen = () => setPickerFlag(id, true)
 
   return (
     <div className="field">

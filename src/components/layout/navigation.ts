@@ -21,7 +21,7 @@ export interface NavItem {
 const canManageUsers = (ctx: NavContext) => ctx.isAdmin || ctx.hasRole('jefe_cuerpo_activo')
 
 export const NAV_ITEMS: NavItem[] = [
-  { to: '/panel', label: 'Panel', icon: 'grid', section: 'Gestión' },
+  { to: '/panel', label: 'Inicio', icon: 'home', section: 'Gestión' },
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building', section: 'Gestión' },
   { to: '/mapa', label: 'Mapa Regional', icon: 'mapPin', section: 'Gestión' },
   { to: '/calendario', label: 'Calendario', icon: 'calendar', section: 'Gestión' },

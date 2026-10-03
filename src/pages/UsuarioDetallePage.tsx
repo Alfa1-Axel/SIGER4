@@ -375,7 +375,7 @@ export function UsuarioDetallePage() {
         {!isJefeCuerpoActivo && (
           <>
             <div className="field">
-              <label htmlFor="region">Región</label>
+              <label htmlFor="region">Regional</label>
               <select id="region" value={regionId} disabled={scopeFieldsLocked} onChange={(e) => setRegionId(e.target.value)}>
                 <option value="">Sin asignar</option>
                 {regions.map((region) => (
@@ -398,7 +398,7 @@ export function UsuarioDetallePage() {
             </div>
             {scopeFieldsLocked && (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
-                No podés cambiar tu propio cuartel o región. Pedile a un administrador que lo haga.
+                No podés cambiar tu propio cuartel o Regional. Pedile a Informática R4 que lo haga.
               </p>
             )}
           </>
@@ -602,7 +602,7 @@ export function UsuarioDetallePage() {
               )}
               {newScopeType === 'region' && (
                 <div className="field" style={{ marginBottom: 0 }}>
-                  <label htmlFor="scopeRegion">Región</label>
+                  <label htmlFor="scopeRegion">Regional</label>
                   <select id="scopeRegion" value={newScopeRegionId} onChange={(e) => setNewScopeRegionId(e.target.value)}>
                     <option value="">Seleccionar</option>
                     {regions.map((region) => (

@@ -232,7 +232,7 @@ export function CuartelFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="region">Región</label>
+            <label htmlFor="region">Regional</label>
             <select
               id="region"
               required

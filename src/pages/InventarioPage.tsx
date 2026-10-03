@@ -142,6 +142,7 @@ export function InventarioPage() {
       {canEdit && (
         <Link to="/inventario/nuevo" className="btn btn-primary btn-icon fab" aria-label="Nuevo elemento">
           <Icon name="plus" size={20} />
+          <span className="fab-label">Nuevo elemento</span>
         </Link>
       )}
     </AppShell>

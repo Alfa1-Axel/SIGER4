@@ -404,6 +404,53 @@ export interface DepartmentActivityReport {
   updated_at: string
 }
 
+// Informes documentales de un departamento (0098): actas, informes y
+// registros fotográficos, con texto y/o adjuntos. Distintos del registro de
+// actividad para estadísticas (DepartmentActivityReport).
+export type DepartmentReportType =
+  | 'acta_reunion'
+  | 'informe_operativo'
+  | 'informe_administrativo'
+  | 'registro_fotografico'
+  | 'documentacion'
+  | 'otro'
+
+export type DepartmentReportFileKind = 'documento' | 'imagen' | 'video'
+
+export interface DepartmentReportFile {
+  id: string
+  report_id: string
+  department_id: string
+  storage_path: string
+  file_name: string
+  mime_type: string
+  file_size: number
+  file_kind: DepartmentReportFileKind
+  uploaded_by_profile_id: string | null
+  created_at: string
+}
+
+export interface DepartmentReport {
+  id: string
+  department_id: string
+  report_type: DepartmentReportType
+  title: string
+  body: string | null
+  observations: string | null
+  report_date: string
+  created_by_profile_id: string | null
+  created_by_name: string | null
+  is_archived: boolean
+  archived_at: string | null
+  archived_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DepartmentReportWithFiles extends DepartmentReport {
+  files: DepartmentReportFile[]
+}
+
 export type StationHistoryCategory =
   | 'institucional'
   | 'operativo'

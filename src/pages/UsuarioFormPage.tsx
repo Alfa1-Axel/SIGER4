@@ -130,7 +130,7 @@ export function UsuarioFormPage() {
     }
 
     if (scopeType === 'region' && !scopeRegionId) {
-      setError('Seleccioná la región del alcance.')
+      setError('Elegí la Regional del alcance (paso 3).')
       return
     }
     if (scopeType === 'subsede' && !scopeSubsedeId) {
@@ -313,7 +313,7 @@ export function UsuarioFormPage() {
 
           {!isJefeCuerpoActivo && (
             <div className="field">
-              <label htmlFor="region">Región</label>
+              <label htmlFor="region">Regional</label>
               <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
                 <option value="">Sin asignar</option>
                 {regions.map((region) => (
@@ -363,7 +363,7 @@ export function UsuarioFormPage() {
 
                 {scopeType === 'region' && (
                   <select value={scopeRegionId} onChange={(e) => setScopeRegionId(e.target.value)}>
-                    <option value="">Seleccionar región</option>
+                    <option value="">Seleccionar Regional</option>
                     {regions.map((region) => (
                       <option key={region.id} value={region.id}>
                         {region.name}

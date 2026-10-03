@@ -4,6 +4,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
+import { ActionMenu } from '../components/ui/ActionMenu'
+import type { ActionMenuItem } from '../components/ui/ActionMenu'
+import { AccessDenied } from '../components/ui/AccessDenied'
+import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { DepartmentReportsSection } from '../components/DepartmentReportsSection'
+import { useNavigationNotice } from '../hooks/useNavigationNotice'
+import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
 import {
   fetchDepartmentById,
   updateDepartment,
@@ -143,6 +150,8 @@ export function DepartamentoDetallePage() {
   // policy análoga de department_activity_reports) -- se suma acá para que
   // la UI deje de ser más estricta que el backend.
   const canLogActivity = canManage || isMember || hasRole('secretario_regional')
+  const { canView: canViewReports } = useDepartmentReportsAccess()
+  const [notice, setNotice, noticeTone] = useNavigationNotice()
 
   async function reload() {
     if (!id) return
@@ -333,7 +342,7 @@ export function DepartamentoDetallePage() {
       const code = (err as { code?: string } | null)?.code
       setError(
         code === '23503'
-          ? 'Este departamento tiene avales regionales cargados y no se puede eliminar. Podés desactivarlo, o mover o eliminar antes sus avales.'
+          ? 'Este departamento tiene avales regionales o informes cargados y no se puede eliminar. Podés desactivarlo para que no admita cargas nuevas.'
           : describeSupabaseError(err, 'No pudimos eliminar el departamento.'),
       )
     }
@@ -436,9 +445,42 @@ export function DepartamentoDetallePage() {
   if (!department) {
     return (
       <AppShell title="Departamento">
-        <div className="empty-state">No se encontró el departamento solicitado.</div>
+        <AccessDenied
+          title="No encontramos el departamento"
+          message="Puede que lo hayan eliminado. Volvé a la lista para ver los departamentos vigentes."
+          backTo="/departamentos"
+          backLabel="Volver a Departamentos"
+        />
       </AppShell>
     )
+  }
+
+  // Acciones del botón "+ Nuevo": informes (0098) y registro de actividad
+  // (0061), cada una según su permiso.
+  const newItems: ActionMenuItem[] = []
+  if (department.is_active && canViewReports(department.id)) {
+    newItems.push(
+      {
+        to: `/departamentos/informes/nuevo?modo=cargar&departamento=${department.id}`,
+        label: 'Cargar informe o acta',
+        description: 'Subí un PDF, Word o una foto del papel, con fotos o videos.',
+        icon: 'file',
+      },
+      {
+        to: `/departamentos/informes/nuevo?modo=redactar&departamento=${department.id}`,
+        label: 'Redactar informe',
+        description: 'Escribilo acá y sumá fotos si querés.',
+        icon: 'edit',
+      },
+    )
+  }
+  if (canLogActivity) {
+    newItems.push({
+      to: `/departamentos/${department.id}/informes/nuevo`,
+      label: 'Registrar actividad',
+      description: 'Reunión o capacitación con horas y asistentes, para estadísticas.',
+      icon: 'chart',
+    })
   }
 
   const availableProfiles = profiles.filter((p) => !members.some((m) => m.profile_id === p.id))
@@ -449,21 +491,36 @@ export function DepartamentoDetallePage() {
         ← Volver a Departamentos
       </Link>
 
-      <h1 className="page-title">{department.name}</h1>
-      <p className="page-subtitle">
-        {department.is_active ? 'Departamento activo' : 'Departamento inactivo'}
-        {!canManage && ' · Solo el coordinador o Informática pueden modificarlo.'}
-      </p>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">{department.name}</h1>
+          <p className="page-subtitle">
+            {department.is_active ? 'Departamento activo' : 'Departamento inactivo: se puede consultar, pero no admite cargas nuevas'}
+            {!canManage && ' · Sus datos los modifican el coordinador o Informática.'}
+          </p>
+        </div>
+        {newItems.length > 0 && (
+          <div className="page-header-actions">
+            <ActionMenu label="Nuevo" items={newItems} />
+          </div>
+        )}
+      </div>
       {showAvalesLink && (
         <Link to={`/escuela/avales?departamento=${department.id}`} className="link-muted" style={{ display: 'inline-block', marginBottom: 16 }}>
           Ver los avales regionales de este departamento (Escuela) →
         </Link>
       )}
 
+      {notice && <SuccessNotice message={notice} tone={noticeTone} onClose={() => setNotice(null)} />}
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
+      <DepartmentReportsSection departmentId={department.id} departmentActive={department.is_active} />
+
+      <div className="section-header">
+        <h2 className="section-title">Datos del departamento</h2>
+      </div>
       {canManage ? (
         <form onSubmit={handleSaveDetails} className="card-solid" style={{ marginBottom: 20 }}>
           <div className="field">
@@ -753,11 +810,11 @@ export function DepartamentoDetallePage() {
       </div>
 
       <div className="section-header">
-        <h2 className="section-title">Actividad / Informes</h2>
+        <h2 className="section-title">Registro de actividad</h2>
         {canLogActivity && (
           <Link to={`/departamentos/${department.id}/informes/nuevo`} className="btn btn-primary btn-sm">
             <Icon name="plus" size={14} />
-            Nuevo informe
+            Registrar actividad
           </Link>
         )}
       </div>
@@ -867,8 +924,8 @@ export function DepartamentoDetallePage() {
           <input type="date" value={dateToFilter} onChange={(e) => setDateToFilter(e.target.value)} style={{ fontSize: 12 }} aria-label="Hasta" />
         </div>
 
-        {reports.length === 0 && <div className="empty-state">Sin informes de actividad cargados todavía.</div>}
-        {reports.length > 0 && filteredReports.length === 0 && <div className="empty-state">Ningún informe coincide con los filtros.</div>}
+        {reports.length === 0 && <div className="empty-state">Sin actividad registrada todavía. Cada reunión o capacitación que registres suma horas y asistentes a las estadísticas.</div>}
+        {reports.length > 0 && filteredReports.length === 0 && <div className="empty-state">Ninguna actividad coincide con los filtros.</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {filteredReports.map((report) => {

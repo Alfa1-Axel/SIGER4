@@ -276,6 +276,7 @@ export function CarpetaDetallePage() {
           aria-label="Cargar documento en esta carpeta"
         >
           <Icon name="plus" size={20} />
+          <span className="fab-label">Subir documento</span>
         </Link>
       )}
     </AppShell>

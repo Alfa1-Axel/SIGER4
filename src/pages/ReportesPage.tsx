@@ -142,7 +142,7 @@ export function ReportesPage() {
     }
     if (stationId) return stations.find((s) => s.id === stationId)?.name ?? 'Cuartel seleccionado'
     if (subsedeId) return subsedes.find((s) => s.id === subsedeId)?.name ?? 'Subsede seleccionada'
-    if (regionId) return regions.find((r) => r.id === regionId)?.name ?? 'Región seleccionada'
+    if (regionId) return regions.find((r) => r.id === regionId)?.name ?? 'Regional seleccionada'
     return 'Todo el alcance disponible'
   }
 
@@ -228,8 +228,8 @@ export function ReportesPage() {
 
   return (
     <AppShell title="Reportes">
-      <h1 className="page-title">Reportes e Indicadores</h1>
-      <p className="page-subtitle">Generá reportes institucionales en PDF con datos reales cargados en el sistema.</p>
+      <h1 className="page-title">Reportes</h1>
+      <p className="page-subtitle">Elegí el tipo de reporte y el alcance: SIGER4 arma el PDF con los datos cargados.</p>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div className="field">
@@ -275,7 +275,7 @@ export function ReportesPage() {
           </div>
         ) : reportKey === 'departamentos_general' ? (
           <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-            Este reporte incluye todos los departamentos regionales, sin filtro de región/subsede/cuartel.
+            Este reporte incluye todos los departamentos regionales, sin filtro de Regional, subsede o cuartel.
           </p>
         ) : (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
@@ -319,7 +319,7 @@ export function ReportesPage() {
                   </select>
                   {isEscuelaRegional && (
                     <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-                      Solo podés generar reportes de tu propia región.
+                      Solo podés generar reportes de tu propia Regional.
                     </p>
                   )}
                 </div>

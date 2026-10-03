@@ -3,9 +3,18 @@ dist
 dist-ssr
 *.local
 
+# Variables de entorno reales: nunca se versionan. Solo .env.example, con
+# valores de ejemplo.
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Claves y certificados.
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
 
 npm-debug.log*
 yarn-debug.log*
@@ -15,13 +24,8 @@ yarn-error.log*
 !.vscode/extensions.json
 .idea
 
-# Configuración local del asistente (Claude Code) -- permisos y ajustes
-# específicos de la máquina/sesión de quien lo usa, sin ningún valor para el
-# resto del equipo ni para el repo público (y potencialmente revela rutas
-# absolutas/detalles del entorno local de quien la generó). Nunca debe
-# versionarse -- si estaba trackeado, se sacó del índice con
-# `git rm --cached .claude/settings.json` sin borrar el archivo local.
-.claude/
+# Configuración local de herramientas del editor: cada clon la excluye en
+# .git/info/exclude (no se versiona en este archivo).
 
 *.suo
 *.ntvs*
@@ -33,6 +37,8 @@ dev-dist
 *.tsbuildinfo
 
 supabase/.temp
+supabase/.branches
+.vercel
 
 # Copias originales de logos en la raiz (fuente de donde se copiaron a
 # public/logos/, que es lo que la app realmente usa) — no hace falta

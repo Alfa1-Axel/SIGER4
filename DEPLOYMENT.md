@@ -2399,6 +2399,9 @@ puntuales.
 
 ## 22. Banner de novedades del sistema (2026-08)
 
+> **Actualización (2026-10-03):** desde la sección 58.4 cada novedad tiene número de versión, la
+> versión visible sale de `src/config/appUpdates.ts` y hay una página Novedades con el historial.
+
 Sistema para avisar a los usuarios de cambios importantes al iniciar sesión — un banner flotante, no
 invasivo, que aparece una sola vez por usuario por cada novedad publicada.
 
@@ -2475,6 +2478,9 @@ Ninguna migración, ninguna Edge Function, ninguna variable de entorno nueva. Re
 frontend.
 
 ## 23. Solicitudes de Préstamo del Inventario Regional (2026-08) — migraciones 0057-0059
+
+> **Actualización (2026-10-03):** ver la sección 58: control de disponibilidad (0099), solicitud en
+> nombre de un cuartel para Informática y el Secretario Regional, y mensajes de error reales.
 
 Primer ciclo funcional del flujo de préstamos, fase explícitamente documentada como futura en
 `0041_inventory_module.sql`: un cuartel solicita un elemento del Inventario Regional, el responsable
@@ -8427,3 +8433,234 @@ Checklist manual:
 - **Rol de Secretario Regional sobre los informes:** si institucionalmente tiene que ver todos los
   informes, se puede sumar `is_regional_role()` a `can_view_department_reports()` en una migración
   nueva.
+
+## 58. Préstamos de Inventario, versión y Novedades, identidad azul y refuerzo de funciones internas (2026-10-03) — versión 1.4.0, migraciones 0099-0100
+
+### 58.1 Inventario: por qué no se podía solicitar ningún elemento
+
+La base sí permitía las solicitudes. Se reprodujo en Postgres con cada rol: los roles de cuartel
+solicitan para su cuartel, Informática y el Secretario Regional para cualquier cuartel, y Escuela
+queda bloqueada. El problema estaba en la pantalla, en tres puntos:
+
+1. **Cuentas sin cuartel propio.** `SolicitudPrestamoFormPage` armaba el cuartel solicitante
+   solo con `profile.station_id` o un alcance de cuartel. Informática y el Secretario Regional no
+   tienen cuartel propio y veían "Tu perfil no tiene un cuartel asignado" en **todos** los
+   elementos. La policy de 0057 los habilita a solicitar en nombre de un cuartel, pero la pantalla
+   nunca ofrecía elegirlo.
+2. **Errores de la base ocultos.** Ver 58.2: cualquier rechazo, por ejemplo "El elemento no está
+   disponible" o un permiso, se mostraba como un error genérico, sin decir por qué.
+3. **Carga sin fin en el detalle.** `InventarioDetallePage` hacía `setLoading(false)` solo si las
+   cinco consultas salían bien. Si una fallaba, la pantalla quedaba en "Cargando elemento…" y el
+   botón "Solicitar" nunca aparecía.
+
+Además había un hueco de reglas: **no existía control de disponibilidad.** Cada elemento es una
+unidad, pero un elemento entregado a un cuartel seguía figurando "Disponible" y otro cuartel podía
+pedirlo, o se podían aprobar dos préstamos a la vez.
+
+### 58.2 Errores de la base en toda la app
+
+`describeSupabaseError()` reconocía los errores de la base con `instanceof PostgrestError`, pero
+supabase-js devuelve esos errores como **objeto plano** (`{ code, message, details, hint }`): solo
+son instancia de la clase con `.throwOnError()`. Ningún código se reconocía, y todo terminaba en el
+mensaje genérico de cada pantalla, en cualquier módulo:
+
+- permisos (`42501`);
+- motivos de los triggers (`P0001`);
+- "falta una actualización de la base" (`PGRST202`);
+- registros duplicados o vinculados.
+
+Ahora se reconocen por su forma (`isPostgrestError`), también los errores de red. Hay un helper
+`postgrestCode(err)` para las pantallas que necesitan el código; `DepartamentoFormPage` tenía el
+mismo problema con `23505`.
+
+### 58.3 Qué cambió en Inventario
+
+**Base** (`0099_inventory_loan_availability.sql`):
+
+- No se puede crear una solicitud si el elemento tiene un **préstamo activo** (solicitud aprobada o
+  retirada, sin devolver). Mensaje: "El elemento ya está prestado a Las Varillas: no se puede
+  solicitar hasta que se devuelva."
+- Un cuartel no puede tener **dos solicitudes pendientes** del mismo elemento.
+- No se puede **aprobar ni registrar el retiro** de una solicitud si el elemento ya tiene otro
+  préstamo activo.
+- Mensajes nuevos para baja, mantenimiento y no disponible.
+- Las policies de 0057 (quién solicita y quién gestiona) no cambian.
+
+**Pantallas:**
+
+- **Formulario de solicitud:**
+  - campo "Cuartel que lo solicita". Para un rol de cuartel viene elegido; si tiene más de un
+    cuartel, elige. Informática elige entre todos los cuarteles y el Secretario Regional entre los
+    de su Regional;
+  - si el elemento está prestado, reservado, en mantenimiento o de baja, lo explica en lugar de
+    mostrar el formulario;
+  - avisa si ese cuartel ya tiene una solicitud pendiente;
+  - no deja poner una devolución anterior a hoy;
+  - al enviar, abre la solicitud con el aviso "Solicitud enviada…".
+- **Sin permiso:** quien no puede solicitar ve qué roles pueden hacerlo, en el detalle y por URL.
+- **Detalle del elemento:**
+  - tarjeta de disponibilidad: "Disponible para pedir prestado", "Prestado a X hasta el …",
+    "Reservado para X" o el motivo del estado;
+  - "Tu cuartel ya lo pidió" con enlace a la solicitud;
+  - botón "Solicitar préstamo";
+  - el badge muestra "Prestado" o "Reservado".
+- **Lista del Inventario:** marca "Prestado" o "Reservado".
+- **Solicitudes:**
+  - filtro **Mis solicitudes**, encendido por defecto salvo para quien gestiona préstamos;
+  - estado vacío con acción;
+  - en cada solicitud, una línea que explica qué significa su estado y qué sigue.
+
+**Quién puede qué (sin cambios):**
+
+| Acción | Quién |
+|---|---|
+| Solicitar | Jefe de Cuerpo Activo, Presidente y usuario de carga (para su cuartel); Secretario Regional e Informática (en nombre de un cuartel) |
+| Aprobar, rechazar, registrar retiro y devolución | Informática, Director de Escuela, Secretario Regional y el responsable del elemento |
+| Cancelar | Quien la pidió o quien la gestiona, mientras esté pendiente o aprobada |
+| Ver el estado | Todos los usuarios con sesión |
+
+### 58.4 Versión y Novedades
+
+**Antes:** la versión visible ("SIGER4 v1.0.0-beta.1") salía de `package.json`, que no se
+actualizaba desde agosto, y la última novedad era del 09/08.
+
+**Ahora la única fuente es `src/config/appUpdates.ts`:**
+
+- **Versión actual** = la de la primera entrada (hoy **1.4.0**, 3 de octubre de 2026).
+- Cada entrada tiene versión, fecha, título, resumen y una lista de cambios. Cada cambio tiene tipo
+  (Nuevo, Mejora o Corrección), módulo afectado y un texto para usuarios.
+- Se cargaron las versiones reales desde agosto: 0.9.0, 1.0.0-beta.1, 1.1.0, 1.2.0, 1.3.0 y 1.4.0.
+
+**Dónde lo ven los usuarios:**
+
+- **Novedades** (`/novedades`, en el menú, sección Cuenta): versión actual y el historial completo,
+  agrupado en Nuevo, Mejoras y Correcciones.
+- **Pie de cada pantalla:** "v1.4.0", que lleva a Novedades. En el login se muestra solo el número.
+- **Mi perfil y ajustes:** "SIGER4 1.4.0 · actualizado el … · Ver novedades".
+- **Aviso al ingresar:** la novedad nueva se muestra una vez, con "Ver todas las novedades" (ver
+  sección 22), y queda como notificación.
+
+No muestra datos técnicos. El hash de build sigue solo en el bloque de diagnóstico de Informática.
+
+**Cómo publicar una versión** (antes del commit y el deploy):
+
+1. Agregar una entrada **al principio** de `APP_UPDATES`:
+   - `id` nuevo y único (`AAAA-MM-DD-slug`);
+   - `version`: MAYOR.MENOR.PARCHE. MENOR para funciones o mejoras visibles, PARCHE para
+     correcciones;
+   - `date`, `title`, `summary`;
+   - `changes`: `{ type, module, text }`, en lenguaje de usuario.
+2. Poner la misma versión en `version` de `package.json`. Si no coinciden, el build lo avisa con un
+   WARNING (no lo frena).
+3. Commit y deploy. No hace falta migración.
+
+### 58.5 Modo claro con identidad azul
+
+Tokens nuevos con valor propio en cada tema; el modo oscuro no cambia:
+
+| Token | Claro | Oscuro |
+|---|---|---|
+| `--color-header-bg` / `-fg` | `#284f86` / blanco | superficie / texto (igual que antes) |
+| `--color-sidebar-bg` | `#f1f5fb` (tinte azul muy suave) | superficie |
+| `--color-sidebar-active-bg` / `-fg` | `#284f86` / blanco | `--color-primary-soft` (igual que antes) |
+| `--color-sidebar-hover` | `#e2eaf5` | `--color-surface-hover` |
+
+- **Encabezado:** azul institucional con título e íconos en blanco. Contraste 8.2:1, AAA.
+- **Foco en el encabezado:** blanco. El anillo azul daba 1.6:1 sobre el azul.
+- **Badge de notificaciones:** borde blanco para separarlo del fondo.
+- **Menú lateral:**
+  - tinte azul suave;
+  - ítem activo en azul sólido con texto blanco (8.2:1);
+  - texto 6.9:1 y títulos de sección 4.6:1 (AA).
+- **Login:** borde superior azul en la tarjeta.
+- Las pestañas, botones primarios y enlaces ya usaban el mismo azul.
+- En el celular, el menú desplegable usa los mismos estilos.
+
+### 58.6 Auditoría solo para informatica_r4 (confirmado) y funciones internas
+
+**Auditoría** quedó confirmada en la base sobre las migraciones hasta 0100:
+
+- `audit_logs` tiene una sola policy de lectura, `is_super_admin()`;
+- informatica_r4 la ve;
+- `integrante_informatica`, Secretario Regional, Coordinador de Escuela, coordinador de
+  departamento y usuario común ven 0 filas;
+- `anon` recibe "permission denied";
+- en pantalla, `/auditoria` usa `SuperAdminRoute` y el menú solo la muestra a informatica_r4.
+
+Al revisar qué funciones leen `audit_logs`, apareció un problema más amplio. Supabase da EXECUTE a
+`anon` y `authenticated` sobre cada función nueva, y el `revoke ... from public` de 0066-0085 no
+quita esos permisos. Cualquiera con la anon key, aun sin iniciar sesión, podía llamar por la API a:
+
+- `notify_informatica_staff(título, texto)`: avisos con texto arbitrario, y push, a todo
+  Informática;
+- `send_weekly_admin_summary()`, `send_weekly_reminder()`, `send_loan_return_reminders()` y
+  `send_calendar_event_reminders()`: reenviar los avisos programados;
+- `trigger_document_purge()`: disparar la purga de la papelera fuera de horario.
+
+Ninguna devolvía datos, pero permitían enviar avisos falsos o masivos. La migración
+`0100_restrict_internal_functions.sql`:
+
+- les quita EXECUTE a `anon` y `authenticated`. Las siguen ejecutando pg_cron (como `postgres`),
+  otras funciones SECURITY DEFINER y las Edge Functions (con `service_role`);
+- deja `notify_admin_delete_user()`, que la Edge Function `admin-delete-user` llama con la sesión
+  del administrador, pero ahora valida que quien la llama sea de Informática.
+
+### 58.7 Qué correr
+
+1. SQL Editor → `0099_inventory_loan_availability.sql` y `0100_restrict_internal_functions.sql`,
+   en ese orden y después de 0098. Las dos se pueden volver a correr sin efecto.
+2. Desplegar el frontend.
+
+Sin variables de entorno nuevas. Sin cambios en Edge Functions, push ni PWA.
+
+### 58.8 Verificación
+
+- **Postgres 16 local:**
+  - 0099: solicitudes por rol, disponibilidad, aprobación y devolución, y Auditoría: 26 pruebas,
+    0 fallas.
+  - 0100: funciones internas sin EXECUTE para usuarios ni anon, Informática sigue avisando
+    eliminaciones y el resumen semanal sigue corriendo desde el cron: 15 pruebas, 0 fallas.
+  - Ambas se pueden volver a correr y funcionan en un proyecto nuevo.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado): 25 pruebas, 0 fallas.
+  - Informática solicita eligiendo el cuartel. El Jefe de Cuerpo Activo solicita desde el celular
+    con su cuartel ya elegido y la ve en "Mis solicitudes".
+  - Elemento prestado: detalle, badge y formulario. Solicitud pendiente propia.
+  - Sin permiso, en el detalle y por URL. El motivo real de un rechazo de la base.
+  - Aviso de novedad, página Novedades y versión del pie.
+  - Colores del encabezado y del menú en claro, oscuro sin cambios, y foco visible.
+- **Regresión:** las pruebas de la sección 57 (33) y del menú "Nuevo" (8) siguen pasando. Capturas
+  de todas las pantallas en claro y oscuro, escritorio y celular.
+
+### 58.9 Checklist en dispositivo físico (pendiente de hacer en producción)
+
+Lo de arriba se probó con emulación. Antes de dar por cerrada la versión, hacer esto en un
+**Android real** (Chrome y, si se usa, el navegador de Xiaomi) y repetirlo en una computadora:
+
+- [ ] Ingresar. El navegador ofrece guardar la contraseña y la completa después con huella o
+      rostro.
+- [ ] Inicio en el celular: se lee bien, los accesos rápidos responden y no hay scroll horizontal.
+- [ ] Departamentos → Cargar informe o acta → **PDF** desde Archivos → se sube y se abre.
+- [ ] Mismo informe → **Sacar foto** con la cámara → miniatura visible en el detalle.
+- [ ] **Grabar video** corto (menos de 50 MB) → se reproduce en el detalle.
+- [ ] **Descargar** el PDF del informe → se guarda con el nombre original.
+- [ ] Inventario → un elemento disponible → **Solicitar préstamo** → aviso "Solicitud enviada" →
+      aparece en "Mis solicitudes" como Pendiente.
+- [ ] Como responsable (o Informática) → **Aprobar** la solicitud → el elemento figura
+      "Reservado" → otro cuartel no lo puede pedir.
+- [ ] Registrar retiro y devolución → el elemento vuelve a "Disponible".
+- [ ] Novedades: el aviso de la versión 1.4.0 aparece una vez; el pie dice v1.4.0 y lleva a
+      Novedades.
+- [ ] Modo claro: encabezado azul y menú con tinte. Modo oscuro: igual que antes. Probar en las dos
+      pantallas: Inicio, Inventario y un formulario.
+- [ ] Usuario común, integrante de Informática y Secretario Regional: Auditoría no aparece en el
+      menú y por URL muestra el acceso denegado.
+
+### 58.10 Riesgos y pendientes
+
+- **Préstamos activos duplicados de antes de 0099:** si ya hubiera dos préstamos activos del mismo
+  elemento, la migración no los toca. El próximo intento de aprobar otro lo frena. Se pueden
+  revisar en Solicitudes, filtrando por "Aprobada" o "Retirada".
+- **Mensajes más específicos:** con el arreglo de 58.2, varias pantallas pasan a mostrar el motivo
+  real de un rechazo en lugar del genérico. Es el comportamiento buscado, pero conviene mirarlo en
+  el uso diario.
+- **Física:** el checklist de 58.9 sigue pendiente en un equipo real.

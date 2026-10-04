@@ -33,10 +33,42 @@ const PENDING_UPDATE_MESSAGE =
 
 // Errores de red: fetch falla con TypeError ("Failed to fetch" en Chrome,
 // "Load failed" en Safari, "NetworkError..." en Firefox).
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err !== null && typeof (err as { message?: unknown }).message === 'string') {
+    return (err as { message: string }).message
+  }
+  return ''
+}
+
 function isNetworkError(err: unknown): boolean {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
-  if (!(err instanceof Error)) return false
-  return /failed to fetch|load failed|networkerror|network request failed/i.test(err.message)
+  return /failed to fetch|load failed|networkerror|network request failed/i.test(errorMessage(err))
+}
+
+interface PostgrestLikeError {
+  code: string
+  message: string
+}
+
+// supabase-js devuelve los errores de la base como objeto plano
+// ({ code, message, details, hint }), no como instancia de PostgrestError
+// (solo lo es con .throwOnError()). Con "instanceof" ningún código se
+// reconocía y todo terminaba en el mensaje genérico.
+function isPostgrestError(err: unknown): err is PostgrestLikeError {
+  if (err instanceof PostgrestError) return true
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    typeof (err as { code?: unknown }).code === 'string' &&
+    typeof (err as { message?: unknown }).message === 'string' &&
+    ('details' in err || 'hint' in err)
+  )
+}
+
+// Código de error de la base (ej. '23505') o null si no es un error de la base.
+export function postgrestCode(err: unknown): string | null {
+  return isPostgrestError(err) ? err.code : null
 }
 
 // Errores de Supabase Storage (StorageApiError/StorageUnknownError): llegan
@@ -58,7 +90,7 @@ export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un erro
   if (isNetworkError(err)) return NETWORK_MESSAGE
   const storageMessage = describeStorageError(err)
   if (storageMessage) return storageMessage
-  if (err instanceof PostgrestError) {
+  if (isPostgrestError(err)) {
     if (err.code === '42501') return 'No tenés permisos para realizar esta acción.'
     // Función o tabla que la app espera y la base todavía no tiene: falta
     // correr una migración (PGRST202/PGRST205 de PostgREST, 42883/42P01 de

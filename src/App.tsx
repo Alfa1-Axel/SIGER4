@@ -58,6 +58,7 @@ import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
 import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
 import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
+import { NovedadesPage } from './pages/NovedadesPage'
 import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
 
 export default function App() {
@@ -131,6 +132,7 @@ export default function App() {
         <Route path="/inventario/:itemId/solicitudes/nueva" element={<ProtectedRoute><SolicitudPrestamoFormPage /></ProtectedRoute>} />
         <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
         <Route path="/inventario/:id" element={<ProtectedRoute><InventarioDetallePage /></ProtectedRoute>} />
+        <Route path="/novedades" element={<ProtectedRoute><NovedadesPage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
         {/* Informes y actas de un departamento (0098). */}

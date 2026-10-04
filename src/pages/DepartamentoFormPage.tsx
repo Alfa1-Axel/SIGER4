@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { PostgrestError } from '@supabase/supabase-js'
 import { AppShell } from '../components/layout/AppShell'
 import { AccessDenied } from '../components/ui/AccessDenied'
 import { createDepartment, fetchDepartments } from '../lib/api/departments'
 import { fetchProfiles } from '../lib/api/users'
 import type { Department, Profile } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { describeSupabaseError } from '../lib/api/errors'
+import { describeSupabaseError, postgrestCode } from '../lib/api/errors'
 
 // Mismo criterio que el índice único de la base (0097): sin distinguir
 // mayúsculas ni espacios de los extremos.
@@ -63,7 +62,7 @@ export function DepartamentoFormPage() {
       })
       navigate('/departamentos', { state: { notice: `Se creó el departamento "${name.trim()}". Ya aparece también en Escuela → Avales regionales.` } })
     } catch (err) {
-      if (err instanceof PostgrestError && err.code === '23505') {
+      if (postgrestCode(err) === '23505') {
         setError('Ya existe un departamento con ese nombre. Abrilo desde la lista para editarlo.')
       } else {
         setError(describeSupabaseError(err, 'No pudimos crear el departamento. Reintentá en unos segundos.'))

@@ -1,82 +1,153 @@
-// SIGER4 - Novedades/actualizaciones del sistema, mostradas una sola vez por
-// usuario (ver AppUpdateBanner.tsx). Fuente estática desde el frontend por
-// ahora — si en el futuro conviene manejarlo desde la base (para poder
-// publicar una novedad sin redeploy, o dirigirla a un subconjunto de
-// usuarios), este archivo es el único lugar a reemplazar por un fetch: el
-// resto del sistema (AppUpdateBanner, el helper de "ya visto") ya trabaja
-// contra el tipo AppUpdate sin asumir de dónde viene.
+// SIGER4 - Versión y novedades del sistema.
 //
-// Cómo agregar una novedad nueva (ver DEPLOYMENT.md para más detalle):
-//   1. Agregar un nuevo objeto AL PRINCIPIO de APP_UPDATES (el más reciente
-//      primero — es el único que se muestra).
-//   2. "id" tiene que ser único y estable (nunca reutilizar un id ya usado):
-//      es la clave que decide si un usuario ya lo vio, Y la clave de
-//      deduplicación de la notificación interna (ver más abajo). Convención
-//      sugerida: "YYYY-MM-DD-slug-corto".
-//   3. Con guardar y desplegar alcanza — no hace falta ninguna migración ni
-//      variable de entorno nueva (la migración 0077, que agrega el tipo de
-//      notificación y la columna de deduplicación, ya está aplicada de una
-//      vez para siempre — no hay que tocarla por cada novedad nueva).
+// Es la única fuente de la versión que ven los usuarios: la versión actual
+// es la de la primera entrada de APP_UPDATES. Se muestra en el pie de cada
+// pantalla, en Mi perfil y ajustes y en la página Novedades (/novedades),
+// que lista todo el historial. La novedad más reciente además se muestra una
+// vez a cada usuario al ingresar (AppUpdateBanner) y queda como
+// notificación en /notificaciones (migraciones 0077/0079).
 //
-// Notificación interna automática (desde 2026-08-13, migración 0077): cada
-// vez que AppUpdateBanner.tsx detecta que APP_UPDATES[0] es una novedad que
-// el usuario todavía no vio (independiente de si el banner llega a
-// mostrarse o no en este dispositivo puntual), inserta una notificación
-// interna ("Nueva actualización disponible. Ingresá para conocer las
-// novedades.") en /notificaciones — persistente hasta que el usuario la
-// marque como leída, visible desde cualquier sesión/dispositivo (a
-// diferencia del banner, que es "una vez por navegador" vía localStorage).
-// Tocar esa notificación reabre el modal de esa novedad puntual (ver
-// forceShowAppUpdateBanner en src/lib/appUpdateBannerControl.ts). No hace
-// falta ningún paso manual para esto — se dispara solo con solo agregar la
-// entrada nueva acá arriba.
+// Cómo publicar una versión (antes del commit y el deploy):
+//   1. Agregar una entrada AL PRINCIPIO de APP_UPDATES, con:
+//      - id único y estable, nunca reutilizado: "YYYY-MM-DD-slug-corto". Es
+//        la clave de "ya visto" y de la notificación.
+//      - version nueva: MAYOR.MENOR.PARCHE. MENOR para funciones nuevas o
+//        mejoras visibles, PARCHE para correcciones, MAYOR para cambios de
+//        fondo en la forma de trabajar.
+//      - date (YYYY-MM-DD), title, summary y changes. Cada cambio con su
+//        tipo (nuevo, mejora, correccion), el módulo y un texto para
+//        usuarios: qué cambia para ellos, sin detalles técnicos.
+//   2. Poner la misma versión en "version" de package.json (el build avisa
+//      si no coinciden).
+//   3. Commit y deploy. No hace falta migración ni variable de entorno.
 export type AppUpdateSeverity = 'info' | 'improvement' | 'important'
 
+export type AppUpdateChangeType = 'nuevo' | 'mejora' | 'correccion'
+
+export interface AppUpdateChange {
+  type: AppUpdateChangeType
+  // Módulo o sección afectada, como la ve el usuario (Inventario, Escuela…).
+  module: string
+  text: string
+}
+
 export interface AppUpdate {
-  // Identificador único y estable de esta novedad — es la clave que se
-  // guarda como "ya visto" (ver src/lib/appUpdateSeen.ts). Cambiar el id de
-  // una novedad ya publicada hace que vuelva a mostrarse a todos.
+  // Identificador único y estable (ver src/lib/appUpdateSeen.ts). Cambiar el
+  // id de una novedad ya publicada hace que vuelva a mostrarse a todos.
   id: string
-  // Fecha de publicación, formato "YYYY-MM-DD" — solo se muestra en el
-  // banner, no participa en ninguna lógica.
+  version: string
+  // Fecha de publicación, "YYYY-MM-DD".
   date: string
   title: string
-  description: string
-  changes: string[]
+  summary: string
+  changes: AppUpdateChange[]
+  // Etiqueta del aviso al ingresar.
   severity: AppUpdateSeverity
 }
 
-// Únicamente el PRIMER elemento del array se muestra (la novedad más
-// reciente) — ver getLatestAppUpdate() en AppUpdateBanner.tsx. El resto del
-// array queda como historial en el código, no se descarta, por si en algún
-// momento se agrega una pantalla de "novedades anteriores".
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-03-inventario-novedades',
+    version: '1.4.0',
+    date: '2026-10-03',
+    title: 'Préstamos de inventario, Novedades y más azul SIGER4',
+    summary:
+      'Se corrigieron las solicitudes de préstamo del Inventario, ahora podés ver la versión y el historial de cambios del sistema, y el modo claro tiene más identidad.',
+    changes: [
+      { type: 'correccion', module: 'Inventario', text: 'Informática y el Secretario Regional pueden solicitar elementos en nombre de un cuartel. Antes la pantalla no los dejaba.' },
+      { type: 'mejora', module: 'Inventario', text: 'Cada elemento muestra si está disponible, reservado o prestado. Un elemento prestado no se puede volver a pedir hasta que se devuelva.' },
+      { type: 'mejora', module: 'Inventario', text: '"Mis solicitudes" y una explicación de qué sigue en cada estado de la solicitud.' },
+      { type: 'nuevo', module: 'Novedades', text: 'Esta sección: la versión actual de SIGER4 y qué cambió en cada actualización.' },
+      { type: 'mejora', module: 'Diseño', text: 'En modo claro, el encabezado y el menú usan el azul de SIGER4.' },
+      { type: 'correccion', module: 'Seguridad', text: 'Se reforzaron los permisos de los avisos automáticos del sistema.' },
+    ],
+    severity: 'improvement',
+  },
+  {
+    id: '2026-10-03-informes-inicio',
+    version: '1.3.0',
+    date: '2026-10-03',
+    title: 'Informes en Departamentos e Inicio renovado',
+    summary: 'Los departamentos pueden guardar informes y actas con fotos y videos, y la pantalla de inicio se adapta a cada rol.',
+    changes: [
+      { type: 'nuevo', module: 'Departamentos', text: 'Informes y actas: redactá el informe en SIGER4 o subí el acta, con fotos, videos y documentos, desde la computadora o el celular.' },
+      { type: 'mejora', module: 'Inicio', text: 'Al ingresar ves lo que requiere atención, accesos rápidos según tu rol y tus notificaciones sin leer.' },
+      { type: 'mejora', module: 'Ingreso', text: 'Botón para ver la contraseña, opción para recordar tu email y guardado en el gestor del navegador.' },
+      { type: 'mejora', module: 'General', text: 'El logo lleva al Inicio y tu foto a tu perfil.' },
+      { type: 'correccion', module: 'General', text: 'En todo el sistema se usa "Regional" en lugar de "Región".' },
+    ],
+    severity: 'important',
+  },
+  {
+    id: '2026-10-02-coordinadores-celular',
+    version: '1.2.0',
+    date: '2026-10-02',
+    title: 'Coordinadores, carga desde el celular y Auditoría',
+    summary: 'El coordinador de cada departamento se asigna en un solo lugar y los archivos se pueden subir desde el celular.',
+    changes: [
+      { type: 'mejora', module: 'Escuela', text: 'El coordinador de cada departamento se asigna una sola vez, en Departamentos, y ya puede ver y subir sus avales.' },
+      { type: 'nuevo', module: 'Documentos', text: 'Carga de documentos, avales y fotos desde el celular, incluida la cámara.' },
+      { type: 'mejora', module: 'Auditoría', text: 'Queda reservada al Dpto. de Informática y Estadística R4.' },
+      { type: 'mejora', module: 'General', text: 'Mensajes claros cuando una sección no está disponible para tu rol.' },
+    ],
+    severity: 'improvement',
+  },
+  {
+    id: '2026-10-02-avales-diseno',
+    version: '1.1.0',
+    date: '2026-10-02',
+    title: 'Avales regionales y nuevo diseño',
+    summary: 'Escuela suma los avales regionales por departamento y todo el sistema tiene un diseño nuevo.',
+    changes: [
+      { type: 'nuevo', module: 'Escuela', text: 'Avales regionales organizados por departamento.' },
+      { type: 'mejora', module: 'Diseño', text: 'Nuevo diseño visual institucional en todas las pantallas, en modo claro y oscuro.' },
+      { type: 'mejora', module: 'Roles', text: 'La guía de roles agrupa los permisos por tipo: Informática, Escuela, Regional y cuartel.' },
+    ],
+    severity: 'improvement',
+  },
+  {
     id: '2026-08-09-v1-0-beta',
+    version: '1.0.0-beta.1',
     date: '2026-08-09',
     title: 'SIGER4 v1.0 beta',
-    description: 'Primera versión estable de SIGER4 para uso institucional. Se reforzaron permisos y auditoría en todo el sistema, y se agregaron notificaciones y reportes nuevos.',
+    summary:
+      'Primera versión estable de SIGER4 para uso institucional. Se reforzaron permisos y auditoría en todo el sistema, y se agregaron notificaciones y reportes nuevos.',
     changes: [
-      'Reportes de Departamentos Regionales (general y por departamento) en PDF.',
-      'Auditoría filtrada según el rol de cada usuario, sin detalles técnicos para roles institucionales.',
-      'Notificaciones automáticas a Informática ante cambios sensibles (altas, bajas, roles, alcances).',
-      'Resumen semanal enriquecido para Informática y recordatorios automáticos de devolución de préstamos.',
-      'Corrección de recargas inesperadas de la app al volver de segundo plano.',
-      'Revisión completa de permisos por rol en todos los módulos.',
+      { type: 'nuevo', module: 'Reportes', text: 'Reportes de Departamentos Regionales (general y por departamento) en PDF.' },
+      { type: 'mejora', module: 'Auditoría', text: 'Auditoría filtrada según el rol, sin detalles técnicos para roles institucionales.' },
+      { type: 'nuevo', module: 'Notificaciones', text: 'Avisos automáticos a Informática ante cambios sensibles (altas, bajas, roles y alcances).' },
+      { type: 'nuevo', module: 'Notificaciones', text: 'Resumen semanal para Informática y recordatorios de devolución de préstamos.' },
+      { type: 'correccion', module: 'General', text: 'Corrección de recargas inesperadas de la app al volver de segundo plano.' },
+      { type: 'mejora', module: 'General', text: 'Revisión completa de permisos por rol en todos los módulos.' },
     ],
     severity: 'important',
   },
   {
     id: '2026-08-06-documentos-desktop',
+    version: '0.9.0',
     date: '2026-08-06',
     title: 'SIGER4 actualizado',
-    description: 'Se hicieron mejoras y correcciones en el módulo de Documentos y en la experiencia mobile.',
+    summary: 'Mejoras y correcciones en Documentos y en el uso desde el celular.',
     changes: [
-      'Se mejoró la gestión de documentos.',
-      'Se corrigió la carga de archivos desde escritorio.',
-      'Se optimizó la experiencia mobile.',
-      'Se actualizaron permisos y seguridad.',
+      { type: 'mejora', module: 'Documentos', text: 'Se mejoró la gestión de documentos.' },
+      { type: 'correccion', module: 'Documentos', text: 'Se corrigió la carga de archivos desde la computadora.' },
+      { type: 'mejora', module: 'General', text: 'Se mejoró el uso desde el celular.' },
+      { type: 'mejora', module: 'Seguridad', text: 'Se actualizaron permisos y seguridad.' },
     ],
     severity: 'improvement',
   },
 ]
+
+// Versión actual del sistema: la de la novedad más reciente.
+export const CURRENT_APP_UPDATE = APP_UPDATES[0]
+export const CURRENT_VERSION = CURRENT_APP_UPDATE.version
+
+export const CHANGE_TYPE_LABEL: Record<AppUpdateChangeType, string> = {
+  nuevo: 'Nuevo',
+  mejora: 'Mejora',
+  correccion: 'Corrección',
+}
+
+export function formatUpdateDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+}

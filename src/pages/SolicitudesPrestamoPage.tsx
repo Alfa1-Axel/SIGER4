@@ -7,6 +7,7 @@ import { fetchStations } from '../lib/api/stations'
 import { describeSupabaseError } from '../lib/api/errors'
 import type { InventoryItem, InventoryLoanRequest, LoanRequestStatus, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useLoanRequestAccess } from '../hooks/useLoanRequestAccess'
 
 export const LOAN_REQUEST_STATUS_LABEL: Record<LoanRequestStatus, string> = {
   pendiente: 'Pendiente',
@@ -36,9 +37,12 @@ const STATUS_FILTERS: LoanRequestStatus[] = ['pendiente', 'aprobada', 'retirada'
 // solicitudes de otros cuarteles a un rol de cuartel — puede sacarlo con el
 // filtro de cuartel si igual quiere ver otro.
 export function SolicitudesPrestamoPage() {
-  const { isAdmin, hasRole, profile, scopes } = useAuth()
-  const isStationRoleOnly = !isAdmin && hasRole('jefe_cuerpo_activo') && !hasRole('secretario_regional', 'director_escuela')
-  const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? ''
+  const { isAdmin, hasRole, profile } = useAuth()
+  const { ownStationIds } = useLoanRequestAccess()
+  // Quien gestiona préstamos (Informática, Regional, Escuela) ve todas por
+  // defecto; el resto arranca viendo las suyas y las de su cuartel.
+  const isManagerRole = isAdmin || hasRole('secretario_regional', 'director_escuela')
+  const [onlyMine, setOnlyMine] = useState(!isManagerRole)
 
   const [requests, setRequests] = useState<InventoryLoanRequest[]>([])
   const [items, setItems] = useState<InventoryItem[]>([])
@@ -69,9 +73,9 @@ export function SolicitudesPrestamoPage() {
       (r) =>
         (!statusFilter || r.status === statusFilter) &&
         (!stationFilter || r.requesting_station_id === stationFilter) &&
-        (!isStationRoleOnly || stationFilter || r.requesting_station_id === myStationId),
+        (!onlyMine || r.requested_by_profile_id === profile?.id || ownStationIds.includes(r.requesting_station_id)),
     )
-  }, [requests, statusFilter, stationFilter, isStationRoleOnly, myStationId])
+  }, [requests, statusFilter, stationFilter, onlyMine, profile?.id, ownStationIds])
 
   function itemName(itemId: string): string {
     return items.find((i) => i.id === itemId)?.name ?? 'Elemento eliminado'
@@ -82,9 +86,12 @@ export function SolicitudesPrestamoPage() {
   }
 
   return (
-    <AppShell title="Solicitudes de Préstamo">
-      <h1 className="page-title">Solicitudes de Préstamo</h1>
-      <p className="page-subtitle">Préstamos del Inventario Regional: pendientes, aprobadas, retiradas y devueltas.</p>
+    <AppShell title="Solicitudes de préstamo">
+      <Link to="/inventario" className="back-link">
+        ← Volver a Inventario
+      </Link>
+      <h1 className="page-title">Solicitudes de préstamo</h1>
+      <p className="page-subtitle">Pendientes, aprobadas, prestadas y devueltas. Tocá una para ver su estado o gestionarla.</p>
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
@@ -99,6 +106,9 @@ export function SolicitudesPrestamoPage() {
             </option>
           ))}
         </select>
+        <button type="button" className="chip" aria-pressed={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
+          Mis solicitudes
+        </button>
         <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los cuarteles</option>
           {stations.map((station) => (
@@ -110,7 +120,14 @@ export function SolicitudesPrestamoPage() {
       </div>
 
       {loading && <div className="loading-state" role="status">Cargando solicitudes…</div>}
-      {!loading && filtered.length === 0 && <div className="empty-state">No hay solicitudes que coincidan.</div>}
+      {!loading && filtered.length === 0 && (
+        <div className="empty-state empty-state-action">
+          <span>{onlyMine ? 'No tenés solicitudes con estos filtros.' : 'No hay solicitudes con estos filtros.'}</span>
+          <Link to="/inventario" className="btn btn-outlined">
+            Ver elementos para pedir
+          </Link>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {filtered.map((request) => (

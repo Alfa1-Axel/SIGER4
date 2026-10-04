@@ -7,6 +7,21 @@ export async function fetchLoanRequests(): Promise<InventoryLoanRequest[]> {
   return (data ?? []) as InventoryLoanRequest[]
 }
 
+// Préstamo activo: solicitud aprobada (reservado) o retirada (prestado),
+// todavía sin devolver. Mientras exista, el elemento no se puede volver a
+// pedir (0099). Cada elemento es una unidad: hay como mucho uno.
+export const ACTIVE_LOAN_STATUSES: LoanRequestStatus[] = ['aprobada', 'retirada']
+
+export function findActiveLoan(requests: InventoryLoanRequest[]): InventoryLoanRequest | undefined {
+  return requests.find((r) => ACTIVE_LOAN_STATUSES.includes(r.status))
+}
+
+export async function fetchActiveLoans(): Promise<InventoryLoanRequest[]> {
+  const { data, error } = await supabase.from('inventory_loan_requests').select('*').in('status', ACTIVE_LOAN_STATUSES)
+  if (error) throw error
+  return (data ?? []) as InventoryLoanRequest[]
+}
+
 export async function fetchLoanRequestsByItem(itemId: string): Promise<InventoryLoanRequest[]> {
   const { data, error } = await supabase
     .from('inventory_loan_requests')

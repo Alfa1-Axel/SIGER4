@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { APP_UPDATES } from '../config/appUpdates'
+import { Link } from 'react-router-dom'
+import { APP_UPDATES, CHANGE_TYPE_LABEL, formatUpdateDate } from '../config/appUpdates'
 import type { AppUpdate, AppUpdateSeverity } from '../config/appUpdates'
 import { hasSeenAppUpdate, markAppUpdateSeen } from '../lib/appUpdateSeen'
 import { subscribeForceShowAppUpdateBanner } from '../lib/appUpdateBannerControl'
@@ -106,13 +107,17 @@ export function AppUpdateBanner() {
         <h2 id="app-update-title" className="app-update-title">
           {update.title}
         </h2>
-        <p className="app-update-date">{new Date(update.date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'long' })}</p>
-        <p className="app-update-description">{update.description}</p>
+        <p className="app-update-date">
+          Versión {update.version} · {formatUpdateDate(update.date)}
+        </p>
+        <p className="app-update-description">{update.summary}</p>
 
         {update.changes.length > 0 && (
           <ul className="app-update-changes">
             {update.changes.map((change, index) => (
-              <li key={index}>{change}</li>
+              <li key={index}>
+                <strong>{CHANGE_TYPE_LABEL[change.type]} · {change.module}:</strong> {change.text}
+              </li>
             ))}
           </ul>
         )}
@@ -121,6 +126,9 @@ export function AppUpdateBanner() {
           <button type="button" className="btn btn-primary btn-block" onClick={handleDismiss}>
             Entendido
           </button>
+          <Link to="/novedades" className="btn btn-ghost btn-block" onClick={handleDismiss}>
+            Ver todas las novedades
+          </Link>
         </div>
       </div>
     </div>

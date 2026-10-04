@@ -17,6 +17,8 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { LOAN_REQUEST_STATUS_BADGE, LOAN_REQUEST_STATUS_LABEL } from './SolicitudesPrestamoPage'
 import type { InventoryItem, InventoryLoanRequest, Profile, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useNavigationNotice } from '../hooks/useNavigationNotice'
+import { SuccessNotice } from '../components/ui/SuccessNotice'
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'
@@ -31,11 +33,22 @@ function formatDateTime(value: string | null): string {
 // (migracion 0057) -- este gate del frontend es una mejora de UX (ocultar
 // botones que igual serian rechazados por RLS), la autorizacion real la
 // sigue haciendo la base.
+// Qué significa cada estado y qué sigue, en una línea.
+const NEXT_STEP: Record<InventoryLoanRequest['status'], string> = {
+  pendiente: 'Pendiente: el responsable del elemento tiene que aprobarla o rechazarla.',
+  aprobada: 'Aprobada: el elemento queda reservado para el cuartel hasta que lo retire.',
+  rechazada: 'Rechazada: el elemento no se presta para este pedido.',
+  retirada: 'Prestado: el cuartel lo retiró. Falta registrar la devolución.',
+  devuelta: 'Devuelto: el préstamo terminó y el elemento vuelve a estar disponible.',
+  cancelada: 'Cancelada: la solicitud no sigue.',
+}
+
 export function SolicitudPrestamoDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole, profile } = useAuth()
 
   const [request, setRequest] = useState<InventoryLoanRequest | null>(null)
+  const [notice, setNotice, noticeTone] = useNavigationNotice()
   const [item, setItem] = useState<InventoryItem | null>(null)
   const [stations, setStations] = useState<Station[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -236,9 +249,14 @@ export function SolicitudPrestamoDetallePage() {
         </div>
       )}
 
+      {notice && <SuccessNotice message={notice} tone={noticeTone} onClose={() => setNotice(null)} />}
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
+
+      <div className="card availability-card availability-card--info" role="status" style={{ marginBottom: 16 }}>
+        <p style={{ margin: 0, fontSize: 14 }}>{NEXT_STEP[request.status]}</p>
+      </div>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 13 }}>

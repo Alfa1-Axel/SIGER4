@@ -45,6 +45,21 @@
   --color-on-primary: #ffffff;
   --color-link: #284f86;
 
+  /* Identidad: encabezado y menú lateral. En modo claro llevan el azul
+     institucional; en modo oscuro quedan como el resto de las superficies.
+     Contrastes (WCAG): blanco sobre #284f86 8.2:1; texto secundario sobre
+     #f1f5fb 6.9:1 y texto atenuado 4.6:1. */
+  --color-header-bg: #284f86;
+  --color-header-fg: #ffffff;
+  --color-header-hover: rgba(255, 255, 255, 0.14);
+  --color-header-border: #203f6c;
+  --color-header-badge-border: #ffffff;
+  --color-sidebar-bg: #f1f5fb;
+  --color-sidebar-border: #d9e2ef;
+  --color-sidebar-hover: #e2eaf5;
+  --color-sidebar-active-bg: #284f86;
+  --color-sidebar-active-fg: #ffffff;
+
   /* Acento institucional (rojo): marca y avisos puntuales */
   --color-accent: #b3261e;
   --color-accent-fill: #b3261e;
@@ -114,6 +129,16 @@
 }
 
 :root[data-theme='dark'] {
+  --color-header-bg: var(--color-surface);
+  --color-header-fg: var(--color-text-primary);
+  --color-header-hover: var(--color-surface-hover);
+  --color-header-border: var(--color-border);
+  --color-header-badge-border: var(--color-surface);
+  --color-sidebar-bg: var(--color-surface);
+  --color-sidebar-border: var(--color-border);
+  --color-sidebar-hover: var(--color-surface-hover);
+  --color-sidebar-active-bg: var(--color-primary-soft);
+  --color-sidebar-active-fg: var(--color-primary-soft-text);
   --color-bg-app: #0e1217;
   --color-surface: #151a21;
   --color-surface-subtle: #1a2029;
@@ -259,8 +284,8 @@ h3 {
 .app-sidebar {
   width: var(--sidebar-width);
   flex-shrink: 0;
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
+  background: var(--color-sidebar-bg);
+  border-right: 1px solid var(--color-sidebar-border);
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -287,10 +312,30 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-header-border);
+  background: var(--color-header-bg);
+  color: var(--color-header-fg);
   position: relative;
   z-index: 100;
+}
+
+.app-header .btn-ghost {
+  color: var(--color-header-fg);
+}
+
+.app-header .btn-ghost:hover:not(:disabled) {
+  background: var(--color-header-hover);
+  color: var(--color-header-fg);
+}
+
+/* Sobre el azul, el anillo de foco azul no se ve: va en el color del texto. */
+.app-header :is(a, button):focus-visible {
+  outline: 2px solid var(--color-header-fg);
+  outline-offset: 2px;
+}
+
+.app-header .header-badge {
+  border-color: var(--color-header-badge-border);
 }
 
 .app-header-lead {
@@ -338,6 +383,7 @@ h3 {
 }
 
 .app-header-title {
+  color: var(--color-header-fg);
   font-size: 15px;
   font-weight: 600;
   min-width: 0;
@@ -527,7 +573,7 @@ h3 {
 }
 
 .sidebar-link:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-sidebar-hover);
   color: var(--color-text-primary);
 }
 
@@ -537,13 +583,13 @@ h3 {
 }
 
 .sidebar-link.active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary-soft-text);
+  background: var(--color-sidebar-active-bg);
+  color: var(--color-sidebar-active-fg);
   font-weight: 600;
 }
 
 .sidebar-link.active svg {
-  color: var(--color-primary-soft-text);
+  color: var(--color-sidebar-active-fg);
 }
 
 .sidebar-footer {
@@ -567,7 +613,7 @@ h3 {
 
 .sidebar-user:hover,
 .sidebar-brand:hover {
-  background: var(--color-surface-hover);
+  background: var(--color-sidebar-hover);
 }
 
 .sidebar-user-name {
@@ -1634,6 +1680,87 @@ input[type='file']::file-selector-button:hover {
   color: var(--color-info);
 }
 
+.badge-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.badge-neutral {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+/* Novedades: una tarjeta por versión. */
+.release-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.release-date {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.release-title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.release-summary {
+  margin: 0 0 12px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}
+
+.release-group + .release-group {
+  margin-top: 12px;
+}
+
+.release-group-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.release-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.release-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.release-list .badge {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Versión en el pie de página. */
+.app-footer-version {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ============================================================
    Alertas, estados vacíos y de carga
    ============================================================ */
@@ -1935,6 +2062,19 @@ input[type='file']::file-selector-button:hover {
   max-height: 360px;
   border-radius: var(--radius-md);
   background: #000;
+}
+
+/* Disponibilidad de un elemento del inventario. */
+.availability-card {
+  border-left: 3px solid var(--color-warning);
+}
+
+.availability-card--ok {
+  border-left-color: var(--color-success);
+}
+
+.availability-card--info {
+  border-left-color: var(--color-primary);
 }
 
 /* Menú de acciones (botón "+ Nuevo" con opciones). */
@@ -2327,6 +2467,7 @@ input[type='file']::file-selector-button:hover {
   max-width: 380px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-top: 4px solid var(--color-primary);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: 28px 24px;
@@ -2653,6 +2794,8 @@ input[type='file']::file-selector-button:hover {
 
 .app-update-actions {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* Barra fina, no bloqueante: hay una versión nueva del service worker

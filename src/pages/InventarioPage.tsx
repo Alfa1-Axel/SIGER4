@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchInventoryItems } from '../lib/api/inventory'
-import type { InventoryCategory, InventoryItem, InventoryStatus } from '../types/database'
+import { fetchActiveLoans } from '../lib/api/inventoryLoanRequests'
+import type { InventoryCategory, InventoryItem, InventoryLoanRequest, InventoryStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -34,6 +35,7 @@ export function InventarioPage() {
   const canEdit = isAdmin || hasRole('director_escuela', 'secretario_regional')
 
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [activeLoans, setActiveLoans] = useState<InventoryLoanRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -42,6 +44,11 @@ export function InventarioPage() {
 
   useEffect(() => {
     let active = true
+    // Los préstamos activos marcan "Prestado" / "Reservado" en la lista; si
+    // fallan, la lista sigue sirviendo.
+    fetchActiveLoans()
+      .then((loans) => active && setActiveLoans(loans))
+      .catch(() => undefined)
     fetchInventoryItems()
       .then((data) => active && setItems(data))
       .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el inventario')))
@@ -67,8 +74,8 @@ export function InventarioPage() {
         <div>
           <h1 className="page-title">Inventario Regional</h1>
           <p className="page-subtitle">
-            Elementos regionales disponibles para uso compartido entre cuarteles: herramientas, equipos
-            y material de práctica.
+            Herramientas, equipos y material de práctica que los cuarteles se prestan entre sí. Tocá un elemento para ver si
+            está disponible y pedirlo.
           </p>
         </div>
         <Link to="/inventario/solicitudes" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
@@ -134,7 +141,13 @@ export function InventarioPage() {
                 {item.contact_info && ` · ${item.contact_info}`}
               </p>
             </div>
-            <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`}>{INVENTORY_STATUS_LABEL[item.status]}</span>
+            {(() => {
+              const loan = item.status === 'disponible' ? activeLoans.find((l) => l.inventory_item_id === item.id) : undefined
+              if (loan) {
+                return <span className="badge badge-warning">{loan.status === 'retirada' ? 'Prestado' : 'Reservado'}</span>
+              }
+              return <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`}>{INVENTORY_STATUS_LABEL[item.status]}</span>
+            })()}
           </Link>
         ))}
       </div>

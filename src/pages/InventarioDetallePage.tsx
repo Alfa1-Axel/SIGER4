@@ -4,7 +4,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { fetchInventoryItemById, fetchInventoryItemHistory } from '../lib/api/inventory'
-import { fetchLoanRequestsByItem } from '../lib/api/inventoryLoanRequests'
+import { fetchLoanRequestsByItem, findActiveLoan } from '../lib/api/inventoryLoanRequests'
 import { fetchStations } from '../lib/api/stations'
 import { fetchProfiles } from '../lib/api/users'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -12,6 +12,8 @@ import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPa
 import { LOAN_REQUEST_STATUS_BADGE, LOAN_REQUEST_STATUS_LABEL } from './SolicitudesPrestamoPage'
 import type { InventoryItem, InventoryItemHistory, InventoryLoanRequest, Profile, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useLoanRequestAccess } from '../hooks/useLoanRequestAccess'
+import { AccessDenied } from '../components/ui/AccessDenied'
 
 const INVENTORY_STATUS_BADGE: Record<string, string> = {
   disponible: 'badge-success',
@@ -24,7 +26,7 @@ export function InventarioDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { isAdmin, hasRole } = useAuth()
   const canEdit = isAdmin || hasRole('director_escuela', 'secretario_regional')
-  const canRequest = isAdmin || hasRole('secretario_regional', 'jefe_cuerpo_activo', 'presidente_cuartel', 'usuario_carga_cuartel')
+  const { canRequest, ownStationIds } = useLoanRequestAccess()
 
   const [item, setItem] = useState<InventoryItem | null>(null)
   const [history, setHistory] = useState<InventoryItemHistory[]>([])
@@ -45,9 +47,11 @@ export function InventarioDetallePage() {
         setRequests(requestsData)
         setStations(stationsData)
         setProfiles(profilesData)
-        setLoading(false)
       })
-      .catch((err) => active && setError(describeSupabaseError(err)))
+      // Sin el finally, si alguna consulta fallaba la pantalla quedaba en
+      // "Cargando elemento…" para siempre y nunca aparecía "Solicitar".
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar el elemento. Reintentá en unos segundos.')))
+      .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
@@ -74,12 +78,26 @@ export function InventarioDetallePage() {
   if (!item) {
     return (
       <AppShell title="Elemento">
-        <div className="empty-state">No se encontró el elemento solicitado.</div>
+        {error ? (
+          <div className="alert alert-danger" role="alert">{error}</div>
+        ) : (
+          <AccessDenied title="No encontramos el elemento" message="Puede que lo hayan eliminado del inventario." backTo="/inventario" backLabel="Volver a Inventario" />
+        )}
       </AppShell>
     )
   }
 
-  const canRequestThisItem = canRequest && item.status === 'disponible'
+  const activeLoan = findActiveLoan(requests)
+  const myPending = requests.find((r) => r.status === 'pendiente' && ownStationIds.includes(r.requesting_station_id))
+  const isAvailable = item.status === 'disponible' && !activeLoan
+  let availability: string
+  if (item.status === 'baja') availability = 'Dado de baja: ya no se puede solicitar.'
+  else if (item.status === 'mantenimiento') availability = 'En mantenimiento: se va a poder solicitar cuando vuelva a estar disponible.'
+  else if (item.status === 'no_disponible') availability = 'No disponible para préstamo en este momento.'
+  else if (activeLoan?.status === 'retirada')
+    availability = `Prestado a ${stationName(activeLoan.requesting_station_id)}${activeLoan.expected_return_at ? ` hasta el ${new Date(activeLoan.expected_return_at).toLocaleDateString('es-AR')} (estimado)` : ''}. Se puede pedir cuando lo devuelvan.`
+  else if (activeLoan) availability = `Reservado para ${stationName(activeLoan.requesting_station_id)}. Se puede pedir cuando lo devuelvan o se cancele la reserva.`
+  else availability = 'Disponible para pedir prestado.'
 
   return (
     <AppShell title="Inventario Regional">
@@ -95,9 +113,15 @@ export function InventarioDetallePage() {
         <h1 className="page-title" style={{ minWidth: 0 }}>
           {item.name}
         </h1>
-        <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`} style={{ flexShrink: 0 }}>
-          {INVENTORY_STATUS_LABEL[item.status]}
-        </span>
+        {item.status === 'disponible' && activeLoan ? (
+          <span className="badge badge-warning" style={{ flexShrink: 0 }}>
+            {activeLoan.status === 'retirada' ? 'Prestado' : 'Reservado'}
+          </span>
+        ) : (
+          <span className={`badge ${INVENTORY_STATUS_BADGE[item.status]}`} style={{ flexShrink: 0 }}>
+            {INVENTORY_STATUS_LABEL[item.status]}
+          </span>
+        )}
       </div>
       <p className="page-subtitle">
         {item.category === 'otros' ? item.category_other_label : INVENTORY_CATEGORY_LABEL[item.category]}
@@ -123,19 +147,25 @@ export function InventarioDetallePage() {
         </div>
       </div>
 
-      {item.status !== 'disponible' && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p style={{ margin: 0, fontSize: 13 }}>
-            Este elemento no está disponible para solicitar en este momento
-            {item.status === 'baja' ? ' (dado de baja).' : item.status === 'mantenimiento' ? ' (en mantenimiento).' : '.'}
+      <div className={`card availability-card${isAvailable ? ' availability-card--ok' : ''}`} role="status" style={{ marginBottom: 16 }}>
+        <p style={{ margin: 0, fontSize: 14 }}>{availability}</p>
+        {myPending && (
+          <p style={{ margin: '6px 0 0', fontSize: 13 }}>
+            Tu cuartel ya lo pidió: <Link to={`/inventario/solicitudes/${myPending.id}`}>ver la solicitud pendiente</Link>.
           </p>
-        </div>
-      )}
+        )}
+        {isAvailable && !canRequest && (
+          <p className="field-help" style={{ margin: '6px 0 0' }}>
+            Lo solicitan el Jefe de Cuerpo Activo, el Presidente y los usuarios de carga de cada cuartel, el Secretario
+            Regional e Informática.
+          </p>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-        {canRequestThisItem && (
-          <Link to={`/inventario/${item.id}/solicitudes/nueva`} className="btn btn-primary btn-sm">
-            Solicitar
+        {isAvailable && canRequest && !myPending && (
+          <Link to={`/inventario/${item.id}/solicitudes/nueva`} className="btn btn-primary">
+            Solicitar préstamo
           </Link>
         )}
         {canEdit && (

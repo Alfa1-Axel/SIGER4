@@ -5,6 +5,7 @@ import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { ImagePicker } from '../components/ui/ImagePicker'
 import { SystemSettingsSection } from '../components/SystemSettingsSection'
+import { CURRENT_APP_UPDATE, CURRENT_VERSION, formatUpdateDate } from '../config/appUpdates'
 import { PasskeysSection } from '../components/PasskeysSection'
 import { passkeysAvailable } from '../lib/auth/loginHelpers'
 import { useAuth } from '../hooks/useAuth'
@@ -422,7 +423,8 @@ export function AjustesPage() {
       <h1 className="page-title">Mi perfil y ajustes</h1>
       <p className="page-subtitle">Tus datos personales, rol y alcance dentro del sistema.</p>
       <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
-        SIGER4 v{__SIGER4_APP_VERSION__}
+        SIGER4 {CURRENT_APP_UPDATE.version} · actualizado el {formatUpdateDate(CURRENT_APP_UPDATE.date)} ·{' '}
+        <Link to="/novedades">Ver novedades</Link>
       </p>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
@@ -1017,7 +1019,7 @@ export function AjustesPage() {
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
-              Versión: <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_APP_VERSION__}</code> · Build:{' '}
+              Versión: <code style={{ fontFamily: 'var(--font-mono)' }}>{CURRENT_VERSION}</code> · Build:{' '}
               <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_BUILD_VERSION__}</code>
             </p>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>

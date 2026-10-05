@@ -3,26 +3,23 @@ import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { AccessDenied } from '../components/ui/AccessDenied'
+import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
+import { DepartmentAssignmentPicker } from '../components/DepartmentAssignmentPicker'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
+import { applyProfileDepartments, fetchVisibleDepartments } from '../lib/api/departments'
 import { createUserAccount } from '../lib/api/users'
-import { INFORMATICA_ONLY_ASSIGNABLE_ROLES, ROLE_DEFINITIONS } from '../types/roles'
+import { buildRoleAssignments } from '../lib/roleAssignments'
+import { INFORMATICA_ONLY_ASSIGNABLE_ROLES, REGION_DIVISION_ROLES, ROLE_DEFINITIONS, STATION_DIVISION_ROLES } from '../types/roles'
 import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
-import type { Region, ScopeType, Station, Subsede } from '../types/database'
+import type { Region, ScopeType, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
-const SCOPE_OPTIONS: { value: ScopeType; label: string }[] = [
-  { value: 'region', label: 'Regional' },
-  { value: 'subsede', label: 'Subsede' },
-  { value: 'station', label: 'Cuartel' },
-  { value: 'escuela', label: 'Escuela' },
-  { value: 'system', label: 'Informática' },
-]
-
 const INFORMATICA_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']
+const ESCUELA_ROLES: RoleKey[] = ['director_escuela', 'instructor', 'coordinador_escuela', 'secretario_escuela']
 
 // Roles que un jefe_cuerpo_activo puede asignar al crear un usuario de su
 // propio cuartel. Confirmado explícitamente: nunca jefe_cuerpo_activo (no
@@ -38,6 +35,16 @@ const JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES: RoleKey[] = [
   'invitado',
 ]
 
+// El alcance que se guarda en user_scopes sale de los roles elegidos: el
+// más amplio manda. El cuartel y la Regional del perfil completan el resto
+// (my_station_ids() y my_region_ids() los suman en la base).
+function scopeTypeForRoles(roles: RoleKey[]): ScopeType {
+  if (roles.some((r) => INFORMATICA_ROLES.includes(r))) return 'system'
+  if (roles.includes('secretario_regional')) return 'region'
+  if (roles.some((r) => ESCUELA_ROLES.includes(r))) return 'escuela'
+  return 'station'
+}
+
 export function UsuarioFormPage() {
   const navigate = useNavigate()
   const { profile: currentProfile, roles: currentRoles } = useAuth()
@@ -50,9 +57,8 @@ export function UsuarioFormPage() {
   // valida la Edge Function admin-create-user). informatica_r4/
   // integrante_informatica: todos. director_escuela: todos menos los de
   // Informática y los que dan acceso a Avales regionales (coordinador/
-  // secretario de Escuela, coordinador de departamento interno: esos los
-  // asigna solo Informática). jefe_cuerpo_activo: solo el set fijo de roles
-  // de cuartel.
+  // secretario de Escuela: esos los asigna solo Informática).
+  // jefe_cuerpo_activo: solo el set fijo de roles de cuartel.
   const assignableRoles = useMemo(() => {
     if (isInformatica) return ROLE_DEFINITIONS
     if (isDirectorEscuela) return ROLE_DEFINITIONS.filter((r) => !INFORMATICA_ONLY_ASSIGNABLE_ROLES.includes(r.key))
@@ -65,17 +71,16 @@ export function UsuarioFormPage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [rank, setRank] = useState('')
   const [regionId, setRegionId] = useState('')
   const [stationId, setStationId] = useState(isJefeCuerpoActivo ? currentProfile?.station_id ?? '' : '')
   const [selectedRoles, setSelectedRoles] = useState<RoleKey[]>([])
-
-  const [scopeType, setScopeType] = useState<ScopeType>('station')
-  const [scopeRegionId, setScopeRegionId] = useState('')
-  const [scopeSubsedeId, setScopeSubsedeId] = useState('')
-  const [scopeStationId, setScopeStationId] = useState(isJefeCuerpoActivo ? currentProfile?.station_id ?? '' : '')
+  // Departamentos (solo Informática asigna coordinadores, 0097).
+  const [coordinates, setCoordinates] = useState<string[]>([])
+  const [memberOf, setMemberOf] = useState<string[]>([])
 
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -83,6 +88,11 @@ export function UsuarioFormPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
+  const [departmentsWarning, setDepartmentsWarning] = useState<string | null>(null)
+
+  const needsStation = selectedRoles.some((r) => STATION_DIVISION_ROLES.includes(r))
+  const needsRegion = selectedRoles.some((r) => REGION_DIVISION_ROLES.includes(r))
+  const scopeType = scopeTypeForRoles(selectedRoles)
 
   function handleGeneratePassword() {
     const bytes = new Uint8Array(12)
@@ -94,23 +104,41 @@ export function UsuarioFormPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()]).then(
-      ([regionsData, subsedesData, stationsData]) => {
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), isInformatica ? fetchVisibleDepartments().catch(() => []) : Promise.resolve([])]).then(
+      ([regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
+        setDepartments(departmentsData)
         if (!isJefeCuerpoActivo) setRegionId((prev) => prev || regionsData[0]?.id || '')
       },
     )
     return () => {
       active = false
     }
-  }, [isJefeCuerpoActivo])
+  }, [isJefeCuerpoActivo, isInformatica])
 
   function toggleRole(role: RoleKey) {
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
   }
+
+  // Vista previa: cada rol con la división que va a tener.
+  const preview = useMemo(
+    () =>
+      buildRoleAssignments({
+        roles: selectedRoles,
+        profileStationId: stationId || null,
+        profileRegionId: isJefeCuerpoActivo ? null : regionId || null,
+        scopes: [],
+        coordinated: departments.filter((d) => coordinates.includes(d.id)),
+        memberOf: departments.filter((d) => memberOf.includes(d.id)),
+        stationName: (id) => stations.find((s) => s.id === id)?.name ?? null,
+        regionName: (id) => regions.find((r) => r.id === id)?.name ?? null,
+        subsedeName: (id) => subsedes.find((s) => s.id === id)?.name ?? null,
+      }),
+    [selectedRoles, stationId, regionId, isJefeCuerpoActivo, departments, coordinates, memberOf, stations, regions, subsedes],
+  )
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -124,36 +152,30 @@ export function UsuarioFormPage() {
       setError('Revisá el email (paso 1): es el usuario con el que la persona va a iniciar sesión.')
       return
     }
-    if (selectedRoles.length === 0) {
-      setError('Elegí al menos un rol (paso 4).')
-      return
-    }
-
-    if (scopeType === 'region' && !scopeRegionId) {
-      setError('Elegí la Regional del alcance (paso 3).')
-      return
-    }
-    if (scopeType === 'subsede' && !scopeSubsedeId) {
-      setError('Seleccioná la subsede del alcance.')
-      return
-    }
-    if (scopeType === 'station' && !scopeStationId) {
-      setError('Seleccioná el cuartel del alcance.')
-      return
-    }
-
     if (password.length < 8) {
-      setError('La contraseña temporal debe tener al menos 8 caracteres.')
+      setError('La contraseña temporal debe tener al menos 8 caracteres (paso 2).')
       return
     }
     if (password !== confirmPassword) {
-      setError('Las contraseñas no coinciden.')
+      setError('Las contraseñas no coinciden (paso 2).')
+      return
+    }
+    if (selectedRoles.length === 0) {
+      setError('Elegí al menos un rol (paso 3).')
+      return
+    }
+    if (needsStation && !stationId) {
+      setError('Elegí el cuartel (paso 4): los roles de cuartel trabajan sobre un cuartel.')
+      return
+    }
+    if (needsRegion && !regionId && !isJefeCuerpoActivo) {
+      setError('Elegí la Regional (paso 4): el rol elegido trabaja sobre una Regional.')
       return
     }
 
     setSubmitting(true)
     try {
-      await createUserAccount({
+      const created = await createUserAccount({
         full_name: fullName.trim(),
         email: email.trim(),
         rank: rank || null,
@@ -163,12 +185,21 @@ export function UsuarioFormPage() {
         roles: selectedRoles,
         scope: {
           scope_type: scopeType,
-          region_id: scopeType === 'region' ? scopeRegionId || null : null,
-          subsede_id: scopeType === 'subsede' ? scopeSubsedeId || null : null,
-          station_id: scopeType === 'station' ? scopeStationId || null : null,
+          region_id: scopeType === 'region' ? regionId || null : null,
+          subsede_id: null,
+          station_id: scopeType === 'station' ? (isJefeCuerpoActivo ? currentProfile?.station_id ?? null : stationId || null) : null,
         },
       })
 
+      if (coordinates.length > 0 || memberOf.length > 0) {
+        try {
+          await applyProfileDepartments(created.id, { coordinated: [], memberOf: [] }, { coordinated: coordinates, memberOf })
+        } catch (err) {
+          setDepartmentsWarning(
+            describeSupabaseError(err, 'La cuenta se creó, pero no pudimos asignar los departamentos. Asignalos desde la ficha del usuario.'),
+          )
+        }
+      }
       setCreatedPassword(password)
     } catch (err) {
       setError(describeSupabaseError(err, 'No pudimos crear el usuario.'))
@@ -200,6 +231,17 @@ export function UsuarioFormPage() {
         </p>
         <div className="card-solid" style={{ marginBottom: 20, wordBreak: 'break-all' }}>
           <code>{createdPassword}</code>
+        </div>
+        {departmentsWarning && (
+          <div className="alert alert-warning" role="alert">
+            {departmentsWarning}
+          </div>
+        )}
+        <div className="card-solid" style={{ marginBottom: 20 }}>
+          <div className="kpi-label" style={{ marginBottom: 8 }}>
+            Roles y dónde aplican
+          </div>
+          <RoleAssignmentsList assignments={preview} />
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button
@@ -304,17 +346,48 @@ export function UsuarioFormPage() {
         </fieldset>
 
         <fieldset className="form-section">
-          <legend className="form-section-title">3. Ubicación y alcance</legend>
+          <legend className="form-section-title">3. Roles</legend>
+          <p className="form-section-help">
+            Qué puede hacer. Elegí al menos uno: en el paso 4 te pedimos dónde aplica cada rol.{' '}
+            <Link to="/roles" className="link-muted">
+              Ver qué permite cada rol
+            </Link>
+          </p>
+          <div className="field">
+            <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
+          </div>
+
+          {isInformatica && departments.length > 0 && (
+            <div className="field">
+              <span className="field-label">Departamentos (opcional)</span>
+              <p className="field-help" style={{ marginTop: 0 }}>
+                Coordinador o integrante de uno o más departamentos. Solo ve los departamentos que elijas acá.
+              </p>
+              <DepartmentAssignmentPicker
+                departments={departments}
+                coordinates={coordinates}
+                memberOf={memberOf}
+                onChange={(next) => {
+                  setCoordinates(next.coordinates)
+                  setMemberOf(next.memberOf)
+                }}
+              />
+            </div>
+          )}
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend className="form-section-title">4. Dónde aplica</legend>
           <p className="form-section-help">
             {isJefeCuerpoActivo
               ? 'La cuenta queda en tu cuartel y ve solo la información de tu cuartel.'
-              : 'Dónde está la persona y qué información puede ver: el alcance limita los datos que le muestra cada sección.'}
+              : 'La división de cada rol: el cuartel para los roles de cuartel y la Regional para los regionales. Informática y los roles de avales de Escuela no la necesitan.'}
           </p>
 
           {!isJefeCuerpoActivo && (
             <div className="field">
-              <label htmlFor="region">Regional</label>
-              <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+              <label htmlFor="region">Regional{needsRegion ? '' : ' (opcional)'}</label>
+              <select id="region" value={regionId} onChange={(e) => setRegionId(e.target.value)} aria-required={needsRegion}>
                 <option value="">Sin asignar</option>
                 {regions.map((region) => (
                   <option key={region.id} value={region.id}>
@@ -327,8 +400,8 @@ export function UsuarioFormPage() {
 
           {!isJefeCuerpoActivo && (
             <div className="field">
-              <label htmlFor="station">Cuartel (opcional)</label>
-              <select id="station" value={stationId} onChange={(e) => setStationId(e.target.value)}>
+              <label htmlFor="station">Cuartel{needsStation ? '' : ' (opcional)'}</label>
+              <select id="station" value={stationId} onChange={(e) => setStationId(e.target.value)} aria-required={needsStation}>
                 <option value="">Sin asignar</option>
                 {stations.map((station) => (
                   <option key={station.id} value={station.id}>
@@ -336,81 +409,23 @@ export function UsuarioFormPage() {
                   </option>
                 ))}
               </select>
+              {needsStation && <p className="field-help">Los roles de cuartel solo ven y cargan datos de este cuartel.</p>}
             </div>
           )}
 
-          <div className="field">
-            <span className="field-label">Alcance</span>
-            {isJefeCuerpoActivo ? (
-              <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                {stations.find((s) => s.id === currentProfile?.station_id)?.name ?? 'Tu cuartel'}
-              </p>
-            ) : (
-              <>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                  {SCOPE_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setScopeType(option.value)}
-                      className="chip"
-                      aria-pressed={scopeType === option.value}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
+          {isJefeCuerpoActivo && (
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+              Cuartel: {stations.find((s) => s.id === currentProfile?.station_id)?.name ?? 'tu cuartel'}
+            </p>
+          )}
 
-                {scopeType === 'region' && (
-                  <select value={scopeRegionId} onChange={(e) => setScopeRegionId(e.target.value)}>
-                    <option value="">Seleccionar Regional</option>
-                    {regions.map((region) => (
-                      <option key={region.id} value={region.id}>
-                        {region.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {scopeType === 'subsede' && (
-                  <select value={scopeSubsedeId} onChange={(e) => setScopeSubsedeId(e.target.value)}>
-                    <option value="">Seleccionar subsede</option>
-                    {subsedes.map((subsede) => (
-                      <option key={subsede.id} value={subsede.id}>
-                        {subsede.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {scopeType === 'station' && (
-                  <select value={scopeStationId} onChange={(e) => setScopeStationId(e.target.value)}>
-                    <option value="">Seleccionar cuartel</option>
-                    {stations.map((station) => (
-                      <option key={station.id} value={station.id}>
-                        {station.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </>
-            )}
-          </div>
-
-        </fieldset>
-
-        <fieldset className="form-section">
-          <legend className="form-section-title">4. Roles</legend>
-          <p className="form-section-help">
-            Qué puede hacer. Elegí al menos uno. Para que alguien coordine un departamento no hace falta un rol: se lo
-            asigna en Departamentos.{' '}
-            <Link to="/roles" className="link-muted">
-              Ver qué permite cada rol
-            </Link>
-          </p>
-          <div className="field">
-            <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
-          </div>
+          {preview.length > 0 && (
+            <div className="field">
+              <span className="field-label">Así va a quedar</span>
+              <RoleAssignmentsList assignments={preview} />
+              <p className="field-help">Para sumar una subsede o más cuarteles, hacelo después desde la ficha del usuario.</p>
+            </div>
+          )}
         </fieldset>
 
         {error && (

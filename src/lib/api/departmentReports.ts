@@ -35,14 +35,16 @@ export async function fetchDepartmentReports(departmentId: string): Promise<Depa
 }
 
 // Últimos informes de todos los departamentos que el usuario puede ver (la
-// RLS filtra). Para la lista de Departamentos y el Inicio.
-export async function fetchRecentDepartmentReports(limit = 5): Promise<DepartmentReport[]> {
-  const { data, error } = await supabase
+// RLS filtra), o de uno solo. Para la lista de Departamentos y el Inicio.
+export async function fetchRecentDepartmentReports(limit = 5, departmentId?: string): Promise<DepartmentReport[]> {
+  let query = supabase
     .from('department_reports')
     .select('*')
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (departmentId) query = query.eq('department_id', departmentId)
+  const { data, error } = await query
   if (error) throw error
   return (data ?? []) as DepartmentReport[]
 }

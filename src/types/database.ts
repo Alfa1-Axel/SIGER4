@@ -504,6 +504,8 @@ export interface CalendarEvent {
   region_id: string | null
   subsede_id: string | null
   station_id: string | null
+  // Evento de un departamento (0103): sin Regional, subsede ni cuartel.
+  department_id: string | null
   status: CalendarEventStatus
   notify_on_create: boolean
   notify_before_minutes: number | null
@@ -554,6 +556,36 @@ export interface MapReferencePoint {
 
 // Departamento tal como lo ve Avales regionales: la fila de departments
 // (sección Departamentos) más el nombre de su coordinador.
+// list_visible_departments() (0103): departamentos que el usuario puede ver.
+export type DepartmentRelation = 'coordinador' | 'integrante'
+
+export interface VisibleDepartment {
+  id: string
+  name: string
+  description: string | null
+  contact_info: string | null
+  is_active: boolean
+  coordinator_profile_id: string | null
+  coordinator_name: string | null
+  member_count: number
+  // null: lo ve por su rol regional (Informática, Secretario Regional,
+  // Director de Escuela), sin integrarlo.
+  my_relation: DepartmentRelation | null
+}
+
+// department_member_directory() (0103).
+export interface DepartmentDirectoryEntry {
+  member_id: string
+  profile_id: string
+  full_name: string
+  rank: string | null
+  email: string
+  phone: string | null
+  station_id: string | null
+  station_name: string | null
+  is_active: boolean
+}
+
 export interface AvalesDepartment {
   id: string
   name: string

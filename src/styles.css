@@ -3590,6 +3590,247 @@ kbd {
   line-height: 1.5;
 }
 
+/* Roles por división: rol + dónde aplica (ficha, Mi perfil, guía). */
+.role-assignments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.role-assignment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.role-assignment-role {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.role-assignment-division {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.role-assignment--missing {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
+}
+
+.role-assignment--missing .role-assignment-division {
+  color: var(--color-text-primary);
+}
+
+.role-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.role-example {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 2fr);
+  gap: 4px 12px;
+  font-size: 13px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.role-example:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.role-example-role {
+  font-weight: 600;
+}
+
+.role-example-division {
+  color: var(--color-primary-soft-text);
+}
+
+.role-example-result {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 640px) {
+  .role-example {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Coordinador / integrante por departamento (alta y ficha de usuario). */
+.department-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.department-assignment {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.department-assignment-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.department-assignment-note {
+  flex-basis: 100%;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-warning);
+}
+
+.department-assignment-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Inicio: el departamento del coordinador o integrante. */
+.dept-dashboard {
+  margin-bottom: 24px;
+}
+
+.dept-dashboard .filter-bar {
+  margin-bottom: 10px;
+}
+
+.dept-chip-relation {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.chip[aria-pressed='true'] .dept-chip-relation {
+  color: inherit;
+  opacity: 0.85;
+}
+
+.dept-dashboard-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px 16px;
+  margin-bottom: 14px;
+}
+
+.dept-dashboard-title {
+  margin: 0;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.dept-dashboard-meta {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.dept-dashboard-open {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.dept-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .dept-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dept-dashboard-subtitle {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.dept-dashboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dept-dashboard-list a {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.dept-dashboard-list a:hover {
+  background: var(--color-surface-hover);
+}
+
+.dept-dashboard-list a:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+.dept-dashboard-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.dept-dashboard-item-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dept-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
 /* ============================================================
    Mapa Regional (Leaflet)
    ============================================================

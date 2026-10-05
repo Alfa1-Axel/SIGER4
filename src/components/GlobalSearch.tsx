@@ -13,6 +13,7 @@ import {
 } from '../lib/api/globalSearch'
 import type { SearchModule, SearchOutcome, SearchResult } from '../lib/api/globalSearch'
 import { fetchDepartments } from '../lib/api/departments'
+import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
 import { fetchStations } from '../lib/api/stations'
 import { useAccessContext } from '../hooks/useAccessContext'
 import { OPEN_SEARCH_EVENT } from '../lib/searchControl'
@@ -21,16 +22,26 @@ const PER_MODULE = 4
 const PER_MODULE_FILTERED = 20
 const DEBOUNCE_MS = 300
 
-// Nombres para los subtítulos; se cargan una vez por sesión de la pantalla.
-let lookupsCache: Promise<{ departments: Map<string, string>; stations: Map<string, string> }> | null = null
-function loadLookups() {
-  if (!lookupsCache) {
-    lookupsCache = Promise.all([fetchDepartments().catch(() => []), fetchStations().catch(() => [])]).then(([deps, sts]) => ({
-      departments: new Map(deps.map((d) => [d.id, d.name])),
+// Nombres para los subtítulos, de lo que el usuario puede ver: sus
+// departamentos (o todos, con visión regional), los de Avales si entra a
+// Avales, y sus cuarteles. Se cargan una vez por usuario: si otra persona
+// inicia sesión en la misma pestaña, se vuelven a pedir.
+type Lookups = { departments: Map<string, string>; stations: Map<string, string> }
+let lookupsCache: { key: string; promise: Promise<Lookups> } | null = null
+function loadLookups(profileId: string | null, withAvales: boolean) {
+  const key = `${profileId ?? ''}:${withAvales}`
+  if (!lookupsCache || lookupsCache.key !== key) {
+    const promise = Promise.all([
+      fetchDepartments().catch(() => []),
+      withAvales ? fetchAvalesDepartments().catch(() => []) : Promise.resolve([]),
+      fetchStations().catch(() => []),
+    ]).then(([deps, avalesDeps, sts]) => ({
+      departments: new Map([...avalesDeps, ...deps].map((d) => [d.id, d.name])),
       stations: new Map(sts.map((s) => [s.id, s.name])),
     }))
+    lookupsCache = { key, promise }
   }
-  return lookupsCache
+  return lookupsCache.promise
 }
 
 // Botón "Buscar en SIGER4" del encabezado + paleta de búsqueda. Ctrl/Cmd + K
@@ -108,7 +119,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
     const id = ++requestId.current
     setLoading(true)
     setError(null)
-    loadLookups()
+    loadLookups(ctx.profileId, ctx.hasAvalesAccess)
       .then((lookups) =>
         searchEverything(
           term,

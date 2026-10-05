@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { fetchCoordinatingProfileIds } from './departments'
 import { DEPARTMENT_REPORT_TYPE_LABEL } from './departmentReports'
 import { NOTIFICATION_TYPE_LABEL } from '../notificationMeta'
 import { HELP_ARTICLES, canSeeHelpArticle, helpArticleMatches } from '../../config/helpContent'
@@ -145,11 +146,11 @@ async function searchUsers(like: string, ctx: SearchContext, limit: number): Pro
     const ids = rows.map((r) => r.id)
     const [{ data: roles }, { data: coordinated }] = await Promise.all([
       supabase.from('user_roles').select('profile_id, role').in('profile_id', ids),
-      supabase.from('departments').select('coordinator_profile_id').in('coordinator_profile_id', ids),
+      fetchCoordinatingProfileIds(ids).then((data) => ({ data })),
     ])
     const blocked = new Set<string>([
       ...((roles ?? []) as { profile_id: string; role: RoleKey }[]).filter((r) => PRIVILEGED_FOR_JEFE.includes(r.role)).map((r) => r.profile_id),
-      ...((coordinated ?? []) as { coordinator_profile_id: string }[]).map((d) => d.coordinator_profile_id),
+      ...coordinated,
     ])
     rows = rows.filter((r) => !blocked.has(r.id))
   }

@@ -16,12 +16,15 @@ import {
   updateProfile,
   updateUserAccount,
 } from '../lib/api/users'
-import { fetchCoordinatedDepartments } from '../lib/api/departments'
+import { applyProfileDepartments, fetchCoordinatingProfileIds, fetchProfileDepartmentIds, fetchVisibleDepartments } from '../lib/api/departments'
+import { DepartmentAssignmentPicker } from '../components/DepartmentAssignmentPicker'
+import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
+import { buildRoleAssignments } from '../lib/roleAssignments'
 import { DeleteUserConfirmModal } from '../components/ui/DeleteUserConfirmModal'
 import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCHOOL_AVALES_ROLES } from '../types/roles'
 import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
-import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope } from '../types/database'
+import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -60,7 +63,14 @@ export function UsuarioDetallePage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
-  const [coordinatedDepartments, setCoordinatedDepartments] = useState<{ id: string; name: string }[]>([])
+  // Departamentos: el de Informática edita coordinación e integración; el Jefe
+  // de Cuerpo Activo solo necesita saber si coordina alguno (no lo gestiona).
+  const [allDepartments, setAllDepartments] = useState<VisibleDepartment[]>([])
+  const [departmentIds, setDepartmentIds] = useState<{ coordinated: string[]; memberOf: string[] }>({ coordinated: [], memberOf: [] })
+  const [departmentDraft, setDepartmentDraft] = useState<{ coordinates: string[]; memberOf: string[] }>({ coordinates: [], memberOf: [] })
+  const [savingDepartments, setSavingDepartments] = useState(false)
+  const [departmentsSaved, setDepartmentsSaved] = useState(false)
+  const [targetCoordinates, setTargetCoordinates] = useState(false)
 
   const [fullName, setFullName] = useState('')
   const [rank, setRank] = useState('')
@@ -87,11 +97,25 @@ export function UsuarioDetallePage() {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
+  async function loadDepartments(profileId: string) {
+    if (isAdmin) {
+      const [ids, visible] = await Promise.all([fetchProfileDepartmentIds(profileId), fetchVisibleDepartments()])
+      setDepartmentIds(ids)
+      setDepartmentDraft({ coordinates: ids.coordinated, memberOf: ids.memberOf })
+      setAllDepartments(visible)
+      setTargetCoordinates(ids.coordinated.length > 0)
+    } else if (isJefeCuerpoActivo) {
+      // Si no se puede verificar, se trata como coordinador: la pantalla no
+      // ofrece gestionarlo (admin-update-user lo rechazaría igual).
+      const ids = await fetchCoordinatingProfileIds([profileId]).catch(() => [profileId])
+      setTargetCoordinates(ids.length > 0)
+    }
+  }
+
   async function reload() {
     if (!id) return
-    const [data, coordinated] = await Promise.all([fetchProfileWithRoles(id), fetchCoordinatedDepartments(id).catch(() => [])])
+    const [data] = await Promise.all([fetchProfileWithRoles(id), loadDepartments(id).catch(() => undefined)])
     if (!data) return
-    setCoordinatedDepartments(coordinated)
     setProfile(data.profile)
     setRoles(data.roles)
     setScopes(data.scopes)
@@ -109,14 +133,13 @@ export function UsuarioDetallePage() {
       fetchSubsedes(),
       fetchStations(),
       id ? fetchProfileWithRoles(id) : null,
-      id ? fetchCoordinatedDepartments(id).catch(() => []) : [],
+      id ? loadDepartments(id).catch(() => undefined) : undefined,
     ]).then(
-      ([regionsData, subsedesData, stationsData, profileData, coordinatedData]) => {
+      ([regionsData, subsedesData, stationsData, profileData]) => {
         if (!active) return
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
-        setCoordinatedDepartments(coordinatedData)
         if (profileData) {
           setProfile(profileData.profile)
           setRoles(profileData.roles)
@@ -133,7 +156,27 @@ export function UsuarioDetallePage() {
     return () => {
       active = false
     }
+    // loadDepartments depende de isAdmin/isJefeCuerpoActivo, que no cambian
+    // mientras la pantalla está abierta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  async function handleSaveDepartments() {
+    if (!id) return
+    setSavingDepartments(true)
+    setDepartmentsSaved(false)
+    setError(null)
+    try {
+      await applyProfileDepartments(id, departmentIds, { coordinated: departmentDraft.coordinates, memberOf: departmentDraft.memberOf })
+      await loadDepartments(id)
+      setDepartmentsSaved(true)
+    } catch (err) {
+      setError(describeSupabaseError(err, 'No pudimos guardar los departamentos.'))
+      await loadDepartments(id).catch(() => undefined)
+    } finally {
+      setSavingDepartments(false)
+    }
+  }
 
   async function handleSaveBasics() {
     if (!id) return
@@ -306,7 +349,7 @@ export function UsuarioDetallePage() {
   // admin-update-user server-side — usuarios de otro cuartel, o con un rol
   // privilegiado (informática/regional/escuela), ni siquiera se muestran.
   if (isJefeCuerpoActivo) {
-    const targetHasPrivilegedRole = roles.some((r) => PRIVILEGED_TARGET_ROLES.includes(r.role)) || coordinatedDepartments.length > 0
+    const targetHasPrivilegedRole = roles.some((r) => PRIVILEGED_TARGET_ROLES.includes(r.role)) || targetCoordinates
     const targetIsOwnStation = !!currentProfile?.station_id && profile.station_id === currentProfile.station_id
     if (!targetIsOwnStation || targetHasPrivilegedRole) {
       return (
@@ -333,6 +376,22 @@ export function UsuarioDetallePage() {
   // updateUserAccount que isAdmin pero limitada a datos no sensibles.
   const canManageAccount = isAdmin || isJefeCuerpoActivo
 
+  // Cada rol con su división, en lenguaje de todos los días.
+  const assignments = buildRoleAssignments({
+    roles: roles.map((r) => r.role),
+    profileStationId: profile.station_id,
+    profileRegionId: profile.region_id,
+    scopes,
+    coordinated: allDepartments.filter((d) => departmentIds.coordinated.includes(d.id)),
+    memberOf: allDepartments.filter((d) => departmentIds.memberOf.includes(d.id)),
+    stationName: (sid) => stations.find((s) => s.id === sid)?.name ?? null,
+    regionName: (rid) => regions.find((r) => r.id === rid)?.name ?? null,
+    subsedeName: (sid) => subsedes.find((s) => s.id === sid)?.name ?? null,
+  })
+  const departmentsChanged =
+    [...departmentDraft.coordinates].sort().join() !== [...departmentIds.coordinated].sort().join() ||
+    [...departmentDraft.memberOf].sort().join() !== [...departmentIds.memberOf].sort().join()
+
   return (
     <AppShell title="Usuario">
       <Link to="/usuarios" className="back-link">
@@ -358,6 +417,20 @@ export function UsuarioDetallePage() {
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
+      )}
+
+      {isAdmin && (
+        <div className="card-solid" style={{ marginBottom: 20 }}>
+          <div className="kpi-label" style={{ marginBottom: 8 }}>
+            Roles y dónde aplican
+          </div>
+          <RoleAssignmentsList assignments={assignments} />
+          {assignments.some((a) => a.missing) && (
+            <p className="field-help" style={{ marginTop: 8 }}>
+              Un rol sin su división no ve los datos que le corresponden: asignale el cuartel o la Regional en Datos básicos.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="section-header">
@@ -506,24 +579,38 @@ export function UsuarioDetallePage() {
           </div>
 
           <div className="section-header">
-            <h2 className="section-title">Departamentos que coordina</h2>
+            <h2 className="section-title">Departamentos</h2>
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
-            {coordinatedDepartments.length > 0 ? (
-              <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>
-                {coordinatedDepartments.map((d) => (
-                  <li key={d.id}>
-                    <Link to={`/departamentos/${d.id}`}>{d.name}</Link>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p style={{ margin: '0 0 10px' }}>No coordina ningún departamento.</p>
-            )}
-            <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: 0 }}>
-              El coordinador se elige en cada departamento (sección Departamentos). Con eso ya ve y sube los avales de
-              su departamento en Escuela: no hace falta ningún rol ni otra asignación.
+            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 0 }}>
+              Ve solo los departamentos que coordina o integra: integrantes, informes, actas, eventos y avisos. El coordinador
+              también ve y sube los avales de su departamento en Escuela.
             </p>
+            {allDepartments.length === 0 ? (
+              <p style={{ margin: 0 }}>Todavía no hay departamentos cargados.</p>
+            ) : (
+              <DepartmentAssignmentPicker
+                departments={allDepartments}
+                coordinates={departmentDraft.coordinates}
+                memberOf={departmentDraft.memberOf}
+                profileId={profile.id}
+                disabled={savingDepartments}
+                onChange={(next) => {
+                  setDepartmentsSaved(false)
+                  setDepartmentDraft(next)
+                }}
+              />
+            )}
+            {allDepartments.length > 0 && (
+              <button type="button" className="btn btn-primary" style={{ marginTop: 12 }} disabled={!departmentsChanged || savingDepartments} onClick={handleSaveDepartments}>
+                {savingDepartments ? 'Guardando…' : 'Guardar departamentos'}
+              </button>
+            )}
+            {departmentsSaved && (
+              <p className="field-help" role="status" style={{ color: 'var(--color-success)', marginTop: 8 }}>
+                Departamentos guardados.
+              </p>
+            )}
           </div>
 
           <div className="section-header">

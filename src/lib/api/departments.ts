@@ -1,5 +1,13 @@
 import { supabase } from '../supabaseClient'
-import type { Department, DepartmentManualMember, DepartmentMember, Profile } from '../../types/database'
+import type {
+  Department,
+  DepartmentDirectoryEntry,
+  DepartmentManualMember,
+  DepartmentMember,
+  NotificationType,
+  Profile,
+  VisibleDepartment,
+} from '../../types/database'
 
 export async function fetchDepartments(): Promise<Department[]> {
   const { data, error } = await supabase.from('departments').select('*').order('name', { ascending: true })
@@ -13,9 +21,90 @@ export async function fetchDepartmentById(id: string): Promise<Department | null
   return data as Department
 }
 
+// Departamentos que el usuario puede ver (0103), con el coordinador, la
+// cantidad de integrantes y su relación con cada uno.
+export async function fetchVisibleDepartments(): Promise<VisibleDepartment[]> {
+  const { data, error } = await supabase.rpc('list_visible_departments')
+  if (error) throw error
+  return (data ?? []) as VisibleDepartment[]
+}
+
+// Integrantes con cuenta, con nombre, cuartel y contacto, aunque sean de otro
+// cuartel (profiles está limitado por cuartel). Vacío si no puede verlo.
+export async function fetchDepartmentDirectory(departmentId: string): Promise<DepartmentDirectoryEntry[]> {
+  const { data, error } = await supabase.rpc('department_member_directory', { p_department_id: departmentId })
+  if (error) throw error
+  return (data ?? []) as DepartmentDirectoryEntry[]
+}
+
+// Aviso a todo el departamento: una notificación personal por integrante.
+// Devuelve a cuántas personas llegó.
+export async function notifyDepartment(departmentId: string, type: NotificationType, title: string, body: string | null): Promise<number> {
+  const { data, error } = await supabase.rpc('notify_department', {
+    p_department_id: departmentId,
+    p_type: type,
+    p_title: title,
+    p_body: body,
+  })
+  if (error) throw error
+  return (data as number | null) ?? 0
+}
+
+// De estos perfiles, cuáles coordinan algún departamento (0103). Solo responde
+// por perfiles de los cuarteles del usuario, o para Informática: lo usan las
+// pantallas del Jefe de Cuerpo Activo, que no gestiona coordinadores.
+export async function fetchCoordinatingProfileIds(profileIds: string[]): Promise<string[]> {
+  if (profileIds.length === 0) return []
+  const { data, error } = await supabase.rpc('coordinating_profile_ids', { p_profile_ids: profileIds })
+  if (error) throw error
+  return ((data ?? []) as (string | { coordinating_profile_ids: string })[]).map((row) =>
+    typeof row === 'string' ? row : row.coordinating_profile_ids,
+  )
+}
+
+// Departamentos de una persona (ficha de usuario). Informática ve todos.
+export async function fetchProfileDepartmentIds(profileId: string): Promise<{ coordinated: string[]; memberOf: string[] }> {
+  const [coordinated, memberships] = await Promise.all([
+    supabase.from('departments').select('id').eq('coordinator_profile_id', profileId),
+    supabase.from('department_members').select('department_id').eq('profile_id', profileId),
+  ])
+  if (coordinated.error) throw coordinated.error
+  if (memberships.error) throw memberships.error
+  return {
+    coordinated: (coordinated.data ?? []).map((d) => (d as { id: string }).id),
+    memberOf: (memberships.data ?? []).map((m) => (m as { department_id: string }).department_id),
+  }
+}
+
+// Coordinador de un departamento: lo asigna solo Informática (0097). null lo
+// deja sin coordinador.
+export async function setDepartmentCoordinator(departmentId: string, profileId: string | null): Promise<void> {
+  const { error } = await supabase.from('departments').update({ coordinator_profile_id: profileId }).eq('id', departmentId)
+  if (error) throw error
+}
+
+export async function removeDepartmentMembership(departmentId: string, profileId: string): Promise<void> {
+  const { error } = await supabase.from('department_members').delete().eq('department_id', departmentId).eq('profile_id', profileId)
+  if (error) throw error
+}
+
+// Aplica coordinación e integración de una persona en varios departamentos
+// (alta y ficha de usuario). Solo toca los departamentos que cambian.
+export async function applyProfileDepartments(
+  profileId: string,
+  current: { coordinated: string[]; memberOf: string[] },
+  next: { coordinated: string[]; memberOf: string[] },
+): Promise<void> {
+  for (const id of next.coordinated.filter((d) => !current.coordinated.includes(d))) await setDepartmentCoordinator(id, profileId)
+  for (const id of current.coordinated.filter((d) => !next.coordinated.includes(d))) await setDepartmentCoordinator(id, null)
+  for (const id of next.memberOf.filter((d) => !current.memberOf.includes(d))) await addDepartmentMember(id, profileId)
+  for (const id of current.memberOf.filter((d) => !next.memberOf.includes(d))) await removeDepartmentMembership(id, profileId)
+}
+
 // Departamentos que coordina un perfil (departments.coordinator_profile_id).
 // Ser coordinador es lo que da acceso a los avales del departamento en
-// Escuela (0097); departments tiene lectura abierta a cualquier autenticado.
+// Escuela (0097). Desde 0103 departments solo devuelve los departamentos que
+// el usuario puede ver.
 export async function fetchCoordinatedDepartments(profileId: string): Promise<Pick<Department, 'id' | 'name'>[]> {
   const { data, error } = await supabase
     .from('departments')

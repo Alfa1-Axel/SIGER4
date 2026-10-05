@@ -43,6 +43,21 @@ export async function fetchUpcomingCalendarEventsByStation(stationId: string, li
   return (data ?? []) as CalendarEvent[]
 }
 
+// Próximos eventos de un departamento (0103). La RLS solo los devuelve a su
+// coordinador, sus integrantes y los roles con visión regional.
+export async function fetchUpcomingDepartmentEvents(departmentId: string, limit = 3): Promise<CalendarEvent[]> {
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .select('*')
+    .eq('department_id', departmentId)
+    .neq('status', 'cancelado')
+    .gte('starts_at', new Date().toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as CalendarEvent[]
+}
+
 export interface CalendarEventInput {
   title: string
   description?: string | null
@@ -53,6 +68,7 @@ export interface CalendarEventInput {
   region_id?: string | null
   subsede_id?: string | null
   station_id?: string | null
+  department_id?: string | null
   status?: CalendarEventStatus
   notify_on_create?: boolean
   notify_before_minutes?: number | null

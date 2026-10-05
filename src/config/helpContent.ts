@@ -17,6 +17,7 @@ export type HelpAudience =
   | 'gestionar_usuarios'
   | 'informatica'
   | 'auditoria'
+  | 'avisar_departamento'
 
 export interface HelpAudienceContext {
   isAdmin: boolean
@@ -28,6 +29,8 @@ export interface HelpAudienceContext {
   isEscuelaRole: boolean
   canUploadDocuments: boolean
   canManageUsers: boolean
+  // Coordinador de algún departamento, Secretario Regional o Informática.
+  canNotifyDepartments: boolean
 }
 
 export type HelpSection = 'inicio' | 'inventario' | 'departamentos' | 'escuela' | 'documentos' | 'cuenta' | 'administracion' | 'faq'
@@ -80,6 +83,8 @@ export function canSeeHelpArticle(article: Pick<HelpArticle, 'audience'>, ctx: H
       return ctx.isAdmin
     case 'auditoria':
       return ctx.isSuperAdmin
+    case 'avisar_departamento':
+      return ctx.canNotifyDepartments
     default:
       return false
   }
@@ -248,6 +253,36 @@ export const HELP_ARTICLES: HelpArticle[] = [
     links: [{ label: 'Ir a Departamentos', to: '/departamentos' }],
     keywords: ['redactar', 'informe', 'escribir', 'departamento'],
   },
+  {
+    id: 'evento-departamento',
+    section: 'departamentos',
+    audience: 'departamentos',
+    title: 'Cargar un evento del departamento',
+    summary: 'Reuniones o prácticas que solo ven y reciben los integrantes.',
+    steps: [
+      'Entrá a tu departamento (o desde el Inicio, "Nuevo evento").',
+      'Tocá "Nuevo" → "Evento del departamento".',
+      'Completá título, tipo y fecha. Si querés, marcá "Notificar al crear" o un recordatorio.',
+      'El aviso y el recordatorio les llegan solo al coordinador y a los integrantes.',
+    ],
+    links: [{ label: 'Ir a Departamentos', to: '/departamentos' }],
+    keywords: ['evento', 'reunión', 'calendario', 'departamento', 'práctica'],
+  },
+  {
+    id: 'avisar-departamento',
+    section: 'departamentos',
+    audience: 'avisar_departamento',
+    title: 'Avisar a todo el departamento',
+    summary: 'Un aviso que le llega a cada integrante, también al celular.',
+    steps: [
+      'Entrá al departamento y tocá "Nuevo" → "Aviso al departamento" (o "Avisar al departamento" desde el Inicio).',
+      'Elegí el tipo, escribí el título y el mensaje.',
+      'Tocá "Enviar notificación": te confirmamos a cuántas personas les llegó.',
+      'No les llega a otros departamentos.',
+    ],
+    links: [{ label: 'Ir a Departamentos', to: '/departamentos' }],
+    keywords: ['aviso', 'avisar', 'notificar', 'notificación', 'departamento', 'coordinador'],
+  },
 
   // ---------------- Escuela ----------------
   {
@@ -328,15 +363,20 @@ export const HELP_ARTICLES: HelpArticle[] = [
     section: 'cuenta',
     audience: 'todos',
     title: 'Qué significa cada rol',
-    summary: 'Informática, Escuela, Regional y cuartel: qué ve y qué hace cada uno.',
+    summary: 'El rol dice qué hacés; la división (cuartel, Regional, Escuela o departamento), dónde.',
     steps: [
-      'Informática administra el sistema y ve todo.',
-      'Escuela gestiona cursos y avales; el coordinador de cada departamento ve los avales del suyo.',
-      'El Secretario Regional gestiona la información de toda la Regional.',
-      'Los roles de cuartel cargan los datos de su cuartel y piden préstamos.',
+      'Informática administra el sistema y ve todo. La Auditoría es solo de Dpto. Informática y Estadística R4.',
+      'Los roles de cuartel (Jefe de Cuerpo Activo, Presidente, usuario de carga…) ven y cargan los datos de su cuartel, no de otros.',
+      'El Secretario Regional ve la Regional completa, también todos los departamentos.',
+      'El Coordinador y el Secretario de Escuela ven los avales de todos los departamentos.',
+      'El coordinador y los integrantes de un departamento (Fuego, Forestal, FASME…) ven solo su departamento: integrantes, informes, actas, eventos y avisos.',
+      'Tus roles y dónde aplican están en Mi perfil y ajustes.',
     ],
-    links: [{ label: 'Ver Roles y permisos', to: '/roles' }],
-    keywords: ['roles', 'permisos', 'informática', 'escuela', 'regional', 'cuartel'],
+    links: [
+      { label: 'Ver Roles y permisos', to: '/roles' },
+      { label: 'Ver mis roles', to: '/ajustes' },
+    ],
+    keywords: ['roles', 'permisos', 'informática', 'escuela', 'regional', 'cuartel', 'división', 'alcance', 'departamento', 'coordinador', 'integrante'],
   },
 
   // ---------------- Administración ----------------
@@ -425,9 +465,10 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'faq-no-veo-informe',
     section: 'faq',
     audience: 'todos',
-    title: 'No veo los informes de un departamento',
-    summary: 'Los ven el coordinador, los integrantes e Informática.',
-    answer: 'Si tenés que verlos, pedile al coordinador del departamento que te sume como integrante.',
-    keywords: ['informe', 'departamento', 'no veo', 'acta'],
+    title: 'No veo un departamento o sus informes',
+    summary: 'Cada departamento lo ven su coordinador, sus integrantes e Informática.',
+    answer:
+      'Si tenés que verlo, pedile al coordinador del departamento (o a Informática) que te sume como integrante. Desde ese momento lo ves en Departamentos y en tu Inicio.',
+    keywords: ['informe', 'departamento', 'no veo', 'acta', 'menú', 'integrante'],
   },
 ]

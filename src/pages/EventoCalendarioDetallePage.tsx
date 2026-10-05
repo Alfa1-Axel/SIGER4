@@ -6,7 +6,8 @@ import { deleteCalendarEvent, fetchCalendarEventById, updateCalendarEvent } from
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import type { CalendarEvent, Region, Station, Subsede } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import type { CalendarEvent, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { EVENT_STATUS_LABEL, EVENT_TYPE_LABEL } from './CalendarioPage'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -25,6 +26,7 @@ export function EventoCalendarioDetallePage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
@@ -32,10 +34,11 @@ export function EventoCalendarioDetallePage() {
   useEffect(() => {
     if (!id) return
     let active = true
-    Promise.all([fetchCalendarEventById(id), fetchRegions(), fetchSubsedes(), fetchStations()]).then(
-      ([eventData, regionsData, subsedesData, stationsData]) => {
+    Promise.all([fetchCalendarEventById(id), fetchRegions(), fetchSubsedes(), fetchStations(), fetchVisibleDepartments().catch(() => [])]).then(
+      ([eventData, regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
         setEvent(eventData)
+        setDepartments(departmentsData)
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
@@ -53,6 +56,12 @@ export function EventoCalendarioDetallePage() {
   // rechazaba el guardado si el evento no era del alcance propio del usuario.
   const canManage = (() => {
     if (isAdmin || !event) return isAdmin
+    // Evento de departamento (0103): el coordinador, quien lo cargó (si sigue
+    // en el departamento) o el Secretario Regional.
+    if (event.department_id) {
+      const relation = departments.find((d) => d.id === event.department_id)?.my_relation
+      return isRegionalRole || relation === 'coordinador' || (!!relation && event.created_by_profile_id === profile?.id)
+    }
     if (['escuela', 'capacitacion'].includes(event.event_type)) return isEscuelaRole
     if (isRegionalRole) {
       if (event.region_id) return event.region_id === myRegionId
@@ -65,6 +74,7 @@ export function EventoCalendarioDetallePage() {
   })()
 
   function scopeLabel(e: CalendarEvent): string {
+    if (e.department_id) return `Departamento ${departments.find((d) => d.id === e.department_id)?.name ?? ''}`.trim()
     if (e.station_id) return stations.find((s) => s.id === e.station_id)?.name ?? 'Cuartel'
     if (e.subsede_id) return subsedes.find((s) => s.id === e.subsede_id)?.name ?? 'Subsede'
     if (e.region_id) return regions.find((r) => r.id === e.region_id)?.name ?? 'Regional'

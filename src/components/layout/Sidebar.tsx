@@ -24,8 +24,9 @@ interface SidebarProps {
 // la clase "open"; se cierra solo al elegir una opción, tocar el botón de
 // cierre, o el backdrop (manejado por AppShell).
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { profile, signOut, isAdmin, isSuperAdmin, hasRole } = useAuth()
-  const visibleItems = NAV_ITEMS.filter((item) => !item.visible || item.visible({ isAdmin, isSuperAdmin, hasRole }))
+  const { profile, signOut, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
+  const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
+  const visibleItems = NAV_ITEMS.filter((item) => !item.visible || item.visible({ isAdmin, isSuperAdmin, hasRole, hasDepartments }))
   const navRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
 

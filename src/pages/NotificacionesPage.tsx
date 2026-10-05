@@ -8,6 +8,7 @@ import { fetchNotificationsForProfile, markNotificationsRead } from '../lib/api/
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
+import { fetchVisibleDepartments } from '../lib/api/departments'
 import {
   NOTIFICATION_CATEGORY,
   NOTIFICATION_CATEGORY_ICON,
@@ -28,9 +29,10 @@ const CATEGORY_ORDER: NotificationCategory[] = ['sistema', 'escuela', 'inventari
 // Bandeja de notificaciones (vista my_notifications, 0102): solo lo dirigido a
 // quien mira, con su propio estado de leído también en las masivas.
 export function NotificacionesPage() {
-  const { profile, isAdmin, hasRole } = useAuth()
+  const { profile, isAdmin, hasRole, coordinatedDepartmentIds } = useAuth()
   const navigate = useNavigate()
-  const canCreate = isAdmin || hasRole('secretario_regional', 'director_escuela', 'instructor')
+  // Los coordinadores de departamento avisan a su departamento (0103).
+  const canCreate = isAdmin || hasRole('secretario_regional', 'director_escuela', 'instructor') || coordinatedDepartmentIds.length > 0
   const canManageUsers = isAdmin || hasRole('jefe_cuerpo_activo')
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -44,6 +46,7 @@ export function NotificacionesPage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departmentNames, setDepartmentNames] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
     if (!profile) return
@@ -59,9 +62,10 @@ export function NotificacionesPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations()])
-      .then(([regionsData, subsedesData, stationsData]) => {
+    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchVisibleDepartments().catch(() => [])])
+      .then(([regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
+        setDepartmentNames(new Map(departmentsData.map((d) => [d.id, d.name])))
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
@@ -126,6 +130,9 @@ export function NotificacionesPage() {
   }
 
   function originLabel(n: Notification): string {
+    // Avisos de un departamento (0103): personales, pero con origen.
+    const departmentId = n.link_path?.match(/^\/departamentos\/([0-9a-f-]{36})$/)?.[1]
+    if (departmentId && departmentNames.has(departmentId)) return `Departamento ${departmentNames.get(departmentId)}`
     if (n.profile_id) return 'Para vos'
     if (n.station_id) return `Cuartel ${stations.find((s) => s.id === n.station_id)?.name ?? ''}`.trim()
     if (n.subsede_id) return `Subsede ${subsedes.find((s) => s.id === n.subsede_id)?.name ?? ''}`.trim()

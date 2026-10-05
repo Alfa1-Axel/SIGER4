@@ -15,21 +15,24 @@ import {
   fetchDepartmentById,
   updateDepartment,
   deleteDepartment,
-  fetchDepartmentMembers,
+  fetchDepartmentDirectory,
+  fetchVisibleDepartments,
   addDepartmentMember,
   removeDepartmentMember,
   fetchDepartmentManualMembers,
   createDepartmentManualMember,
   updateDepartmentManualMember,
-  type DepartmentMemberWithProfile,
 } from '../lib/api/departments'
+import { fetchUpcomingDepartmentEvents } from '../lib/api/calendar'
 import { fetchDepartmentActivityReports, deleteDepartmentActivityReport } from '../lib/api/departmentActivityReports'
 import { fetchProfiles } from '../lib/api/users'
 import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import type {
+  CalendarEvent,
   Department,
   DepartmentActivityReport,
+  DepartmentDirectoryEntry,
   DepartmentActivityType,
   DepartmentManualMember,
   Profile,
@@ -78,7 +81,11 @@ export function DepartamentoDetallePage() {
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
 
   const [department, setDepartment] = useState<Department | null>(null)
-  const [members, setMembers] = useState<DepartmentMemberWithProfile[]>([])
+  // Integrantes con cuenta, desde department_member_directory() (0103):
+  // trae nombre y cuartel aunque sean de otro cuartel que el usuario.
+  const [members, setMembers] = useState<DepartmentDirectoryEntry[]>([])
+  const [coordinatorName, setCoordinatorName] = useState<string | null>(null)
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [stations, setStations] = useState<Station[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
@@ -150,17 +157,22 @@ export function DepartamentoDetallePage() {
   // policy análoga de department_activity_reports) -- se suma acá para que
   // la UI deje de ser más estricta que el backend.
   const canLogActivity = canManage || isMember || hasRole('secretario_regional')
+  // Mismas reglas que can_work_in_department() y can_notify_department() (0103).
+  const canAddEvents = canLogActivity
+  const canNotify = canManage || hasRole('secretario_regional')
   const { canView: canViewReports } = useDepartmentReportsAccess()
   const [notice, setNotice, noticeTone] = useNavigationNotice()
 
   async function reload() {
     if (!id) return
-    const [departmentData, membersData, manualMembersData, reportsData] = await Promise.all([
+    const [departmentData, membersData, manualMembersData, reportsData, visible] = await Promise.all([
       fetchDepartmentById(id),
-      fetchDepartmentMembers(id),
+      fetchDepartmentDirectory(id),
       fetchDepartmentManualMembers(id),
       fetchDepartmentActivityReports(id),
+      fetchVisibleDepartments(),
     ])
+    setCoordinatorName(visible.find((d) => d.id === id)?.coordinator_name ?? null)
     if (departmentData) {
       setDepartment(departmentData)
       setName(departmentData.name)
@@ -179,15 +191,19 @@ export function DepartamentoDetallePage() {
     let active = true
     Promise.all([
       fetchDepartmentById(id),
-      fetchDepartmentMembers(id),
+      fetchDepartmentDirectory(id),
       fetchDepartmentManualMembers(id),
       fetchDepartmentActivityReports(id),
       fetchProfiles(),
       fetchStations(),
       fetchSubsedes(),
+      fetchVisibleDepartments().catch(() => []),
+      fetchUpcomingDepartmentEvents(id, 5).catch(() => []),
     ])
-      .then(([departmentData, membersData, manualMembersData, reportsData, profilesData, stationsData, subsedesData]) => {
+      .then(([departmentData, membersData, manualMembersData, reportsData, profilesData, stationsData, subsedesData, visible, eventsData]) => {
         if (!active) return
+        setCoordinatorName(visible.find((d) => d.id === id)?.coordinator_name ?? null)
+        setEvents(eventsData)
         if (departmentData) {
           setDepartment(departmentData)
           setName(departmentData.name)
@@ -442,12 +458,14 @@ export function DepartamentoDetallePage() {
     )
   }
 
+  // La base no devuelve el departamento si no es tuyo (0103): no se distingue
+  // "no existe" de "no tenés acceso", a propósito.
   if (!department) {
     return (
       <AppShell title="Departamento">
         <AccessDenied
-          title="No encontramos el departamento"
-          message="Puede que lo hayan eliminado. Volvé a la lista para ver los departamentos vigentes."
+          title="No podés ver este departamento"
+          message="Un departamento lo ven su coordinador, sus integrantes, Informática, el Secretario Regional y el Director de Escuela. Si deberías verlo, pedile a su coordinador que te sume. También puede que lo hayan eliminado."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />
@@ -480,6 +498,22 @@ export function DepartamentoDetallePage() {
       label: 'Registrar actividad',
       description: 'Reunión o capacitación con horas y asistentes, para estadísticas.',
       icon: 'chart',
+    })
+  }
+  if (department.is_active && canAddEvents) {
+    newItems.push({
+      to: `/calendario/nuevo?departamento=${department.id}`,
+      label: 'Evento del departamento',
+      description: 'Solo lo ven y reciben el coordinador y los integrantes.',
+      icon: 'calendar',
+    })
+  }
+  if (department.is_active && canNotify) {
+    newItems.push({
+      to: `/notificaciones/nueva?departamento=${department.id}`,
+      label: 'Aviso al departamento',
+      description: 'Le llega a cada integrante, también al celular si activó los avisos.',
+      icon: 'bell',
     })
   }
 
@@ -517,6 +551,30 @@ export function DepartamentoDetallePage() {
       )}
 
       <DepartmentReportsSection departmentId={department.id} departmentActive={department.is_active} />
+
+      <div className="section-header">
+        <h2 className="section-title">Próximos eventos</h2>
+        {department.is_active && canAddEvents && (
+          <Link to={`/calendario/nuevo?departamento=${department.id}`} className="btn btn-outlined btn-sm">
+            <Icon name="plus" size={14} />
+            Nuevo evento
+          </Link>
+        )}
+      </div>
+      <div className="card row-list" style={{ marginBottom: 20 }}>
+        {events.length === 0 && <div className="empty-state">No hay eventos próximos del departamento.</div>}
+        {events.map((event) => (
+          <Link key={event.id} to={`/calendario/${event.id}`} className="row-item">
+            <div style={{ minWidth: 0 }}>
+              <div className="row-item-title">{event.title}</div>
+              <div className="row-item-meta">
+                {new Date(event.starts_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: event.all_day ? undefined : 'short' })}
+              </div>
+            </div>
+            <Icon name="chevronRight" size={16} />
+          </Link>
+        ))}
+      </div>
 
       <div className="section-header">
         <h2 className="section-title">Datos del departamento</h2>
@@ -582,7 +640,7 @@ export function DepartamentoDetallePage() {
           {department.description && <p style={{ fontSize: 13, marginBottom: 8 }}>{department.description}</p>}
           <p style={{ fontSize: 13, marginBottom: 8 }}>
             {department.coordinator_profile_id
-              ? `Coordinador: ${profiles.find((p) => p.id === department.coordinator_profile_id)?.full_name ?? 'asignado'}`
+              ? `Coordinador: ${coordinatorName ?? 'asignado'}`
               : 'Sin coordinador asignado'}
           </p>
           {department.contact_info && (
@@ -601,22 +659,29 @@ export function DepartamentoDetallePage() {
         {members.length === 0 && <div className="empty-state">Sin miembros cargados todavía.</div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {members.map((member) => (
-            <div key={member.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div key={member.member_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>{member.profile.full_name}</div>
+                <div style={{ fontWeight: 600, fontSize: 13, overflowWrap: 'anywhere' }}>
+                  {member.full_name}
+                  {!member.is_active && (
+                    <span className="badge badge-warning" style={{ marginLeft: 6 }}>
+                      Inactivo
+                    </span>
+                  )}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
-                  {stationName(member.profile.station_id)}
+                  {member.station_name ?? 'Sin cuartel asignado'}
                 </div>
                 <div className="contact-list" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                  <ContactLink kind="email" value={member.profile.email} />
-                  {member.profile.phone && <ContactLink kind="phone" value={member.profile.phone} />}
+                  <ContactLink kind="email" value={member.email} />
+                  {member.phone && <ContactLink kind="phone" value={member.phone} />}
                 </div>
               </div>
               {canManage && (
                 <button
                   type="button"
                   className="btn btn-danger-outline btn-sm" style={{ flexShrink: 0 }}
-                  onClick={() => handleRemoveMember(member.id)}
+                  onClick={() => handleRemoveMember(member.member_id)}
                   aria-label="Quitar miembro"
                 >
                   <Icon name="trash" size={14} />

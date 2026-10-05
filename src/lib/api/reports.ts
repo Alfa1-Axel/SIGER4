@@ -171,10 +171,11 @@ export interface DepartmentWithMembers extends Department {
   reports: DepartmentActivityReport[]
 }
 
-// departments/department_members/department_manual_members/department_activity_reports
-// tienen lectura abierta a cualquier autenticado (auth.role() = 'authenticated',
-// sin scope territorial) — el control de quién puede generar este reporte vive
-// en ReportesPage.tsx (ReportsRoute + lógica de rol/coordinador), no en RLS.
+// Desde 0103, departments/department_members/department_manual_members/
+// department_activity_reports se leen por división (can_view_department()):
+// Informática, Secretario Regional y Director de Escuela ven todos; el
+// coordinador y los integrantes, solo los suyos. ReportesPage.tsx decide qué
+// reportes ofrecer; la base decide qué datos entran.
 export async function fetchDepartmentsReportData(departmentId?: string | null): Promise<DepartmentWithMembers[]> {
   let departmentsQuery = supabase.from('departments').select('*').order('name', { ascending: true })
   if (departmentId) departmentsQuery = departmentsQuery.eq('id', departmentId)

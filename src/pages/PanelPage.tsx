@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { TasksSection } from '../components/TasksSection'
+import { DepartmentDashboard } from '../components/DepartmentDashboard'
 import { openGlobalSearch } from '../lib/searchControl'
 import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
-import { fetchDepartments } from '../lib/api/departments'
+import { fetchVisibleDepartments } from '../lib/api/departments'
 import { fetchLatestUnreadNotifications, fetchUnreadNotificationCount } from '../lib/api/notifications'
 import type { DashboardSummary } from '../lib/api/dashboard'
-import type { Notification, Station } from '../types/database'
+import type { Notification, Station, VisibleDepartment } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
 import { formatPercent } from '../lib/format'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
@@ -65,7 +66,7 @@ interface QuickAction {
 // llegó (notificaciones sin leer), qué viene (agenda) y, para los roles
 // territoriales, el estado de la Regional.
 export function PanelPage() {
-  const { profile, roles, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds } = useAuth()
+  const { profile, roles, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   const { hasAnyAccess: hasReportsAccess } = useDepartmentReportsAccess()
   // Mismo criterio que ReportsRoute.
@@ -78,7 +79,8 @@ export function PanelPage() {
   const [stations, setStations] = useState<Station[]>([])
   const [unread, setUnread] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  const [coordinatedNames, setCoordinatedNames] = useState<string[]>([])
+  // Departamentos que coordina o integra (0103).
+  const [myDepartments, setMyDepartments] = useState<VisibleDepartment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -111,16 +113,19 @@ export function PanelPage() {
     }
   }, [showRegionalStatus])
 
+  const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
   useEffect(() => {
-    if (coordinatedDepartmentIds.length === 0) return
+    if (!hasDepartments) return
     let active = true
-    fetchDepartments()
-      .then((list) => active && setCoordinatedNames(list.filter((d) => coordinatedDepartmentIds.includes(d.id)).map((d) => d.name)))
+    fetchVisibleDepartments()
+      .then((list) => active && setMyDepartments(list.filter((d) => d.my_relation)))
       .catch(() => undefined)
     return () => {
       active = false
     }
-  }, [coordinatedDepartmentIds])
+  }, [hasDepartments, coordinatedDepartmentIds, memberDepartmentIds])
+  const coordinatedNames = myDepartments.filter((d) => d.my_relation === 'coordinador').map((d) => d.name)
+  const memberNames = myDepartments.filter((d) => d.my_relation === 'integrante').map((d) => d.name)
 
   // Accesos rápidos según el rol, en orden de uso esperado.
   const actions: QuickAction[] = []
@@ -138,6 +143,7 @@ export function PanelPage() {
   const roleSummary = [
     ...roles.filter((r) => r !== 'administrativo' && r !== 'coordinador_departamento_escuela').map((r) => roleLabel(r)),
     ...(coordinatedNames.length ? [`Coordinador de ${coordinatedNames.join(', ')}`] : []),
+    ...(memberNames.length ? [`Integrante de ${memberNames.join(', ')}`] : []),
   ]
   const todayRaw = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
   const today = todayRaw.charAt(0).toUpperCase() + todayRaw.slice(1)
@@ -167,6 +173,8 @@ export function PanelPage() {
       </button>
 
       <TasksSection unreadNotifications={unread} unreadTotal={unreadCount} />
+
+      {myDepartments.length > 0 && <DepartmentDashboard departments={myDepartments} />}
 
       <div className="section-header">
         <h2 className="section-title">Accesos rápidos</h2>

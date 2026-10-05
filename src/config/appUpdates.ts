@@ -47,6 +47,22 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-05-roles-divisiones',
+    version: '1.6.0',
+    date: '2026-10-05',
+    title: 'Roles por división: cada uno ve lo suyo',
+    summary: 'Cada rol aplica a un cuartel, la Regional, la Escuela o uno o más departamentos, y SIGER4 muestra solo lo que corresponde a cada uno.',
+    changes: [
+      { type: 'nuevo', module: 'Inicio', text: 'Si coordinás o integrás un departamento, el Inicio te muestra sus últimos informes, próximos eventos y accesos directos. Con varios, elegís cuál ver.' },
+      { type: 'nuevo', module: 'Departamentos', text: 'Eventos del departamento en el Calendario y avisos a todo el departamento: solo los ven y reciben sus integrantes.' },
+      { type: 'mejora', module: 'Departamentos', text: 'Cada departamento lo ven su coordinador, sus integrantes e Informática; el Secretario Regional y el Director de Escuela, todos.' },
+      { type: 'mejora', module: 'Usuarios', text: 'Al crear un usuario, cada rol pide dónde aplica (cuartel o Regional) y se pueden elegir sus departamentos. La ficha muestra "rol · dónde aplica".' },
+      { type: 'mejora', module: 'Calendario', text: 'Cada cuartel ve sus eventos, los de su subsede y Regional y los de Escuela, no los de otros cuarteles.' },
+      { type: 'correccion', module: 'Departamentos', text: 'La lista de integrantes muestra a los de otros cuarteles con su nombre y cuartel.' },
+    ],
+    severity: 'important',
+  },
+  {
     id: '2026-10-05-busqueda-ayuda',
     version: '1.5.0',
     date: '2026-10-05',

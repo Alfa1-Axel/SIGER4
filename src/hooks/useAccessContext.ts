@@ -9,7 +9,7 @@ import type { SearchContext } from '../lib/api/globalSearch'
 // Qué puede hacer el usuario, resumido para la Ayuda y la búsqueda global.
 // Espejo de las guardas de cada pantalla; la base (RLS) sigue decidiendo.
 export function useAccessContext(): SearchContext {
-  const { isAdmin, isSuperAdmin, hasRole, profile } = useAuth()
+  const { isAdmin, isSuperAdmin, hasRole, profile, coordinatedDepartmentIds } = useAuth()
   const { canRequest, ownStationIds } = useLoanRequestAccess()
   const { hasAnyAccess: hasReportsAccess } = useDepartmentReportsAccess()
   const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
@@ -31,6 +31,7 @@ export function useAccessContext(): SearchContext {
       isEscuelaRole,
       canUploadDocuments,
       canManageUsers: isAdmin || isJefe || isDirector,
+      canNotifyDepartments: isAdmin || isRegional || coordinatedDepartmentIds.length > 0,
     }
     return {
       ...help,
@@ -41,5 +42,5 @@ export function useAccessContext(): SearchContext {
       canSearchUsers: isAdmin || isJefe,
       usersLimitedToOwnStation: !isAdmin && isJefe,
     }
-  }, [isAdmin, isSuperAdmin, canRequest, isRegional, isDirector, hasReportsAccess, hasAvalesAccess, isEscuelaRole, canUploadDocuments, isJefe, profileId, ownStationIds])
+  }, [isAdmin, isSuperAdmin, canRequest, isRegional, isDirector, hasReportsAccess, hasAvalesAccess, isEscuelaRole, canUploadDocuments, isJefe, profileId, ownStationIds, coordinatedDepartmentIds])
 }

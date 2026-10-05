@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { createCalendarEvent, fetchCalendarEventById, updateCalendarEvent } from '../lib/api/calendar'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import type { CalendarEventType, Region, Station, Subsede } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import type { CalendarEventType, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
@@ -14,6 +15,9 @@ import { describeSupabaseError } from '../lib/api/errors'
 type ScopeTarget = 'region' | 'subsede' | 'station' | 'escuela'
 
 const SCOPELESS_TYPES: CalendarEventType[] = ['escuela', 'capacitacion']
+// Tipos para un evento de departamento (0103): sin los que nombran un
+// alcance territorial o la Escuela.
+const DEPARTMENT_EVENT_TYPES: CalendarEventType[] = ['reunion', 'capacitacion', 'mantenimiento', 'vencimiento', 'otro']
 
 function toDatetimeLocal(iso: string): string {
   const d = new Date(iso)
@@ -25,11 +29,18 @@ export function EventoCalendarioFormPage() {
   const { id } = useParams<{ id?: string }>()
   const isEditing = Boolean(id)
   const navigate = useNavigate()
-  const { profile, scopes, isAdmin, hasRole } = useAuth()
+  const [searchParams] = useSearchParams()
+  const presetDepartmentId = searchParams.get('departamento') ?? ''
+  const { profile, scopes, isAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const isStationRole = hasRole('presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
   const isRegionalRole = hasRole('secretario_regional')
   const isEscuelaRole = hasRole('director_escuela', 'instructor')
-  const canCreate = isAdmin || isStationRole || isRegionalRole || isEscuelaRole
+  const canCreateGeneral = isAdmin || isStationRole || isRegionalRole || isEscuelaRole
+  // Eventos de departamento: su coordinador e integrantes, Secretario Regional
+  // e Informática (can_work_in_department(), 0103).
+  const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
+  const canCreateDepartmentEvents = isAdmin || isRegionalRole || hasDepartments
+  const canCreate = canCreateGeneral || canCreateDepartmentEvents
   // El cuartel del usuario puede venir de profiles.station_id (asignación
   // directa) o de una fila en user_scopes con scope_type='station' (mismo
   // criterio que my_station_ids() en la base, ver 0026) — usar solo
@@ -60,6 +71,9 @@ export function EventoCalendarioFormPage() {
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
   const [stationId, setStationId] = useState('')
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
+  const [forDepartment, setForDepartment] = useState(Boolean(presetDepartmentId) || !canCreateGeneral)
+  const [departmentId, setDepartmentId] = useState(presetDepartmentId)
   const [notifyOnCreate, setNotifyOnCreate] = useState(false)
   const [notifyBeforeMinutes, setNotifyBeforeMinutes] = useState('')
 
@@ -68,7 +82,9 @@ export function EventoCalendarioFormPage() {
   const [error, setError] = useState<string | null>(null)
 
   const stationLocked = isStationRole && !isAdmin && !isRegionalRole && !isEscuelaRole
-  const isScopeless = SCOPELESS_TYPES.includes(eventType)
+  // Un evento de departamento no lleva alcance territorial, aunque sea de
+  // capacitación: lo ve solo el departamento.
+  const isScopeless = !forDepartment && SCOPELESS_TYPES.includes(eventType)
   // El <select> de tipo solo debe ofrecer los tipos que la RLS realmente le
   // va a aceptar a este rol (calendar_events_write_admin_regional_station_escuela,
   // migración 0051) -- mostrar los 9 tipos a todos hacía que, por ejemplo, un
@@ -80,11 +96,13 @@ export function EventoCalendarioFormPage() {
   // elegir (ej. lo cargó un admin), se agrega igual como opción -- si no,
   // el <select> quedaría sin ninguna opción seleccionada y guardar sin tocar
   // el campo cambiaría el tipo del evento sin que el usuario lo haya elegido.
-  const roleAllowedEventTypes: CalendarEventType[] = isAdmin
-    ? (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[])
-    : isEscuelaRole
-      ? SCOPELESS_TYPES
-      : (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[]).filter((t) => !SCOPELESS_TYPES.includes(t))
+  const roleAllowedEventTypes: CalendarEventType[] = forDepartment
+    ? DEPARTMENT_EVENT_TYPES
+    : isAdmin
+      ? (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[])
+      : isEscuelaRole
+        ? SCOPELESS_TYPES
+        : (Object.keys(EVENT_TYPE_LABEL) as CalendarEventType[]).filter((t) => !SCOPELESS_TYPES.includes(t))
   const allowedEventTypes: CalendarEventType[] = roleAllowedEventTypes.includes(eventType)
     ? roleAllowedEventTypes
     : [eventType, ...roleAllowedEventTypes]
@@ -107,6 +125,29 @@ export function EventoCalendarioFormPage() {
     }
   }, [canCreate, stationLocked, regionLocked, myRegionId])
 
+  // Departamentos donde puede cargar: los suyos, o todos los activos para
+  // Informática y el Secretario Regional.
+  useEffect(() => {
+    if (!canCreateDepartmentEvents) return
+    let active = true
+    fetchVisibleDepartments()
+      .then((data) => {
+        if (!active) return
+        const options = data.filter((d) => d.is_active && (isAdmin || isRegionalRole || d.my_relation))
+        setDepartments(options)
+        setDepartmentId((prev) => prev || (options.length === 1 ? options[0].id : ''))
+      })
+      .catch(() => active && setDepartments([]))
+    return () => {
+      active = false
+    }
+  }, [canCreateDepartmentEvents, isAdmin, isRegionalRole])
+
+  // Al pasar a "de un departamento", el tipo tiene que ser uno de los suyos.
+  useEffect(() => {
+    if (forDepartment && !DEPARTMENT_EVENT_TYPES.includes(eventType) && !isEditing) setEventType('reunion')
+  }, [forDepartment, eventType, isEditing])
+
   useEffect(() => {
     if (!id) return
     let active = true
@@ -120,7 +161,11 @@ export function EventoCalendarioFormPage() {
       setAllDay(event.all_day)
       setNotifyOnCreate(event.notify_on_create)
       setNotifyBeforeMinutes(event.notify_before_minutes ? String(event.notify_before_minutes) : '')
-      if (event.station_id) {
+      if (event.department_id) {
+        setForDepartment(true)
+        setDepartmentId(event.department_id)
+      } else if (event.station_id) {
+        setForDepartment(false)
         setScopeTarget('station')
         setStationId(event.station_id)
       } else if (event.subsede_id) {
@@ -150,7 +195,8 @@ export function EventoCalendarioFormPage() {
     event.preventDefault()
     setError(null)
 
-    if (!isScopeless) {
+    if (forDepartment && !departmentId) return setError('Elegí el departamento.')
+    if (!forDepartment && !isScopeless) {
       if (scopeTarget === 'region' && !regionId) return setError('Elegí la Regional destino.')
       if (scopeTarget === 'subsede' && !subsedeId) return setError('Seleccioná la subsede destino.')
       if (scopeTarget === 'station' && !stationLocked && !stationId) return setError('Seleccioná el cuartel destino.')
@@ -169,9 +215,10 @@ export function EventoCalendarioFormPage() {
         starts_at: new Date(startsAt).toISOString(),
         ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         all_day: allDay,
-        region_id: isScopeless ? null : scopeTarget === 'region' ? regionId : null,
-        subsede_id: isScopeless ? null : scopeTarget === 'subsede' ? subsedeId : null,
-        station_id: isScopeless ? null : scopeTarget === 'station' ? (stationLocked ? myStationId || null : stationId) : null,
+        region_id: forDepartment || isScopeless ? null : scopeTarget === 'region' ? regionId : null,
+        subsede_id: forDepartment || isScopeless ? null : scopeTarget === 'subsede' ? subsedeId : null,
+        station_id: forDepartment || isScopeless ? null : scopeTarget === 'station' ? (stationLocked ? myStationId || null : stationId) : null,
+        department_id: forDepartment ? departmentId : null,
         notify_on_create: notifyOnCreate,
         notify_before_minutes: notifyBeforeMinutes ? Number(notifyBeforeMinutes) : null,
       }
@@ -200,12 +247,48 @@ export function EventoCalendarioFormPage() {
   return (
     <AppShell title={isEditing ? 'Editar Evento' : 'Nuevo Evento'}>
       <h1 className="page-title">{isEditing ? 'Editar Evento' : 'Nuevo Evento'}</h1>
-      <p className="page-subtitle">Cargá un evento institucional, de cuartel, de Escuela o un vencimiento.</p>
+      <p className="page-subtitle">
+        {canCreateGeneral
+          ? 'Cargá un evento institucional, de cuartel, de Escuela, de un departamento o un vencimiento.'
+          : 'Cargá un evento de tu departamento: lo ven y reciben solo su coordinador y sus integrantes.'}
+      </p>
 
       {loading ? (
         <div className="loading-state" role="status">Cargando datos del evento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
+          {canCreateGeneral && canCreateDepartmentEvents && departments.length > 0 && !isEditing && (
+            <div className="field">
+              <span className="field-label">¿De qué es el evento?</span>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" className="chip" aria-pressed={!forDepartment} onClick={() => setForDepartment(false)}>
+                  General
+                </button>
+                <button type="button" className="chip" aria-pressed={forDepartment} onClick={() => setForDepartment(true)}>
+                  De un departamento
+                </button>
+              </div>
+            </div>
+          )}
+
+          {forDepartment && (
+            <div className="field">
+              <label htmlFor="department">Departamento</label>
+              <select id="department" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} disabled={isEditing} aria-describedby="department-help">
+                <option value="">Seleccionar departamento</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+              <p id="department-help" className="field-help">
+                Lo ven y reciben solo el coordinador y los integrantes de ese departamento.
+              </p>
+              {departments.length === 0 && <p className="field-help">No tenés departamentos activos donde cargar eventos.</p>}
+            </div>
+          )}
+
           <div className="field">
             <label htmlFor="title">Título</label>
             <input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Reunión de comisión, vencimiento de matafuegos..." />
@@ -246,7 +329,7 @@ export function EventoCalendarioFormPage() {
             <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
 
-          {!isScopeless && (
+          {!forDepartment && !isScopeless && (
             <div className="field">
               <label>Alcance</label>
               {stationLocked ? (
@@ -301,7 +384,7 @@ export function EventoCalendarioFormPage() {
             </div>
           )}
 
-          {isScopeless && (
+          {!forDepartment && isScopeless && (
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
               Los eventos de Escuela/Capacitación son regionales por definición, sin alcance territorial propio.
             </p>

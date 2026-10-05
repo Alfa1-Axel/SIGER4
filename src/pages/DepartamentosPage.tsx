@@ -6,17 +6,15 @@ import { SuccessNotice } from '../components/ui/SuccessNotice'
 import { ActionMenu } from '../components/ui/ActionMenu'
 import { DEPARTMENT_REPORT_TYPE_LABEL, fetchRecentDepartmentReports } from '../lib/api/departmentReports'
 import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
-import { fetchDepartments } from '../lib/api/departments'
-import { fetchProfiles } from '../lib/api/users'
-import type { Department, DepartmentReport, Profile } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import type { DepartmentReport, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { describeSupabaseError } from '../lib/api/errors'
 
 export function DepartamentosPage() {
-  const { isAdmin, profile } = useAuth()
-  const [departments, setDepartments] = useState<Department[]>([])
-  const [profiles, setProfiles] = useState<Profile[]>([])
+  const { isAdmin } = useAuth()
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice, noticeTone] = useNavigationNotice()
@@ -39,12 +37,8 @@ export function DepartamentosPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchDepartments(), fetchProfiles()])
-      .then(([departmentsData, profilesData]) => {
-        if (!active) return
-        setDepartments(departmentsData)
-        setProfiles(profilesData)
-      })
+    fetchVisibleDepartments()
+      .then((data) => active && setDepartments(data))
       .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar los departamentos. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
@@ -53,11 +47,14 @@ export function DepartamentosPage() {
   }, [])
 
   const canCreateReports = departments.some((d) => d.is_active && canView(d.id))
-
-  function coordinatorName(coordinatorProfileId: string | null): string | null {
-    if (!coordinatorProfileId) return null
-    return profiles.find((p) => p.id === coordinatorProfileId)?.full_name ?? null
-  }
+  // Primero los propios (coordina o integra); después, para quien tiene
+  // visión regional, el resto.
+  const mine = departments.filter((d) => d.my_relation)
+  const others = departments.filter((d) => !d.my_relation)
+  const sections = [
+    { key: 'mine', title: mine.length === 1 ? 'Tu departamento' : 'Tus departamentos', items: mine },
+    { key: 'others', title: mine.length > 0 ? 'Otros departamentos' : 'Departamentos', items: others },
+  ].filter((s) => s.items.length > 0)
 
   return (
     <AppShell title="Departamentos">
@@ -65,8 +62,9 @@ export function DepartamentosPage() {
         <div>
           <h1 className="page-title">Departamentos</h1>
           <p className="page-subtitle">
-            Áreas de la Regional 4 con su coordinador, integrantes, informes y actas. Es la única lista de departamentos:
-            Escuela → Avales regionales usa estos mismos.
+            {others.length > 0
+              ? 'Áreas de la Regional 4 con su coordinador, integrantes, informes y actas. Es la única lista de departamentos: Escuela → Avales regionales usa estos mismos.'
+              : 'Los departamentos que coordinás o integrás, con sus integrantes, informes, actas y eventos.'}
           </p>
         </div>
         {(isAdmin || canCreateReports) && (
@@ -122,9 +120,6 @@ export function DepartamentosPage() {
               </Link>
             ))}
           </div>
-          <div className="section-header">
-            <h2 className="section-title">Todos los departamentos</h2>
-          </div>
         </>
       )}
 
@@ -135,48 +130,60 @@ export function DepartamentosPage() {
       {loading && <div className="loading-state" role="status">Cargando departamentos…</div>}
       {!loading && !error && departments.length === 0 && (
         <div className="empty-state empty-state-action">
-          <span>Todavía no hay departamentos cargados.</span>
           {isAdmin ? (
-            <Link to="/departamentos/nuevo" className="btn btn-primary">
-              <Icon name="plus" size={16} />
-              Crear el primer departamento
-            </Link>
+            <>
+              <span>Todavía no hay departamentos cargados.</span>
+              <Link to="/departamentos/nuevo" className="btn btn-primary">
+                <Icon name="plus" size={16} />
+                Crear el primer departamento
+              </Link>
+            </>
           ) : (
-            <span style={{ fontSize: 13 }}>Los crea el Dpto. de Informática y Estadística R4.</span>
+            <>
+              <span>No coordinás ni integrás ningún departamento.</span>
+              <span style={{ fontSize: 13 }}>Si deberías estar en uno, pedile a su coordinador o a Informática que te sume.</span>
+            </>
           )}
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {departments.map((department) => {
-          const coordinator = coordinatorName(department.coordinator_profile_id)
-          const isMine = !!profile && department.coordinator_profile_id === profile.id
-          return (
-            <Link
-              key={department.id}
-              to={`/departamentos/${department.id}`}
-              className="card-solid"
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, textDecoration: 'none', color: 'inherit' }}
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{department.name}</h3>
-                {department.description && (
-                  <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{department.description}</p>
-                )}
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                  {department.coordinator_profile_id ? `Coordinador: ${coordinator ?? 'asignado'}` : 'Sin coordinador'}
-                </p>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
-                {isMine && <span className="badge badge-info">Tu departamento</span>}
-                <span className={`badge ${department.is_active ? 'badge-success' : 'badge-danger'}`}>
-                  {department.is_active ? 'Activo' : 'Inactivo'}
-                </span>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
+      {sections.map((section) => (
+        <div key={section.key} style={{ marginBottom: 20 }}>
+          {(sections.length > 1 || recentReports.length > 0) && (
+            <div className="section-header">
+              <h2 className="section-title">{section.title}</h2>
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {section.items.map((department) => (
+              <Link
+                key={department.id}
+                to={`/departamentos/${department.id}`}
+                className="card-solid"
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, textDecoration: 'none', color: 'inherit' }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{department.name}</h3>
+                  {department.description && (
+                    <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{department.description}</p>
+                  )}
+                  <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    {department.coordinator_profile_id ? `Coordinador: ${department.coordinator_name ?? 'asignado'}` : 'Sin coordinador'} ·{' '}
+                    {department.member_count === 1 ? '1 integrante' : `${department.member_count} integrantes`}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  {department.my_relation === 'coordinador' && <span className="badge badge-info">Coordinás</span>}
+                  {department.my_relation === 'integrante' && <span className="badge badge-info">Integrás</span>}
+                  <span className={`badge ${department.is_active ? 'badge-success' : 'badge-danger'}`}>
+                    {department.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
     </AppShell>
   )
 }

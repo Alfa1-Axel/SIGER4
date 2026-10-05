@@ -11,7 +11,8 @@ import { passkeysAvailable } from '../lib/auth/loginHelpers'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
 import { Link } from 'react-router-dom'
-import { getRoleCategory, getRoleDefinition } from '../types/roles'
+import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
+import { useMyRoleAssignments } from '../hooks/useMyRoleAssignments'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
@@ -131,6 +132,7 @@ function describePushInfraStatus(infra: PushInfraDiagnostics): { message: string
 
 export function AjustesPage() {
   const { profile, user, roles, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
+  const roleAssignments = useMyRoleAssignments()
   const push = usePushNotifications(profile?.id)
   const [clearingCache, setClearingCache] = useState(false)
   const [clearCacheError, setClearCacheError] = useState<string | null>(null)
@@ -442,32 +444,18 @@ export function AjustesPage() {
           </div>
         </div>
 
-        {roles.length > 0 && (
+        {(roles.length > 0 || roleAssignments.length > 0) && (
           <div style={{ marginTop: 16 }}>
             <div className="kpi-label" style={{ marginBottom: 6 }}>
-              Roles asignados (no editable — solo un administrador puede cambiarlo)
+              Tus roles y dónde aplican
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {roles.map((role) => {
-                const def = getRoleDefinition(role)
-                return (
-                  <div key={role} style={{ fontSize: 13, minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      {def && <span className="badge badge-info">{getRoleCategory(def.category).label}</span>}
-                      <strong style={{ overflowWrap: 'anywhere' }}>{def?.label ?? role}</strong>
-                    </div>
-                    {def && (
-                      <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                        {def.description} Alcance: {def.scopeLabel}.
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <Link to="/roles" className="link-muted" style={{ display: 'inline-block', marginTop: 10 }}>
-              Ver qué permite cada rol
-            </Link>
+            <RoleAssignmentsList assignments={roleAssignments} />
+            <p className="field-help" style={{ marginTop: 8 }}>
+              Los asigna Informática; los departamentos, también su coordinador.{' '}
+              <Link to="/roles" className="link-muted">
+                Ver qué permite cada rol
+              </Link>
+            </p>
           </div>
         )}
       </div>

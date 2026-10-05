@@ -4,6 +4,8 @@ export interface NavContext {
   isAdmin: boolean
   isSuperAdmin: boolean
   hasRole: (...roles: RoleKey[]) => boolean
+  // Coordina o integra al menos un departamento.
+  hasDepartments: boolean
 }
 
 export type NavSection = 'Gestión' | 'Administración' | 'Cuenta'
@@ -20,6 +22,10 @@ export interface NavItem {
 
 const canManageUsers = (ctx: NavContext) => ctx.isAdmin || ctx.hasRole('jefe_cuerpo_activo')
 
+// Mismo criterio que can_view_department() (0103): sus departamentos, o todos
+// para Informática, Secretario Regional y Director de Escuela.
+const canSeeDepartments = (ctx: NavContext) => ctx.hasDepartments || ctx.isAdmin || ctx.hasRole('secretario_regional', 'director_escuela')
+
 export const NAV_ITEMS: NavItem[] = [
   { to: '/panel', label: 'Inicio', icon: 'home', section: 'Gestión' },
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building', section: 'Gestión' },
@@ -27,7 +33,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/calendario', label: 'Calendario', icon: 'calendar', section: 'Gestión' },
   { to: '/escuela', label: 'Escuela', icon: 'school', section: 'Gestión' },
   { to: '/documentos', label: 'Documentos', icon: 'file', section: 'Gestión' },
-  { to: '/departamentos', label: 'Departamentos', icon: 'building', section: 'Gestión' },
+  { to: '/departamentos', label: 'Departamentos', icon: 'building', section: 'Gestión', visible: canSeeDepartments },
   { to: '/inventario', label: 'Inventario', icon: 'tag', section: 'Gestión' },
   // Misma regla que ReportsRoute.
   {

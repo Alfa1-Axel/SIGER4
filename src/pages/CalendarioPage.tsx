@@ -6,7 +6,8 @@ import { fetchCalendarEvents } from '../lib/api/calendar'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import type { CalendarEvent, CalendarEventStatus, CalendarEventType, Region, Station, Subsede } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import type { CalendarEvent, CalendarEventStatus, CalendarEventType, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -55,9 +56,11 @@ function buildMonthGrid(year: number, month: number): Date[] {
 }
 
 export function CalendarioPage() {
-  const { isAdmin, hasRole, profile, scopes } = useAuth()
+  const { isAdmin, hasRole, profile, scopes, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
+  const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
   const canCreate =
     isAdmin ||
+    hasDepartments ||
     hasRole('secretario_regional', 'director_escuela', 'instructor', 'presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision')
   // El cuartel del usuario puede venir de profiles.station_id o de una fila
   // en user_scopes con scope_type='station' (mismo criterio que
@@ -69,6 +72,7 @@ export function CalendarioPage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,10 +86,11 @@ export function CalendarioPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchCalendarEvents(), fetchRegions(), fetchSubsedes(), fetchStations()])
-      .then(([eventsData, regionsData, subsedesData, stationsData]) => {
+    Promise.all([fetchCalendarEvents(), fetchRegions(), fetchSubsedes(), fetchStations(), fetchVisibleDepartments().catch(() => [])])
+      .then(([eventsData, regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
         setEvents(eventsData)
+        setDepartments(departmentsData)
         setRegions(regionsData)
         setSubsedes(subsedesData)
         setStations(stationsData)
@@ -97,7 +102,11 @@ export function CalendarioPage() {
     }
   }, [])
 
+  // Para distinguir y filtrar los eventos de cada departamento propio.
+  const myDepartments = departments.filter((d) => d.my_relation)
+
   function scopeLabel(event: CalendarEvent): string {
+    if (event.department_id) return `Departamento ${departments.find((d) => d.id === event.department_id)?.name ?? ''}`.trim()
     if (event.station_id) return stations.find((s) => s.id === event.station_id)?.name ?? 'Cuartel'
     if (event.subsede_id) return subsedes.find((s) => s.id === event.subsede_id)?.name ?? 'Subsede'
     if (event.region_id) return regions.find((r) => r.id === event.region_id)?.name ?? 'Regional'
@@ -112,6 +121,8 @@ export function CalendarioPage() {
           (!statusFilter || e.status === statusFilter) &&
           (!scopeFilter ||
             (scopeFilter === 'mi_cuartel' && e.station_id === myStationId) ||
+            (scopeFilter === 'departamentos' && e.department_id !== null) ||
+            (scopeFilter.startsWith('dep:') && e.department_id === scopeFilter.slice(4)) ||
             (scopeFilter === 'escuela' && (e.event_type === 'escuela' || e.event_type === 'capacitacion'))),
       ),
     [events, typeFilter, statusFilter, scopeFilter, myStationId],
@@ -171,6 +182,12 @@ export function CalendarioPage() {
           <option value="">Todo el alcance</option>
           {myStationId && <option value="mi_cuartel">Mi cuartel</option>}
           <option value="escuela">Escuela</option>
+          {myDepartments.length > 1 && <option value="departamentos">Mis departamentos</option>}
+          {myDepartments.map((d) => (
+            <option key={d.id} value={`dep:${d.id}`}>
+              {d.name}
+            </option>
+          ))}
         </select>
       </div>
 

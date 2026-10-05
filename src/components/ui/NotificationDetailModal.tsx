@@ -8,6 +8,8 @@ interface NotificationDetailModalProps {
   typeLabel: string
   scopeLabel: string | null
   onClose: () => void
+  // "Abrir" el elemento relacionado, si hay.
+  onOpenRelated?: () => void
 }
 
 // Detalle completo de una notificación — el listado (.list-item-title/
@@ -16,7 +18,7 @@ interface NotificationDetailModalProps {
 // institucionales. Este modal muestra el texto sin recortar. Sigue el mismo
 // patrón que ReasonPromptModal.tsx (createPortal, Escape para cerrar, click
 // afuera para cerrar) para mantener consistencia visual con el resto del sistema.
-export function NotificationDetailModal({ notification, typeLabel, scopeLabel, onClose }: NotificationDetailModalProps) {
+export function NotificationDetailModal({ notification, typeLabel, scopeLabel, onClose, onOpenRelated }: NotificationDetailModalProps) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose()
@@ -54,8 +56,14 @@ export function NotificationDetailModal({ notification, typeLabel, scopeLabel, o
 
         <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span>{new Date(notification.created_at).toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' })}</span>
-          {scopeLabel && <span>Alcance: {scopeLabel}</span>}
+          {scopeLabel && <span>Origen: {scopeLabel}</span>}
         </div>
+
+        {onOpenRelated && (
+          <button type="button" className="btn btn-primary btn-block" style={{ marginTop: 16 }} onClick={onOpenRelated}>
+            Abrir
+          </button>
+        )}
       </div>
     </div>,
     document.body,

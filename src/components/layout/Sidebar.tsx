@@ -1,4 +1,5 @@
-import { Link, NavLink } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
 import { NAV_ITEMS, NAV_SECTIONS } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
@@ -25,6 +26,21 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { profile, signOut, isAdmin, isSuperAdmin, hasRole } = useAuth()
   const visibleItems = NAV_ITEMS.filter((item) => !item.visible || item.visible({ isAdmin, isSuperAdmin, hasRole }))
+  const navRef = useRef<HTMLElement>(null)
+  const { pathname } = useLocation()
+
+  // Con muchos ítems (Informática) el menú scrollea: si el ítem activo quedó
+  // fuera de vista, se lo centra moviendo solo el menú, no la página.
+  useEffect(() => {
+    const nav = navRef.current
+    const active = nav?.querySelector<HTMLElement>('.sidebar-link.active')
+    if (!nav || !active) return
+    const navBox = nav.getBoundingClientRect()
+    const box = active.getBoundingClientRect()
+    if (box.top < navBox.top || box.bottom > navBox.bottom) {
+      nav.scrollTop += box.top - navBox.top - (navBox.height - box.height) / 2
+    }
+  }, [pathname, open])
 
   return (
     <aside className={`app-sidebar${open ? ' open' : ''}`}>
@@ -38,7 +54,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </button>
       </div>
 
-      <nav className="sidebar-nav" aria-label="Menú principal">
+      <nav ref={navRef} className="sidebar-nav" aria-label="Menú principal">
         {NAV_SECTIONS.map((section) => {
           const items = visibleItems.filter((item) => item.section === section)
           if (items.length === 0) return null

@@ -51,6 +51,7 @@ const PATHS: Record<string, string> = {
   fingerprint:
     'M12 11v3a8 8 0 0 1-1.5 4.6M8 10a4 4 0 0 1 8 0v2a12 12 0 0 1-.6 3.8M4.5 15.5A10 10 0 0 0 5 12v-2a7 7 0 0 1 11.6-5.3M19.6 8A7 7 0 0 1 20 10v2a15 15 0 0 1-.8 5M8.2 19.7A11 11 0 0 0 9 15v-3',
   arrowRight: 'M5 12h14M12 5l7 7-7 7',
+  help: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20ZM9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01',
 }
 
 export function Icon({ name, size = 20 }: IconProps) {

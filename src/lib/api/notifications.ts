@@ -14,9 +14,19 @@ import type { Notification, NotificationType } from '../../types/database'
 // no leídas del header YA NO usa esta función (ver fetchUnreadNotificationCount
 // más abajo) -- antes también estaba limitado a las mismas 20 filas, así
 // que subestimaba el conteo real si había más de 20 sin leer.
+// Desde 0102 la bandeja se lee de la vista my_notifications: solo lo dirigido
+// a quien mira (personales suyas y masivas de su alcance), con is_read
+// resuelto para esa persona. Antes, una notificación masiva tenía un solo
+// is_read compartido, y Informática veía también las personales de todos.
+export const NOTIFICATIONS_CHANGED_EVENT = 'siger4:notifications-changed'
+
+function emitNotificationsChanged() {
+  window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT))
+}
+
 export async function fetchNotificationsForProfile(_profileId: string, limit = 100): Promise<Notification[]> {
   const { data, error } = await supabase
-    .from('notifications')
+    .from('my_notifications')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -30,7 +40,7 @@ export async function fetchNotificationsForProfile(_profileId: string, limit = 1
 // más no leídas que el límite de esa página.
 export async function fetchUnreadNotificationCount(): Promise<number> {
   const { count, error } = await supabase
-    .from('notifications')
+    .from('my_notifications')
     .select('id', { count: 'exact', head: true })
     .eq('is_read', false)
   if (error) throw error
@@ -40,7 +50,7 @@ export async function fetchUnreadNotificationCount(): Promise<number> {
 // Últimas no leídas, para el Inicio.
 export async function fetchLatestUnreadNotifications(limit = 3): Promise<Notification[]> {
   const { data, error } = await supabase
-    .from('notifications')
+    .from('my_notifications')
     .select('*')
     .eq('is_read', false)
     .order('created_at', { ascending: false })
@@ -49,9 +59,16 @@ export async function fetchLatestUnreadNotifications(limit = 3): Promise<Notific
   return (data ?? []) as Notification[]
 }
 
-export async function markNotificationRead(id: string): Promise<void> {
-  const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id)
+// Marca como leídas para quien llama (personales y masivas). Sin ids, todas.
+export async function markNotificationsRead(ids: string[] | null): Promise<number> {
+  const { data, error } = await supabase.rpc('mark_notifications_read', { p_ids: ids })
   if (error) throw error
+  emitNotificationsChanged()
+  return (data as number | null) ?? 0
+}
+
+export async function markNotificationRead(id: string): Promise<void> {
+  await markNotificationsRead([id])
 }
 
 export interface NotificationInput {

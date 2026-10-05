@@ -47,6 +47,22 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-05-busqueda-ayuda',
+    version: '1.5.0',
+    date: '2026-10-05',
+    title: 'Búsqueda global, Centro de ayuda y tareas en Inicio',
+    summary: 'Encontrá cualquier cosa desde el encabezado, aprendé a usar cada sección en Ayuda y mirá en el Inicio lo que necesita tu acción.',
+    changes: [
+      { type: 'nuevo', module: 'Búsqueda', text: 'Buscá usuarios, cuarteles, documentos, informes, elementos, cursos, eventos y notificaciones desde el encabezado o con Ctrl+K. Solo aparece lo que podés abrir.' },
+      { type: 'nuevo', module: 'Ayuda', text: 'Centro de ayuda con guías cortas para tu rol: pedir un elemento, cargar un informe, subir un aval y más.' },
+      { type: 'mejora', module: 'Inicio', text: 'Tareas y pendientes agrupados por módulo: qué retirar, qué entregar, solicitudes en espera, avales e informes nuevos.' },
+      { type: 'mejora', module: 'Notificaciones', text: 'Filtros por no leídas, importantes y módulo, "Marcar todas como leídas" y un botón para abrir lo relacionado.' },
+      { type: 'nuevo', module: 'Departamentos', text: 'El coordinador y los integrantes reciben un aviso cuando se carga un informe en su departamento.' },
+      { type: 'correccion', module: 'Notificaciones', text: 'Los avisos para todo el cuartel o la Regional se marcan como leídos solo para vos y ya no quedan pendientes en el contador.' },
+    ],
+    severity: 'important',
+  },
+  {
     id: '2026-10-03-inventario-novedades',
     version: '1.4.0',
     date: '2026-10-03',

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
+import { GlobalSearch } from '../GlobalSearch'
 import { useAuth } from '../../hooks/useAuth'
 import { useTheme } from '../../hooks/useTheme'
-import { fetchUnreadNotificationCount } from '../../lib/api/notifications'
+import { NOTIFICATIONS_CHANGED_EVENT, fetchUnreadNotificationCount } from '../../lib/api/notifications'
 
 interface AppHeaderProps {
   title: string
@@ -15,21 +16,33 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const [unreadCount, setUnreadCount] = useState(0)
+  const { pathname } = useLocation()
+  const profileId = profile?.id ?? null
 
+  // El contador sale de la misma bandeja que /notificaciones (my_notifications,
+  // 0102) y se recalcula al marcar leídas, al cambiar de pantalla y al volver
+  // a la pestaña, para que siempre coincida.
   useEffect(() => {
-    if (!profile) return
+    if (!profileId) return
     let active = true
-    fetchUnreadNotificationCount()
-      .then((count) => {
-        if (active) setUnreadCount(count)
-      })
-      .catch(() => {
-        // Si falla la carga del contador, simplemente no se muestra el badge.
-      })
+    const refresh = () => {
+      fetchUnreadNotificationCount()
+        .then((count) => {
+          if (active) setUnreadCount(count)
+        })
+        .catch(() => {
+          // Si falla la carga del contador, simplemente no se muestra el badge.
+        })
+    }
+    refresh()
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh)
+    window.addEventListener('focus', refresh)
     return () => {
       active = false
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, refresh)
+      window.removeEventListener('focus', refresh)
     }
-  }, [profile])
+  }, [profileId, pathname])
 
   return (
     <header className="app-header">
@@ -43,6 +56,7 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         <span className="app-header-title">{title}</span>
       </div>
       <div className="app-header-actions">
+        <GlobalSearch />
         <button
           type="button"
           className="btn btn-icon btn-ghost"

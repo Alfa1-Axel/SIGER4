@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { PendingItemsSection } from '../components/PendingItemsSection'
+import { TasksSection } from '../components/TasksSection'
+import { openGlobalSearch } from '../lib/searchControl'
 import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
 import { fetchDepartments } from '../lib/api/departments'
@@ -160,7 +161,12 @@ export function PanelPage() {
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      <PendingItemsSection />
+      <button type="button" className="home-search" onClick={openGlobalSearch}>
+        <Icon name="search" size={18} />
+        <span>Buscar en SIGER4: usuarios, documentos, informes, elementos…</span>
+      </button>
+
+      <TasksSection unreadNotifications={unread} unreadTotal={unreadCount} />
 
       <div className="section-header">
         <h2 className="section-title">Accesos rápidos</h2>
@@ -179,28 +185,6 @@ export function PanelPage() {
           </Link>
         ))}
       </nav>
-
-      {unread.length > 0 && (
-        <>
-          <div className="section-header">
-            <h2 className="section-title">Notificaciones sin leer</h2>
-            <Link to="/notificaciones" className="link-muted">
-              Ver todas{unreadCount > unread.length ? ` (${unreadCount})` : ''}
-            </Link>
-          </div>
-          <div className="card row-list" style={{ marginBottom: 20 }}>
-            {unread.map((n) => (
-              <Link key={n.id} to="/notificaciones" className="row-item">
-                <div style={{ minWidth: 0 }}>
-                  <div className="row-item-title">{n.title}</div>
-                  {n.body && <div className="row-item-meta" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.body}</div>}
-                </div>
-                <span style={{ fontSize: 12, color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{timeAgo(n.created_at)}</span>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
 
       {!loading && (summary?.todayEvents.length ?? 0) > 0 && (
         <>

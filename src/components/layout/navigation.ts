@@ -54,6 +54,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/notificaciones', label: 'Notificaciones', icon: 'bell', section: 'Cuenta' },
   { to: '/ajustes', label: 'Mi perfil y ajustes', icon: 'settings', section: 'Cuenta' },
   { to: '/roles', label: 'Roles y permisos', icon: 'info', section: 'Cuenta' },
+  { to: '/ayuda', label: 'Ayuda', icon: 'help', section: 'Cuenta' },
   { to: '/novedades', label: 'Novedades', icon: 'magic', section: 'Cuenta' },
 ]
 

@@ -8924,3 +8924,230 @@ Sin variables de entorno nuevas. Sin cambios en Edge Functions, push ni PWA.
   `link_path` en cada uno más adelante.
 - **Búsqueda de usuarios para el Jefe de Cuerpo Activo:** el filtro de roles privilegiados se
   aplica en la pantalla, igual que en Usuarios. La RLS ya limita qué perfiles puede leer.
+
+## 60. Roles por división: rol, división y alcance (2026-10-05) — versión 1.6.0, migración 0103
+
+### 60.1 Modelo encontrado
+
+**Rol + alcance ya existía**, repartido en fuentes únicas que se mantienen:
+
+| Qué | Dónde vive | Para qué |
+|---|---|---|
+| Rol (qué puede hacer) | `user_roles` (enum `role_key`) | `has_role()`, `is_informatica_r4()`, `is_regional_role()`… |
+| Cuartel y Regional del perfil | `profiles.station_id`, `profiles.region_id` | `my_station_ids()`, `my_region_ids()` |
+| Alcance adicional | `user_scopes` (sistema, Regional, subsede, cuartel, Escuela) | Las mismas funciones, más `my_subsede_ids()` |
+| Coordinador de departamento | `departments.coordinator_profile_id` (uno por departamento) | Avales (0097), informes (0098) |
+| Integrante de departamento | `department_members` | Informes (0098) |
+
+**Decisión:** no se creó ninguna tabla ni rol nuevo.
+- La división de cada rol sale de esas fuentes. Duplicarlas en una columna `scope` de `user_roles` habría obligado a reescribir todos los helpers y la RLS.
+- "Coordinador de departamento" e "Integrante de departamento" son **roles de división**: se asignan eligiendo departamentos, no son valores de `role_key`.
+- La correspondencia rol → división está en `src/types/roles.ts` (`roleDivisionNeed()`, `DEPARTMENT_ROLE_DEFINITIONS`) y en los helpers SQL de 0103.
+
+### 60.2 Problemas encontrados
+
+1. **Departamentos legibles por cualquier usuario.**
+   - Tablas afectadas: `departments`, `department_members`, `department_manual_members` (con teléfonos y emails de contacto) y `department_activity_reports`.
+   - Tenían `select` para cualquier autenticado: un integrante de Fuego, o cualquier usuario de cuartel, podía leer por la API los integrantes, contactos y actividad de FASME.
+2. **Calendario sin alcance.** `calendar_events` tenía `select` para cualquier autenticado: cada cuartel veía los eventos de todos los demás.
+3. **Historial institucional sin alcance.** `station_history_events` era legible por cualquiera, aunque `stations` sí estaba filtrada.
+4. **Ficha del departamento rota.** La lista de integrantes hacía join con `profiles`, que está limitado por cuartel. Un coordinador que no es de Informática recibía `profile = null` para los integrantes de otros cuarteles y la pantalla fallaba.
+5. **Alta de usuario incoherente.** El alcance (paso 3) y los roles (paso 4) eran independientes. Se podía crear, por ejemplo, un Secretario Regional con alcance de cuartel, o un Jefe de Cuerpo Activo sin cuartel.
+6. **No se veía "rol + división".** La ficha mostraba roles y alcances por separado, en términos técnicos.
+
+### 60.3 Migración 0103 (`0103_role_divisions_and_scopes.sql`)
+
+**Helpers nuevos:**
+
+| Función | Devuelve |
+|---|---|
+| `is_department_member_or_coordinator(dep)` | Coordinador o integrante del departamento. |
+| `my_department_ids()` | Departamentos que coordina o integra el usuario. |
+| `can_view_department(dep)` | Informática, Secretario Regional, Director de Escuela (los mismos que generan los reportes de Departamentos), o su coordinador e integrantes. |
+| `can_work_in_department(dep)` | Cargar eventos: Informática, Secretario Regional, coordinador o integrantes. |
+| `can_notify_department(dep)` | Avisar a todo el departamento: Informática, Secretario Regional o su coordinador. |
+| `my_effective_region_ids()` | Las Regionales propias más las de sus cuarteles y subsedes. Sirve para usuarios sin `region_id` en el perfil, como los que crea un Jefe de Cuerpo Activo. |
+
+**RLS:**
+
+- **`departments`, `department_members`, `department_manual_members`, `department_activity_reports`:** se leen con `can_view_department()`. Cada uno sigue viendo sus propias filas de integración. Las policies de escritura no cambian.
+- **`department_reports` y adjuntos (0098):** sin cambios. Los ven el coordinador, los integrantes e Informática. Storage sigue cerrado por departamento.
+- **`calendar_events`:**
+  - Columna nueva `department_id`.
+  - Lectura, con sesión de un perfil activo:
+    - eventos de su cuartel, su subsede y su Regional;
+    - Escuela y capacitación, para toda la Regional;
+    - los de sus departamentos.
+  - Roles regionales y de Escuela: todos los eventos de su Regional. Informática: todos.
+  - Barrera restrictiva: un evento de departamento no se abre por ninguna otra regla (por ejemplo, la de Escuela para capacitaciones).
+  - Un evento de departamento no lleva Regional, subsede ni cuartel (`calendar_events_single_scope` actualizado).
+  - Lo carga cualquier integrante o el coordinador (con el departamento activo). Lo editan o borran quien lo cargó, el coordinador, el Secretario Regional o Informática.
+  - El autor lo completa la base (`trg_calendar_events_set_creator`): el formulario nunca lo enviaba.
+- **`station_history_events`:** se lee con el mismo alcance que el cuartel (`exists` sobre `stations`, que aplica `stations_select_scope`).
+
+**Funciones nuevas** (`authenticated`, sin `anon`):
+
+| Función | Qué hace |
+|---|---|
+| `list_visible_departments()` | Departamentos visibles con nombre del coordinador, cantidad de integrantes y la relación del usuario (`coordinador`, `integrante` o null). |
+| `department_member_directory(dep)` | Integrantes con nombre, jerarquía, contacto y cuartel, para quien puede ver el departamento. Vacío para el resto. |
+| `notify_department(dep, tipo, título, texto)` | Aviso a todo el departamento. Ver el detalle abajo. |
+| `coordinating_profile_ids(ids)` | Cuáles de esos perfiles coordinan un departamento. Ver el detalle abajo. |
+
+`notify_department()`:
+- crea una notificación **personal** por integrante activo y coordinador, salvo quien envía, con enlace al departamento;
+- solo acepta los tipos de aviso manual (rechaza los internos);
+- rechaza departamentos inactivos;
+- el push sale por el envío existente.
+
+`coordinating_profile_ids()`:
+- solo responde por perfiles de los cuarteles de quien pregunta, o para Informática;
+- la usan las pantallas del Jefe de Cuerpo Activo, que no gestiona coordinadores.
+- `admin-update-user` lo sigue validando con `service_role`, sin cambios.
+
+**Avisos automáticos:**
+- `notify_calendar_event_created()` y `send_calendar_event_reminders()`: un evento de departamento avisa solo a su coordinador e integrantes, con enlace al evento. **Nunca a la Regional.** El resto sigue igual.
+- `get_pending_items()`:
+  - los eventos de departamento aparecen solo para su gente (también para Informática, que no es pendiente suyo);
+  - para Informática, nuevos pendientes: "Rol de cuartel sin cuartel", "Rol regional sin Regional" y "Departamento sin coordinador".
+
+### 60.4 Roles por división
+
+| Rol | División | Cómo se asigna | Qué ve |
+|---|---|---|---|
+| Informática R4 / Integrante de Informática | Todo el sistema | Rol | Todo. Auditoría solo informatica_r4 |
+| Secretario Regional | Su Regional | Rol + Regional | Cuarteles y departamentos de la Regional |
+| Director de Escuela / Instructor | Escuela Regional de su Regional | Rol + Regional | Escuela y lectura regional; el Director ve todos los departamentos (reportes) |
+| Coordinador / Secretario de Escuela | Toda la Escuela | Rol | Avales de todos los departamentos |
+| Roles de cuartel (Jefe, Presidente, carga, Secretario de Comisión, invitado) | Su cuartel | Rol + cuartel | Su cuartel (y su subsede si tiene ese alcance) |
+| Coordinador de departamento | Uno o más departamentos | Elegir departamentos | Solo los suyos: datos, integrantes, informes, eventos, avisos y avales |
+| Integrante de departamento | Uno o más departamentos | Elegir departamentos | Solo los suyos: integrantes, informes y eventos |
+
+Los roles de departamento se suman a un rol del sistema: por ejemplo, "Usuario de carga · Cuartel Río Primero" e "Integrante · Fuego".
+
+### 60.5 Cómo se asignan
+
+- **Alta de usuario:**
+  1. Datos.
+  2. Acceso.
+  3. **Roles.** Agrupados por tipo, cada uno con lo que permite. Para Informática, también los **departamentos**: No, Integrante o Coordinador por departamento, con aviso si reemplaza al coordinador actual.
+  4. **Dónde aplica.**
+     - Pide el cuartel o la Regional según los roles elegidos y no deja crear un rol de cuartel sin cuartel.
+     - El alcance que se envía a `admin-create-user` sale de los roles: el más amplio manda.
+     - Muestra una vista previa **"Así va a quedar"** con cada rol y su división.
+  - Subsedes y alcances extra: desde la ficha, como antes. La Edge Function no cambió.
+- **Ficha de usuario (Informática):** sección **Departamentos** con el mismo selector y "Guardar departamentos". Reemplaza a la lista de solo lectura "Departamentos que coordina".
+- **Departamentos:** el coordinador sigue asignándose también en la ficha del departamento. Los integrantes los suma Informática o el coordinador.
+
+### 60.6 Cómo se muestran
+
+- **Ficha de usuario** (Informática): "Roles y dónde aplican".
+  - Por ejemplo: "Jefe de Cuerpo Activo · Cuartel Villa del Rosario", "Coordinador de departamento · Fuego".
+  - Los roles sin su división se marcan: "Falta asignar el cuartel".
+- **Mi perfil y ajustes:** "Tus roles y dónde aplican".
+- **Roles y permisos:**
+  - "Tus roles";
+  - ejemplos de rol + división;
+  - en cada rol, su División y su Alcance;
+  - grupo **Departamentos** con los dos roles de división.
+- **Inicio:** el saludo suma "Coordinador de Fuego" e "Integrante de Forestal".
+
+### 60.7 Inicio
+
+- Quien coordina o integra un departamento ve **"Tu departamento"**:
+  - nombre y relación ("Coordinás" o "Integrás");
+  - integrantes y coordinador;
+  - últimos 3 informes y actas, y próximos 3 eventos;
+  - acciones: Cargar informe, Nuevo evento y Avisar al departamento (solo el coordinador).
+- Con varios departamentos: **chips** para elegir, primero los que coordina. La elección se recuerda en el navegador.
+- En el celular, las dos columnas se apilan.
+- Los pendientes del servidor incluyen los eventos próximos de sus departamentos.
+
+### 60.8 Búsqueda, notificaciones, documentos y eventos
+
+- **Búsqueda:**
+  - Departamentos y Calendario respetan la nueva RLS: un integrante de Fuego no encuentra FASME ni sus eventos.
+  - Los nombres para los subtítulos se cachean por usuario. Antes la caché se compartía si otra persona iniciaba sesión en la misma pestaña.
+  - Para Escuela suma los departamentos de Avales.
+  - El filtro del Jefe para no mostrar coordinadores usa `coordinating_profile_ids()`.
+- **Notificaciones:**
+  - Destino **Departamento** en "Nueva notificación" para el coordinador (su único destino si no tiene otro permiso), el Secretario Regional e Informática.
+  - Al enviar, vuelve al departamento con "Aviso enviado a N personas de Fuego".
+  - En la bandeja, el origen dice "Departamento Fuego".
+  - Los avisos de eventos e informes de un departamento no le llegan a otro.
+- **Eventos:**
+  - "¿De qué es el evento?": General o De un departamento.
+  - Desde el departamento o el Inicio llega preseleccionado.
+  - El calendario muestra "Departamento Fuego" y suma filtros "Mis departamentos" y uno por departamento.
+- **Documentos:**
+  - Los documentos de un departamento son sus **informes y actas con adjuntos** (0098). Ya están cerrados por departamento en la base y en Storage.
+  - No se creó un segundo sistema de documentos por departamento.
+  - Documentos sigue con su alcance territorial (Regional, subsede, cuartel), sin cambios.
+- **Menú:** "Departamentos" solo aparece a quien tiene departamentos o visión regional. Por URL directa, un departamento ajeno muestra "No podés ver este departamento".
+
+### 60.9 Qué correr
+
+1. SQL Editor → `0103_role_divisions_and_scopes.sql` (después de 0102). Se puede volver a correr. Si falta 0102, se detiene con un mensaje.
+2. Desplegar el frontend. **Correr la migración antes:** el frontend llama a `list_visible_departments()` y `department_member_directory()`.
+
+Sin variables de entorno nuevas. Sin cambios en Edge Functions, push ni PWA.
+
+### 60.10 Verificación
+
+- **Postgres 16 local, 0103:** 79 pruebas, 0 fallas.
+  - Coordinador de Fuego ve solo Fuego.
+  - Integrante de Fuego ve Fuego y no FASME: ni sus integrantes sin usuario con contacto, ni su actividad, ni por nombre ni por id.
+  - Coordinador de Forestal que además integra Fuego ve los dos y distingue su relación.
+  - Usuario de cuartel sin departamentos no ve ninguno.
+  - Coordinador y Secretario de Escuela siguen viendo los avales de todos.
+  - Director, Secretario Regional e Informática ven todos los departamentos. El Director sigue sin ver informes (0098 sin cambios).
+  - Directorio de integrantes de otro cuartel.
+  - Eventos de departamento:
+    - alta por coordinador e integrante;
+    - un integrante no carga en otro departamento ni borra el evento del coordinador, pero edita el suyo;
+    - un Instructor no ve ni edita una capacitación de Fuego;
+    - el Director los ve pero no los carga;
+    - un usuario de cuartel no carga;
+    - un evento de departamento no acepta cuartel.
+  - Alcance territorial del calendario por cuartel, Regional (también sin Regional en el perfil) y Secretario Regional.
+  - Avisos y recordatorios de eventos solo al departamento.
+  - Aviso al departamento: coordinador sí, integrante no, otro departamento no, tipo interno no, departamento inactivo no.
+  - Historial por cuartel.
+  - Pendientes.
+  - `coordinating_profile_ids()` acotada al cuartel.
+  - Auditoría solo informatica_r4.
+  - Sin sesión: nada.
+  - Se puede volver a correr, funciona en un proyecto nuevo y se detiene sin 0102.
+- **Regresión SQL:** 0098 (42), 0099 (26), 0100 (15) y 0102 (20) siguen pasando con 0103.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado): 65 pruebas, 0 fallas.
+  - Menú, lista y URL directa de Departamentos por rol.
+  - Ficha con integrantes de otros cuarteles, eventos y menú según el rol.
+  - Inicio de un integrante (celular) y de alguien con dos departamentos: selector, cambio de contenido y recordar la elección.
+  - Calendario por rol y con filtro por departamento; alta de un evento de departamento.
+  - Aviso al departamento desde el coordinador y su origen en la bandeja.
+  - Búsqueda por rol.
+  - Alta de usuario: cuartel obligatorio, vista previa, alcance derivado, departamentos y celular.
+  - Ficha de usuario: resumen, editor y reemplazo de coordinador.
+  - Mi perfil y guía de roles.
+- **Regresión en navegador:** secciones 57 (33), 58 (26), 59 (47), menú "Nuevo" (8) y menú lateral (4). Capturas en claro y oscuro.
+
+### 60.11 Checklist en producción
+
+- [ ] Correr 0103 y entrar como un integrante de un departamento: en el menú aparece Departamentos con el suyo solo.
+- [ ] Como usuario de cuartel sin departamentos: Departamentos no aparece y la URL de un departamento muestra "No podés ver este departamento".
+- [ ] Como coordinador: "Aviso al departamento" → les llega a los integrantes (y el push al celular), no a otro departamento.
+- [ ] Evento de departamento con "Notificar al crear" → lo reciben solo los integrantes.
+- [ ] Calendario como usuario de cuartel: no aparecen eventos de otros cuarteles; sí los de la Regional y la Escuela.
+- [ ] Alta de usuario con rol de cuartel: pide el cuartel; con departamentos, quedan asignados.
+- [ ] Revisar en el Inicio de Informática los pendientes "Rol de cuartel sin cuartel" y "Departamento sin coordinador" y corregirlos.
+
+### 60.12 Riesgos y decisiones
+
+- **Cambio de visibilidad.** Los usuarios de cuartel que no integran ningún departamento dejan de ver la sección Departamentos, y cada cuartel deja de ver los eventos de los demás. Es lo pedido, pero conviene avisarlo.
+- **Inventario y cursos siguen siendo regionales.**
+  - El Inventario Regional es compartido entre cuarteles: la disponibilidad tiene que verse para pedir.
+  - La oferta de la Escuela es para todos.
+  - No cambiaron.
+- **Coordinador y Secretario de Escuela no ven Departamentos.** Sus departamentos los ven en Avales.
+- **Un solo alcance en el alta.** `admin-create-user` recibe un alcance; el cuartel y la Regional del perfil completan el resto. Subsedes y cuarteles extra se agregan desde la ficha.
+- **Codificación con psql en Windows.** 0103 empieza con `set client_encoding = 'UTF8'` para que los textos con tildes no se guarden mal si se corre con psql desde una consola de Windows. En el SQL Editor no cambia nada.

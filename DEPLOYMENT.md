@@ -8664,3 +8664,263 @@ Lo de arriba se probó con emulación. Antes de dar por cerrada la versión, hac
   real de un rechazo en lugar del genérico. Es el comportamiento buscado, pero conviene mirarlo en
   el uso diario.
 - **Física:** el checklist de 58.9 sigue pendiente en un equipo real.
+
+## 59. Búsqueda global, Centro de ayuda, notificaciones internas y tareas en Inicio (2026-10-05) — versión 1.5.0, migraciones 0101-0102
+
+### 59.1 Búsqueda global
+
+**Dónde aparece:**
+
+- **Escritorio:** botón "Buscar en SIGER4" en el encabezado de todas las pantallas, con el atajo
+  **Ctrl+K** (⌘K en Mac).
+- **Celular** (menos de 900 px): ícono de lupa en el encabezado. La búsqueda ocupa la pantalla
+  completa.
+- **Inicio:** campo "Buscar en SIGER4…" arriba de las tareas. Abre la misma búsqueda.
+
+**Cómo funciona** (`src/components/GlobalSearch.tsx` y `src/lib/api/globalSearch.ts`):
+
+- Busca a partir de **2 letras**, 300 ms después de la última tecla. Si llega una respuesta vieja
+  después de una nueva, se descarta.
+- Cada módulo es una consulta corta (`ilike` sobre título y una o dos columnas más) con **límite**:
+  4 resultados por módulo en "Todo", 20 cuando se filtra un módulo. Los módulos se consultan en
+  paralelo; si uno falla, los demás se muestran igual con el aviso "No pudimos buscar en: …".
+- El texto se limpia antes de consultar: se quitan los comodines y separadores de PostgREST
+  (`% _ , ( ) . : * ;`, barra invertida y comillas) y se corta en 60 caracteres.
+- Cada resultado muestra tipo, título, un subtítulo corto y se abre con clic, toque o Enter. Los
+  grupos tienen "Ver más en X →" y hay chips para filtrar por módulo.
+- Teclado: ↑ ↓ para moverse, Enter para abrir, Esc para cerrar. El campo es un combobox accesible
+  (`aria-activedescendant`).
+- **Estados:** sin texto (qué se puede buscar y enlace a Ayuda), buscando, sin resultados (con
+  sugerencias y "Buscar en todo" si había un filtro), error solo si fallaron todos los módulos
+  remotos.
+
+**Módulos y qué se muestra:**
+
+| Módulo | Busca en | Muestra | Abre |
+|---|---|---|---|
+| Usuarios | nombre, email | nombre, jerarquía, email, "Inactivo" | `/usuarios/:id` |
+| Cuarteles | nombre, código, dirección | nombre, código, dirección | `/cuarteles/:id` |
+| Departamentos | nombre, descripción | nombre, descripción | `/departamentos/:id` |
+| Informes y actas | título, texto | departamento, tipo, fecha | `/departamentos/informes/:id` |
+| Documentos | título, categoría | categoría, fecha | carpeta del documento |
+| Avales | título, descripción | departamento, fecha | Avales, filtrado por su departamento |
+| Inventario | nombre, descripción | disponibilidad | `/inventario/:id` |
+| Solicitudes de préstamo | elementos encontrados | cuartel, estado, fecha | `/inventario/solicitudes/:id` |
+| Cursos | título, categoría | categoría, fecha | `/escuela` |
+| Calendario | título, descripción | fecha | `/calendario/:id` |
+| Notificaciones | título, texto | tipo, fecha | `/notificaciones` |
+| Ayuda | contenido local | resumen | `/ayuda#articulo` |
+
+No se muestran teléfonos, DNI, direcciones personales, rutas de archivos ni datos técnicos.
+
+**Permisos.** Si el usuario no puede abrir algo, el resultado no aparece:
+
+- **La RLS de cada tabla** filtra todas las consultas: se busca con la sesión del usuario, como
+  en las pantallas de cada módulo. No hay funciones nuevas ni SECURITY DEFINER para buscar.
+- **Además, en la pantalla** se saltean los módulos que el rol no puede abrir, para no mostrar
+  resultados que lleven a "sin permiso":
+  - **Usuarios:** solo Informática y el Jefe de Cuerpo Activo. El Jefe ve solo su cuartel, sin
+    roles regionales, de Escuela ni coordinadores (las mismas reglas que la pantalla Usuarios).
+  - **Informes y actas:** solo quien ve informes de algún departamento (Informática, coordinador o
+    integrante). La RLS deja solo los de sus departamentos.
+  - **Avales:** solo quien entra a Avales (Informática, Escuela o coordinadores de departamento).
+    No se buscan los archivados.
+  - **Documentos:** sin los de la papelera ni las subidas sin terminar.
+  - **Notificaciones:** desde la vista `my_notifications` (59.3): solo las propias y los avisos de
+    su cuartel, Regional o Escuela.
+  - **Ayuda:** solo los artículos de su rol (59.2).
+
+**Limitación conocida:** en los módulos de la base la búsqueda **no ignora tildes**: "prestamo" no
+encuentra "préstamo". El mensaje de "sin resultados" sugiere probar con o sin tildes. La Ayuda sí
+ignora tildes, porque se busca en el navegador. Para la base haría falta la extensión `unaccent` e
+índices; se dejó para más adelante.
+
+### 59.2 Centro de ayuda
+
+Ruta `/ayuda`, en el menú (sección Cuenta, ícono de ayuda) y en los resultados de la búsqueda.
+
+**Organización** (`src/pages/AyudaPage.tsx`):
+
+- Buscador propio que ignora tildes y mayúsculas, y busca también en los pasos.
+- Chips por sección: Primeros pasos, Inventario y préstamos, Departamentos, Escuela, Documentos,
+  Tu cuenta, Administración y Preguntas frecuentes.
+- Cada artículo es un desplegable con un resumen de una línea, **pasos numerados** y botones que
+  llevan a la pantalla real ("Ir a Inventario", "Ver mis solicitudes", …).
+- `/ayuda#id` abre ese artículo y lo lleva a la vista; así enlaza la búsqueda global.
+- Si no hay coincidencias, ofrece buscar en todo SIGER4. Al pie, a quién pedir ayuda.
+
+**Contenido** (`src/config/helpContent.ts`):
+
+| Sección | Artículos |
+|---|---|
+| Primeros pasos | Cómo usar el Inicio · Buscar en SIGER4 · Ver y ordenar tus notificaciones · Recibir avisos en el celular (push) · Ver qué cambió en SIGER4 (Novedades) |
+| Inventario y préstamos | Pedir un elemento prestado · Ver el estado de mis solicitudes · Aprobar y registrar préstamos |
+| Departamentos | Cargar un informe o un acta · Redactar un informe en SIGER4 |
+| Escuela | Subir un aval regional · Cursos de la Escuela |
+| Documentos | Subir un documento |
+| Tu cuenta | Cambiar mi contraseña o mi foto · Qué hacer si no tengo permiso · Qué significa cada rol |
+| Administración | Crear un usuario y darle acceso · Asignar el coordinador de un departamento · Revisar la auditoría |
+| Preguntas frecuentes | No veo una sección del menú · Olvidé mi contraseña · No puedo subir un archivo desde el celular · No me deja pedir un elemento · No veo los informes de un departamento |
+
+**Por rol.** Cada artículo tiene un público (`audience`) y `canSeeHelpArticle()` decide si se
+muestra: por ejemplo, "Aprobar y registrar préstamos" solo a quien gestiona préstamos, "Crear un
+usuario" a quien puede crear usuarios (Informática, Jefe de Cuerpo Activo y Director de Escuela), "Asignar el coordinador" a Informática y "Revisar
+la auditoría" solo a informatica_r4. Es solo para no mostrar ayuda que no sirve: los permisos
+reales siguen en la RLS y en las rutas.
+
+**Cómo editarla:** agregar o cambiar objetos en `HELP_ARTICLES` (id único, sección, público,
+título, resumen, pasos o respuesta, enlaces y palabras clave). No hace falta migración.
+
+### 59.3 Notificaciones internas
+
+**Problemas encontrados:**
+
+1. **Los avisos masivos no se podían marcar como leídos.** Los avisos a un cuartel, una Regional o
+   la Escuela son una sola fila con `profile_id` nulo. La policy de UPDATE solo permite tocar las
+   propias, así que para un usuario común quedaban **sin leer para siempre** en el contador.
+2. **Informática marcaba como leído para todos.** Informática sí podía actualizar esas filas: al
+   marcarlas, desaparecían como no leídas para toda la Regional.
+3. **La bandeja de Informática mostraba avisos personales de otros usuarios**, porque su policy de
+   lectura ve todas las filas.
+4. **Los informes de departamento no avisaban** a nadie.
+
+**Base** (`0101_notification_type_department_report.sql` y `0102_notification_reads_and_links.sql`):
+
+- Tipo nuevo `informe_departamento` (0101; un valor de enum tiene que confirmarse antes de usarse,
+  por eso va en su propia migración).
+- Columna `notifications.link_path`: ruta interna opcional al elemento relacionado. Un `check` solo
+  acepta rutas que empiezan con `/`, sin dominio ni esquema, de hasta 300 caracteres.
+- Tabla `notification_reads (notification_id, profile_id, read_at)`: la lectura de un aviso masivo
+  **por usuario**. RLS: cada uno ve y crea solo las suyas, y solo para avisos masivos que puede ver.
+  Sin permisos para `anon`.
+- Vista `my_notifications` (`security_invoker`): las notificaciones propias más los avisos masivos
+  que la RLS deja ver, con `is_read` calculado por usuario. La bandeja, el contador, el Inicio y la
+  búsqueda leen de acá. Informática ya no ve los avisos personales de otros en su bandeja.
+- Función `mark_notifications_read(p_ids uuid[] default null)` (security invoker): marca las
+  indicadas, o todas si `p_ids` es nulo. Personales: `is_read = true`. Masivas: fila en
+  `notification_reads` (sin duplicar). Devuelve cuántas cambió.
+- Trigger `trg_notify_department_report_created` en `department_reports`: al cargar un informe o
+  acta avisa al coordinador y a los integrantes activos del departamento, salvo a quien lo cargó.
+  Es una notificación **personal** por persona, con `link_path` al informe. El push sale como
+  cualquier otra notificación, por el envío que ya existe.
+
+No cambian los triggers existentes, las Edge Functions, el push ni la PWA. Las filas viejas siguen
+funcionando: sin `link_path`, el botón "Abrir" lleva a la pantalla del módulo según el tipo.
+
+**Pantalla** (`/notificaciones`):
+
+- Filtros de estado: **Todas · No leídas (n) · Importantes**.
+- Filtros de módulo, solo los que tienen avisos: Sistema, Escuela, Inventario, Documentos,
+  Calendario, Cuarteles y Departamentos.
+- **Importantes:** préstamos solicitados, aprobados, por vencer y vencidos, asistencia pendiente y
+  alertas de Informática. Llevan el badge "Importante".
+- Cada aviso muestra ícono del módulo, título, texto, tipo, **origen** ("Para vos", cuartel,
+  subsede o Regional) y hace cuánto llegó. Los no leídos tienen borde y título destacados.
+- Acciones: **Abrir** (marca como leído y va al elemento), **Leída** y **Marcar todas como
+  leídas**. Tocar el aviso abre el detalle, que también tiene "Abrir".
+- Estados vacíos por filtro: "Estás al día…", "No hay avisos importantes", etc., con "Ver todas".
+- En el celular los filtros de módulo se desplazan de costado y las acciones quedan al pie de cada
+  aviso.
+
+**Contador del encabezado:** se actualiza al cambiar de pantalla, al volver a la pestaña y apenas
+se marca algo como leído (evento `siger4:notifications-changed`), sin esperar al siguiente
+intervalo.
+
+### 59.4 Tareas y pendientes en Inicio
+
+La sección "Tareas y pendientes" (`src/components/TasksSection.tsx`) reemplaza a la lista de
+pendientes y a "Notificaciones sin leer". Junta:
+
+- los pendientes del servidor (`get_pending_items()`, sin cambios: cuarteles, asistencia,
+  documentos, usuarios, Escuela, calendario);
+- **préstamos:** "Retirá X" (aprobada para tu cuartel, urgente), "Entregar X" (para quien gestiona:
+  aprobada sin retiro), "Tu solicitud de X espera respuesta" (o "N solicitudes tuyas…");
+- **Escuela:** "N avales nuevos esta semana", para quien entra a Avales;
+- **Departamentos:** "N informes nuevos en tus departamentos" (Informática: "en Departamentos"),
+  cargados por otros en los últimos 7 días;
+- **notificaciones sin leer**, con su título real; si alguna es importante, el grupo sube de
+  prioridad.
+
+Se agrupan por módulo con su cantidad, ordenadas por urgencia (alta, media, baja), con hasta 3
+tareas por grupo y "Ver N más →". Arriba se ve el total y cuántas son urgentes. Sin pendientes:
+"Todo al día". Si fallan los datos, un aviso no bloqueante.
+
+| Rol | Qué ve |
+|---|---|
+| Informática | Revisión (cuarteles sin datos, asistencia, papelera, usuarios), préstamos para entregar, avales e informes nuevos, avisos |
+| Gestión de préstamos (Secretario Regional, Director de Escuela, responsable del elemento) | Solicitudes para aprobar (servidor), préstamos aprobados para entregar |
+| Coordinador de Escuela | Avales nuevos, pendientes de Escuela, avisos |
+| Coordinador o integrante de departamento | Informes nuevos en sus departamentos, avales nuevos (coordinador), avisos de informes |
+| Usuario común / cuartel | Qué retirar, solicitudes en espera, pendientes de su cuartel, notificaciones sin leer, próximos eventos (bloque "Hoy" y "Próximos eventos") |
+
+Todo pasa por la RLS: una tarea nunca lleva a algo que el usuario no pueda abrir.
+
+### 59.5 Otros ajustes
+
+- **Menú lateral:** con muchos ítems (Informática) el menú scrollea y el ítem activo podía quedar
+  fuera de vista, por ejemplo Ayuda o Novedades. Ahora se centra al cambiar de pantalla; se mueve
+  solo el menú, no la página.
+- Ícono nuevo `help`.
+- Versión **1.5.0** en `appUpdates.ts` y `package.json`.
+
+### 59.6 Qué correr
+
+1. SQL Editor → `0101_notification_type_department_report.sql`, **sola**, y esperar a que termine.
+2. SQL Editor → `0102_notification_reads_and_links.sql`. Si se corre sin 0101, se detiene con un
+   mensaje que lo explica y no cambia nada.
+3. Desplegar el frontend.
+
+Van después de 0100. Las dos se pueden volver a correr sin efecto y funcionan en un proyecto
+nuevo. **El frontend nuevo necesita 0102:** la bandeja, el contador y la búsqueda leen de
+`my_notifications`. Correr las migraciones antes de desplegar.
+
+Sin variables de entorno nuevas. Sin cambios en Edge Functions, push ni PWA.
+
+### 59.7 Verificación
+
+- **Postgres 16 local:**
+  - 0102: lectura por usuario de avisos masivos (un usuario no marca para otro, Informática no
+    marca para todos), vista sin avisos personales ajenos, marcar todas sin duplicar, `link_path`
+    rechaza `javascript:` y enlaces externos, aviso de informe al coordinador y no al autor ni a
+    nadie fuera del departamento, sin acceso para `anon`: 20 pruebas, 0 fallas. Se puede volver
+    a correr; en un proyecto nuevo corre completa; sin 0101 se detiene.
+  - Las pruebas de 0098 (informes, 42), 0099 (26) y 0100 (15) siguen pasando con el trigger nuevo.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado): 51 pruebas, 0 fallas.
+  - Búsqueda: Informática encuentra usuarios, informes, elementos y solicitudes; el usuario común
+    no ve Usuarios ni Informes; el coordinador de Fuego encuentra los informes de Fuego y no los de
+    otro departamento; filtro por módulo, teclado, sin resultados y celular a pantalla completa.
+  - Ayuda: el usuario común no ve Administración; Informática sí; Escuela ve Avales; los enlaces
+    llevan a la pantalla real; `/ayuda#id` abre el artículo; el buscador ignora tildes.
+  - Notificaciones: contador igual a la bandeja, sin avisos personales ajenos, filtros Importantes
+    e Inventario, "Leída" baja el contador, "Marcar todas" lo deja en 0, estado vacío y "Abrir" va
+    al informe.
+  - Inicio: usuario común (Retirá, solicitud en espera, avisos, lo urgente primero), Informática
+    (Entregar, pendientes del servidor), Coordinador de Escuela (avales), coordinador de Fuego
+    (aviso del informe) y sin pendientes ("Todo al día").
+  - Menú: el ítem activo queda a la vista en escritorio y celular.
+- **Regresión:** pruebas de las secciones 57 (33), 58 (26) y del menú "Nuevo" (8). Capturas en
+  claro y oscuro, escritorio y celular.
+
+### 59.8 Checklist en dispositivo físico
+
+- [ ] Celular: lupa del encabezado → buscar un elemento del Inventario → abrirlo.
+- [ ] Computadora: Ctrl+K → buscar un usuario (como Informática) y un informe (como coordinador).
+- [ ] Usuario común: buscar el nombre de un compañero → no aparece Usuarios.
+- [ ] Ayuda en el celular: abrir "Pedir un elemento prestado" → "Ir a Inventario".
+- [ ] Cargar un informe en un departamento → el coordinador recibe la notificación (y el push, si
+      lo tiene activo) → "Abrir" lleva al informe.
+- [ ] Un aviso para toda la Regional: marcarlo como leído con un usuario → sigue sin leer para otro.
+- [ ] "Marcar todas como leídas" → el número de la campana pasa a 0 sin recargar.
+- [ ] Inicio con un préstamo aprobado para el cuartel → aparece "Retirá …" arriba de todo.
+
+### 59.9 Riesgos y pendientes
+
+- **Tildes en la búsqueda** (59.1): limitación conocida en los módulos de la base.
+- **Crecimiento de `notification_reads`:** una fila por usuario y aviso masivo leído. Se borra sola
+  si se borra el aviso (`on delete cascade`). Con el volumen actual no es un problema; si crece, se
+  puede purgar junto con las notificaciones viejas.
+- **Avisos viejos sin `link_path`:** "Abrir" lleva a la pantalla del módulo, no al elemento exacto.
+  Los triggers existentes no se cambiaron para no tocar el envío de push; se puede sumar
+  `link_path` en cada uno más adelante.
+- **Búsqueda de usuarios para el Jefe de Cuerpo Activo:** el filtro de roles privilegiados se
+  aplica en la pantalla, igual que en Usuarios. La RLS ya limita qué perfiles puede leer.

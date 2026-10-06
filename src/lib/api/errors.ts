@@ -86,12 +86,35 @@ function describeStorageError(err: unknown): string | null {
   return null
 }
 
+// Restricciones CHECK de la base con un mensaje que el usuario puede
+// resolver. Si la restricción no está acá, se usa un mensaje general.
+const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
+  attendance_rate_range: 'La tasa de asistencia tiene que estar entre 0 y 100.',
+  attendance_period_valid: 'La fecha de fin tiene que ser igual o posterior a la de inicio.',
+  attendance_total_members_non_negative: 'La dotación no puede ser negativa.',
+  attendance_present_average_non_negative: 'El promedio de presentes no puede ser negativo.',
+  attendance_observations_length: 'Las observaciones pueden tener hasta 1000 caracteres.',
+  calendar_events_dates_check: 'La fecha de fin del evento tiene que ser posterior al inicio.',
+  calendar_events_single_scope: 'Elegí un solo destino para el evento: un cuartel, una subsede, la Regional o un departamento.',
+  notifications_scope_not_ambiguous: 'No pudimos generar el aviso automático de este cambio. Avisale al Dpto. de Informática.',
+}
+
+// Permiso denegado por la RLS al guardar: mensaje según la sección.
+const RLS_TABLE_MESSAGES: Record<string, string> = {
+  attendance_summaries: 'No tenés permiso para cargar asistencia de este cuartel.',
+  intervention_summaries: 'No tenés permiso para cargar intervenciones de este cuartel.',
+  calendar_events: 'No tenés permiso para cargar eventos con ese destino.',
+}
+
 export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un error inesperado. Intentá de nuevo.'): string {
   if (isNetworkError(err)) return NETWORK_MESSAGE
   const storageMessage = describeStorageError(err)
   if (storageMessage) return storageMessage
   if (isPostgrestError(err)) {
-    if (err.code === '42501') return 'No tenés permisos para realizar esta acción.'
+    if (err.code === '42501') {
+      const table = err.message.match(/row-level security policy for table "([^"]+)"/)?.[1]
+      return (table && RLS_TABLE_MESSAGES[table]) || 'No tenés permisos para realizar esta acción.'
+    }
     // Función o tabla que la app espera y la base todavía no tiene: falta
     // correr una migración (PGRST202/PGRST205 de PostgREST, 42883/42P01 de
     // Postgres). Mejor decirlo así que mostrar un error genérico.
@@ -111,7 +134,10 @@ export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un erro
     }
     if (err.code === '23503') return 'El registro está vinculado a otros datos y no puede eliminarse, o hace referencia a algo que no existe.'
     if (err.code === '23505') return 'Ya existe un registro con esos datos.'
-    if (err.code === '23514') return 'El valor ingresado no es válido para el estado actual del registro.'
+    if (err.code === '23514') {
+      const constraint = err.message.match(/check constraint "([^"]+)"/)?.[1]
+      return (constraint && CHECK_CONSTRAINT_MESSAGES[constraint]) || 'Algún dato no cumple las reglas del sistema. Revisá los valores e intentá de nuevo.'
+    }
     // P0001: "raise exception" explícito de un trigger nuestro (ver
     // validate_inventory_loan_request_item_status en 0057) -- el mensaje ya
     // está pensado para mostrarse tal cual, en español, al usuario.

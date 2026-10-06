@@ -81,18 +81,21 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
     if (chart) builder.addBarChartImage(chart)
   }
 
+  // "Presentes prom." solo existe en resúmenes anteriores a 0104 (se cargaba
+  // a mano): la columna aparece únicamente si alguno lo tiene.
+  const withLegacyAverage = rows.some((r) => r.present_average != null)
   builder.addTable(
-    ['Cuartel', 'Subsede', 'Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
+    ['Cuartel', 'Subsede', 'Período', 'Asistencia', 'Dotación', ...(withLegacyAverage ? ['Presentes prom.'] : [])],
     rows.map((r) => [
       r.station?.name ?? '—',
       shortSubsedeName(r.station?.subsede?.name) ?? '—',
       `${r.period_start} a ${r.period_end}`,
       pct(r.attendance_rate),
-      r.total_members,
-      r.present_average,
+      r.total_members ?? '—',
+      ...(withLegacyAverage ? [r.present_average ?? '—'] : []),
     ]),
     'Detalle',
-    [55, 40, 45, 'auto', 'auto', 'auto'],
+    [55, 40, 45, 'auto', 'auto', ...(withLegacyAverage ? ['auto' as const] : [])],
   )
 
   return builder.finalize()
@@ -275,11 +278,17 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
       : 'Sin intervenciones registradas en el período.',
   ])
 
+  const stationLegacyAverage = data.attendance.some((r) => r.present_average != null)
   builder.addTable(
-    ['Período', 'Asistencia', 'Miembros', 'Presentes prom.'],
-    data.attendance.map((r) => [`${r.period_start} a ${r.period_end}`, pct(r.attendance_rate), r.total_members, r.present_average]),
+    ['Período', 'Asistencia', 'Dotación', ...(stationLegacyAverage ? ['Presentes prom.'] : [])],
+    data.attendance.map((r) => [
+      `${r.period_start} a ${r.period_end}`,
+      pct(r.attendance_rate),
+      r.total_members ?? '—',
+      ...(stationLegacyAverage ? [r.present_average ?? '—'] : []),
+    ]),
     'Asistencia',
-    [60, 'auto', 'auto', 'auto'],
+    [60, 'auto', 'auto', ...(stationLegacyAverage ? ['auto' as const] : [])],
   )
 
   builder.addTable(

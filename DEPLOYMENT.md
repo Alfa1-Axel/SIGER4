@@ -9151,3 +9151,105 @@ Sin variables de entorno nuevas. Sin cambios en Edge Functions, push ni PWA.
 - **Coordinador y Secretario de Escuela no ven Departamentos.** Sus departamentos los ven en Avales.
 - **Un solo alcance en el alta.** `admin-create-user` recibe un alcance; el cuartel y la Regional del perfil completan el resto. Subsedes y cuarteles extra se agregan desde la ficha.
 - **Codificación con psql en Windows.** 0103 empieza con `set client_encoding = 'UTF8'` para que los textos con tildes no se guarden mal si se corre con psql desde una consola de Windows. En el SQL Editor no cambia nada.
+
+## 61. Resumen de asistencia y avisos automáticos de cuartel (2026-10-06) — versión 1.6.1, migración 0104
+
+### 61.1 Causa del error "El valor ingresado no es válido para el estado actual del registro"
+
+Ese mensaje era la traducción genérica del código `23514` (violación de un CHECK). El CHECK que fallaba **no era de la asistencia**:
+
+- Al dar de alta un resumen, el trigger `notify_attendance_created()` crea un aviso para el cuartel. Lo creaba con `region_id`, `subsede_id` **y** `station_id` a la vez.
+- Desde 0087, `notifications_scope_not_ambiguous` exige **exactamente un** alcance por aviso. El aviso violaba el check y la base rechazaba todo el alta del resumen.
+- Pasaba en el celular y en la computadora, para cualquier rol, desde que se corrió 0087.
+
+El mismo defecto tenían otros cuatro avisos automáticos, que también fallaban desde 0087:
+
+| Acción | Trigger |
+|---|---|
+| Alta de resumen de intervenciones | `notify_intervention_created()` |
+| Cambio de estado del cuartel | `notify_station_status_change()` |
+| Cambio de estado de un integrante | `notify_personnel_status_change()` |
+| Cambio de estado de un vehículo | `notify_vehicle_status_change()` |
+
+Se reprodujeron los cinco en Postgres 16 antes de corregirlos.
+
+### 61.2 Corrección (migración `0104_attendance_summaries_and_station_notices.sql`)
+
+**Avisos:** los cinco se rehacen con **un solo alcance, el cuartel**, y enlace a la ficha del cuartel.
+- Es el mismo destino que ya elegía el envío de push para avisos con varios alcances (prioridad perfil > cuartel > subsede > Regional, 0087), así que el push llega a las mismas personas.
+- En la campana los ven el cuartel, quienes tienen alcance sobre su subsede e Informática.
+
+**Resumen de asistencia:**
+- `total_members` y `present_average` dejan de ser obligatorios.
+- Columna nueva `observations` (opcional, hasta 1000 caracteres).
+- Trigger `trg_attendance_summaries_before_write`:
+  - completa la **dotación** al dar de alta: `stations.personnel_count`, que la base ya calcula con el personal en estado "activo". Si el cuartel no tiene personal cargado queda vacía, no en 0;
+  - no deja cargar a mano la dotación ni el promedio; en una edición conserva los valores que ya tenía;
+  - valida con mensajes claros, que la pantalla muestra tal cual:
+    - "La tasa de asistencia tiene que estar entre 0 y 100."
+    - "La fecha de fin tiene que ser igual o posterior a la de inicio."
+    - "El período no puede empezar en el futuro."
+    - "Ya hay un resumen de asistencia de este cuartel del 01/09/2026 al 30/09/2026, que se superpone con este período. Editá ese resumen o elegí otras fechas."
+  - la superposición se controla al dar de alta y al cambiar el período o el cuartel. Los resúmenes viejos que ya se superponían se pueden seguir editando.
+- **RLS sin cambios:** cargan Informática (cualquier cuartel), el Secretario Regional (cuarteles de su Regional) y el Presidente, el Jefe de Cuerpo Activo y el usuario de carga (solo su cuartel).
+
+### 61.3 Total de miembros y promedio de presentes
+
+- **Total de miembros → Dotación.** No varía mes a mes: sale del Personal del cuartel. El formulario lo muestra como dato informativo ("Dotación: 28 integrantes activos. Sale del Personal del cuartel"). En cada resumen nuevo queda la dotación del momento del alta.
+- **Promedio de presentes → no se pide ni se calcula.** No hay asistencia diaria por persona para calcularlo, y derivarlo de la tasa por la dotación no agregaría información real.
+- **Resúmenes anteriores:** conservan el total y el promedio que se cargaron a mano. Se siguen viendo en la ficha del cuartel ("Dotación: 30 · promedio 24 presentes") y en los reportes.
+
+### 61.4 Pantallas
+
+**Formulario** (`/cuarteles/:id/asistencia/nueva` y `/asistencia/:id/editar`):
+- El encabezado dice "Asistencia": en el celular ya no se corta. El título completo va en la página, con el cuartel.
+- Campos: período (con atajos "Mes pasado", sugerido, y "Este mes"), tasa de asistencia y observaciones.
+- La tasa acepta coma o punto y abre el teclado numérico del celular.
+- Validación junto a cada campo antes de enviar: tasa entre 0 y 100, hasta dos decimales, fechas, período futuro.
+- Al guardar vuelve al cuartel con "Resumen de asistencia del 01/09/2026 al 30/09/2026 guardado."
+- Sin permiso, explica quién puede cargar.
+
+**Ficha del cuartel:** cada resumen muestra fechas DD/MM/AAAA, la tasa, la dotación, las observaciones y, en los viejos, el promedio.
+
+**Reportes** (Asistencias y General por cuartel):
+- La columna "Miembros" pasa a "Dotación".
+- "Presentes prom." aparece solo si algún resumen del reporte lo tiene.
+- Los valores vacíos se muestran como "—".
+
+**Errores de la base** (`src/lib/api/errors.ts`):
+- Los CHECK conocidos y los rechazos de permisos por tabla tienen mensaje propio, por ejemplo "No tenés permiso para cargar asistencia de este cuartel."
+- Un CHECK desconocido ya no dice "estado actual del registro", sino "Algún dato no cumple las reglas del sistema…".
+
+### 61.5 Qué correr
+
+1. SQL Editor → `0104_attendance_summaries_and_station_notices.sql` (después de 0102). Se puede volver a correr.
+2. Desplegar el frontend.
+
+Sin cambios en Edge Functions, push ni PWA.
+
+### 61.6 Verificación
+
+- **Postgres 16 local, 0104:** 30 pruebas, 0 fallas.
+  - Alta con 72,3 y dotación tomada del personal activo (no la que manda la pantalla).
+  - Aviso con un solo alcance, visible solo en su cuartel.
+  - Tasa negativa o mayor a 100, fechas invertidas, período futuro, período repetido y superpuesto, período contiguo aceptado.
+  - Permisos: otro cuartel e Instructor rechazados; Secretario Regional e Informática aceptados.
+  - Histórico conservado al editar; la dotación no se pisa a mano.
+  - Los cuatro avisos de cuartel restantes ya no fallan.
+  - Se puede volver a correr y funciona en un proyecto nuevo.
+- **Regresión SQL:** 0098, 0099, 0100, 0102 y 0103 siguen pasando.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado): 33 pruebas, 0 fallas.
+  - Alta desde el celular con "72,3", sin los campos manuales y sin scroll horizontal.
+  - Validaciones junto a cada campo.
+  - Mensajes de la base: período repetido, sin permiso, aviso automático.
+  - Sin permiso en la pantalla.
+  - Histórico en la ficha y en la edición.
+  - Los dos reportes generados con resúmenes viejos y nuevos.
+- **Regresión en navegador:** secciones 57, 58, 59 y 60, menú "Nuevo" y menú lateral.
+
+### 61.7 Checklist en producción
+
+- [ ] Correr 0104 y cargar un resumen de asistencia desde el celular: se guarda y el cuartel recibe el aviso.
+- [ ] Cargar un resumen de intervenciones y cambiar el estado de un vehículo: ya no dan error.
+- [ ] Intentar cargar el mismo período dos veces: muestra el mensaje del período repetido.
+- [ ] Generar el Reporte de Asistencias: resúmenes viejos con su total y promedio, nuevos con su dotación.

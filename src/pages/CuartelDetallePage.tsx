@@ -43,6 +43,8 @@ import type {
 import type { RoleKey } from '../types/roles'
 import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
+import { useNavigationNotice } from '../hooks/useNavigationNotice'
+import { SuccessNotice } from '../components/ui/SuccessNotice'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
   operativo: 'Operativo',
@@ -114,6 +116,13 @@ function calculateSeniority(joinDate: string | null): string | null {
   return `${years} ${years === 1 ? 'año' : 'años'}`
 }
 
+// Fecha "AAAA-MM-DD" a "DD/MM/AAAA" sin pasar por Date (evita el corrimiento
+// de un día por zona horaria).
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+
 export function CuartelDetallePage() {
   const { id } = useParams<{ id: string }>()
   const { profile, scopes, isAdmin, hasRole } = useAuth()
@@ -121,6 +130,7 @@ export function CuartelDetallePage() {
   const isRegionalRole = hasRole('secretario_regional')
   const myStationId = profile?.station_id ?? scopes.find((s) => s.scope_type === 'station')?.station_id ?? null
   const myRegionId = profile?.region_id ?? scopes.find((s) => s.scope_type === 'region')?.region_id ?? null
+  const [notice, setNotice, noticeTone] = useNavigationNotice()
   const [station, setStation] = useState<Station | null>(null)
   // personnel_write_admin_regional_station / vehicles_write_admin_regional_station
   // (migración 0027): secretario_regional solo dentro de su propia región,
@@ -406,6 +416,7 @@ export function CuartelDetallePage() {
         )}
       </div>
 
+      {notice && <SuccessNotice message={notice} tone={noticeTone} onClose={() => setNotice(null)} />}
       {loading && <div className="loading-state" role="status">Cargando información del cuartel…</div>}
       {!loading && !station && <div className="empty-state">No se encontró el cuartel solicitado.</div>}
 
@@ -813,15 +824,22 @@ export function CuartelDetallePage() {
                 className="row-item"
                 style={{ pointerEvents: canEdit ? 'auto' : 'none' }}
               >
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>
-                    {summary.period_start} — {summary.period_end}
+                    {formatDay(summary.period_start)} — {formatDay(summary.period_end)}
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                    {summary.total_members} miembros · promedio {summary.present_average} presentes
+                  <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
+                    {[
+                      summary.total_members != null ? `Dotación: ${summary.total_members}` : null,
+                      // Solo resúmenes anteriores a 0104, que se cargaban a mano.
+                      summary.present_average != null ? `promedio ${summary.present_average} presentes` : null,
+                      summary.observations,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Sin observaciones'}
                   </div>
                 </div>
-                <span className="badge badge-info">{summary.attendance_rate}%</span>
+                <span className="badge badge-info" style={{ flexShrink: 0 }}>{formatPercent(summary.attendance_rate)}</span>
               </Link>
             ))}
           </div>

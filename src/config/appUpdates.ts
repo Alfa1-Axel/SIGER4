@@ -47,6 +47,20 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-06-asistencia',
+    version: '1.6.1',
+    date: '2026-10-06',
+    title: 'Resumen de asistencia corregido',
+    summary: 'Ya se pueden cargar los resúmenes de asistencia, y el formulario pide solo lo necesario.',
+    changes: [
+      { type: 'correccion', module: 'Asistencia', text: 'Guardar un resumen de asistencia daba error. Ahora se guarda desde el celular y la computadora.' },
+      { type: 'correccion', module: 'Cuarteles', text: 'También se corrigieron la carga de intervenciones y los cambios de estado del cuartel, del personal y de los vehículos, que daban el mismo error.' },
+      { type: 'mejora', module: 'Asistencia', text: 'El formulario pide el período, la tasa (con coma o punto) y observaciones. La dotación sale del Personal del cuartel: ya no hay que cargar el total de miembros ni el promedio de presentes.' },
+      { type: 'mejora', module: 'Asistencia', text: 'Si algo no está bien (tasa fuera de 0 a 100, fechas invertidas o un período ya cargado), te lo dice junto al campo.' },
+    ],
+    severity: 'important',
+  },
+  {
     id: '2026-10-05-roles-divisiones',
     version: '1.6.0',
     date: '2026-10-05',

@@ -142,8 +142,13 @@ export interface AttendanceSummary {
   period_start: string
   period_end: string
   attendance_rate: number
-  total_members: number
-  present_average: number
+  // Dotación activa del cuartel al cargar el resumen (la completa la base,
+  // 0104). null si el cuartel no tenía personal cargado. En los resúmenes
+  // anteriores es el valor que se cargaba a mano.
+  total_members: number | null
+  // Solo resúmenes anteriores a 0104 (se cargaba a mano). Ya no se pide.
+  present_average: number | null
+  observations: string | null
   created_at: string
 }
 

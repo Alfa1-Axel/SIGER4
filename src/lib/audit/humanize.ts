@@ -224,6 +224,7 @@ const DEPARTMENT_ACTIVITY_TYPE_LABELS: Record<string, string> = {
 
 const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   informe_departamento: 'Informe de departamento',
+  aviso_departamento: 'Aviso de departamento',
   curso_nuevo: 'Curso nuevo',
   circular_nueva: 'Circular nueva',
   asistencia_pendiente: 'Asistencia pendiente',

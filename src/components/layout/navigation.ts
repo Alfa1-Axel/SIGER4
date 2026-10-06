@@ -4,7 +4,7 @@ export interface NavContext {
   isAdmin: boolean
   isSuperAdmin: boolean
   hasRole: (...roles: RoleKey[]) => boolean
-  // Coordina o integra al menos un departamento.
+  // Coordina al menos un departamento o es miembro de uno (con su rol).
   hasDepartments: boolean
 }
 

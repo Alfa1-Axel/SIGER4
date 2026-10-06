@@ -21,7 +21,7 @@ import { DepartmentAssignmentPicker } from '../components/DepartmentAssignmentPi
 import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
 import { buildRoleAssignments } from '../lib/roleAssignments'
 import { DeleteUserConfirmModal } from '../components/ui/DeleteUserConfirmModal'
-import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCHOOL_AVALES_ROLES } from '../types/roles'
+import { DEPARTMENT_ROLES, RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCHOOL_AVALES_ROLES } from '../types/roles'
 import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
 import type { Profile, Region, ScopeType, Station, Subsede, UserRole, UserScope, VisibleDepartment } from '../types/database'
@@ -163,12 +163,20 @@ export function UsuarioDetallePage() {
 
   async function handleSaveDepartments() {
     if (!id) return
+    setError(null)
+    // Sin departamentos se le quita el rol de departamento: no puede quedar
+    // sin ningún rol.
+    const otherRoles = roles.filter((r) => !DEPARTMENT_ROLES.includes(r.role))
+    if (otherRoles.length === 0 && departmentDraft.coordinates.length === 0 && departmentDraft.memberOf.length === 0) {
+      setError('Su único rol es de departamento: dejale al menos un departamento, o asignale otro rol antes de sacarlo de todos.')
+      return
+    }
     setSavingDepartments(true)
     setDepartmentsSaved(false)
-    setError(null)
     try {
       await applyProfileDepartments(id, departmentIds, { coordinated: departmentDraft.coordinates, memberOf: departmentDraft.memberOf })
-      await loadDepartments(id)
+      // La base agrega o quita los roles de departamento (0106): se recargan.
+      await reload()
       setDepartmentsSaved(true)
     } catch (err) {
       setError(describeSupabaseError(err, 'No pudimos guardar los departamentos.'))
@@ -575,6 +583,8 @@ export function UsuarioDetallePage() {
               selected={roles.map((r) => r.role)}
               onToggle={handleToggleRole}
               disabled={rolesScopesLocked}
+              lockedRoles={DEPARTMENT_ROLES}
+              lockedNote="Se asigna eligiendo sus departamentos, en la sección Departamentos."
             />
           </div>
 
@@ -583,8 +593,9 @@ export function UsuarioDetallePage() {
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 0 }}>
-              Ve solo los departamentos que coordina o integra: integrantes, informes, actas, eventos y avisos. El coordinador
-              también ve y sube los avales de su departamento en Escuela.
+              Elegí si es Coordinador o Miembro en cada departamento: al guardar se le asigna el rol Coordinador o Miembro de
+              Departamento, y se le quita si deja de estar en todos (salvo que sea su único rol). Ve solo esos departamentos: miembros,
+              informes, actas, eventos y avisos. El coordinador también ve y sube los avales de su departamento en Escuela.
             </p>
             {allDepartments.length === 0 ? (
               <p style={{ margin: 0 }}>Todavía no hay departamentos cargados.</p>

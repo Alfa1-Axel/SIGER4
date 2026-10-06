@@ -58,10 +58,17 @@ export function NotificacionFormPage() {
   const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [departmentId, setDepartmentId] = useState(presetDepartmentId)
 
-  const [type, setType] = useState<NotificationType>('circular_nueva')
+  const startsWithDepartment = Boolean(presetDepartmentId) || !canCreateGeneral
+  const [type, setType] = useState<NotificationType>(startsWithDepartment ? 'aviso_departamento' : 'circular_nueva')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [scopeTarget, setScopeTarget] = useState<NotifScopeTarget>(presetDepartmentId || !canCreateGeneral ? 'department' : 'region')
+  const [scopeTarget, setScopeTarget] = useState<NotifScopeTarget>(startsWithDepartment ? 'department' : 'region')
+  // "Aviso de departamento" solo tiene sentido con destino Departamento.
+  const typeOptions =
+    scopeTarget === 'department' ? [{ value: 'aviso_departamento' as const, label: 'Aviso de departamento' }, ...NOTIFICATION_TYPE_OPTIONS] : NOTIFICATION_TYPE_OPTIONS
+  useEffect(() => {
+    if (scopeTarget !== 'department' && type === 'aviso_departamento') setType('circular_nueva')
+  }, [scopeTarget, type])
   const [regionId, setRegionId] = useState('')
   const [subsedeId, setSubsedeId] = useState('')
   const [stationId, setStationId] = useState('')
@@ -174,7 +181,7 @@ export function NotificacionFormPage() {
           state: {
             notice:
               sent === 0
-                ? `El aviso no le llegó a nadie: ${name} todavía no tiene otros integrantes.`
+                ? `El aviso no le llegó a nadie: ${name} todavía no tiene otros miembros.`
                 : `Aviso enviado a ${sent === 1 ? '1 persona' : `${sent} personas`} de ${name}.`,
           },
         })
@@ -210,7 +217,7 @@ export function NotificacionFormPage() {
         <div className="field">
           <label>Tipo</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {NOTIFICATION_TYPE_OPTIONS.map((option) => (
+            {typeOptions.map((option) => (
               <button
                 key={option.value}
                 type="button"
@@ -293,7 +300,7 @@ export function NotificacionFormPage() {
                   </option>
                 ))}
               </select>
-              <p className="field-help">Le llega solo al coordinador y a los integrantes de ese departamento. No a otros departamentos.</p>
+              <p className="field-help">Le llega solo al coordinador y a los miembros de ese departamento. No a otros departamentos.</p>
             </>
           )}
 

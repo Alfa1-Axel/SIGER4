@@ -319,7 +319,7 @@ export function DepartamentoInformeFormPage() {
       <AppShell title="Nuevo informe">
         <AccessDenied
           title="No podés cargar informes"
-          message="Cargan informes el coordinador de cada departamento, sus integrantes e Informática. Si tenés que cargar en un departamento, pedile a su coordinador que te sume como integrante."
+          message="Cargan informes el coordinador de cada departamento, sus miembros e Informática. Si tenés que cargar en un departamento, pedile a su coordinador que te sume como miembro."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />
@@ -406,7 +406,7 @@ export function DepartamentoInformeFormPage() {
               ))}
             </select>
             <p id="departamento-help" className="field-help">
-              Lo ven el coordinador, los integrantes del departamento e Informática.
+              Lo ven el coordinador, los miembros del departamento e Informática.
             </p>
           </div>
 

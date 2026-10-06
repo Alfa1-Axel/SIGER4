@@ -3716,7 +3716,30 @@ kbd {
   gap: 6px;
 }
 
-/* Inicio: el departamento del coordinador o integrante. */
+/* Secciones a las que se llega con #id (accesos del Inicio): que el
+   encabezado fijo no las tape. */
+.anchor-target {
+  scroll-margin-top: calc(var(--header-height) + 12px);
+}
+
+/* Departamentos de un rol de departamento (alta de usuario). */
+.department-checklist {
+  border: none;
+  margin: 0 0 16px;
+  padding: 0;
+  min-width: 0;
+}
+
+.department-check {
+  cursor: pointer;
+}
+
+.department-check:has(input:checked) {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+/* Inicio: el departamento del coordinador o miembro. */
 .dept-dashboard {
   margin-bottom: 24px;
 }
@@ -3760,6 +3783,21 @@ kbd {
 .dept-dashboard-open {
   font-size: 13px;
   white-space: nowrap;
+}
+
+.dept-dashboard-attention {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.dept-dashboard-clear {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-success);
 }
 
 .dept-dashboard-grid {

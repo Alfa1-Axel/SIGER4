@@ -59,6 +59,19 @@ export async function fetchLatestUnreadNotifications(limit = 3): Promise<Notific
   return (data ?? []) as Notification[]
 }
 
+// Avisos sin leer de un departamento (0106: department_id es su origen).
+export async function fetchUnreadDepartmentNotifications(departmentId: string, limit = 3): Promise<Notification[]> {
+  const { data, error } = await supabase
+    .from('my_notifications')
+    .select('*')
+    .eq('is_read', false)
+    .eq('department_id', departmentId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? []) as Notification[]
+}
+
 // Marca como leídas para quien llama (personales y masivas). Sin ids, todas.
 export async function markNotificationsRead(ids: string[] | null): Promise<number> {
   const { data, error } = await supabase.rpc('mark_notifications_read', { p_ids: ids })

@@ -15,6 +15,8 @@ export type RoleKey =
   | 'secretario_escuela'
   | 'coordinador_departamento_escuela'
   | 'secretario_regional'
+  | 'coordinador_departamento'
+  | 'miembro_departamento'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
   | 'usuario_carga_cuartel'
@@ -22,9 +24,8 @@ export type RoleKey =
   | 'administrativo'
   | 'invitado'
 
-// Grupo visual de cada rol (tipo/nivel). El coordinador de un departamento
-// no es un rol: es el campo "Coordinador" de la sección Departamentos (ver
-// DEPARTMENT_COORDINATOR_INFO más abajo).
+// Grupo visual de cada rol (tipo/nivel). Los roles de departamento van en el
+// grupo Regional, con sus departamentos como división.
 export type RoleCategory = 'informatica' | 'escuela' | 'region' | 'cuartel' | 'otros'
 
 export interface RoleCategoryDefinition {
@@ -48,7 +49,7 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
   {
     key: 'region',
     label: 'Regional',
-    description: 'Gestión administrativa con alcance sobre toda la Regional.',
+    description: 'Gestión de la Regional y roles de departamento (Fuego, Forestal, FASME…): el rol se asigna junto con sus departamentos.',
   },
   {
     key: 'cuartel',
@@ -70,7 +71,7 @@ export const SCOPE_LEVELS: { label: string; description: string }[] = [
   { label: 'Subsede', description: 'Los cuarteles de una subsede. Se asigna como alcance del usuario, no hay roles exclusivos de subsede.' },
   { label: 'Cuartel', description: 'Un solo cuartel: el propio del usuario.' },
   { label: 'Escuela', description: 'Escuela Regional: cursos, capacitaciones y avales.' },
-  { label: 'Departamento', description: 'Uno o más departamentos de la sección Departamentos (Fuego, Forestal, FASME...). Su coordinador e integrantes ven solo los suyos: integrantes, informes, actas, eventos y avisos.' },
+  { label: 'Departamento', description: 'Uno o más departamentos de la sección Departamentos (Fuego, Forestal, FASME...). El Coordinador y los Miembros de Departamento ven solo los suyos: miembros, informes, actas, eventos y avisos.' },
 ]
 
 export interface RoleDefinition {
@@ -79,7 +80,7 @@ export interface RoleDefinition {
   description: string
   category: RoleCategory
   // Nivel de alcance del rol.
-  scope: 'system' | 'regional' | 'escuela' | 'cuartel'
+  scope: 'system' | 'regional' | 'escuela' | 'cuartel' | 'departamento'
   // Alcance en lenguaje institucional, para mostrar junto al rol.
   scopeLabel: string
   // Permisos principales, resumidos de la matriz final de permisos
@@ -201,6 +202,35 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
       'Calendario regional, Inventario Regional y aprobación de préstamos.',
       'Departamentos: ve todos; carga integrantes sin usuario, actividad y eventos, y puede avisar a un departamento.',
       'Reportes regionales.',
+    ],
+    assignable: true,
+  },
+  {
+    key: 'coordinador_departamento',
+    label: 'Coordinador de Departamento',
+    description: 'Gestiona uno o más departamentos (Fuego, Forestal, FASME…). Cada departamento tiene un solo coordinador.',
+    category: 'region',
+    scope: 'departamento',
+    scopeLabel: 'Solo los departamentos que coordina',
+    permissions: [
+      'Ve y edita su departamento: datos, miembros, informes, actas y eventos.',
+      'Suma y quita miembros y avisa a todo su departamento.',
+      'Avales regionales: ve y carga los de su departamento. No edita, archiva ni elimina.',
+      'Recibe los avisos de su departamento. No ve otros departamentos.',
+    ],
+    assignable: true,
+  },
+  {
+    key: 'miembro_departamento',
+    label: 'Miembro de Departamento',
+    description: 'Participa en uno o más departamentos.',
+    category: 'region',
+    scope: 'departamento',
+    scopeLabel: 'Solo los departamentos de los que es miembro',
+    permissions: [
+      'Ve su departamento: miembros, informes, actas y eventos.',
+      'Carga informes, actas, actividad y eventos de su departamento.',
+      'Recibe los avisos de su departamento. No ve otros departamentos.',
     ],
     assignable: true,
   },
@@ -338,9 +368,8 @@ export function groupRolesByCategory(roles: RoleDefinition[]): RoleGroup[] {
 export const ADMIN_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']
 
 // Roles que dan acceso a TODOS los departamentos de Avales regionales
-// (además de Informática). El coordinador de un departamento también entra,
-// pero solo a su departamento, y no por rol: por ser el coordinador en la
-// sección Departamentos (ver 0097).
+// (además de Informática). El Coordinador de Departamento también entra, pero
+// solo a los departamentos que coordina (0097, 0106).
 export const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela']
 
 // ---------------------------------------------------------------------------
@@ -352,10 +381,13 @@ export const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretari
 //                   (user_scopes), igual que my_station_ids() en la base.
 //   - regional:     profiles.region_id o un alcance de Regional.
 //   - departamento: departments.coordinator_profile_id (coordinador) y
-//                   department_members (integrantes).
+//                   department_members (miembros). La base exige rol Y
+//                   departamento (0106) y los mantiene sincronizados.
 //   - Informática y los roles de avales de Escuela no piden división.
 // ---------------------------------------------------------------------------
-export type DivisionNeed = 'none' | 'station' | 'region'
+export type DivisionNeed = 'none' | 'station' | 'region' | 'department'
+
+export const DEPARTMENT_ROLES: RoleKey[] = ['coordinador_departamento', 'miembro_departamento']
 
 export const STATION_DIVISION_ROLES: RoleKey[] = ['presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel', 'secretario_comision', 'invitado']
 export const REGION_DIVISION_ROLES: RoleKey[] = ['secretario_regional', 'director_escuela', 'instructor']
@@ -363,51 +395,11 @@ export const REGION_DIVISION_ROLES: RoleKey[] = ['secretario_regional', 'directo
 export function roleDivisionNeed(role: RoleKey | string): DivisionNeed {
   if ((STATION_DIVISION_ROLES as string[]).includes(role)) return 'station'
   if ((REGION_DIVISION_ROLES as string[]).includes(role)) return 'region'
+  if ((DEPARTMENT_ROLES as string[]).includes(role)) return 'department'
   return 'none'
 }
 
-// Roles de división departamental. No son valores de role_key: se asignan
-// eligiendo los departamentos (coordinador en departments, integrantes en
-// department_members) y la base los valida con my_department_ids() y
-// can_view_department() (0103).
-export type DepartmentRoleKey = 'coordinador_departamento' | 'integrante_departamento'
-
-export interface DepartmentRoleDefinition {
-  key: DepartmentRoleKey
-  label: string
-  description: string
-  scopeLabel: string
-  permissions: string[]
-}
-
-export const DEPARTMENT_ROLE_DEFINITIONS: DepartmentRoleDefinition[] = [
-  {
-    key: 'coordinador_departamento',
-    label: 'Coordinador de departamento',
-    description: 'Gestiona uno o más departamentos (Fuego, Forestal, FASME…). Cada departamento tiene un solo coordinador.',
-    scopeLabel: 'Solo los departamentos que coordina',
-    permissions: [
-      'Ve y edita su departamento: datos, integrantes, informes, actas y eventos.',
-      'Avisa a todo su departamento desde Notificaciones.',
-      'Avales regionales: ve y carga los de su departamento. No edita, archiva ni elimina.',
-      'No ve otros departamentos. Lo asigna Informática.',
-    ],
-  },
-  {
-    key: 'integrante_departamento',
-    label: 'Integrante de departamento',
-    description: 'Participa en uno o más departamentos.',
-    scopeLabel: 'Solo los departamentos que integra',
-    permissions: [
-      'Ve su departamento: integrantes, informes, actas y eventos.',
-      'Carga informes, actas y eventos de su departamento.',
-      'Recibe los avisos de su departamento.',
-      'No ve otros departamentos. Lo suma Informática o el coordinador.',
-    ],
-  },
-]
-
 // Roles que solo Informática puede asignar al crear un usuario (espejo de
-// INFORMATICA_ONLY_ROLES en supabase/functions/admin-create-user/index.ts):
-// los de Informática y los que dan acceso a Avales regionales.
-export const INFORMATICA_ONLY_ASSIGNABLE_ROLES: RoleKey[] = [...ADMIN_ROLES, ...SCHOOL_AVALES_ROLES]
+// admin-create-user): los de Informática, los que dan acceso a Avales
+// regionales y los de departamento (sus departamentos los asigna Informática).
+export const INFORMATICA_ONLY_ASSIGNABLE_ROLES: RoleKey[] = [...ADMIN_ROLES, ...SCHOOL_AVALES_ROLES, ...DEPARTMENT_ROLES]

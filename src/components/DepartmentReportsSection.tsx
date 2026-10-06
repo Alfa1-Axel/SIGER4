@@ -65,7 +65,7 @@ export function DepartmentReportsSection({ departmentId, departmentActive }: Pro
         <div className="card" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <Icon name="lock" size={18} />
           <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-secondary)' }}>
-            Los informes y actas de este departamento los ven su coordinador, sus integrantes e Informática.
+            Los informes y actas de este departamento los ven su coordinador, sus miembros e Informática.
           </p>
         </div>
       ) : (

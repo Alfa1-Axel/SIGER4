@@ -165,7 +165,7 @@ export function InformeDepartamentoFormPage() {
       <AppShell title="Registro de actividad">
         <AccessDenied
           title={isEditing ? 'No podés editar esta actividad' : 'No podés registrar actividad acá'}
-          message="Registran actividad el coordinador del departamento, sus integrantes, el Secretario Regional e Informática."
+          message="Registran actividad el coordinador del departamento, sus miembros, el Secretario Regional e Informática."
           backTo={`/departamentos/${resolvedDepartmentId}`}
           backLabel={`Volver a ${department.name}`}
         />

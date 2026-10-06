@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom'
 import { Icon } from './ui/Icon'
 import { DEPARTMENT_REPORT_TYPE_LABEL, fetchRecentDepartmentReports } from '../lib/api/departmentReports'
 import { fetchUpcomingDepartmentEvents } from '../lib/api/calendar'
-import type { CalendarEvent, DepartmentReport, VisibleDepartment } from '../types/database'
+import { fetchUnreadDepartmentNotifications } from '../lib/api/notifications'
+import { fetchPendingItems } from '../lib/api/pendingItems'
+import type { PendingItem } from '../lib/api/pendingItems'
+import { notificationLink } from '../lib/notificationMeta'
+import type { CalendarEvent, DepartmentReport, Notification, VisibleDepartment } from '../types/database'
 
 const SELECTED_KEY = 'siger4:inicio-departamento'
 
@@ -27,15 +31,30 @@ function formatDay(iso: string, withTime: boolean): string {
   return new Date(iso).toLocaleString('es-AR', withTime ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short' })
 }
 
-// Inicio de un coordinador o integrante: su departamento, con lo último y lo
-// próximo. Si tiene varios, los distingue con un selector.
+// Inicio de un coordinador o miembro: su departamento, con lo que pide
+// atención, lo último y lo próximo. Si tiene varios, los distingue con un
+// selector.
 export function DepartmentDashboard({ departments }: { departments: VisibleDepartment[] }) {
   // Primero los que coordina.
   const mine = [...departments.filter((d) => d.my_relation === 'coordinador'), ...departments.filter((d) => d.my_relation === 'integrante')]
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [reports, setReports] = useState<DepartmentReport[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
+  const [notices, setNotices] = useState<Notification[]>([])
+  const [pending, setPending] = useState<PendingItem[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Pendientes del servidor (get_pending_items): se piden una vez y se
+  // filtran por el departamento elegido.
+  useEffect(() => {
+    let active = true
+    fetchPendingItems()
+      .then((items) => active && setPending(items))
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
 
   const selected = mine.find((d) => d.id === selectedId) ?? mine.find((d) => d.id === readSelected()) ?? mine[0] ?? null
 
@@ -43,14 +62,17 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
     if (!selected) return
     let active = true
     setLoading(true)
-    Promise.all([fetchRecentDepartmentReports(3, selected.id).catch(() => []), fetchUpcomingDepartmentEvents(selected.id, 3).catch(() => [])]).then(
-      ([reportsData, eventsData]) => {
-        if (!active) return
-        setReports(reportsData)
-        setEvents(eventsData)
-        setLoading(false)
-      },
-    )
+    Promise.all([
+      fetchRecentDepartmentReports(3, selected.id).catch(() => []),
+      fetchUpcomingDepartmentEvents(selected.id, 3).catch(() => []),
+      fetchUnreadDepartmentNotifications(selected.id, 3).catch(() => []),
+    ]).then(([reportsData, eventsData, noticesData]) => {
+      if (!active) return
+      setReports(reportsData)
+      setEvents(eventsData)
+      setNotices(noticesData)
+      setLoading(false)
+    })
     return () => {
       active = false
     }
@@ -64,6 +86,12 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
   }
 
   const isCoordinator = selected.my_relation === 'coordinador'
+  // Pendientes de este departamento: sin actividad reciente y sus eventos de
+  // los próximos días.
+  const departmentPending = pending.filter(
+    (item) => item.linkPath === `/departamentos/${selected.id}` || events.some((e) => item.linkPath === `/calendario/${e.id}`),
+  )
+  const allClear = !loading && notices.length === 0 && departmentPending.length === 0
 
   return (
     <section className="dept-dashboard" aria-label="Tu departamento">
@@ -76,7 +104,7 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
           {mine.map((d) => (
             <button key={d.id} type="button" className="chip" aria-pressed={d.id === selected.id} onClick={() => choose(d.id)}>
               {d.name}
-              <span className="dept-chip-relation">{d.my_relation === 'coordinador' ? 'Coordinás' : 'Integrás'}</span>
+              <span className="dept-chip-relation">{d.my_relation === 'coordinador' ? 'Coordinás' : 'Miembro'}</span>
             </button>
           ))}
         </div>
@@ -87,14 +115,45 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
           <div style={{ minWidth: 0 }}>
             <h3 className="dept-dashboard-title">{selected.name}</h3>
             <p className="dept-dashboard-meta">
-              {isCoordinator ? 'Coordinás este departamento' : 'Integrás este departamento'} ·{' '}
-              {selected.member_count === 1 ? '1 integrante' : `${selected.member_count} integrantes`}
+              {isCoordinator ? 'Coordinás este departamento' : 'Sos miembro de este departamento'} ·{' '}
+              {selected.member_count === 1 ? '1 miembro' : `${selected.member_count} miembros`}
               {!isCoordinator && selected.coordinator_name ? ` · Coordina ${selected.coordinator_name}` : ''}
             </p>
           </div>
           <Link to={`/departamentos/${selected.id}`} className="link-muted dept-dashboard-open">
             Ver departamento →
           </Link>
+        </div>
+
+        <div className="dept-dashboard-attention" aria-live="polite">
+          <h4 className="dept-dashboard-subtitle">Pendientes y avisos</h4>
+          {loading ? (
+            <p className="field-help">Cargando…</p>
+          ) : allClear ? (
+            <p className="dept-dashboard-clear">
+              <Icon name="check" size={16} />
+              Todo al día en {selected.name}.
+            </p>
+          ) : (
+            <ul className="dept-dashboard-list">
+              {departmentPending.map((item) => (
+                <li key={item.itemKey}>
+                  <Link to={item.linkPath}>
+                    <span className="dept-dashboard-item-title">{item.title}</span>
+                    <span className="dept-dashboard-item-meta">{item.description}</span>
+                  </Link>
+                </li>
+              ))}
+              {notices.map((n) => (
+                <li key={n.id}>
+                  <Link to={notificationLink(n, false) ?? '/notificaciones'}>
+                    <span className="dept-dashboard-item-title">{n.title}</span>
+                    <span className="dept-dashboard-item-meta">Aviso sin leer</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="dept-dashboard-grid">
@@ -149,6 +208,15 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
             <Link to={`/calendario/nuevo?departamento=${selected.id}`} className="btn btn-outlined btn-sm">
               <Icon name="calendar" size={14} />
               Nuevo evento
+            </Link>
+            <Link to={`/departamentos/${selected.id}#informes`} className="btn btn-ghost btn-sm">
+              Ver informes
+            </Link>
+            <Link to={`/departamentos/${selected.id}#eventos`} className="btn btn-ghost btn-sm">
+              Ver eventos
+            </Link>
+            <Link to={`/departamentos/${selected.id}#miembros`} className="btn btn-ghost btn-sm">
+              Ver miembros
             </Link>
             {isCoordinator && (
               <Link to={`/notificaciones/nueva?departamento=${selected.id}`} className="btn btn-outlined btn-sm">

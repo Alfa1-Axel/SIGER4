@@ -25,6 +25,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   prestamo_vencido: 'Préstamo vencido',
   actualizacion_sistema: 'Novedad del sistema',
   informe_departamento: 'Informe de departamento',
+  aviso_departamento: 'Aviso de departamento',
 }
 
 export const NOTIFICATION_CATEGORY: Record<NotificationType, NotificationCategory> = {
@@ -47,6 +48,13 @@ export const NOTIFICATION_CATEGORY: Record<NotificationType, NotificationCategor
   prestamo_por_vencer: 'inventario',
   prestamo_vencido: 'inventario',
   informe_departamento: 'departamentos',
+  aviso_departamento: 'departamentos',
+}
+
+// Módulo de un aviso: los que vienen de un departamento (0106) van a
+// Departamentos aunque sean de otro tipo (un evento, una circular).
+export function notificationCategory(n: Pick<Notification, 'type' | 'department_id'>): NotificationCategory {
+  return n.department_id ? 'departamentos' : NOTIFICATION_CATEGORY[n.type]
 }
 
 export const NOTIFICATION_CATEGORY_LABEL: Record<NotificationCategory, string> = {

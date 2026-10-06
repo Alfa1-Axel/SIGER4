@@ -4,14 +4,14 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { AccessDenied } from '../components/ui/AccessDenied'
 import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
-import { DepartmentAssignmentPicker } from '../components/DepartmentAssignmentPicker'
+import { DepartmentChecklist } from '../components/DepartmentChecklist'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { applyProfileDepartments, fetchVisibleDepartments } from '../lib/api/departments'
 import { createUserAccount } from '../lib/api/users'
 import { buildRoleAssignments } from '../lib/roleAssignments'
-import { INFORMATICA_ONLY_ASSIGNABLE_ROLES, REGION_DIVISION_ROLES, ROLE_DEFINITIONS, STATION_DIVISION_ROLES } from '../types/roles'
+import { DEPARTMENT_ROLES, INFORMATICA_ONLY_ASSIGNABLE_ROLES, REGION_DIVISION_ROLES, ROLE_DEFINITIONS, STATION_DIVISION_ROLES } from '../types/roles'
 import { RoleGroupedPicker } from '../components/RoleGroupedPicker'
 import type { RoleKey } from '../types/roles'
 import type { Region, ScopeType, Station, Subsede, VisibleDepartment } from '../types/database'
@@ -37,11 +37,14 @@ const JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES: RoleKey[] = [
 
 // El alcance que se guarda en user_scopes sale de los roles elegidos: el
 // más amplio manda. El cuartel y la Regional del perfil completan el resto
-// (my_station_ids() y my_region_ids() los suman en la base).
+// (my_station_ids() y my_region_ids() los suman en la base). Quien solo
+// tiene roles de departamento queda con alcance Regional: sus departamentos
+// los da el rol + departamento, no el alcance.
 function scopeTypeForRoles(roles: RoleKey[]): ScopeType {
   if (roles.some((r) => INFORMATICA_ROLES.includes(r))) return 'system'
   if (roles.includes('secretario_regional')) return 'region'
   if (roles.some((r) => ESCUELA_ROLES.includes(r))) return 'escuela'
+  if (roles.length > 0 && roles.every((r) => DEPARTMENT_ROLES.includes(r))) return 'region'
   return 'station'
 }
 
@@ -86,12 +89,17 @@ export function UsuarioFormPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
 
   const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPassword, setCreatedPassword] = useState<string | null>(null)
   const [departmentsWarning, setDepartmentsWarning] = useState<string | null>(null)
 
   const needsStation = selectedRoles.some((r) => STATION_DIVISION_ROLES.includes(r))
-  const needsRegion = selectedRoles.some((r) => REGION_DIVISION_ROLES.includes(r))
+  const isCoordinatorRole = selectedRoles.includes('coordinador_departamento')
+  const isMemberRole = selectedRoles.includes('miembro_departamento')
+  // Los roles de departamento son del nivel Regional: si no hay un rol de
+  // cuartel, piden la Regional.
+  const needsRegion = selectedRoles.some((r) => REGION_DIVISION_ROLES.includes(r)) || ((isCoordinatorRole || isMemberRole) && !needsStation)
   const scopeType = scopeTypeForRoles(selectedRoles)
 
   function handleGeneratePassword() {
@@ -120,8 +128,15 @@ export function UsuarioFormPage() {
   }, [isJefeCuerpoActivo, isInformatica])
 
   function toggleRole(role: RoleKey) {
+    const removing = selectedRoles.includes(role)
     setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
+    // Sin el rol, sus departamentos no se asignan.
+    if (removing && role === 'coordinador_departamento') setCoordinates([])
+    if (removing && role === 'miembro_departamento') setMemberOf([])
   }
+
+  const coordinatesError = submitted && isCoordinatorRole && coordinates.length === 0 ? 'Elegí al menos un departamento que coordine.' : undefined
+  const memberOfError = submitted && isMemberRole && memberOf.length === 0 ? 'Elegí al menos un departamento del que sea miembro.' : undefined
 
   // Vista previa: cada rol con la división que va a tener.
   const preview = useMemo(
@@ -143,6 +158,7 @@ export function UsuarioFormPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
+    setSubmitted(true)
 
     if (!fullName.trim()) {
       setError('Falta el nombre completo (paso 1).')
@@ -162,6 +178,14 @@ export function UsuarioFormPage() {
     }
     if (selectedRoles.length === 0) {
       setError('Elegí al menos un rol (paso 3).')
+      return
+    }
+    if (isCoordinatorRole && coordinates.length === 0) {
+      setError('Coordinador de Departamento: elegí al menos un departamento que coordine (paso 3).')
+      return
+    }
+    if (isMemberRole && memberOf.length === 0) {
+      setError('Miembro de Departamento: elegí al menos un departamento del que sea miembro (paso 3).')
       return
     }
     if (needsStation && !stationId) {
@@ -202,7 +226,14 @@ export function UsuarioFormPage() {
       }
       setCreatedPassword(password)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos crear el usuario.'))
+      const message = describeSupabaseError(err, 'No pudimos crear el usuario.')
+      // admin-create-user sin los roles de departamento (falta desplegar la
+      // versión de 0105): mejor decirlo que un "Rol inválido." a secas.
+      setError(
+        message === 'Rol inválido.' && (isCoordinatorRole || isMemberRole)
+          ? 'El servicio de alta de usuarios todavía no tiene los roles de departamento: falta actualizar la función admin-create-user (DEPLOYMENT.md, sección 62).'
+          : message,
+      )
     } finally {
       setSubmitting(false)
     }
@@ -357,22 +388,28 @@ export function UsuarioFormPage() {
             <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />
           </div>
 
-          {isInformatica && departments.length > 0 && (
-            <div className="field">
-              <span className="field-label">Departamentos (opcional)</span>
-              <p className="field-help" style={{ marginTop: 0 }}>
-                Coordinador o integrante de uno o más departamentos. Solo ve los departamentos que elijas acá.
-              </p>
-              <DepartmentAssignmentPicker
-                departments={departments}
-                coordinates={coordinates}
-                memberOf={memberOf}
-                onChange={(next) => {
-                  setCoordinates(next.coordinates)
-                  setMemberOf(next.memberOf)
-                }}
-              />
-            </div>
+          {isCoordinatorRole && (
+            <DepartmentChecklist
+              id="coordinates"
+              label="Departamentos que coordina"
+              help="Uno o más. Ve y gestiona solo estos departamentos."
+              departments={departments}
+              selected={coordinates}
+              onChange={setCoordinates}
+              forCoordinator
+              error={coordinatesError}
+            />
+          )}
+          {isMemberRole && (
+            <DepartmentChecklist
+              id="memberOf"
+              label="Departamentos de los que es miembro"
+              help="Uno o más. Ve y carga informes y eventos solo de estos departamentos."
+              departments={departments}
+              selected={memberOf}
+              onChange={setMemberOf}
+              error={memberOfError}
+            />
           )}
         </fieldset>
 

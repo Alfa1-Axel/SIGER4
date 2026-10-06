@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
@@ -77,6 +77,7 @@ function SimpleBarRow({ label, value, maxValue, formatValue }: { label: string; 
 
 export function DepartamentoDetallePage() {
   const { id } = useParams<{ id: string }>()
+  const { hash } = useLocation()
   const navigate = useNavigate()
   const { profile: currentProfile, isAdmin, hasRole } = useAuth()
 
@@ -225,6 +226,13 @@ export function DepartamentoDetallePage() {
       active = false
     }
   }, [id])
+
+  // Accesos del Inicio (#informes, #eventos, #miembros): al terminar de
+  // cargar, lleva a esa sección.
+  useEffect(() => {
+    if (loading || !hash) return
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+  }, [loading, hash])
 
   function stationName(stationId: string | null): string {
     if (!stationId) return 'Sin cuartel asignado'
@@ -465,7 +473,7 @@ export function DepartamentoDetallePage() {
       <AppShell title="Departamento">
         <AccessDenied
           title="No podés ver este departamento"
-          message="Un departamento lo ven su coordinador, sus integrantes, Informática, el Secretario Regional y el Director de Escuela. Si deberías verlo, pedile a su coordinador que te sume. También puede que lo hayan eliminado."
+          message="Un departamento lo ven su coordinador y sus miembros (con el rol de departamento), Informática, el Secretario Regional y el Director de Escuela. Si deberías verlo, pedile a su coordinador o a Informática que te sumen. También puede que lo hayan eliminado."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />
@@ -504,7 +512,7 @@ export function DepartamentoDetallePage() {
     newItems.push({
       to: `/calendario/nuevo?departamento=${department.id}`,
       label: 'Evento del departamento',
-      description: 'Solo lo ven y reciben el coordinador y los integrantes.',
+      description: 'Solo lo ven y reciben el coordinador y los miembros.',
       icon: 'calendar',
     })
   }
@@ -512,7 +520,7 @@ export function DepartamentoDetallePage() {
     newItems.push({
       to: `/notificaciones/nueva?departamento=${department.id}`,
       label: 'Aviso al departamento',
-      description: 'Le llega a cada integrante, también al celular si activó los avisos.',
+      description: 'Le llega a cada miembro, también al celular si activó los avisos.',
       icon: 'bell',
     })
   }
@@ -550,9 +558,11 @@ export function DepartamentoDetallePage() {
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
-      <DepartmentReportsSection departmentId={department.id} departmentActive={department.is_active} />
+      <div id="informes" className="anchor-target">
+        <DepartmentReportsSection departmentId={department.id} departmentActive={department.is_active} />
+      </div>
 
-      <div className="section-header">
+      <div className="section-header anchor-target" id="eventos">
         <h2 className="section-title">Próximos eventos</h2>
         {department.is_active && canAddEvents && (
           <Link to={`/calendario/nuevo?departamento=${department.id}`} className="btn btn-outlined btn-sm">
@@ -652,7 +662,7 @@ export function DepartamentoDetallePage() {
         </div>
       )}
 
-      <div className="section-header">
+      <div className="section-header anchor-target" id="miembros">
         <h2 className="section-title">Miembros</h2>
       </div>
       <div className="card" style={{ marginBottom: 20 }}>

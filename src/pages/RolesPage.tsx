@@ -6,14 +6,14 @@ import { useAuth } from '../hooks/useAuth'
 import { useMyRoleAssignments } from '../hooks/useMyRoleAssignments'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
-import { DEPARTMENT_ROLE_DEFINITIONS, RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCOPE_LEVELS, groupRolesByCategory, roleDivisionNeed } from '../types/roles'
+import { RETIRED_ROLE_DEFINITIONS, ROLE_DEFINITIONS, SCOPE_LEVELS, groupRolesByCategory, roleDivisionNeed } from '../types/roles'
 import type { RoleDefinition } from '../types/roles'
 import type { AvalesDepartment } from '../types/database'
 
 // Ejemplos de rol + división -> qué ve. Mismo modelo que la base (0103).
 const EXAMPLES: { role: string; division: string; result: string }[] = [
-  { role: 'Coordinador de departamento', division: 'Fuego', result: 'Ve y gestiona Fuego. No ve Forestal ni FASME.' },
-  { role: 'Integrante de departamento', division: 'Forestal', result: 'Ve y carga informes y eventos de Forestal.' },
+  { role: 'Coordinador de Departamento', division: 'Fuego', result: 'Ve y gestiona Fuego. No ve Forestal ni FASME.' },
+  { role: 'Miembro de Departamento', division: 'FASME', result: 'Ve y carga informes y eventos de FASME.' },
   { role: 'Coordinador o Secretario de Escuela', division: 'Escuela Regional', result: 'Ve los avales de todos los departamentos.' },
   { role: 'Jefe de Cuerpo Activo', division: 'Su cuartel', result: 'Ve y edita los datos de su cuartel. No ve otros cuarteles.' },
   { role: 'Secretario Regional', division: 'Su Regional', result: 'Ve los cuarteles y departamentos de la Regional.' },
@@ -24,6 +24,7 @@ function divisionText(role: RoleDefinition): string {
   const need = roleDivisionNeed(role.key)
   if (need === 'station') return 'Se asigna con un cuartel.'
   if (need === 'region') return 'Se asigna con una Regional.'
+  if (need === 'department') return 'Se asigna con uno o más departamentos.'
   if (!role.assignable) return 'Rol retirado.'
   return role.scope === 'system' ? 'No pide división: aplica a todo el sistema.' : 'No pide división: aplica a toda la Escuela.'
 }
@@ -31,7 +32,7 @@ function divisionText(role: RoleDefinition): string {
 // Guía de roles: qué hace cada rol (rol), dónde (división) y qué datos ve
 // (alcance). Solo informa: la autorización real está en la base.
 export function RolesPage() {
-  const { roles: myRoles, isAdmin, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
+  const { roles: myRoles, isAdmin } = useAuth()
   const { hasAccess } = useSchoolAvalesAccess()
   const myAssignments = useMyRoleAssignments()
   const [departments, setDepartments] = useState<AvalesDepartment[]>([])
@@ -49,10 +50,6 @@ export function RolesPage() {
 
   // Los roles retirados solo se listan si el usuario todavía tiene uno.
   const groups = useMemo(() => groupRolesByCategory([...ROLE_DEFINITIONS, ...RETIRED_ROLE_DEFINITIONS.filter((r) => myRoles.includes(r.key))]), [myRoles])
-  const myDepartmentRoles = {
-    coordinador_departamento: coordinatedDepartmentIds.length > 0,
-    integrante_departamento: memberDepartmentIds.length > 0,
-  }
 
   return (
     <AppShell title="Roles y permisos">
@@ -126,34 +123,12 @@ export function RolesPage() {
           </section>
         ))}
 
-        <section aria-label="Departamentos">
-          <div className="role-group-header">
-            <span className="role-group-title">Departamentos</span>
-            <span className="role-group-description">
-              Roles de división: se asignan eligiendo uno o más departamentos, no como roles del sistema.
-            </span>
-          </div>
-          <div className="role-group-options">
-            {DEPARTMENT_ROLE_DEFINITIONS.map((role) => (
-              <article key={role.key} className="role-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'flex-start' }}>
-                  <h3 style={{ margin: 0, fontSize: 14 }}>{role.label}</h3>
-                  {myDepartmentRoles[role.key] && <span className="badge badge-success">Tu rol</span>}
-                </div>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--color-text-secondary)' }}>{role.description}</p>
-                <p style={{ margin: '6px 0 0', fontSize: 12 }}>
-                  <strong>División:</strong> se asigna con uno o más departamentos. <strong>Alcance:</strong> {role.scopeLabel}
-                </p>
-                <ul className="role-permissions">
-                  {role.permissions.map((permission) => (
-                    <li key={permission}>{permission}</li>
-                  ))}
-                </ul>
-              </article>
-            ))}
-          </div>
-
-          {departments.length > 0 && (
+        {departments.length > 0 && (
+          <section aria-label="Departamentos y sus coordinadores">
+            <div className="role-group-header">
+              <span className="role-group-title">Departamentos</span>
+              <span className="role-group-description">Cada departamento con su Coordinador de Departamento.</span>
+            </div>
             <div className="card row-list" style={{ marginTop: 8 }}>
               {departments.map((department) => (
                 <div key={department.id} className="row-item">
@@ -176,8 +151,8 @@ export function RolesPage() {
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </section>
+        )}
       </div>
     </AppShell>
   )

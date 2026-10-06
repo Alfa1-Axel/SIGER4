@@ -18,7 +18,7 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
-import { roleLabel } from '../types/roles'
+import { DEPARTMENT_ROLES, roleLabel } from '../types/roles'
 import type { RoleKey } from '../types/roles'
 
 function timeAgo(iso: string): string {
@@ -79,7 +79,7 @@ export function PanelPage() {
   const [stations, setStations] = useState<Station[]>([])
   const [unread, setUnread] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  // Departamentos que coordina o integra (0103).
+  // Departamentos que coordina o de los que es miembro, con su rol (0106).
   const [myDepartments, setMyDepartments] = useState<VisibleDepartment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -140,10 +140,14 @@ export function PanelPage() {
   if (showRegionalStatus) actions.push({ to: '/cuarteles', label: 'Cuarteles', description: 'Personal, unidades y estado', icon: 'building' })
 
   const firstName = profile?.full_name?.split(' ')[0] ?? ''
+  // Los roles de departamento se muestran con su departamento ("Coordinador
+  // de Fuego"), no con el nombre genérico del rol.
   const roleSummary = [
-    ...roles.filter((r) => r !== 'administrativo' && r !== 'coordinador_departamento_escuela').map((r) => roleLabel(r)),
+    ...roles
+      .filter((r) => r !== 'administrativo' && r !== 'coordinador_departamento_escuela' && !DEPARTMENT_ROLES.includes(r))
+      .map((r) => roleLabel(r)),
     ...(coordinatedNames.length ? [`Coordinador de ${coordinatedNames.join(', ')}`] : []),
-    ...(memberNames.length ? [`Integrante de ${memberNames.join(', ')}`] : []),
+    ...(memberNames.length ? [`Miembro de ${memberNames.join(', ')}`] : []),
   ]
   const todayRaw = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
   const today = todayRaw.charAt(0).toUpperCase() + todayRaw.slice(1)

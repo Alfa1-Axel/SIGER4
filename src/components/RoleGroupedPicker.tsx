@@ -9,13 +9,15 @@ interface RoleGroupedPickerProps {
   selected: RoleKey[]
   onToggle: (role: RoleKey) => void
   disabled?: boolean
+  // Roles que se ven pero no se tocan desde acá, con el motivo (por ejemplo,
+  // los de departamento en la ficha: se asignan eligiendo los departamentos).
+  lockedRoles?: RoleKey[]
+  lockedNote?: string
 }
 
-// Selector de roles agrupado por tipo/nivel (Informática, Escuela,
-// Departamento interno de Escuela, Región, Cuartel, Otros), con la
-// descripción y el alcance de cada rol a la vista. Reemplaza a la fila plana
-// de botones que mezclaba todos los roles.
-export function RoleGroupedPicker({ roles, selected, onToggle, disabled }: RoleGroupedPickerProps) {
+// Selector de roles agrupado por tipo/nivel (Informática, Escuela, Regional,
+// Cuartel, Otros), con la descripción y el alcance de cada rol a la vista.
+export function RoleGroupedPicker({ roles, selected, onToggle, disabled, lockedRoles = [], lockedNote }: RoleGroupedPickerProps) {
   const groups = groupRolesByCategory(roles)
 
   return (
@@ -29,13 +31,14 @@ export function RoleGroupedPicker({ roles, selected, onToggle, disabled }: RoleG
           <div className="role-group-options">
             {groupRoles.map((role) => {
               const isSelected = selected.includes(role.key)
+              const isLocked = lockedRoles.includes(role.key)
               return (
                 <button
                   key={role.key}
                   type="button"
                   className={`role-option${isSelected ? ' role-option--selected' : ''}`}
                   aria-pressed={isSelected}
-                  disabled={disabled}
+                  disabled={disabled || isLocked}
                   onClick={() => onToggle(role.key)}
                 >
                   <span className="role-option-check" aria-hidden="true">
@@ -45,6 +48,7 @@ export function RoleGroupedPicker({ roles, selected, onToggle, disabled }: RoleG
                     <span className="role-option-label">{role.label}</span>
                     <span className="role-option-description">{role.description}</span>
                     <span className="role-option-scope">Alcance: {role.scopeLabel}</span>
+                    {isLocked && lockedNote && <span className="role-option-scope">{lockedNote}</span>}
                   </span>
                 </button>
               )

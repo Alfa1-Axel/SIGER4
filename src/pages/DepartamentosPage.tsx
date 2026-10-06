@@ -47,7 +47,7 @@ export function DepartamentosPage() {
   }, [])
 
   const canCreateReports = departments.some((d) => d.is_active && canView(d.id))
-  // Primero los propios (coordina o integra); después, para quien tiene
+  // Primero los propios (coordina o es miembro); después, para quien tiene
   // visión regional, el resto.
   const mine = departments.filter((d) => d.my_relation)
   const others = departments.filter((d) => !d.my_relation)
@@ -63,8 +63,8 @@ export function DepartamentosPage() {
           <h1 className="page-title">Departamentos</h1>
           <p className="page-subtitle">
             {others.length > 0
-              ? 'Áreas de la Regional 4 con su coordinador, integrantes, informes y actas. Es la única lista de departamentos: Escuela → Avales regionales usa estos mismos.'
-              : 'Los departamentos que coordinás o integrás, con sus integrantes, informes, actas y eventos.'}
+              ? 'Áreas de la Regional 4 con su coordinador, miembros, informes y actas. Es la única lista de departamentos: Escuela → Avales regionales usa estos mismos.'
+              : 'Los departamentos que coordinás o de los que sos miembro, con sus miembros, informes, actas y eventos.'}
           </p>
         </div>
         {(isAdmin || canCreateReports) && (
@@ -140,7 +140,7 @@ export function DepartamentosPage() {
             </>
           ) : (
             <>
-              <span>No coordinás ni integrás ningún departamento.</span>
+              <span>No coordinás ningún departamento ni sos miembro de uno.</span>
               <span style={{ fontSize: 13 }}>Si deberías estar en uno, pedile a su coordinador o a Informática que te sume.</span>
             </>
           )}
@@ -169,12 +169,12 @@ export function DepartamentosPage() {
                   )}
                   <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-muted)' }}>
                     {department.coordinator_profile_id ? `Coordinador: ${department.coordinator_name ?? 'asignado'}` : 'Sin coordinador'} ·{' '}
-                    {department.member_count === 1 ? '1 integrante' : `${department.member_count} integrantes`}
+                    {department.member_count === 1 ? '1 miembro' : `${department.member_count} miembros`}
                   </p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
                   {department.my_relation === 'coordinador' && <span className="badge badge-info">Coordinás</span>}
-                  {department.my_relation === 'integrante' && <span className="badge badge-info">Integrás</span>}
+                  {department.my_relation === 'integrante' && <span className="badge badge-info">Sos miembro</span>}
                   <span className={`badge ${department.is_active ? 'badge-success' : 'badge-danger'}`}>
                     {department.is_active ? 'Activo' : 'Inactivo'}
                   </span>

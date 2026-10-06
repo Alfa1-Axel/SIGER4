@@ -141,7 +141,7 @@ export function DepartamentoInformeDetallePage() {
       <AppShell title="Informe">
         <AccessDenied
           title="No encontramos el informe"
-          message="Puede que lo hayan eliminado o que no tengas acceso: los informes los ven el coordinador del departamento, sus integrantes e Informática."
+          message="Puede que lo hayan eliminado o que no tengas acceso: los informes los ven el coordinador del departamento, sus miembros e Informática."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />

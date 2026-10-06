@@ -47,6 +47,21 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-06-roles-departamento',
+    version: '1.7.0',
+    date: '2026-10-06',
+    title: 'Roles de departamento y avisos para cada departamento',
+    summary: 'Coordinador y Miembro de Departamento son roles de la Regional que se asignan con sus departamentos, y cada departamento recibe sus propios avisos.',
+    changes: [
+      { type: 'nuevo', module: 'Usuarios', text: 'Roles Coordinador de Departamento y Miembro de Departamento: al elegirlos se marcan sus departamentos (uno o más). Ya no hace falta un rol de relleno para quien solo trabaja en un departamento.' },
+      { type: 'nuevo', module: 'Notificaciones', text: 'Avisos para el coordinador y los miembros: informe nuevo, archivado o editado, actividad registrada, eventos, te sumaron, ahora coordinás y aval nuevo. Nunca le llegan a otro departamento.' },
+      { type: 'mejora', module: 'Notificaciones', text: 'Cada aviso de un departamento muestra su origen ("Departamento Fuego") y aparece en el filtro Departamentos.' },
+      { type: 'mejora', module: 'Inicio', text: 'El panel de tu departamento muestra sus pendientes y avisos sin leer ("Todo al día" si no hay) y accesos a informes, eventos y miembros.' },
+      { type: 'mejora', module: 'Departamentos', text: 'Para ver un departamento hacen falta el rol y el departamento: si a alguien se le quita el rol, deja de verlo.' },
+    ],
+    severity: 'important',
+  },
+  {
     id: '2026-10-06-asistencia',
     version: '1.6.1',
     date: '2026-10-06',

@@ -15,7 +15,7 @@ interface DepartmentAssignmentPickerProps {
 
 const OPTIONS: { value: Relation; label: string }[] = [
   { value: 'none', label: 'No' },
-  { value: 'integrante', label: 'Integrante' },
+  { value: 'integrante', label: 'Miembro' },
   { value: 'coordinador', label: 'Coordinador' },
 ]
 

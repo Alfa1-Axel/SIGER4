@@ -5,12 +5,12 @@ export interface CurrentUserContext {
   profile: Profile
   roles: UserRole[]
   scopes: UserScope[]
-  // Departamentos de los que el usuario es coordinador en la sección
-  // Departamentos (departments.coordinator_profile_id). Es la única fuente:
-  // da acceso a los Avales regionales de esos departamentos (ver 0097).
+  // Departamentos que coordina: figura como coordinador
+  // (departments.coordinator_profile_id) y tiene el rol Coordinador de
+  // Departamento (0106). Da acceso a sus informes y a sus Avales regionales.
   coordinatedDepartmentIds: string[]
-  // Departamentos donde es integrante con cuenta (department_members): con
-  // el coordinador, ven y cargan los informes del departamento (0098).
+  // Departamentos de los que es miembro: figura en department_members y tiene
+  // el rol Miembro de Departamento (0106).
   memberDepartmentIds: string[]
 }
 
@@ -32,11 +32,18 @@ export async function fetchCurrentUserContext(authUserId: string): Promise<Curre
     supabase.from('department_members').select('department_id').eq('profile_id', profile.id),
   ])
 
+  // Rol + departamento (0106): figurar en un departamento sin el rol
+  // Coordinador/Miembro de Departamento no da acceso. Informática no lo necesita.
+  const roleKeys = ((roles ?? []) as UserRole[]).map((r) => r.role)
+  const isAdmin = roleKeys.includes('informatica_r4') || roleKeys.includes('integrante_informatica')
+  const coordinatesWithRole = isAdmin || roleKeys.includes('coordinador_departamento')
+  const memberWithRole = isAdmin || roleKeys.includes('miembro_departamento')
+
   return {
     profile: profile as Profile,
     roles: (roles ?? []) as UserRole[],
     scopes: (scopes ?? []) as UserScope[],
-    coordinatedDepartmentIds: (coordinated ?? []).map((d) => (d as { id: string }).id),
-    memberDepartmentIds: (memberships ?? []).map((m) => (m as { department_id: string }).department_id),
+    coordinatedDepartmentIds: coordinatesWithRole ? (coordinated ?? []).map((d) => (d as { id: string }).id) : [],
+    memberDepartmentIds: memberWithRole ? (memberships ?? []).map((m) => (m as { department_id: string }).department_id) : [],
   }
 }

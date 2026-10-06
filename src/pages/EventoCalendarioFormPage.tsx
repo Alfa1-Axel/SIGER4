@@ -36,7 +36,7 @@ export function EventoCalendarioFormPage() {
   const isRegionalRole = hasRole('secretario_regional')
   const isEscuelaRole = hasRole('director_escuela', 'instructor')
   const canCreateGeneral = isAdmin || isStationRole || isRegionalRole || isEscuelaRole
-  // Eventos de departamento: su coordinador e integrantes, Secretario Regional
+  // Eventos de departamento: su coordinador y miembros, Secretario Regional
   // e Informática (can_work_in_department(), 0103).
   const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
   const canCreateDepartmentEvents = isAdmin || isRegionalRole || hasDepartments
@@ -250,7 +250,7 @@ export function EventoCalendarioFormPage() {
       <p className="page-subtitle">
         {canCreateGeneral
           ? 'Cargá un evento institucional, de cuartel, de Escuela, de un departamento o un vencimiento.'
-          : 'Cargá un evento de tu departamento: lo ven y reciben solo su coordinador y sus integrantes.'}
+          : 'Cargá un evento de tu departamento: lo ven y reciben solo su coordinador y sus miembros.'}
       </p>
 
       {loading ? (
@@ -283,7 +283,7 @@ export function EventoCalendarioFormPage() {
                 ))}
               </select>
               <p id="department-help" className="field-help">
-                Lo ven y reciben solo el coordinador y los integrantes de ese departamento.
+                Lo ven y reciben solo el coordinador y los miembros de ese departamento.
               </p>
               {departments.length === 0 && <p className="field-help">No tenés departamentos activos donde cargar eventos.</p>}
             </div>

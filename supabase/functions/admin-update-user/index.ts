@@ -62,6 +62,8 @@ type RoleKey =
   | 'secretario_escuela'
   | 'coordinador_departamento_escuela'
   | 'secretario_regional'
+  | 'coordinador_departamento'
+  | 'miembro_departamento'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
   | 'usuario_carga_cuartel'
@@ -80,6 +82,8 @@ const ALL_ROLES: RoleKey[] = [
   'secretario_escuela',
   'coordinador_departamento_escuela',
   'secretario_regional',
+  'coordinador_departamento',
+  'miembro_departamento',
   'presidente_cuartel',
   'jefe_cuerpo_activo',
   'usuario_carga_cuartel',
@@ -233,6 +237,10 @@ Deno.serve(async (req: Request) => {
         'secretario_regional',
         'coordinador_escuela',
         'secretario_escuela',
+        // Roles de departamento (0105): dan acceso a los datos de sus
+        // departamentos, igual que los de Avales.
+        'coordinador_departamento',
+        'miembro_departamento',
       ]
       if (!actorProfile.station_id || targetProfile.station_id !== actorProfile.station_id) {
         return jsonResponse({ error: 'Solo podés editar usuarios de tu propio cuartel.' }, 403)

@@ -115,6 +115,9 @@ export type NotificationType =
   | 'prestamo_vencido'
   | 'actualizacion_sistema'
   | 'informe_departamento'
+  // Avisos del sistema para un departamento (0105): te sumaron, ahora
+  // coordinás, aval nuevo, actividad registrada.
+  | 'aviso_departamento'
 
 export interface Notification {
   id: string
@@ -131,6 +134,9 @@ export interface Notification {
   // APP_UPDATES (src/config/appUpdates.ts) que originó esta notificación.
   // Null para el resto de los tipos.
   app_update_id: string | null
+  // Departamento de origen (0106): solo informativo, para mostrar
+  // "Departamento Fuego" y filtrar. Null en el resto.
+  department_id: string | null
   // Ruta interna del elemento relacionado (0102). Null en los avisos que no
   // la cargan: la pantalla abre el módulo según el tipo.
   link_path: string | null

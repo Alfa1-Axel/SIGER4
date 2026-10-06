@@ -9,15 +9,7 @@ import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchVisibleDepartments } from '../lib/api/departments'
-import {
-  NOTIFICATION_CATEGORY,
-  NOTIFICATION_CATEGORY_ICON,
-  NOTIFICATION_CATEGORY_LABEL,
-  NOTIFICATION_TYPE_LABEL,
-  isImportantNotification,
-  notificationLink,
-  timeAgo,
-} from '../lib/notificationMeta'
+import { NOTIFICATION_CATEGORY_ICON, NOTIFICATION_CATEGORY_LABEL, NOTIFICATION_TYPE_LABEL, isImportantNotification, notificationLink, timeAgo, notificationCategory } from '../lib/notificationMeta'
 import type { NotificationCategory } from '../lib/notificationMeta'
 import type { Notification, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
@@ -78,7 +70,7 @@ export function NotificacionesPage() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
   const categoriesPresent = useMemo(
-    () => CATEGORY_ORDER.filter((c) => notifications.some((n) => NOTIFICATION_CATEGORY[n.type] === c)),
+    () => CATEGORY_ORDER.filter((c) => notifications.some((n) => notificationCategory(n) === c)),
     [notifications],
   )
   const visible = useMemo(
@@ -86,7 +78,7 @@ export function NotificacionesPage() {
       notifications.filter(
         (n) =>
           (status === 'todas' || (status === 'no_leidas' && !n.is_read) || (status === 'importantes' && isImportantNotification(n))) &&
-          (!category || NOTIFICATION_CATEGORY[n.type] === category),
+          (!category || notificationCategory(n) === category),
       ),
     [notifications, status, category],
   )
@@ -130,9 +122,8 @@ export function NotificacionesPage() {
   }
 
   function originLabel(n: Notification): string {
-    // Avisos de un departamento (0103): personales, pero con origen.
-    const departmentId = n.link_path?.match(/^\/departamentos\/([0-9a-f-]{36})$/)?.[1]
-    if (departmentId && departmentNames.has(departmentId)) return `Departamento ${departmentNames.get(departmentId)}`
+    // Avisos de un departamento (0106): personales, pero con su origen.
+    if (n.department_id) return `Departamento ${departmentNames.get(n.department_id) ?? ''}`.trim()
     if (n.profile_id) return 'Para vos'
     if (n.station_id) return `Cuartel ${stations.find((s) => s.id === n.station_id)?.name ?? ''}`.trim()
     if (n.subsede_id) return `Subsede ${subsedes.find((s) => s.id === n.subsede_id)?.name ?? ''}`.trim()
@@ -214,7 +205,7 @@ export function NotificacionesPage() {
 
       <ul className="notification-list">
         {visible.map((n) => {
-          const cat = NOTIFICATION_CATEGORY[n.type]
+          const cat = notificationCategory(n)
           const link = notificationLink(n, canManageUsers)
           const important = isImportantNotification(n)
           return (

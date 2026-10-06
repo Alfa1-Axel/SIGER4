@@ -72,6 +72,8 @@ type RoleKey =
   | 'secretario_escuela'
   | 'coordinador_departamento_escuela'
   | 'secretario_regional'
+  | 'coordinador_departamento'
+  | 'miembro_departamento'
   | 'presidente_cuartel'
   | 'jefe_cuerpo_activo'
   | 'usuario_carga_cuartel'
@@ -90,6 +92,8 @@ const ALL_ROLES: RoleKey[] = [
   'secretario_escuela',
   'coordinador_departamento_escuela',
   'secretario_regional',
+  'coordinador_departamento',
+  'miembro_departamento',
   'presidente_cuartel',
   'jefe_cuerpo_activo',
   'usuario_carga_cuartel',
@@ -104,6 +108,10 @@ const INFORMATICA_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica'
 // Informática los asigna: director_escuela no figura en la matriz de
 // permisos de Avales, así que tampoco puede repartir ese acceso.
 const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela', 'coordinador_departamento_escuela']
+
+// Roles de departamento (0105/0106): van con sus departamentos, que asigna
+// solo Informática (departments y department_members).
+const DEPARTMENT_ROLES: RoleKey[] = ['coordinador_departamento', 'miembro_departamento']
 
 // Roles que un jefe_cuerpo_activo puede asignar (confirmado explícitamente:
 // nunca su propio rol, nunca nada regional/escuela/informática).
@@ -241,6 +249,9 @@ Deno.serve(async (req: Request) => {
       }
       if (requestedRoles.some((r) => SCHOOL_AVALES_ROLES.includes(r))) {
         return jsonResponse({ error: 'Los roles de Avales regionales (Coordinador/Secretario de Escuela, Coordinador de departamento interno) los asigna solo Informática.' }, 403)
+      }
+      if (requestedRoles.some((r) => DEPARTMENT_ROLES.includes(r))) {
+        return jsonResponse({ error: 'Los roles Coordinador y Miembro de Departamento los asigna solo Informática, junto con sus departamentos.' }, 403)
       }
     }
 

@@ -9253,3 +9253,166 @@ Sin cambios en Edge Functions, push ni PWA.
 - [ ] Cargar un resumen de intervenciones y cambiar el estado de un vehículo: ya no dan error.
 - [ ] Intentar cargar el mismo período dos veces: muestra el mensaje del período repetido.
 - [ ] Generar el Reporte de Asistencias: resúmenes viejos con su total y promedio, nuevos con su dotación.
+
+## 62. Roles de departamento y avisos de departamento (2026-10-06) — versión 1.7.0, migraciones 0105-0106
+
+### 62.1 Qué faltaba
+
+1. **Faltaban roles asignables para quien trabaja en un departamento.**
+   - Al crear un usuario el sistema exige un rol, pero "coordinador" e "integrante" eran solo asignaciones en `departments` y `department_members`.
+   - Para dar de alta a alguien que solo trabaja en un departamento había que ponerle un rol de relleno.
+2. **Faltaban avisos de departamento.**
+   - Había avisos de informe nuevo (0102), eventos y avisos manuales (0103).
+   - No había avisos de informe archivado o editado, actividad registrada, "te sumaron", "ahora coordinás" ni aval nuevo.
+   - Los avisos no mostraban de qué departamento venían.
+
+### 62.2 Modelo
+
+| Qué | Dónde |
+|---|---|
+| Rol (qué puede hacer) | `user_roles`: **`coordinador_departamento`** (Coordinador de Departamento) y **`miembro_departamento`** (Miembro de Departamento), en el grupo **Regional** |
+| Departamento (dónde) | `departments.coordinator_profile_id` y `department_members`, sin cambios ni tablas nuevas |
+| Acceso | **rol Y departamento**. Informática ve todo, como antes. |
+
+Rol y departamento se mantienen sincronizados en la base (`sync_department_roles()`):
+
+- **Al asignar a alguien** como coordinador (desde la ficha del usuario, el alta o la ficha del departamento) o al sumarlo como miembro (también si lo suma el coordinador), recibe el rol.
+- **Al sacarlo de su último departamento,** se le quita el rol, salvo que sea su único rol. En ese caso queda en los pendientes de Informática.
+- **Si se le quita el rol a mano,** deja de ver el departamento aunque siga figurando en él. Queda en los pendientes de Informática como "Figura en un departamento sin su rol".
+- **Los usuarios Informática R4 no se tocan:** ven todo y sus roles solo los cambia otro Informática R4.
+
+### 62.3 Migraciones
+
+- **`0105_department_role_keys.sql`** (va **sola**: Postgres no deja usar un valor nuevo de un enum en la misma transacción): agrega `coordinador_departamento` y `miembro_departamento` a `role_key`, y `aviso_departamento` a `notification_type`.
+- **`0106_department_roles_and_notices.sql`:**
+  - **Helpers:**
+    - nuevos con rol + departamento: `coordinates_department()` e `is_department_member()`;
+    - rehechos: `is_department_member_or_coordinator()`, `my_department_ids()`, `can_notify_department()`, `can_view_department_reports()`, `can_manage_department_report()` (informes, adjuntos y Storage) e `is_school_department_coordinator()` (avales). `list_visible_departments()` calcula la relación con el rol.
+  - **Policies:** las que daban acceso solo por figurar en el departamento pasan a usar los helpers: edición del departamento, miembros, integrantes sin usuario, actividad y edición o borrado de eventos de departamento.
+  - **Sincronización:** triggers en `departments` y `department_members`, y carga de los roles de quienes ya coordinan o integran un departamento.
+  - **Origen:** `notifications.department_id` (solo informativo). La vista `my_notifications` lo expone y se completa en los avisos ya enviados.
+  - **Avisos**, solo al coordinador y a los miembros con su rol, activos (`department_recipient_ids()`, interna). Ver 62.5.
+  - **Pendientes de Informática:** "Rol de departamento sin departamento" y "Figura en un departamento sin su rol". Los departamentos sin actividad usan `my_department_ids()`.
+
+Ambas se pueden volver a correr. 0106 se detiene si falta 0105 o 0103, y funciona en un proyecto nuevo.
+
+### 62.4 Funciones de usuarios (Edge Functions)
+
+`admin-create-user` y `admin-update-user` validan los roles contra una lista fija. Sin agregar los nuevos, el alta respondería "Rol inválido.". Cambio mínimo, sin tocar su lógica:
+
+- los dos roles en `RoleKey`/`ALL_ROLES`;
+- en el alta, solo Informática puede asignarlos, porque sus departamentos los asigna Informática;
+- en la edición, el Jefe de Cuerpo Activo no gestiona usuarios con esos roles, igual que con los de Avales.
+
+**Hay que desplegarlas**, igual que en las secciones 5 y 6:
+
+```bash
+supabase functions deploy admin-create-user
+supabase functions deploy admin-update-user
+```
+
+Si el alta se intenta sin desplegarlas, la pantalla lo explica en lugar de mostrar "Rol inválido.".
+
+### 62.5 Avisos de departamento
+
+| Hecho | A quién | Enlace |
+|---|---|---|
+| Informe o acta nuevo | Coordinador y miembros, menos quien lo cargó | Informe |
+| Informe archivado o restaurado | Coordinador y miembros, menos quien lo hizo | Informe |
+| Alguien edita tu informe | Solo el autor | Informe |
+| Actividad registrada | Coordinador y miembros, menos quien la cargó | Departamento |
+| Evento nuevo y recordatorio (0103) | Coordinador y miembros | Evento |
+| Te sumaron a un departamento | El nuevo miembro, y su coordinador ("Nuevo miembro en …") | Departamento |
+| Ahora coordinás un departamento | El nuevo coordinador | Departamento |
+| Aval nuevo del departamento | Su coordinador (los miembros no ven avales) | Avales del departamento |
+| Aviso manual al departamento | Coordinador y miembros, menos quien lo envía | Departamento |
+
+**Cómo se evita que lleguen a otro departamento:**
+- Todos son avisos **personales** (`profile_id`), uno por destinatario, y los destinatarios salen de `department_recipient_ids()`: el coordinador y los miembros de **ese** departamento con su rol, activos.
+- Ningún aviso de departamento usa un alcance de Regional, subsede o cuartel.
+- El push sale por el envío existente, una vez por aviso personal: no se duplica ni llega a otros.
+
+**En pantalla:**
+- origen "Departamento Fuego";
+- filtro **Departamentos** para cualquier aviso que venga de un departamento;
+- tipo nuevo "Aviso de departamento";
+- lectura por usuario (0102);
+- "Abrir" lleva al elemento.
+
+En el aviso manual a un departamento, "Aviso de departamento" es el tipo sugerido.
+
+### 62.6 Usuarios
+
+**Alta:**
+- Los dos roles aparecen en el grupo Regional, solo para Informática.
+- Al marcar "Coordinador de Departamento" aparece **"Departamentos que coordina"**, y al marcar "Miembro de Departamento", **"Departamentos de los que es miembro"**. Se elige uno o más, con aviso si reemplaza a un coordinador.
+- No deja guardar el rol sin departamento: lo dice junto a la lista y arriba del botón.
+- Un usuario solo departamental pide la Regional y queda con alcance Regional.
+- Vista previa "Coordinador de Departamento · Fuego".
+
+**Ficha:**
+- "Roles y dónde aplican" muestra "Coordinador de Departamento · Fuego", "Miembro de Departamento · FASME" y las inconsistencias ("Fuego: falta el rol, no tiene acceso").
+- Los roles de departamento se ven en el selector, pero no se tildan sueltos: se asignan en la sección **Departamentos** (No, Miembro o Coordinador por departamento).
+- Al guardar se recargan los roles.
+- No deja sacar a alguien de todos sus departamentos si es su único rol.
+
+**Guía de roles y Ayuda:** los dos roles figuran en el grupo Regional con División "Se asigna con uno o más departamentos". El artículo de administración pasa a "Asignar Coordinador o Miembro de Departamento".
+
+### 62.7 Inicio y búsqueda
+
+- **Inicio** (coordinador o miembro):
+  - **"Pendientes y avisos"** del departamento elegido: sus pendientes del servidor (sin actividad reciente, eventos próximos) y sus avisos sin leer. Si no hay, "Todo al día en Fuego".
+  - Más accesos: Ver informes, Ver eventos y Ver miembros, que llevan a esa sección de la ficha.
+  - El saludo dice "Coordinador de Fuego · Miembro de Forestal", no el nombre genérico del rol.
+- **Búsqueda:** sin cambios de código. Respeta rol + departamento porque los informes, eventos y departamentos se leen con la RLS. Un miembro de Fuego encuentra el acta de Fuego, uno de Forestal no; Informática encuentra todo.
+
+### 62.8 Qué correr (en este orden)
+
+1. SQL Editor → `0104_attendance_summaries_and_station_notices.sql` (sección 61), si no se corrió.
+2. SQL Editor → `0105_department_role_keys.sql`, **sola**, y esperar a que termine.
+3. SQL Editor → `0106_department_roles_and_notices.sql`.
+4. `supabase functions deploy admin-create-user` y `supabase functions deploy admin-update-user`.
+5. Desplegar el frontend. **Después de 0106:** el frontend nuevo toma el acceso a un departamento del rol, y sin la carga de roles de 0106 los coordinadores y miembros actuales no verían su departamento en la pantalla.
+
+Sin cambios en push ni PWA.
+
+### 62.9 Verificación
+
+- **Postgres 16 local, 0106:** 48 pruebas, 0 fallas.
+  - Roles cargados a quienes ya estaban en departamentos.
+  - Sincronización: asignar coordinador o miembro agrega el rol; el coordinador anterior pierde el rol si tiene otro; si es su único rol, lo conserva; Informática R4 no se toca.
+  - Permisos: Coordinador de Fuego ve Fuego y no Forestal; Miembro de Fuego ve Fuego y no FASME; Coordinador de Forestal y Miembro de Fuego ve los dos y distingue su relación; un rol sin departamento no ve ninguno; Informática ve todos.
+  - Informes: un miembro de Forestal carga en Forestal y no en Fuego.
+  - Avisos: informe nuevo, edición al autor, archivo, actividad, evento, aviso manual con "Aviso de departamento", te sumaron, nuevo miembro, ahora coordinás, aval al coordinador y no a los miembros. Ninguno a Forestal desde Fuego.
+  - Origen en la bandeja y lectura por usuario.
+  - Sin el rol: no ve el departamento, ni sus informes, ni sus avales, ni recibe sus avisos.
+  - Pendientes de Informática.
+  - Se puede volver a correr, funciona en un proyecto nuevo y se detiene sin 0105.
+- **Regresión SQL:** 0098 (42), 0099 (26), 0100 (15), 0102 (20), 0103 (79) y 0104 (30) siguen pasando con el acceso por rol + departamento.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado): 40 pruebas, 0 fallas.
+  - Alta de Coordinador + Fuego (bloqueo sin departamento, reemplazo, Regional, alcance, asignación).
+  - Alta de Miembro + Forestal.
+  - Ficha: roles bloqueados, único rol, cambio de departamento, dos departamentos, sin rol.
+  - Usuario sin el rol: menú, URL y búsqueda.
+  - Avisos con origen, filtro Departamentos, abrir el informe, aviso manual, otros departamentos.
+  - Inicio con pendientes y avisos, "Todo al día", "Ver miembros".
+  - Búsqueda por departamento en celular y escritorio.
+  - Guía de roles.
+- **Regresión en navegador:** secciones 57 (33), 58 (26), 59 (47), 60 (65, con el acceso por rol), 61 (33), menú "Nuevo" (8) y menú lateral (4).
+
+### 62.10 Checklist en producción
+
+- [ ] Correr 0105, 0106, desplegar las dos funciones y el frontend.
+- [ ] Ficha de un coordinador existente: aparece "Coordinador de Departamento · su departamento".
+- [ ] Crear un usuario con Miembro de Departamento + Forestal (sin otro rol): entra, ve solo Forestal y su Inicio muestra Forestal.
+- [ ] Intentar crearlo sin departamento: no deja guardar.
+- [ ] Cargar un informe en Fuego: llega el aviso (y el push) al coordinador y miembros de Fuego, no a Forestal.
+- [ ] Marcarlo como leído con un miembro: sigue sin leer para el coordinador.
+- [ ] Revisar los pendientes de Informática "Rol de departamento sin departamento" y "Figura en un departamento sin su rol".
+
+### 62.11 Riesgos y decisiones
+
+- **El acceso ahora pide el rol.** La carga de 0106 se los da a todos los que ya estaban asignados. Si alguien pierde el rol a mano, deja de ver su departamento (es lo pedido: el rol define qué puede hacer).
+- **Avisos al Dpto. de Informática por cambios de rol.** Al sumar miembros, la base asigna el rol y el aviso existente de "Cambio de rol de usuario" les llega a Informática, como con cualquier asignación de rol.
+- **Edición de informes:** se avisa solo al autor cuando lo edita otra persona, para no llenar de avisos al departamento.
+- **Adjuntos:** sumar un archivo a un informe no genera un aviso aparte: lo cubre el aviso del informe.

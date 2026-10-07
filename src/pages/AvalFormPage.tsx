@@ -225,8 +225,8 @@ export function AvalFormPage() {
 
       {!loading && !loadError && !notFound && departmentOptions.length === 0 && (
         <div className="empty-state">
-          No hay departamentos activos donde puedas subir avales. Si deberías tenerlos, pedile a Informática que revise el departamento en la
-          sección Departamentos.
+          No hay departamentos activos donde puedas subir avales. Si deberías tenerlos, consultá a Informática y Estadística para que revisen
+          tu departamento en la sección Departamentos.
         </div>
       )}
 

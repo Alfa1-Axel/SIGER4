@@ -189,8 +189,8 @@ export function AsistenciaFormPage() {
     return (
       <AppShell title="Asistencia">
         <div className="empty-state">
-          No tenés permiso para cargar asistencia de este cuartel. La cargan Informática, el Secretario Regional y, en su propio cuartel,
-          el Presidente, el Jefe de Cuerpo Activo y el usuario de carga.
+          No tenés permiso para cargar asistencia de este cuartel con tu rol actual. La cargan Informática, el Secretario Regional y, en su
+          propio cuartel, el Presidente, el Jefe de Cuerpo Activo y el usuario de carga.
         </div>
       </AppShell>
     )
@@ -309,10 +309,17 @@ export function AsistenciaFormPage() {
         <div className="alert alert-info" role="note">
           <span className="alert-content">
             <strong>Dotación:</strong>{' '}
-            {members
-              ? `${members} ${members === 1 ? 'integrante activo' : 'integrantes activos'}${existing ? ' al cargar este resumen' : ''}.`
-              : 'sin personal activo cargado.'}{' '}
-            Sale del Personal del cuartel: no hace falta cargarla.
+            {members ? (
+              <>
+                {members} {members === 1 ? 'integrante' : 'integrantes'}
+                {existing ? ' al cargar este resumen' : ''}. Sale de la dotación actual del cuartel: no hace falta cargarla acá.
+              </>
+            ) : (
+              <>
+                todavía no está cargada. Cargá la dotación actual del cuartel y el resumen la toma sola.{' '}
+                <Link to={`/cuarteles/${resolvedStationId}#dotacion`}>Cargar la dotación</Link>
+              </>
+            )}
             {existing?.present_average != null && ` Promedio de presentes cargado antes: ${existing.present_average}.`}
           </span>
         </div>

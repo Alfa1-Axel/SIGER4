@@ -233,7 +233,7 @@ export function AvalesPage() {
         <div className="empty-state">
           {canViewAll
             ? 'Todavía no hay departamentos activos. Se crean en la sección Departamentos.'
-            : 'No figurás como coordinador de ningún departamento. Si deberías, pedile a Informática que te asigne en la sección Departamentos.'}
+            : 'No figurás como coordinador de ningún departamento. Si deberías, consultá a Informática y Estadística para que te asignen en la sección Departamentos.'}
         </div>
       )}
 

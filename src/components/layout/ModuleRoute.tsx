@@ -13,7 +13,7 @@ export function ModuleRoute({ module, title, children }: { module: AppModule; ti
     <GuardedRoute
       title={title}
       allow={({ isDepartmentOnly }) => canUseModule(module, isDepartmentOnly)}
-      deniedMessage={`${title} no forma parte de tu rol: Coordinador y Miembro de Departamento trabajan con su departamento (informes, actas, eventos y avisos). Si necesitás usar ${title}, pedile a Informática R4 que te asigne el rol que corresponde.`}
+      deniedMessage={`${title} no forma parte de tu rol: Coordinador y Miembro de Departamento trabajan con su departamento (informes, actas, eventos y avisos). Si necesitás usar ${title}, consultá a Informática y Estadística para que te asignen el rol que corresponde.`}
     >
       {children}
     </GuardedRoute>

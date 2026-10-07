@@ -39,7 +39,7 @@ export function CuartelesPage() {
         setSubsedes(subsedesData)
         setCompliance(complianceData)
       })
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar cuarteles')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar los cuarteles. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -64,7 +64,7 @@ export function CuartelesPage() {
   return (
     <AppShell title="Cuarteles">
       <h1 className="page-title">Cuarteles</h1>
-      <p className="page-subtitle">Los cuarteles de la Regional 4 con su personal, unidades y estado de carga.</p>
+      <p className="page-subtitle">Los cuarteles de la Regional 4, con su dotación, móviles y estado de carga.</p>
 
       <div className="search-input" style={{ marginBottom: 12 }}>
         <Icon name="search" size={16} />
@@ -163,11 +163,11 @@ export function CuartelesPage() {
             >
               <div>
                 <div style={{ fontWeight: 700 }}>{String(station.personnel_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>PERSONAL</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>DOTACIÓN</div>
               </div>
               <div>
                 <div style={{ fontWeight: 700 }}>{String(station.vehicles_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>VEHÍCULOS</div>
+                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>MÓVILES</div>
               </div>
               <div>
                 <div style={{ fontWeight: 700, color: 'var(--color-link)' }}>

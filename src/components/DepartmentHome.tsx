@@ -103,7 +103,7 @@ export function DepartmentHome() {
         <div className="card dept-home-empty">
           <h2 className="section-title">Todavía no tenés un departamento asignado</h2>
           <p>
-            Tu rol trabaja con un departamento, pero Informática R4 todavía no te asignó uno. Cuando te sumen, lo vas a ver acá con sus informes,
+            Tu rol trabaja con un departamento, pero Informática y Estadística todavía no te asignó uno. Cuando te sumen, lo vas a ver acá con sus informes,
             actas, eventos y avisos.
           </p>
           <Link to="/ayuda#sin-seccion-departamento" className="btn btn-outlined btn-sm">

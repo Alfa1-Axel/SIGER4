@@ -138,7 +138,7 @@ function GeneralHome() {
   actions.push({ to: '/notificaciones', label: 'Notificaciones', description: unreadCount ? `${unreadCount} sin leer` : 'Al día', icon: 'bell', badge: unreadCount })
   if (canAccessReports) actions.push({ to: '/reportes', label: 'Generar reporte', description: 'PDF por cuartel, curso o departamento', icon: 'chart' })
   if (canManageUsers) actions.push({ to: '/usuarios', label: 'Usuarios', description: 'Altas, roles y accesos', icon: 'user' })
-  if (showRegionalStatus) actions.push({ to: '/cuarteles', label: 'Cuarteles', description: 'Personal, unidades y estado', icon: 'building' })
+  if (showRegionalStatus) actions.push({ to: '/cuarteles', label: 'Cuarteles', description: 'Dotación, móviles y estado', icon: 'building' })
 
   const firstName = profile?.full_name?.split(' ')[0] ?? ''
   // Los roles de departamento se muestran con su departamento ("Coordinador
@@ -273,6 +273,12 @@ function GeneralHome() {
               <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.stationsCount ?? 0}</div>
             </div>
             <div className="kpi-card">
+              <div className="kpi-label">Dotación total</div>
+              <div className="kpi-value">
+                {loading ? <span className="skeleton" aria-hidden="true" /> : stations.reduce((sum, station) => sum + station.personnel_count, 0)}
+              </div>
+            </div>
+            <div className="kpi-card">
               <div className="kpi-label">Asistencia promedio</div>
               <div className="kpi-value">
                 {loading || summary?.averageAttendanceRate == null ? '—' : formatPercent(summary.averageAttendanceRate)}
@@ -287,7 +293,7 @@ function GeneralHome() {
               <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.coursesActive ?? 0}</div>
             </div>
             <div className="kpi-card">
-              <div className="kpi-label">Vehículos registrados</div>
+              <div className="kpi-label">Móviles registrados</div>
               <div className="kpi-value">{loading ? <span className="skeleton" aria-hidden="true" /> : summary?.vehiclesRegistered ?? 0}</div>
             </div>
           </div>
@@ -323,7 +329,7 @@ function GeneralHome() {
                 <div>
                   <div className="row-item-title">{station.name}</div>
                   <div className="row-item-meta">
-                    Personal: {station.personnel_count} · Unidades: {station.vehicles_count}
+                    Dotación: {station.personnel_count} · Móviles: {station.vehicles_count}
                   </div>
                 </div>
                 <Icon name="chevronRight" size={18} />

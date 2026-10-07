@@ -127,7 +127,7 @@ export function CursoFormPage() {
   if (!canEdit) {
     return (
       <AppShell title="Escuela">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'crear'} cursos.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'crear'} cursos con tu rol actual.</div>
       </AppShell>
     )
   }

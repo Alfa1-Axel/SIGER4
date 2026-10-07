@@ -100,7 +100,7 @@ export function AyudaPage() {
                     ))}
                   </div>
                 )}
-                {a.contact && <SupportContact variant="inline" lead="Escribile al Dpto. de Informática y Estadística R4:" />}
+                {a.contact && <SupportContact variant="inline" lead="Consultá a Informática y Estadística:" />}
               </div>
             </details>
           ))}

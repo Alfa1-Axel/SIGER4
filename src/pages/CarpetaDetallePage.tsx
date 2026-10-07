@@ -85,7 +85,7 @@ export function CarpetaDetallePage() {
         }
         setLoading(false)
       })
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la carpeta')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar la carpeta. Reintentá en unos segundos.')))
     return () => {
       active = false
     }
@@ -157,7 +157,7 @@ export function CarpetaDetallePage() {
   if (!isGeneral && !folder) {
     return (
       <AppShell title="Carpeta">
-        <div className="empty-state">No se encontró la carpeta solicitada.</div>
+        <div className="empty-state">No encontramos esa carpeta. Puede que la hayan eliminado.</div>
       </AppShell>
     )
   }

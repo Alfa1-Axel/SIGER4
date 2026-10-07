@@ -1,6 +1,7 @@
 import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
 import { shortSubsedeName, stationSummaryLine } from './reportText'
 import { truncateDecimals } from '../format'
+import { STAFFING_CATEGORIES } from '../staffing'
 import {
   fetchAttendanceReportData,
   fetchCoursesReportData,
@@ -67,6 +68,7 @@ export async function generateAttendanceReport(ctx: ReportRunContext) {
       ? [
           `Se registraron ${rows.length} resúmenes de asistencia en el período seleccionado.`,
           `La tasa de asistencia promedio fue de ${pct(average)}.`,
+          'La dotación de cada fila es la que tenía el cuartel al cargar el resumen: no cambia si después cambia su dotación actual.',
         ]
       : ['No hay resúmenes de asistencia cargados para el período y alcance seleccionados.'],
   )
@@ -245,7 +247,7 @@ export async function generateVehiclesReport(ctx: ReportRunContext) {
 export async function generateStationGeneralReport(ctx: ReportRunContext) {
   if (!ctx.filters.stationId) throw new Error('Seleccioná un cuartel para este reporte.')
   const data = await fetchStationReportData(ctx.filters.stationId, ctx.filters)
-  if (!data) throw new Error('No se encontró el cuartel seleccionado.')
+  if (!data) throw new Error('No encontramos el cuartel seleccionado.')
 
   const builder = await new ReportBuilder({
     title: `Reporte General — ${data.station.name}`,
@@ -263,6 +265,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   const totalInterventions = data.interventions.reduce((sum, r) => sum + r.total_count, 0)
 
   builder.addKpiRow([
+    { label: 'Dotación', value: data.station.personnel_count > 0 ? String(data.station.personnel_count) : '—' },
     { label: 'Asistencia promedio', value: data.attendance.length ? pct(avgAttendance) : '—' },
     { label: 'Intervenciones', value: String(totalInterventions) },
     { label: 'Vehículos', value: String(data.vehicles.length) },
@@ -270,6 +273,9 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
 
   builder.addExecutiveSummary([
     stationSummaryLine(data.station),
+    data.staffing
+      ? `Dotación actual: ${data.staffing.total} integrantes, actualizada el ${new Date(data.staffing.updated_at).toLocaleDateString('es-AR')}.`
+      : 'La dotación del cuartel todavía no está cargada por categorías.',
     data.attendance.length
       ? `Asistencia promedio del período: ${pct(avgAttendance)}.`
       : 'Sin resúmenes de asistencia cargados en el período.',
@@ -277,6 +283,16 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
       ? `Total de intervenciones registradas: ${totalInterventions}.`
       : 'Sin intervenciones registradas en el período.',
   ])
+
+  if (data.staffing) {
+    const staffing = data.staffing
+    builder.addTable(
+      ['Categoría', 'Cantidad'],
+      [...STAFFING_CATEGORIES.map((c) => [c.label, staffing[c.key]]), ['Dotación total', staffing.total]],
+      'Dotación actual',
+      [120, 'auto'],
+    )
+  }
 
   const stationLegacyAverage = data.attendance.some((r) => r.present_average != null)
   builder.addTable(
@@ -324,8 +340,11 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
     : 0
   const totalInterventions = data.interventions.reduce((sum, r) => sum + r.total_count, 0)
 
+  const totalDotation = data.stations.reduce((sum, s) => sum + s.personnel_count, 0)
+
   builder.addKpiRow([
     { label: 'Cuarteles', value: String(data.stations.length) },
+    { label: 'Dotación', value: totalDotation > 0 ? String(totalDotation) : '—' },
     { label: 'Asistencia promedio', value: data.attendance.length ? pct(avgAttendance) : '—' },
     { label: 'Intervenciones', value: String(totalInterventions) },
     { label: 'Cursos', value: String(data.courses.length) },
@@ -334,6 +353,9 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
 
   builder.addExecutiveSummary([
     `La Regional cuenta con ${data.stations.length} cuarteles dentro del alcance seleccionado.`,
+    totalDotation > 0
+      ? `La dotación actual suma ${totalDotation} integrantes; ${data.staffing.length} de ${data.stations.length} cuarteles la cargaron por categorías.`
+      : 'Todavía no hay dotación cargada en los cuarteles del alcance seleccionado.',
     data.attendance.length
       ? `La asistencia promedio del período fue de ${pct(avgAttendance)}.`
       : 'Sin resúmenes de asistencia cargados en el período.',
@@ -361,11 +383,25 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
   }
 
   builder.addTable(
-    ['Cuartel', 'Subsede', 'Estado', 'Vehículos'],
-    data.stations.map((s) => [s.name, shortSubsedeName(s.subsede?.name) ?? '—', s.status, s.vehicles_count]),
+    ['Cuartel', 'Subsede', 'Estado', 'Dotación', 'Vehículos'],
+    data.stations.map((s) => [s.name, shortSubsedeName(s.subsede?.name) ?? '—', s.status, s.personnel_count > 0 ? s.personnel_count : '—', s.vehicles_count]),
     'Cuarteles',
-    [65, 50, 45, 'auto'],
+    [60, 40, 35, 'auto', 'auto'],
   )
+
+  // Totales por categoría de los cuarteles que ya cargaron su dotación.
+  if (data.staffing.length > 0) {
+    const staffing = data.staffing
+    builder.addTable(
+      ['Categoría', 'Cantidad'],
+      [
+        ...STAFFING_CATEGORIES.map((c) => [c.label, staffing.reduce((sum, row) => sum + row[c.key], 0)]),
+        ['Dotación total', staffing.reduce((sum, row) => sum + row.total, 0)],
+      ],
+      `Dotación por categoría (${staffing.length} ${staffing.length === 1 ? 'cuartel' : 'cuarteles'} con dotación cargada)`,
+      [120, 'auto'],
+    )
+  }
 
   return builder.finalize()
 }
@@ -482,7 +518,7 @@ export async function generateDepartmentSpecificReport(ctx: ReportRunContext) {
     fetchDepartmentsReportData(ctx.departmentId),
     fetchStations(),
   ])
-  if (!department) throw new Error('No se encontró el departamento seleccionado.')
+  if (!department) throw new Error('No encontramos el departamento seleccionado.')
   const stationName = (stationId: string | null) => (stationId ? stations.find((s) => s.id === stationId)?.name ?? '—' : '—')
 
   const builder = await new ReportBuilder({

@@ -18,7 +18,7 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
       <Navigate
         to="/login"
         replace
-        state={{ message: 'Tu cuenta fue desactivada. Contactá a un administrador si creés que es un error.' }}
+        state={{ message: 'Tu cuenta fue desactivada. Si creés que es un error, consultá a Informática y Estadística.' }}
       />
     )
   }

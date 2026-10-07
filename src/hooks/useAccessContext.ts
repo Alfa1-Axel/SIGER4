@@ -18,6 +18,8 @@ export function useAccessContext(): SearchContext {
   const isDirector = hasRole('director_escuela')
   const isEscuelaRole = hasRole('director_escuela', 'instructor', 'coordinador_escuela', 'secretario_escuela')
   const canUploadDocuments = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  // Misma regla que la carga de personal y de dotación (0108).
+  const canEditStaffing = isAdmin || hasRole('secretario_regional', 'presidente_cuartel', 'jefe_cuerpo_activo', 'usuario_carga_cuartel')
   const profileId = profile?.id ?? null
 
   return useMemo<SearchContext>(() => {
@@ -34,6 +36,7 @@ export function useAccessContext(): SearchContext {
       canNotifyDepartments: isAdmin || isRegional || coordinatedDepartmentIds.length > 0,
       departmentOnly: isDepartmentOnly,
       hasOwnDepartments: coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0,
+      canEditStaffing,
     }
     return {
       ...help,
@@ -44,5 +47,5 @@ export function useAccessContext(): SearchContext {
       canSearchUsers: isAdmin || isJefe,
       usersLimitedToOwnStation: !isAdmin && isJefe,
     }
-  }, [isAdmin, isSuperAdmin, isDepartmentOnly, canRequest, isRegional, isDirector, hasReportsAccess, hasAvalesAccess, isEscuelaRole, canUploadDocuments, isJefe, profileId, ownStationIds, coordinatedDepartmentIds, memberDepartmentIds])
+  }, [isAdmin, isSuperAdmin, isDepartmentOnly, canRequest, isRegional, isDirector, hasReportsAccess, hasAvalesAccess, isEscuelaRole, canUploadDocuments, isJefe, canEditStaffing, profileId, ownStationIds, coordinatedDepartmentIds, memberDepartmentIds])
 }

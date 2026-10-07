@@ -102,7 +102,7 @@ export function CalendarioPage() {
         setSubsedes(subsedesData)
         setStations(stationsData)
       })
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el calendario')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar el calendario. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

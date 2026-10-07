@@ -60,7 +60,7 @@ export function PapeleraDocumentosPage() {
   useEffect(() => {
     let active = true
     reload()
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la papelera')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar la papelera. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -136,7 +136,7 @@ export function PapeleraDocumentosPage() {
   if (!canManage) {
     return (
       <AppShell title="Papelera">
-        <div className="empty-state">No tenés permisos para ver la papelera de documentos.</div>
+        <div className="empty-state">No tenés permiso para ver la papelera de documentos con tu rol actual.</div>
       </AppShell>
     )
   }

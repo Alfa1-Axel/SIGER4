@@ -25,7 +25,7 @@ export function UsuariosPage() {
     let active = true
     fetchProfiles()
       .then((data) => active && setProfiles(data))
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar usuarios')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar los usuarios. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

@@ -92,7 +92,7 @@ export function InformeDepartamentoFormPage() {
         setLoading(false)
       } catch (err) {
         if (!active) return
-        setError(describeSupabaseError(err, 'Error al cargar los datos del informe.'))
+        setError(describeSupabaseError(err, 'No pudimos cargar los datos del informe. Reintentá en unos segundos.'))
         setLoading(false)
       }
     }

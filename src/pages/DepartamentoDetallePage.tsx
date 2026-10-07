@@ -221,7 +221,7 @@ export function DepartamentoDetallePage() {
         setSubsedes(subsedesData)
         setLoading(false)
       })
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el departamento')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar el departamento. Reintentá en unos segundos.')))
     return () => {
       active = false
     }
@@ -473,7 +473,7 @@ export function DepartamentoDetallePage() {
       <AppShell title="Departamento">
         <AccessDenied
           title="No podés ver este departamento"
-          message="Un departamento lo ven su coordinador y sus miembros (con el rol de departamento), Informática, el Secretario Regional y el Director de Escuela. Si deberías verlo, pedile a su coordinador o a Informática que te sumen. También puede que lo hayan eliminado."
+          message="Un departamento lo ven su coordinador y sus miembros (con el rol de departamento), Informática y Estadística, el Secretario Regional y el Director de Escuela. Si deberías verlo, pedile a su coordinador o a Informática y Estadística que te sumen. También puede que lo hayan eliminado."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />

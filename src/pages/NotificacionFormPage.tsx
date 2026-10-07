@@ -142,7 +142,7 @@ export function NotificacionFormPage() {
   if (!canCreate) {
     return (
       <AppShell title="Nueva Notificación">
-        <div className="empty-state">No tenés permisos para crear notificaciones.</div>
+        <div className="empty-state">No tenés permiso para crear notificaciones con tu rol actual.</div>
       </AppShell>
     )
   }

@@ -174,7 +174,7 @@ export function LoginPage() {
         )}
 
         <p className="login-help">
-          ¿Olvidaste la contraseña o no tenés cuenta? Pedíselo al Dpto. de Informática y Estadística R4.
+          ¿Olvidaste la contraseña o no tenés cuenta? Consultá a Informática y Estadística.
         </p>
         <SupportContact variant="inline" />
       </div>

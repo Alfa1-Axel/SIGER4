@@ -27,8 +27,8 @@ function SchoolAvalesGate({ children }: { children: ReactNode }) {
           title="No tenés permiso para ver Avales regionales"
           message={
             isDepartmentOnly
-              ? 'Avales es para el coordinador de cada departamento, que ve y sube solo los de su departamento. Tu rol (Miembro de Departamento) no incluye Avales. Si lo necesitás, pedíselo a Informática R4.'
-              : 'Avales es para Informática, el Coordinador y el Secretario de Escuela, y el coordinador de cada departamento (que ve solo el suyo). Si coordinás un departamento y no lo ves, pedile a Informática que te asigne como coordinador en la sección Departamentos.'
+              ? 'Avales es para el coordinador de cada departamento, que ve y sube solo los de su departamento. Tu rol (Miembro de Departamento) no incluye Avales. Si lo necesitás, consultá a Informática y Estadística.'
+              : 'Avales es para Informática, el Coordinador y el Secretario de Escuela, y el coordinador de cada departamento (que ve solo el suyo). Si coordinás un departamento y no lo ves, consultá a Informática y Estadística para que te asignen como coordinador en la sección Departamentos.'
           }
           backTo={isDepartmentOnly ? '/panel' : '/escuela'}
           backLabel={isDepartmentOnly ? 'Volver al inicio' : 'Volver a Escuela'}

@@ -90,7 +90,7 @@ export function CarpetaFormPage() {
       return
     }
     if (scopeTarget === 'station' && stationLocked && !myStationId) {
-      setError('No pudimos determinar tu cuartel asignado. Contactá a un administrador.')
+      setError('No pudimos identificar tu cuartel. Consultá a Informática y Estadística.')
       return
     }
     if (scopeTarget === 'profile' && !profileId) {
@@ -120,7 +120,7 @@ export function CarpetaFormPage() {
   if (!canCreate) {
     return (
       <AppShell title="Documentos">
-        <div className="empty-state">No tenés permisos para crear carpetas.</div>
+        <div className="empty-state">No tenés permiso para crear carpetas con tu rol actual.</div>
       </AppShell>
     )
   }

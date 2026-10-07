@@ -77,7 +77,7 @@ export function DepartamentoFormPage() {
       <AppShell title="Departamentos">
         <AccessDenied
           title="No podés crear departamentos"
-          message="Los departamentos los crea el Dpto. de Informática y Estadística R4. Si falta uno, pediles que lo agreguen."
+          message="Los departamentos los crea Informática y Estadística. Si falta uno, consultales para que lo agreguen."
           backTo="/departamentos"
           backLabel="Volver a Departamentos"
         />

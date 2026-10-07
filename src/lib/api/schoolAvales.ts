@@ -121,5 +121,5 @@ export async function deleteSchoolAvalDocument(doc: SchoolAvalDocument): Promise
   await removeSchoolAvalFile(doc.storage_path)
   const { data, error } = await supabase.from('school_avales_documents').delete().eq('id', doc.id).select('id')
   if (error) throw error
-  if (!data || data.length === 0) throw new Error('No tenés permisos para eliminar este documento.')
+  if (!data || data.length === 0) throw new Error('No tenés permiso para eliminar este documento con tu rol actual.')
 }

@@ -208,7 +208,7 @@ export function SolicitudPrestamoDetallePage() {
             </p>
           </div>
         ) : (
-          <div className="empty-state">No se encontró la solicitud solicitada.</div>
+          <div className="empty-state">No encontramos esa solicitud. Puede que la hayan eliminado.</div>
         )}
       </AppShell>
     )

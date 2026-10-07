@@ -119,7 +119,7 @@ export function EventoCalendarioDetallePage() {
   if (!event) {
     return (
       <AppShell title="Evento">
-        <div className="empty-state">No se encontró el evento solicitado.</div>
+        <div className="empty-state">No encontramos ese evento. Puede que lo hayan eliminado.</div>
       </AppShell>
     )
   }

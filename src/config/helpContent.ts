@@ -27,6 +27,7 @@ export type HelpAudience =
   | 'informatica'
   | 'auditoria'
   | 'avisar_departamento'
+  | 'cargar_dotacion'
 
 export interface HelpAudienceContext {
   isAdmin: boolean
@@ -44,12 +45,16 @@ export interface HelpAudienceContext {
   departmentOnly: boolean
   // Coordina o integra al menos un departamento, con su rol.
   hasOwnDepartments: boolean
+  // Carga la dotación de un cuartel: Informática, Secretario Regional y los
+  // roles de carga de cuartel (misma regla que la carga de personal).
+  canEditStaffing: boolean
 }
 
-export type HelpSection = 'inicio' | 'inventario' | 'departamentos' | 'escuela' | 'documentos' | 'cuenta' | 'administracion' | 'faq'
+export type HelpSection = 'inicio' | 'cuarteles' | 'inventario' | 'departamentos' | 'escuela' | 'documentos' | 'cuenta' | 'administracion' | 'faq'
 
 export const HELP_SECTION_LABEL: Record<HelpSection, string> = {
   inicio: 'Primeros pasos',
+  cuarteles: 'Cuarteles y dotación',
   inventario: 'Inventario y préstamos',
   departamentos: 'Departamentos',
   escuela: 'Escuela',
@@ -59,7 +64,7 @@ export const HELP_SECTION_LABEL: Record<HelpSection, string> = {
   faq: 'Preguntas frecuentes',
 }
 
-export const HELP_SECTION_ORDER: HelpSection[] = ['inicio', 'inventario', 'departamentos', 'escuela', 'documentos', 'cuenta', 'administracion', 'faq']
+export const HELP_SECTION_ORDER: HelpSection[] = ['inicio', 'cuarteles', 'inventario', 'departamentos', 'escuela', 'documentos', 'cuenta', 'administracion', 'faq']
 
 export interface HelpArticle {
   id: string
@@ -111,6 +116,8 @@ export function canSeeHelpArticle(article: Pick<HelpArticle, 'audience' | 'modul
       return ctx.isSuperAdmin
     case 'avisar_departamento':
       return ctx.canNotifyDepartments
+    case 'cargar_dotacion':
+      return ctx.canEditStaffing
     default:
       return false
   }
@@ -200,6 +207,42 @@ export const HELP_ARTICLES: HelpArticle[] = [
     ],
     links: [{ label: 'Ir a Novedades', to: '/novedades' }],
     keywords: ['novedades', 'versión', 'cambios', 'actualización'],
+  },
+
+  // ---------------- Cuarteles y dotación ----------------
+  {
+    id: 'dotacion-que-es',
+    section: 'cuarteles',
+    audience: 'todos',
+    module: 'cuarteles',
+    title: 'Qué es la dotación del cuartel',
+    summary: 'La cantidad actual de integrantes, por categoría, y quién la actualiza.',
+    steps: [
+      'La dotación es la cantidad actual de integrantes de un cuartel, por categoría: aspirantes menores y mayores, bomberos de Nivel 1 a 4, personal en reserva y cuerpo auxiliar.',
+      'El total es la suma de las categorías y se calcula solo: nadie lo carga a mano.',
+      'La actualizan el Presidente, el Jefe de Cuerpo Activo o el usuario de carga de cada cuartel, el Secretario Regional (en su Regional) e Informática y Estadística.',
+      'No hace falta cargar nombres: el registro nominal de personal es opcional.',
+      'Asistencia toma la dotación del cuartel al cargar cada resumen y la guarda. Si después cambia la dotación, los resúmenes anteriores no se modifican.',
+    ],
+    links: [{ label: 'Ir a Cuarteles', to: '/cuarteles' }],
+    keywords: ['dotación', 'categorías', 'aspirantes', 'bomberos', 'nivel', 'reserva', 'cuerpo auxiliar', 'total', 'cuartel', 'personal'],
+  },
+  {
+    id: 'dotacion-cargar',
+    section: 'cuarteles',
+    audience: 'cargar_dotacion',
+    module: 'cuarteles',
+    title: 'Cargar la dotación del cuartel',
+    summary: 'Cargá cuántos integrantes hay en cada categoría. Se actualiza cuando cambia la dotación real.',
+    steps: [
+      'Entrá a Cuarteles, elegí el cuartel y bajá hasta "Dotación actual".',
+      'Cargá la cantidad de cada categoría con los botones − y + o escribiendo el número. Solo se admiten números enteros, desde 0.',
+      'Mirá el total: se actualiza solo mientras cargás.',
+      'Tocá "Guardar dotación". Queda registrada la fecha y quién la actualizó.',
+      'Volvé a entrar cuando cambie la dotación real del cuartel. No es una carga mensual.',
+    ],
+    links: [{ label: 'Ir a Cuarteles', to: '/cuarteles' }],
+    keywords: ['dotación', 'cargar', 'actualizar', 'categorías', 'aspirantes', 'bomberos', 'reserva', 'cuerpo auxiliar', 'total', 'nombres'],
   },
 
   // ---------------- Inventario ----------------
@@ -414,7 +457,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Qué hacer si no veo una sección',
     summary: 'Tu menú muestra solo lo que tu rol necesita para trabajar en tu departamento.',
     answer:
-      'Ver menos es normal: Coordinador y Miembro de Departamento usan su departamento, el calendario del departamento, las notificaciones, la ayuda y su perfil. Si no ves tu departamento, todavía no te asignaron uno. Si necesitás otra sección (por ejemplo Documentos o Inventario), pedile a Informática R4 que te asigne el rol que corresponde, contando qué necesitás hacer.',
+      'Ver menos es normal: Coordinador y Miembro de Departamento usan su departamento, el calendario del departamento, las notificaciones, la ayuda y su perfil. Si no ves tu departamento, todavía no te asignaron uno. Si necesitás otra sección (por ejemplo Documentos o Inventario), consultá a Informática y Estadística para que te asignen el rol que corresponde, contando qué necesitás hacer.',
     keywords: ['menú', 'sección', 'no veo', 'falta', 'permiso', 'departamento', 'rol'],
   },
 
@@ -490,7 +533,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     steps: [
       'Si una pantalla dice "No tenés permiso", es por tu rol o tu alcance, no por un error.',
       'Revisá en "Roles y permisos" qué puede hacer cada rol.',
-      'Si necesitás un acceso, pedíselo a Informática R4 (o al coordinador de tu departamento, si es para Departamentos).',
+      'Si necesitás un acceso, consultá a Informática y Estadística (o al coordinador de tu departamento, si es para Departamentos).',
     ],
     links: [{ label: 'Ver Roles y permisos', to: '/roles' }],
     keywords: ['permiso', 'acceso', 'no puedo', 'rol', 'denegado'],
@@ -571,7 +614,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     contact: true,
     title: 'No veo una sección del menú',
     summary: 'El menú muestra solo lo que tu rol puede usar.',
-    answer: 'Cada rol tiene su menú. Si creés que deberías ver una sección, pedíselo a Informática R4 indicando qué necesitás hacer.',
+    answer: 'Cada rol tiene su menú. Si creés que deberías ver una sección, consultá a Informática y Estadística indicando qué necesitás hacer.',
     keywords: ['menú', 'sección', 'no veo', 'falta'],
   },
   {
@@ -580,8 +623,8 @@ export const HELP_ARTICLES: HelpArticle[] = [
     audience: 'todos',
     contact: true,
     title: 'Olvidé mi contraseña',
-    summary: 'La restablece Informática R4.',
-    answer: 'Pedile a Informática R4 que te asigne una contraseña temporal. Al ingresar, el sistema te pide cambiarla por una tuya.',
+    summary: 'La restablece Informática y Estadística.',
+    answer: 'Pedile a Informática y Estadística una contraseña temporal. Al ingresar, el sistema te pide cambiarla por una tuya.',
     keywords: ['contraseña', 'olvidé', 'no puedo entrar', 'ingresar'],
   },
   {
@@ -613,7 +656,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'No veo un departamento o sus informes',
     summary: 'Cada departamento lo ven su coordinador, sus miembros e Informática.',
     answer:
-      'Si tenés que verlo, pedile al coordinador del departamento (o a Informática) que te sume como miembro. Desde ese momento lo ves en Departamentos, en tu Inicio y en la búsqueda.',
+      'Si tenés que verlo, pedile al coordinador del departamento (o a Informática y Estadística) que te sume como miembro. Desde ese momento lo ves en Departamentos, en tu Inicio y en la búsqueda.',
     keywords: ['informe', 'departamento', 'no veo', 'acta', 'menú', 'miembro', 'integrante'],
   },
 ]

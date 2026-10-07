@@ -51,7 +51,7 @@ export function InventarioPage() {
       .catch(() => undefined)
     fetchInventoryItems()
       .then((data) => active && setItems(data))
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar el inventario')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar el inventario. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

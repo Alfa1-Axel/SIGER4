@@ -163,7 +163,7 @@ export function VehiculoFormPage() {
   if (!canEdit) {
     return (
       <AppShell title="Vehículos">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} vehículos.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} vehículos con tu rol actual.</div>
       </AppShell>
     )
   }

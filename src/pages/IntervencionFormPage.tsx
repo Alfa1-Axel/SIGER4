@@ -117,7 +117,7 @@ export function IntervencionFormPage() {
   if (!canEdit) {
     return (
       <AppShell title="Intervenciones">
-        <div className="empty-state">No tenés permisos para cargar resúmenes de intervenciones.</div>
+        <div className="empty-state">No tenés permiso para cargar resúmenes de intervenciones con tu rol actual.</div>
       </AppShell>
     )
   }
@@ -184,7 +184,7 @@ export function IntervencionFormPage() {
               />
             </div>
             <div className="field" style={{ flex: 1, minWidth: 140 }}>
-              <label htmlFor="personnelCount">Cantidad de personal</label>
+              <label htmlFor="personnelCount">Personal que intervino</label>
               <input
                 id="personnelCount"
                 type="number"

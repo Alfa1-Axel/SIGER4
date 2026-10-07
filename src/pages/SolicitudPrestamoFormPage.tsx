@@ -97,7 +97,7 @@ export function SolicitudPrestamoFormPage() {
     } catch (err) {
       setError(
         describeSupabaseError(err, 'No pudimos enviar la solicitud. Reintentá en unos segundos.').replace(
-          'No tenés permisos para realizar esta acción.',
+          'No tenés permiso para realizar esta acción con tu rol actual.',
           'No tenés permiso para solicitar para ese cuartel.',
         ),
       )
@@ -154,7 +154,7 @@ export function SolicitudPrestamoFormPage() {
         ? `Este elemento está prestado a ${stationName(activeLoan.requesting_station_id)}${activeLoan.expected_return_at ? ` (devolución estimada: ${new Date(activeLoan.expected_return_at).toLocaleDateString('es-AR')})` : ''}. Se puede pedir cuando lo devuelvan.`
         : `Este elemento está reservado para ${stationName(activeLoan.requesting_station_id)}. Se puede pedir cuando lo devuelvan o se cancele la reserva.`
   } else if (stationOptions.length === 0) {
-    blocker = 'Tu cuenta no tiene un cuartel asignado. Pedile a Informática R4 que te asigne tu cuartel para poder solicitar préstamos.'
+    blocker = 'Tu cuenta no tiene un cuartel asignado. Consultá a Informática y Estadística para que te lo asignen y puedas solicitar préstamos.'
   }
 
   return (

@@ -226,6 +226,24 @@ export interface VehicleStatusHistory {
 
 export type PersonnelStatus = 'activo' | 'licencia' | 'baja' | 'reserva' | 'aspirante' | 'renuncia' | 'pase'
 
+// Dotación actual del cuartel por categorías (0108). `total` lo calcula la base.
+export interface StationStaffing {
+  station_id: string
+  aspirantes_menores: number
+  aspirantes_mayores: number
+  bomberos_nivel_1: number
+  bomberos_nivel_2: number
+  bomberos_nivel_3: number
+  bomberos_nivel_4: number
+  personal_reserva: number
+  cuerpo_auxiliar: number
+  total: number
+  updated_by_profile_id: string | null
+  updated_by_name: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Personnel {
   id: string
   station_id: string

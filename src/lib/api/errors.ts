@@ -29,7 +29,7 @@ import { FIELD_LABELS } from '../audit/humanize'
 // base o que no traen ningún mensaje propio.
 const NETWORK_MESSAGE = 'No hay conexión con el servidor. Revisá tu conexión a internet y volvé a intentar.'
 const PENDING_UPDATE_MESSAGE =
-  'Esta función necesita una actualización de la base de datos que todavía no se aplicó. Avisá al Dpto. de Informática y Estadística R4.'
+  'Esta función necesita una actualización de la base de datos que todavía no se aplicó. Consultá a Informática y Estadística.'
 
 // Errores de red: fetch falla con TypeError ("Failed to fetch" en Chrome,
 // "Load failed" en Safari, "NetworkError..." en Firefox).
@@ -96,31 +96,33 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   attendance_observations_length: 'Las observaciones pueden tener hasta 1000 caracteres.',
   calendar_events_dates_check: 'La fecha de fin del evento tiene que ser posterior al inicio.',
   calendar_events_single_scope: 'Elegí un solo destino para el evento: un cuartel, una subsede, la Regional o un departamento.',
-  notifications_scope_not_ambiguous: 'No pudimos generar el aviso automático de este cambio. Avisale al Dpto. de Informática.',
+  notifications_scope_not_ambiguous: 'No pudimos generar el aviso automático de este cambio. Consultá a Informática y Estadística.',
+  station_staffing_counts_range: 'Cada categoría de la dotación tiene que ser un número entero entre 0 y 9999.',
 }
 
 // Permiso denegado por la RLS al guardar: mensaje según la sección.
 const RLS_TABLE_MESSAGES: Record<string, string> = {
-  attendance_summaries: 'No tenés permiso para cargar asistencia de este cuartel.',
-  intervention_summaries: 'No tenés permiso para cargar intervenciones de este cuartel.',
-  calendar_events: 'No tenés permiso para cargar eventos con ese destino.',
+  attendance_summaries: 'No tenés permiso para cargar asistencia de este cuartel con tu rol actual.',
+  intervention_summaries: 'No tenés permiso para cargar intervenciones de este cuartel con tu rol actual.',
+  calendar_events: 'No tenés permiso para cargar eventos con ese destino con tu rol actual.',
+  station_staffing: 'No tenés permiso para cargar la dotación de este cuartel con tu rol actual.',
 }
 
-export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un error inesperado. Intentá de nuevo.'): string {
+export function describeSupabaseError(err: unknown, fallback = 'No pudimos completar la acción. Intentá de nuevo; si sigue fallando, consultá a Informática y Estadística.'): string {
   if (isNetworkError(err)) return NETWORK_MESSAGE
   const storageMessage = describeStorageError(err)
   if (storageMessage) return storageMessage
   if (isPostgrestError(err)) {
     if (err.code === '42501') {
       const table = err.message.match(/row-level security policy for table "([^"]+)"/)?.[1]
-      return (table && RLS_TABLE_MESSAGES[table]) || 'No tenés permisos para realizar esta acción.'
+      return (table && RLS_TABLE_MESSAGES[table]) || 'No tenés permiso para realizar esta acción con tu rol actual.'
     }
     // Función o tabla que la app espera y la base todavía no tiene: falta
     // correr una migración (PGRST202/PGRST205 de PostgREST, 42883/42P01 de
     // Postgres). Mejor decirlo así que mostrar un error genérico.
     if (err.code === 'PGRST202' || err.code === 'PGRST205' || err.code === '42883' || err.code === '42P01') return PENDING_UPDATE_MESSAGE
     if (err.code === 'PGRST116') {
-      return 'No tenés permisos para realizar esta acción, o la solicitud ya no está en el estado esperado. Recargá la página e intentá de nuevo.'
+      return 'No tenés permiso para realizar esta acción con tu rol actual, o el registro cambió mientras trabajabas. Recargá la página e intentá de nuevo.'
     }
     if (err.code === '23502') {
       const match = err.message.match(/column "([^"]+)"/)
@@ -132,11 +134,11 @@ export function describeSupabaseError(err: unknown, fallback = 'Ocurrió un erro
       const label = columnName ? FIELD_LABELS[columnName] : undefined
       return label ? `Falta completar un campo obligatorio: ${label}.` : 'Faltan completar campos obligatorios.'
     }
-    if (err.code === '23503') return 'El registro está vinculado a otros datos y no puede eliminarse, o hace referencia a algo que no existe.'
+    if (err.code === '23503') return 'Este registro está vinculado a otros datos y no se puede eliminar, o hace referencia a algo que no existe.'
     if (err.code === '23505') return 'Ya existe un registro con esos datos.'
     if (err.code === '23514') {
       const constraint = err.message.match(/check constraint "([^"]+)"/)?.[1]
-      return (constraint && CHECK_CONSTRAINT_MESSAGES[constraint]) || 'Algún dato no cumple las reglas del sistema. Revisá los valores e intentá de nuevo.'
+      return (constraint && CHECK_CONSTRAINT_MESSAGES[constraint]) || 'Algún dato no cumple las reglas de carga. Revisá los valores e intentá de nuevo.'
     }
     // P0001: "raise exception" explícito de un trigger nuestro (ver
     // validate_inventory_loan_request_item_status en 0057) -- el mensaje ya

@@ -53,8 +53,8 @@ export function describeSignInError(result: { error: string | null; code?: strin
   if (code === 'over_request_rate_limit' || result.status === 429 || message.includes('rate limit')) {
     return 'Demasiados intentos seguidos. Esperá unos minutos y volvé a intentar.'
   }
-  if (code === 'email_not_confirmed') return 'Tu cuenta todavía no está confirmada. Pedile a Informática R4 que la revise.'
-  if (code === 'user_banned') return 'Tu cuenta está desactivada. Comunicate con Informática R4.'
+  if (code === 'email_not_confirmed') return 'Tu cuenta todavía no está confirmada. Consultá a Informática y Estadística para que la revisen.'
+  if (code === 'user_banned') return 'Tu cuenta está desactivada. Consultá a Informática y Estadística.'
   if ((typeof navigator !== 'undefined' && navigator.onLine === false) || /failed to fetch|load failed|networkerror|fetch/i.test(message)) {
     return 'No hay conexión con el servidor. Revisá tu conexión a internet y volvé a intentar.'
   }
@@ -77,7 +77,7 @@ export function describePasskeyError(err: unknown): string {
   }
   if (e?.code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED') return 'Este dispositivo ya está registrado.'
   if (e?.code === 'ERROR_INVALID_DOMAIN' || e?.code === 'ERROR_INVALID_RP_ID') {
-    return 'El ingreso con passkey no está configurado para esta dirección. Avisá a Informática R4.'
+    return 'El ingreso con passkey no está configurado para esta dirección. Consultá a Informática y Estadística.'
   }
   return 'No pudimos completar el ingreso con passkey. Ingresá con email y contraseña.'
 }

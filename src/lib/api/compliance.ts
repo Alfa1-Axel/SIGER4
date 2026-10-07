@@ -18,12 +18,12 @@ export async function fetchStationComplianceById(stationId: string): Promise<Sta
 // nada — nunca se devuelve una lista vacía sin explicación.
 export function complianceReasons(c: StationCompliance): string[] {
   const reasons: string[] = []
-  if (!c.has_contact_info) reasons.push('Falta contacto institucional')
-  if (!c.has_personnel) reasons.push('Personal sin cargar')
-  if (!c.has_vehicles) reasons.push('Sin vehículos cargados')
-  if (!c.attendance_recent) reasons.push('Sin asistencia reciente')
-  if (!c.interventions_recent) reasons.push('Sin intervenciones recientes')
-  if (!c.has_documents) reasons.push('Sin documentos cargados')
+  if (!c.has_contact_info) reasons.push('Falta el contacto institucional')
+  if (!c.has_personnel) reasons.push('Falta cargar la dotación')
+  if (!c.has_vehicles) reasons.push('Faltan cargar los móviles')
+  if (!c.attendance_recent) reasons.push('Sin resumen de asistencia reciente')
+  if (!c.interventions_recent) reasons.push('Sin resumen de intervenciones reciente')
+  if (!c.has_documents) reasons.push('Sin documentos institucionales')
   if (reasons.length === 0) reasons.push('Datos actualizados')
   return reasons
 }

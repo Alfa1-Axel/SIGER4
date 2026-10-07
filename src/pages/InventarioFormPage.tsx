@@ -135,7 +135,7 @@ export function InventarioFormPage() {
   if (!canEdit) {
     return (
       <AppShell title="Inventario Regional">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} elementos del inventario.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} elementos del inventario con tu rol actual.</div>
       </AppShell>
     )
   }

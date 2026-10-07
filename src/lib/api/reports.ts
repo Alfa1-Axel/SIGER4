@@ -9,9 +9,11 @@ import type {
   InterventionSummary,
   Profile,
   Station,
+  StationStaffing,
   Subsede,
   Vehicle,
 } from '../../types/database'
+import { fetchStaffingForStations, fetchStationStaffing } from './stationStaffing'
 
 const STATION_WITH_SUBSEDE_SELECT = '*, subsede:subsedes(*)'
 
@@ -105,10 +107,12 @@ export interface StationReportData {
   attendance: AttendanceSummary[]
   interventions: InterventionSummary[]
   vehicles: Vehicle[]
+  // Dotación actual por categorías; null si el cuartel todavía no la cargó.
+  staffing: StationStaffing | null
 }
 
 export async function fetchStationReportData(stationId: string, filters: ReportFilters): Promise<StationReportData | null> {
-  const [stationRes, attendanceRes, interventionsRes, vehiclesRes] = await Promise.all([
+  const [stationRes, attendanceRes, interventionsRes, vehiclesRes, staffing] = await Promise.all([
     supabase.from('stations').select(STATION_WITH_SUBSEDE_SELECT).eq('id', stationId).single(),
     (() => {
       let q = supabase.from('attendance_summaries').select('*').eq('station_id', stationId)
@@ -123,6 +127,8 @@ export async function fetchStationReportData(stationId: string, filters: ReportF
       return q.order('period_start', { ascending: true })
     })(),
     supabase.from('vehicles').select('*').eq('station_id', stationId).order('internal_code', { ascending: true }),
+    // Si no se puede leer, el reporte sale sin el cuadro de dotación.
+    fetchStationStaffing(stationId).catch(() => null),
   ])
 
   if (stationRes.error || !stationRes.data) return null
@@ -131,6 +137,7 @@ export async function fetchStationReportData(stationId: string, filters: ReportF
     attendance: (attendanceRes.data ?? []) as AttendanceSummary[],
     interventions: (interventionsRes.data ?? []) as InterventionSummary[],
     vehicles: (vehiclesRes.data ?? []) as Vehicle[],
+    staffing,
   }
 }
 
@@ -140,6 +147,8 @@ export interface RegionalConsolidatedData {
   interventions: InterventionReportRow[]
   courses: Course[]
   vehicles: VehicleReportRow[]
+  // Dotación por categorías de los cuarteles que ya la cargaron.
+  staffing: StationStaffing[]
 }
 
 export async function fetchRegionalConsolidatedData(filters: ReportFilters): Promise<RegionalConsolidatedData> {
@@ -156,12 +165,16 @@ export async function fetchRegionalConsolidatedData(filters: ReportFilters): Pro
     fetchVehiclesReportData(filters),
   ])
 
+  const stations = (stationsRes.data ?? []) as unknown as StationWithSubsede[]
+  const staffing = await fetchStaffingForStations(stations.map((s) => s.id)).catch(() => [] as StationStaffing[])
+
   return {
-    stations: (stationsRes.data ?? []) as unknown as StationWithSubsede[],
+    stations,
     attendance,
     interventions,
     courses,
     vehicles,
+    staffing,
   }
 }
 

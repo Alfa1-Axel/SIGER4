@@ -122,16 +122,18 @@ export function PersonalFormPage() {
 
   if (!canEdit) {
     return (
-      <AppShell title="Personal / Dotación">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} personal.</div>
+      <AppShell title="Registro de personal">
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} personal con tu rol actual.</div>
       </AppShell>
     )
   }
 
   return (
-    <AppShell title={isEditing ? 'Editar Personal' : 'Nuevo Integrante'}>
-      <h1 className="page-title">{isEditing ? 'Editar Personal' : 'Nuevo Integrante'}</h1>
-      <p className="page-subtitle">Dotación real del cuartel: capacidad institucional, no un padrón completo de RRHH.</p>
+    <AppShell title={isEditing ? 'Editar integrante' : 'Nuevo integrante'}>
+      <h1 className="page-title">{isEditing ? 'Editar integrante' : 'Nuevo integrante'}</h1>
+      <p className="page-subtitle">
+        Registro nominal del cuartel, opcional. La dotación (cantidad por categoría) se carga en la ficha del cuartel, sin nombres.
+      </p>
 
       {!loading && !['activo', 'licencia', 'aspirante'].includes(status) && (
         <div className="card" style={{ marginBottom: 16 }}>

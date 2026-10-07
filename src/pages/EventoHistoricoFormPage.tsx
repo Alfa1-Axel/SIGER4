@@ -103,7 +103,7 @@ export function EventoHistoricoFormPage() {
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el evento histórico.'))
+      setError(describeSupabaseError(err, 'No pudimos guardar el evento del historial.'))
     } finally {
       setSubmitting(false)
     }
@@ -112,7 +112,7 @@ export function EventoHistoricoFormPage() {
   if (!canEdit) {
     return (
       <AppShell title="Historial Institucional">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} eventos históricos.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} eventos del historial con tu rol actual.</div>
       </AppShell>
     )
   }

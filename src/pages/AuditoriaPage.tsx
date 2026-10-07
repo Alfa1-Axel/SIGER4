@@ -247,7 +247,7 @@ export function AuditoriaPage() {
         setLogs(rows)
         setHasMore(more)
       })
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar la auditoría')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar la auditoría. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

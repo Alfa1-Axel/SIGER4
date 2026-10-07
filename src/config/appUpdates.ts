@@ -54,6 +54,27 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-07-dotacion-y-lenguaje',
+    version: '1.10.0',
+    date: '2026-10-07',
+    title: 'Dotación del cuartel por categorías y textos más claros',
+    summary: 'La dotación se carga por categoría, con botones + y −, y el total se calcula solo. Además se unificaron los textos del sistema.',
+    highlights: [
+      'Dotación actual del cuartel: cantidad por categoría, sin cargar nombres.',
+      'Asistencia, tarjetas y reportes usan esa dotación.',
+    ],
+    changes: [
+      { type: 'nuevo', module: 'Cuarteles', text: 'Dotación actual del cuartel: aspirantes menores y mayores, bomberos de Nivel 1 a 4, personal en reserva y cuerpo auxiliar. Se carga con botones + y − (o escribiendo el número), el total se calcula solo y queda la fecha y quién la actualizó. Se edita cuando cambia la dotación real.' },
+      { type: 'mejora', module: 'Asistencia', text: 'La dotación sale de la dotación actual del cuartel: no hace falta cargarla en cada resumen. Los resúmenes ya cargados conservan la dotación que tenían.' },
+      { type: 'mejora', module: 'Reportes', text: 'El reporte del cuartel trae el cuadro de dotación por categoría, y el consolidado de la Regional suma la dotación de cada cuartel y los totales por categoría.' },
+      { type: 'mejora', module: 'Inicio', text: 'Estado de la Regional muestra la dotación total, y las tarjetas de cuarteles dicen Dotación y Móviles.' },
+      { type: 'mejora', module: 'Cuarteles', text: 'El registro de personal con nombres pasó a ser un registro opcional: la dotación no depende de él.' },
+      { type: 'mejora', module: 'Ayuda', text: 'Nueva sección Cuarteles y dotación: qué es, quién la actualiza y cómo se carga.' },
+      { type: 'mejora', module: 'General', text: 'Textos revisados en todo el sistema: mensajes de permiso y de error más claros, y las consultas se derivan siempre a Informática y Estadística.' },
+    ],
+    severity: 'improvement',
+  },
+  {
     id: '2026-10-07-aviso-y-contacto',
     version: '1.9.0',
     date: '2026-10-07',

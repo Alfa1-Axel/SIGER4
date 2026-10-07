@@ -2534,6 +2534,195 @@ kbd {
   margin: -6px 0 18px;
 }
 
+/* Cantidades enteras con botones − y + (components/ui/NumberStepper.tsx). */
+.stepper-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stepper-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.stepper:focus-within {
+  border-color: var(--color-focus-ring);
+  box-shadow: 0 0 0 3px var(--color-focus-ring-soft);
+}
+
+.stepper-button {
+  flex: 0 0 48px;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
+.stepper-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.stepper-button:active:not(:disabled) {
+  background: var(--color-surface-pressed);
+}
+
+.stepper-button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+.stepper-button:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.stepper .stepper-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  padding: 0 4px;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.stepper .stepper-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Dotación actual del cuartel (components/StationStaffingCard.tsx). */
+.staffing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.staffing-intro,
+.staffing-meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.staffing-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.staffing-total + .staffing-meta {
+  margin-top: 8px;
+}
+
+.staffing-group {
+  border: 0;
+  margin: 0 0 14px;
+  padding: 0;
+  min-width: 0;
+}
+
+.staffing-group-title {
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.staffing-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+}
+
+.staffing-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
+}
+
+.staffing-total-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.staffing-total-value {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.staffing-total-before {
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.staffing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.staffing-actions .btn-primary {
+  flex: 1 1 180px;
+}
+
+.staffing-list {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.staffing-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.staffing-list dt {
+  color: var(--color-text-secondary);
+}
+
+.staffing-list dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Inicio: tareas y pendientes agrupados por módulo. */
 .task-groups {
   display: grid;

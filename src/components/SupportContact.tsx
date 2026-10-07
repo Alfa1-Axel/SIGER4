@@ -56,7 +56,7 @@ export function SupportContact({ variant = 'card', lead }: SupportContactProps) 
         </h2>
       </div>
       <p className="support-contact-text">
-        ¿No encontraste lo que buscabas? Escribile al {SUPPORT_NAME} contando qué querías hacer y en qué pantalla estabas.
+        ¿No encontraste lo que buscabas? Consultá al {SUPPORT_NAME} contando qué querías hacer y en qué pantalla estabas.
       </p>
       <div className="support-contact-actions">
         <a className="btn btn-primary" href={mailto}>

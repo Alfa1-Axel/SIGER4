@@ -207,7 +207,7 @@ export function CuartelFormPage() {
   if (!canAccess) {
     return (
       <AppShell title="Cuarteles">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'crear'} cuarteles.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'crear'} cuarteles con tu rol actual.</div>
       </AppShell>
     )
   }

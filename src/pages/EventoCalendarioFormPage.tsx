@@ -198,7 +198,7 @@ export function EventoCalendarioFormPage() {
       if (scopeTarget === 'subsede' && !subsedeId) return setError('Seleccioná la subsede destino.')
       if (scopeTarget === 'station' && !stationLocked && !stationId) return setError('Seleccioná el cuartel destino.')
       if (scopeTarget === 'station' && stationLocked && !myStationId) {
-        return setError('No pudimos determinar tu cuartel asignado. Contactá a un administrador.')
+        return setError('No pudimos identificar tu cuartel. Consultá a Informática y Estadística.')
       }
     }
     if (!startsAt) return setError('Ingresá la fecha/hora de inicio.')
@@ -236,7 +236,7 @@ export function EventoCalendarioFormPage() {
   if (!canCreate) {
     return (
       <AppShell title="Calendario">
-        <div className="empty-state">No tenés permisos para {isEditing ? 'editar' : 'cargar'} eventos.</div>
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} eventos con tu rol actual.</div>
       </AppShell>
     )
   }

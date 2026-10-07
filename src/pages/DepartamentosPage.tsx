@@ -161,7 +161,7 @@ export function DepartamentosPage() {
           ) : (
             <>
               <span>No coordinás ningún departamento ni sos miembro de uno.</span>
-              <span style={{ fontSize: 13 }}>Si deberías estar en uno, pedile a su coordinador o a Informática que te sume.</span>
+              <span style={{ fontSize: 13 }}>Si deberías estar en uno, pedile a su coordinador o a Informática y Estadística que te sume.</span>
             </>
           )}
         </div>

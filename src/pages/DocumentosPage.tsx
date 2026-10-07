@@ -48,7 +48,7 @@ export function DocumentosPage() {
   useEffect(() => {
     let active = true
     reload()
-      .catch((err) => active && setError(describeSupabaseError(err, 'Error al cargar documentos')))
+      .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar los documentos. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false

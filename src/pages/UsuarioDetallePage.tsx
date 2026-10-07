@@ -348,7 +348,7 @@ export function UsuarioDetallePage() {
   if (!profile) {
     return (
       <AppShell title="Usuario">
-        <div className="empty-state">No se encontró el usuario solicitado.</div>
+        <div className="empty-state">No encontramos a ese usuario. Puede que lo hayan eliminado.</div>
       </AppShell>
     )
   }
@@ -418,7 +418,7 @@ export function UsuarioDetallePage() {
           <p style={{ fontSize: 13, marginTop: 8 }}>
             Este perfil quedó de un flujo de invitación retirado por seguridad y no tiene una cuenta
             de acceso vinculada. Creá un usuario nuevo con estos mismos datos desde "Nuevo usuario"
-            y luego eliminá este perfil, o contactá al Dpto. de Informática si no estás seguro.
+            y luego eliminá este perfil, o consultá a Informática y Estadística si no estás seguro.
           </p>
         </div>
       )}
@@ -479,7 +479,7 @@ export function UsuarioDetallePage() {
             </div>
             {scopeFieldsLocked && (
               <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -8, marginBottom: 12 }}>
-                No podés cambiar tu propio cuartel o Regional. Pedile a Informática R4 que lo haga.
+                No podés cambiar tu propio cuartel o Regional. Consultá a Informática y Estadística.
               </p>
             )}
           </>

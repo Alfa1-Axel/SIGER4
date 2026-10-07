@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { Lightbox } from '../components/ui/Lightbox'
 import { ZoomableImage } from '../components/ui/ZoomableImage'
 import { ReasonPromptModal } from '../components/ui/ReasonPromptModal'
+import { StationStaffingCard } from '../components/StationStaffingCard'
 import { fetchStationAuthorities, fetchStationById } from '../lib/api/stations'
 import { fetchVehiclesByStation, changeVehicleStatus, fetchVehicleStatusHistory, DECOMMISSION_STATUSES } from '../lib/api/vehicles'
 import { fetchAttendanceByStation } from '../lib/api/attendance'
@@ -175,6 +176,15 @@ export function CuartelDetallePage() {
   const [separatingPersonnel, setSeparatingPersonnel] = useState<{ person: Personnel; newStatus: PersonnelStatus } | null>(null)
   const [expandedPersonnelHistoryId, setExpandedPersonnelHistoryId] = useState<string | null>(null)
   const [personnelHistoryByPersonnelId, setPersonnelHistoryByPersonnelId] = useState<Record<string, PersonnelStatusHistory[]>>({})
+
+  // Enlaces a una sección de la ficha (por ejemplo "Cargar la dotación" desde
+  // Asistencia, /cuarteles/<id>#dotacion): se baja hasta ella al abrir.
+  const { hash } = useLocation()
+  const stationLoaded = Boolean(station)
+  useEffect(() => {
+    if (!stationLoaded || !hash) return
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+  }, [stationLoaded, hash])
 
   async function reloadPersonnel(stationId: string) {
     const [personnelData, stationData] = await Promise.all([fetchPersonnelByStation(stationId), fetchStationById(stationId)])
@@ -373,7 +383,7 @@ export function CuartelDetallePage() {
 
   async function handlePersonnelDelete(personId: string) {
     if (!id) return
-    if (!window.confirm('¿Eliminar este integrante de la dotación? Esta acción no se puede deshacer.')) return
+    if (!window.confirm('¿Eliminar a esta persona del registro de personal? Esta acción no se puede deshacer.')) return
     await deletePersonnel(personId)
     await reloadPersonnel(id)
   }
@@ -403,7 +413,7 @@ export function CuartelDetallePage() {
   }
 
   return (
-    <AppShell title="Detalle Cuartel">
+    <AppShell title="Cuartel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Link to="/cuarteles" className="link-muted" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           ← Volver a Cuarteles
@@ -418,7 +428,7 @@ export function CuartelDetallePage() {
 
       {notice && <SuccessNotice message={notice} tone={noticeTone} onClose={() => setNotice(null)} />}
       {loading && <div className="loading-state" role="status">Cargando información del cuartel…</div>}
-      {!loading && !station && <div className="empty-state">No se encontró el cuartel solicitado.</div>}
+      {!loading && !station && <div className="empty-state">No encontramos ese cuartel. Puede que lo hayan dado de baja.</div>}
 
       {station && (
         <>
@@ -476,7 +486,7 @@ export function CuartelDetallePage() {
           <div className="card-grid" style={{ marginBottom: 20 }}>
             <div className="kpi-card" style={{ textAlign: 'center' }}>
               <div className="kpi-value">{station.personnel_count}</div>
-              <div className="kpi-label">Personal</div>
+              <div className="kpi-label">Dotación</div>
             </div>
             <div className="kpi-card" style={{ textAlign: 'center' }}>
               <div className="kpi-value">{station.vehicles_count}</div>
@@ -554,8 +564,15 @@ export function CuartelDetallePage() {
             )}
           </div>
 
+          <StationStaffingCard
+            stationId={station.id}
+            canEdit={canEdit}
+            currentTotal={station.personnel_count}
+            onSaved={(total) => setStation((prev) => (prev ? { ...prev, personnel_count: total } : prev))}
+          />
+
           <div className="section-header">
-            <h2 className="section-title">Personal / Dotación</h2>
+            <h2 className="section-title">Registro nominal del personal</h2>
             {canEdit && (
               <Link to={`/cuarteles/${station.id}/personal/nuevo`} className="link-muted">
                 + Agregar
@@ -563,9 +580,12 @@ export function CuartelDetallePage() {
             )}
           </div>
           <div className="card" style={{ marginBottom: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                Dotación activa: <strong>{activePersonnelCount}</strong> · Total cargado: {personnel.length}
+            <div style={{ marginBottom: 12 }}>
+              <span style={{ display: 'block', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                Activos en el registro: <strong>{activePersonnelCount}</strong> · Total registrado: {personnel.length}
+              </span>
+              <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: 'var(--color-text-muted)' }}>
+                Es opcional: la dotación del cuartel se carga arriba, por categoría, y no hace falta cargar nombres.
               </span>
             </div>
 
@@ -602,7 +622,7 @@ export function CuartelDetallePage() {
               </div>
             )}
 
-            {personnel.length === 0 && <div className="empty-state">No hay personal cargado para este cuartel.</div>}
+            {personnel.length === 0 && <div className="empty-state">Todavía no hay personal en el registro nominal de este cuartel.</div>}
             {personnel.length > 0 && filteredPersonnel.length === 0 && (
               <div className="empty-state">No hay personal que coincida con estos filtros.</div>
             )}
@@ -713,7 +733,7 @@ export function CuartelDetallePage() {
           {separatingPersonnel && (
             <ReasonPromptModal
               title={`${PERSONNEL_SEPARATION_OPTIONS.find((o) => o.value === separatingPersonnel.newStatus)?.label} — ${separatingPersonnel.person.last_name}, ${separatingPersonnel.person.first_name}`}
-              description="Este cambio queda registrado en el historial del integrante y deja de sumar en la dotación activa del cuartel."
+              description="Este cambio queda registrado en el historial de la persona y deja de contar como personal activo del registro. Si la dotación del cuartel está cargada por categoría, actualizala arriba."
               confirmLabel="Confirmar"
               onConfirm={handleConfirmPersonnelSeparation}
               onClose={() => setSeparatingPersonnel(null)}
@@ -868,7 +888,7 @@ export function CuartelDetallePage() {
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
                     {summary.period_start} — {summary.period_end}
                     {summary.time_of_day && ` · ${summary.time_of_day}`}
-                    {summary.personnel_count > 0 && ` · ${summary.personnel_count} personal`}
+                    {summary.personnel_count > 0 && ` · ${summary.personnel_count} de personal`}
                     {summary.vehicles_count > 0 && ` · ${summary.vehicles_count} móviles`}
                     {summary.work_hours > 0 && ` · ${summary.work_hours}h`}
                   </div>

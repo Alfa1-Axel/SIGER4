@@ -9416,3 +9416,137 @@ Sin cambios en push ni PWA.
 - **Avisos al Dpto. de Informática por cambios de rol.** Al sumar miembros, la base asigna el rol y el aviso existente de "Cambio de rol de usuario" les llega a Informática, como con cualquier asignación de rol.
 - **Edición de informes:** se avisa solo al autor cuando lo edita otra persona, para no llenar de avisos al departamento.
 - **Adjuntos:** sumar un archivo a un informe no genera un aviso aparte: lo cubre el aviso del informe.
+
+## 63. Modo departamento: menú, Inicio y datos solo de lo que el rol usa (2026-10-06) — versión 1.8.0, migración 0107
+
+### 63.1 Qué pasaba
+
+1. **Quien solo era Coordinador o Miembro de Departamento veía el sistema entero.**
+   - El menú tenía Cuarteles, Mapa, Escuela, Documentos e Inventario, y el Inicio traía accesos, eventos y estado de la Regional que no son de su trabajo.
+   - Esas pantallas abrían vacías o con datos de la Regional.
+2. **La base le entregaba datos de módulos que su rol no usa.** Medido con un usuario cuyo único rol es Miembro de Departamento, antes de 0107 leía por la API:
+   - documentos y carpetas Regionales (el perfil lleva la Regional);
+   - cursos e inventario completo (esas tablas las lee cualquier usuario con sesión);
+   - eventos Regionales y los de Escuela;
+   - los avisos generales de esos módulos.
+3. **Los pendientes del Inicio mostraban cuarteles ajenos, a todos los roles.**
+   - `get_pending_items()` es `SECURITY DEFINER`: lee la vista `station_compliance` con los permisos de quien creó la función, no con los de quien consulta. El comentario original daba por hecho lo contrario.
+   - Resultado: cualquier usuario recibía los cuarteles en rojo o amarillo de **toda** la base, con el nombre del cuartel y un enlace que no podía abrir.
+
+### 63.2 Qué es el modo departamento
+
+Es la persona con **al menos un rol de departamento y ningún otro**. La pantalla lo calcula con `isDepartmentOnly` (`src/lib/moduleAccess.ts`) y la base con `is_department_only()` (0107): son el mismo criterio.
+
+- **Con otro rol más** (Informática, Escuela, un cuartel…) **no hay modo departamento:** los permisos se suman y todo sigue como antes. Un perfil inactivo tampoco.
+- Quien no tiene ningún rol no entra en el modo (queda como estaba).
+
+| Módulo | Solo roles de departamento | Con otro rol |
+|---|---|---|
+| Inicio | Departamental | Inicio general y, además, el panel de su departamento |
+| Departamentos | "Mi departamento" / "Mis departamentos" | "Departamentos" |
+| Calendario | Solo eventos de su departamento | Como siempre |
+| Notificaciones, Ayuda, Novedades, Mi perfil | Sí | Sí |
+| Avales | Solo el **coordinador**, para su departamento: desde su Inicio y su ficha. No están en el menú | Como siempre |
+| Roles y permisos | Página informativa: abre por URL y desde el perfil y la Ayuda, no está en el menú | En el menú |
+| Cuarteles, Mapa, Escuela (cursos), Documentos, Inventario | No | Como siempre |
+| Reportes, Usuarios, Nuevo usuario, Auditoría | No (ya eran de otros roles) | Como siempre |
+
+### 63.3 Pantalla
+
+- **Menú** (`navigation.ts`): cada ítem declara su módulo. Se muestran solo los que el modo abre y los que ya correspondían por rol.
+  - Con un departamento el ítem dice **"Mi departamento"** y abre directo su ficha; "Atrás" vuelve a donde estaba, no a la lista.
+  - Con varios dice **"Mis departamentos"** y muestra la lista.
+- **URL directa** (`ModuleRoute`): cuarteles, mapa, Escuela, Documentos e Inventario muestran **"No tenés permiso para ver esta sección"**, qué hacer y "Volver al inicio".
+  - Es el mismo aviso de Reportes, Usuarios y Auditoría. Su título por defecto pasó de "No tenés acceso…" a "No tenés permiso…".
+  - Un Miembro que entra a Avales ve "No tenés permiso para ver Avales regionales" y vuelve al inicio, no a Escuela.
+- **Inicio** (`DepartmentHome`): saludo con su rol y departamento ("Coordinador de Fuego"), y el panel del departamento con:
+  - pendientes y avisos, o "Todo al día en Fuego";
+  - últimos informes y próximos eventos;
+  - acciones: cargar informe, nuevo evento, ver informes, eventos y miembros, y avisar al departamento (solo el coordinador);
+  - selector si está en más de un departamento.
+  - Abajo, accesos rápidos solo a lo que abre: Notificaciones, Calendario, Avales regionales (coordinador) y "Qué puedo hacer".
+  - Sin estado de la Regional, tareas de otros módulos, eventos Regionales ni actividad reciente.
+  - Si todavía no tiene departamento, lo dice y lleva a la Ayuda.
+  - No consulta cuarteles, documentos, inventario ni cursos.
+- **Búsqueda:** solo departamento, informes y actas, eventos de su departamento, avales (coordinador), notificaciones, Ayuda y Novedades. Los módulos cerrados ni se consultan.
+  - **Novedades** pasó a ser un módulo de la búsqueda para todos los roles.
+- **Ayuda:**
+  - artículos de inicio, búsqueda y avisos propios del modo departamento;
+  - nuevos: **"Ver mi departamento"**, **"Ver y descargar informes y actas"**, **"Qué puedo hacer con mi rol"** y **"Qué hacer si no veo una sección"**;
+  - cada artículo declara su módulo: la ayuda de Inventario, Escuela y Documentos no se muestra a quien no los usa.
+- **Notificaciones:** los avisos de su departamento con su origen. "Abrir" solo aparece si el destino es de su rol: sin botón que termine en un aviso de permiso. Los avisos generales con enlace a un módulo cerrado no se muestran.
+- **Calendario:** solo los eventos de su departamento, con los tipos de un evento de departamento y un selector de departamento solo si tiene más de uno.
+
+### 63.4 Base: `0107_department_only_mode.sql`
+
+- **`is_department_only()`:** rol de departamento y ningún otro rol (`current_profile_id()` es null si el perfil está inactivo). Disponible también para `anon`: las políticas la evalúan en cualquier consulta y para quien no inició sesión devuelve `false`.
+- **Políticas restrictivas de lectura** (se suman con AND a las que ya existen: solo pueden cerrar, **nunca abrir** ni relajar):
+  - cuarteles y lo que cuelga de un cuartel: `stations`, `vehicles`, `vehicle_status_history`, `personnel`, `personnel_status_history`, `attendance_summaries`, `intervention_summaries`, `station_history_events`;
+  - Documentos: `documents`, `document_versions`, `document_folders` y los archivos del bucket `documents`;
+  - Escuela: `courses`, `course_stations`;
+  - Inventario: `inventory_items`, `inventory_item_history`, `inventory_loan_requests`;
+  - el mapa: `map_reference_points`.
+- **Calendario:** `calendar_events` solo devuelve eventos de departamento (las reglas de Escuela y de la Regional los abrían).
+- **Notificaciones:** se siguen recibiendo todas las dirigidas a la persona (incluidos los avisos de su departamento, que son personales) y los avisos generales sin enlace o con enlace a un módulo abierto.
+  - Se cierran los avisos generales con enlace a un módulo cerrado: un curso nuevo, una circular, un préstamo, un evento regional.
+  - Un aviso manual a toda la Regional sin enlace sigue llegando.
+- **`get_pending_items()`:** tres cambios.
+  - **Cuarteles:** el semáforo se filtra con el alcance real de cada persona, con el mismo criterio que `stations_select_scope`: Informática todos; roles regionales y de Escuela, los de su Regional; el resto, su cuartel y su subsede.
+  - **Préstamos y eventos:** en modo departamento no se devuelven (ni siquiera si lo marcaron responsable de un elemento). Sí los eventos y pendientes de sus departamentos.
+  - El resto de las secciones no cambia.
+- **No se toca:** departamentos, miembros, informes, adjuntos y sus archivos, avales, el perfil, los roles, las Regionales y las subsedes (datos de referencia), ni la escritura de ninguna tabla.
+- Se puede volver a correr y funciona en un proyecto nuevo. No agrega tablas ni datos.
+
+### 63.5 Qué correr
+
+1. SQL Editor → `0107_department_only_mode.sql` (requiere 0103 a 0106).
+2. Desplegar el frontend.
+
+El orden no rompe nada: el frontend nuevo no depende de 0107, y con 0107 puesta y el frontend anterior, el modo departamento recibe vacío en los módulos cerrados.
+
+Sin funciones para desplegar y sin cambios en push ni PWA.
+
+### 63.6 Verificación
+
+- **Postgres 16 local, 0107:** 88 pruebas, 0 fallas. Cada usuario se mide con las políticas de 0107 y sin ellas:
+  - para Informática, Presidente de cuartel, Escuela, Secretario Regional y para quien combina Coordinador con un rol de cuartel **no hay ninguna diferencia** en ninguna tabla;
+  - quien solo es Coordinador o Miembro de Departamento recibe 0 filas de cuarteles, vehículos, personal, asistencia, intervenciones, documentos, carpetas, versiones, archivos, cursos, inventario y mapa, y solo los eventos de su departamento;
+  - lo suyo no cambia: sus departamentos, miembros, informes, adjuntos, avales (el coordinador, no el miembro) y las Regionales y subsedes;
+  - notificaciones: sus avisos personales y los generales abiertos; no los de Escuela, Documentos ni evento regional;
+  - quien tiene rol de departamento y ningún departamento no ve ninguno, y un perfil inactivo no cuenta como modo departamento;
+  - Storage: el archivo de un informe de Fuego lo leen su coordinador, sus miembros e Informática; no el coordinador de otro departamento (FASME) ni quien tiene el rol sin departamento; 0107 no cambia nada ahí. Los archivos de Documentos quedan cerrados para el modo departamento;
+  - sin sesión (`anon`) ninguna política falla por la función;
+  - pendientes: cada rol recibe solo los cuarteles que su RLS le deja ver (Informática 2; el Presidente, el suyo); en modo departamento, ningún cuartel ni préstamo y solo el evento de su departamento.
+- **Regresión SQL:** 0098 (42), 0099 (26), 0100 (15), 0102 (20), 0103 (79), 0104 (30) y 0106 (48) siguen pasando con 0107 aplicada. También se aplicó dos veces en la misma base y sobre una base nueva.
+- **Navegador** (Chrome; escritorio y Android emulado; backend simulado que además aplica lo de 0107): 127 pruebas, 0 fallas.
+  - **Coordinador y Miembro:** menú reducido; Inicio departamental sin widgets globales; "Todo al día"; acceso de cada enlace visible del menú y del Inicio comprobado uno por uno; URL directa a 15 pantallas cerradas con "No tenés permiso"; sus pantallas abren; el Miembro sin acciones de gestión ni Avales; otro departamento no se puede ver.
+  - **Varios departamentos:** selector, "Mis departamentos", y "Mi departamento" que abre directo y vuelve atrás al Inicio.
+  - **Búsqueda:** Fuego encuentra Fuego y no Forestal, sin consultar inventario, documentos, cursos ni cuarteles; Informática encuentra todo; Novedades se busca para todos.
+  - **Notificaciones:** origen, filtro, "Abrir" solo a destinos permitidos, avisos generales de módulos cerrados fuera.
+  - **Ayuda:** las guías de cada rol y ninguna de módulos cerrados.
+  - **Roles combinados:** Informática + Miembro, Escuela + Miembro, Coordinador + cuartel y Jefe conservan lo de sus roles; los demás menús no cambian.
+  - **Celular:** menú reducido, Inicio, búsqueda, notificaciones, aviso de permiso sin scroll horizontal, y carga de un acta con foto de la cámara.
+  - **Perfil, Roles y Novedades:** muestran "Coordinador de Departamento · Fuego", abren sin pedir cuarteles, y una novedad encontrada con la lupa abre esa versión.
+- **Regresión en navegador:** secciones 57 (33), 58 (26; ahora con la versión 1.8.0), 59 (47 y 4), 60 (65), 61 (33), 62 (40) y menú (8).
+- **Build, lint y audit:** el build compila; lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+
+### 63.7 Checklist en producción
+
+- [ ] Correr 0107 y desplegar el frontend.
+- [ ] Entrar con un usuario que solo sea Coordinador de Departamento: el menú tiene Inicio, Calendario, Mi departamento, Notificaciones, Mi perfil y ajustes, Ayuda y Novedades. El Inicio muestra su departamento y no el estado de la Regional.
+- [ ] Con ese usuario, abrir a mano `/documentos`, `/inventario`, `/cuarteles` y `/escuela`: cada una dice "No tenés permiso para ver esta sección".
+- [ ] Con un usuario solo Miembro de Departamento: mismo menú, sin "Avisar al departamento" ni Avales, y "Todo al día" si no hay pendientes.
+- [ ] Un usuario con Coordinador de Departamento **y** un rol de cuartel: sigue viendo Cuarteles, Documentos e Inventario además de su departamento.
+- [ ] Un Presidente de cuartel: ya no recibe en sus pendientes los cuarteles de otras Regionales o subsedes; sí el suyo.
+- [ ] Buscar "fuego" con el Coordinador de Fuego: encuentra su departamento y no Forestal. Buscar un elemento del inventario: sin resultados.
+- [ ] Cargar un informe desde el celular con ese usuario.
+
+### 63.8 Riesgos y decisiones
+
+- **Quien tiene un solo rol de departamento pasa a ver mucho menos.** Es lo pedido. Si alguien necesita Documentos, Inventario u otro módulo, se le asigna el rol que corresponde: los permisos se suman. Los usuarios que ya tenían otro rol además del de departamento no cambian.
+- **Los avisos generales manuales siguen llegando al modo departamento** si no llevan enlace (por ejemplo un aviso a toda la Regional escrito a mano). Se descartan los automáticos que apuntan a un módulo cerrado. El tipo del aviso (por ejemplo "Circular nueva") no alcanza para distinguirlos, porque el formulario manual usa esos mismos tipos.
+- **El calendario del modo departamento solo muestra eventos de su departamento.** Los eventos Regionales y de Escuela no se ven. Si más adelante conviene mostrarlos, es un cambio en la política de `calendar_events` y en la pantalla.
+- **Avales sí, Escuela no.** El coordinador de un departamento sigue subiendo y viendo los avales de su departamento (ya era su función desde 0097), por el Inicio y la ficha. Cursos no.
+- **Roles y permisos queda abierto por URL** aunque no esté en el menú del modo departamento: es solo informativo y se llega desde el perfil y la Ayuda.
+- **La corrección de `get_pending_items()` cambia lo que ven otros roles:** los pendientes de cuarteles ahora son solo los de su alcance. Antes veían todos los cuarteles de la base, con un enlace que no podían abrir. Informática ve todos, como antes. El criterio es el mismo de `stations_select_scope`; se verificó rol por rol contra la RLS real.
+- **Quien no tiene ningún rol no entra en el modo departamento** y queda como estaba.

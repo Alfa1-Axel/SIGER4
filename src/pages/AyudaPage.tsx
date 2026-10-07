@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
+import { SupportContact } from '../components/SupportContact'
 import { HELP_ARTICLES, HELP_SECTION_LABEL, HELP_SECTION_ORDER, canSeeHelpArticle, helpArticleMatches } from '../config/helpContent'
 import type { HelpSection } from '../config/helpContent'
 import { useAccessContext } from '../hooks/useAccessContext'
@@ -99,19 +100,14 @@ export function AyudaPage() {
                     ))}
                   </div>
                 )}
+                {a.contact && <SupportContact variant="inline" lead="Escribile al Dpto. de Informática y Estadística R4:" />}
               </div>
             </details>
           ))}
         </section>
       ))}
 
-      <div className="card help-contact">
-        <Icon name="info" size={18} />
-        <p style={{ margin: 0, fontSize: 14 }}>
-          ¿No encontraste lo que buscabas? Escribile al Dpto. de Informática y Estadística R4 contando qué querías hacer y en qué
-          pantalla estabas.
-        </p>
-      </div>
+      <SupportContact />
     </AppShell>
   )
 }

@@ -75,6 +75,9 @@ export interface HelpArticle {
   // Módulo del que habla: en modo departamento no se muestra la ayuda de un
   // módulo que ese modo no abre (Inventario, Escuela, Documentos…).
   module?: AppModule
+  // Muestra los botones de contacto con Informática al final del artículo:
+  // para las respuestas que mandan a pedirle algo (acceso, contraseña…).
+  contact?: boolean
 }
 
 export function canSeeHelpArticle(article: Pick<HelpArticle, 'audience' | 'module'>, ctx: HelpAudienceContext): boolean {
@@ -407,6 +410,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'sin-seccion-departamento',
     section: 'faq',
     audience: 'solo_departamento',
+    contact: true,
     title: 'Qué hacer si no veo una sección',
     summary: 'Tu menú muestra solo lo que tu rol necesita para trabajar en tu departamento.',
     answer:
@@ -480,6 +484,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'sin-permiso',
     section: 'cuenta',
     audience: 'todos',
+    contact: true,
     title: 'Qué hacer si no tengo permiso',
     summary: 'Cada rol ve y hace cosas distintas. Si te falta algo, se pide.',
     steps: [
@@ -563,6 +568,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'faq-no-veo-seccion',
     section: 'faq',
     audience: 'otros_roles',
+    contact: true,
     title: 'No veo una sección del menú',
     summary: 'El menú muestra solo lo que tu rol puede usar.',
     answer: 'Cada rol tiene su menú. Si creés que deberías ver una sección, pedíselo a Informática R4 indicando qué necesitás hacer.',
@@ -572,6 +578,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'faq-olvide-contrasena',
     section: 'faq',
     audience: 'todos',
+    contact: true,
     title: 'Olvidé mi contraseña',
     summary: 'La restablece Informática R4.',
     answer: 'Pedile a Informática R4 que te asigne una contraseña temporal. Al ingresar, el sistema te pide cambiarla por una tuya.',
@@ -602,6 +609,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'faq-no-veo-informe',
     section: 'faq',
     audience: 'todos',
+    contact: true,
     title: 'No veo un departamento o sus informes',
     summary: 'Cada departamento lo ven su coordinador, sus miembros e Informática.',
     answer:

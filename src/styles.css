@@ -2433,11 +2433,105 @@ kbd {
   gap: 8px;
 }
 
-.help-contact {
+/* Contacto directo con Informática y Estadística (components/SupportContact.tsx). */
+.support-contact {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
   color: var(--color-text-secondary);
+}
+
+.support-contact-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-primary);
+}
+
+.support-contact-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.support-contact-text {
+  margin: 0;
+  font-size: 14px;
+}
+
+.support-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.support-contact > .support-contact-actions .btn {
+  flex: 1 1 200px;
+}
+
+/* Datos a la vista; un toque largo selecciona el valor entero para copiarlo. */
+.support-contact-data {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.support-contact-data > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.support-contact-data dt {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.support-contact-data dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+/* Variante en una línea: pantallas de "No tenés permiso", respuestas de
+   Ayuda e ingreso. */
+.support-contact-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.support-contact-inline .support-contact-actions {
+  justify-content: center;
+}
+
+.support-contact-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.help-article-body .support-contact-inline {
+  align-items: flex-start;
+  margin-top: 4px;
+}
+
+.help-article-body .support-contact-inline .support-contact-actions {
+  justify-content: flex-start;
+}
+
+.help-article-body .support-contact-lead {
+  text-align: left;
+}
+
+.access-denied .support-contact-inline {
+  margin: -6px 0 18px;
 }
 
 /* Inicio: tareas y pendientes agrupados por módulo. */
@@ -3309,7 +3403,11 @@ kbd {
    Novedades del sistema (AppUpdateBanner)
    ============================================================ */
 
-/* Por encima de todo (es un modal real), sin bloquear el uso del sistema. */
+/* Por encima de todo, sin bloquear el uso del sistema: el contenedor no
+   recibe toques, solo la tarjeta. La tarjeta tiene un alto máximo según la
+   pantalla y se reparte en encabezado (con la X), cuerpo que se desplaza y
+   pie con los botones. Así el cierre y "Entendido" quedan siempre a la vista,
+   sin importar cuánto texto traiga la novedad. */
 .app-update-overlay {
   position: fixed;
   inset: 0;
@@ -3317,17 +3415,31 @@ kbd {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
   pointer-events: none;
 }
 
 .app-update-card {
   pointer-events: auto;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 420px;
-  margin-bottom: 16px;
+  /* vh de respaldo; dvh sigue a la barra del navegador del celular. */
+  max-height: calc(100vh - 24px - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
+  padding: 0;
+  overflow: hidden;
   box-shadow: var(--shadow-lg);
   animation: app-update-in 0.2s ease;
+}
+
+/* El foco entra a la tarjeta al abrirse; sus botones tienen su propio foco. */
+.app-update-card:focus {
+  outline: none;
 }
 
 @keyframes app-update-in {
@@ -3341,29 +3453,39 @@ kbd {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .app-update-card {
+    animation: none;
+  }
+}
+
 @media (min-width: 900px) {
   .app-update-overlay {
     justify-content: flex-end;
     padding: 24px;
   }
   .app-update-card {
-    margin-bottom: 0;
+    max-height: min(560px, calc(100vh - 48px));
+    max-height: min(560px, calc(100dvh - 48px));
   }
 }
 
 .app-update-header {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 8px;
+  padding: 8px 8px 4px 16px;
 }
 
 .app-update-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
   border-radius: var(--radius-md);
   border: none;
   background: transparent;
@@ -3380,6 +3502,27 @@ kbd {
   outline-offset: 2px;
 }
 
+/* Lo único que se desplaza. Las sombras de arriba y de abajo avisan que hay
+   más texto cuando el contenido no entra. */
+.app-update-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 12px;
+  background:
+    linear-gradient(var(--color-surface) 30%, rgba(255, 255, 255, 0)) center top / 100% 18px no-repeat local,
+    linear-gradient(rgba(255, 255, 255, 0), var(--color-surface) 70%) center bottom / 100% 18px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0)) center top / 100% 7px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0)) center bottom / 100% 7px no-repeat scroll;
+}
+
+.app-update-body:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
 .app-update-title {
   font-size: 16px;
   font-weight: 600;
@@ -3391,7 +3534,6 @@ kbd {
   font-size: 12px;
   color: var(--color-text-muted);
   margin: 0 0 10px;
-  text-transform: capitalize;
 }
 
 .app-update-description {
@@ -3401,19 +3543,69 @@ kbd {
 }
 
 .app-update-changes {
-  margin: 0 0 16px;
-  padding-left: 18px;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
   font-size: 14px;
   color: var(--color-text-primary);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
+.app-update-changes li {
+  position: relative;
+  padding-left: 16px;
+}
+
+.app-update-changes li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+/* Un punto del aviso ocupa a lo sumo 3 renglones: el resto está en Novedades. */
+.app-update-item {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+.app-update-more {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+/* Pie fijo: los botones nunca quedan fuera de la pantalla. */
 .app-update-actions {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+/* Pantallas bajas (celular de costado): botones en fila para dejar lugar al texto. */
+@media (max-height: 520px) {
+  .app-update-actions {
+    flex-direction: row;
+    padding-top: 10px;
+    padding-bottom: 12px;
+  }
+  .app-update-actions .btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
 }
 
 /* Barra fina, no bloqueante: hay una versión nueva del service worker

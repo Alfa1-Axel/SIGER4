@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Icon } from './Icon'
+import { SupportContact } from '../SupportContact'
 
 interface AccessDeniedProps {
   title?: string
@@ -21,6 +22,7 @@ export function AccessDenied({ title = 'No tenés permiso para ver esta sección
       </span>
       <h1 className="access-denied-title">{title}</h1>
       <p className="access-denied-message">{message}</p>
+      <SupportContact variant="inline" lead="¿Necesitás acceso o creés que es un error? Escribile al Dpto. de Informática y Estadística R4:" />
       <Link to={backTo} className="btn btn-outlined">
         {backLabel}
       </Link>

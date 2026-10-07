@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { Footer } from '../components/layout/Footer'
+import { SupportContact } from '../components/SupportContact'
 import { Icon } from '../components/ui/Icon'
 import {
   describePasskeyError,
@@ -175,6 +176,7 @@ export function LoginPage() {
         <p className="login-help">
           ¿Olvidaste la contraseña o no tenés cuenta? Pedíselo al Dpto. de Informática y Estadística R4.
         </p>
+        <SupportContact variant="inline" />
       </div>
       <Footer />
     </div>

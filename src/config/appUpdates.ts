@@ -17,6 +17,10 @@
 //      - date (YYYY-MM-DD), title, summary y changes. Cada cambio con su
 //        tipo (nuevo, mejora, correccion), el módulo y un texto para
 //        usuarios: qué cambia para ellos, sin detalles técnicos.
+//      - highlights: 2 o 3 frases cortas (hasta unos 90 caracteres) para el
+//        aviso que se muestra al ingresar. El aviso es un resumen que invita
+//        a abrir Novedades, no el historial de la versión: si faltan, usa los
+//        primeros cambios.
 //   2. Poner la misma versión en "version" de package.json (el build avisa
 //      si no coinciden).
 //   3. Commit y deploy. No hace falta migración ni variable de entorno.
@@ -40,12 +44,32 @@ export interface AppUpdate {
   date: string
   title: string
   summary: string
+  // Frases cortas para el aviso al ingresar (máximo 3 se muestran). El
+  // detalle completo está en changes y en la página Novedades.
+  highlights?: string[]
   changes: AppUpdateChange[]
   // Etiqueta del aviso al ingresar.
   severity: AppUpdateSeverity
 }
 
 export const APP_UPDATES: AppUpdate[] = [
+  {
+    id: '2026-10-07-aviso-y-contacto',
+    version: '1.9.0',
+    date: '2026-10-07',
+    title: 'Aviso de novedades más claro y contacto directo con Informática',
+    summary: 'El aviso de novedades entra en la pantalla del celular y se cierra fácil. En Ayuda podés escribirle a Informática y Estadística.',
+    highlights: [
+      'El aviso se ve completo en el celular, se desplaza y se cierra con la X.',
+      'En Ayuda: botones para enviar un email o escribir por WhatsApp.',
+    ],
+    changes: [
+      { type: 'correccion', module: 'Novedades', text: 'El aviso de novedades que aparece al ingresar ya no se sale de la pantalla del celular: muestra un resumen, se desplaza por dentro y se cierra con la X o con "Entendido". El detalle completo sigue en Novedades.' },
+      { type: 'nuevo', module: 'Ayuda', text: 'Contacto directo con el Dpto. de Informática y Estadística R4: un botón para enviar un email y otro para escribir por WhatsApp, con tu nombre ya escrito en el mensaje.' },
+      { type: 'mejora', module: 'Ayuda', text: 'Las pantallas que dicen "No tenés permiso", el ingreso y las respuestas de Ayuda que mandan a Informática traen los mismos botones de contacto.' },
+    ],
+    severity: 'improvement',
+  },
   {
     id: '2026-10-06-modo-departamento',
     version: '1.8.0',

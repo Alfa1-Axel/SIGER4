@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { APP_UPDATES, CHANGE_TYPE_LABEL, formatUpdateDate } from '../config/appUpdates'
 import type { AppUpdate, AppUpdateSeverity } from '../config/appUpdates'
@@ -23,6 +24,26 @@ const SEVERITY_LABEL: Record<AppUpdateSeverity, string> = {
   info: 'Información',
   improvement: 'Mejora',
   important: 'Importante',
+}
+
+// El aviso al ingresar es una invitación, no el historial de la versión: se
+// muestran a lo sumo estos puntos y el detalle completo vive en Novedades.
+const MAX_HIGHLIGHTS = 3
+
+interface AppUpdateSummaryItem {
+  // "Mejora · Calendario": solo cuando el punto sale de un cambio completo.
+  label?: string
+  text: string
+}
+
+// Puntos del aviso: los `highlights` de la novedad (frases cortas escritas
+// para el aviso) o, si no los tiene, sus primeros cambios.
+function summarizeAppUpdate(update: AppUpdate): { items: AppUpdateSummaryItem[]; total: number } {
+  const items: AppUpdateSummaryItem[] =
+    update.highlights && update.highlights.length > 0
+      ? update.highlights.slice(0, MAX_HIGHLIGHTS).map((text) => ({ text }))
+      : update.changes.slice(0, MAX_HIGHLIGHTS).map((change) => ({ label: `${CHANGE_TYPE_LABEL[change.type]} · ${change.module}`, text: change.text }))
+  return { items, total: update.changes.length }
 }
 
 // Se monta una sola vez dentro de AuthProvider (ver App.tsx), mismo patrón
@@ -90,37 +111,80 @@ export function AppUpdateBanner() {
     setVisible(false)
   }
 
+  // Teclado: al abrirse, el foco entra al aviso (y vuelve a donde estaba al
+  // cerrarlo). Como el aviso está antes que la aplicación en el documento, el
+  // Tab sigue de sus botones a la pantalla. Escape lo cierra solo si el foco
+  // está adentro: no pisa a otros diálogos, como la búsqueda.
+  const cardRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!visible) return
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    cardRef.current?.focus({ preventScroll: true })
+    return () => {
+      if (previous?.isConnected) previous.focus({ preventScroll: true })
+    }
+  }, [visible])
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Escape') return
+    event.preventDefault()
+    handleDismiss()
+  }
+
   if (!visible || !update) return null
+
+  const { items, total } = summarizeAppUpdate(update)
 
   return (
     <div className="app-update-overlay" role="presentation">
-      <div className="app-update-card card-solid" role="dialog" aria-modal="true" aria-labelledby="app-update-title">
+      <div
+        ref={cardRef}
+        className="app-update-card card-solid"
+        role="dialog"
+        aria-labelledby="app-update-title"
+        aria-describedby="app-update-summary"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+      >
         <div className="app-update-header">
           <span className={`badge badge-${update.severity === 'important' ? 'danger' : update.severity === 'improvement' ? 'success' : 'info'}`}>
             {SEVERITY_LABEL[update.severity]}
           </span>
-          <button type="button" className="app-update-close" aria-label="Cerrar" onClick={handleDismiss}>
-            <Icon name="close" size={16} />
+          <button type="button" className="app-update-close" aria-label="Cerrar aviso de novedades" title="Cerrar" onClick={handleDismiss}>
+            <Icon name="close" size={18} />
           </button>
         </div>
 
-        <h2 id="app-update-title" className="app-update-title">
-          {update.title}
-        </h2>
-        <p className="app-update-date">
-          Versión {update.version} · {formatUpdateDate(update.date)}
-        </p>
-        <p className="app-update-description">{update.summary}</p>
+        <div className="app-update-body" tabIndex={0} role="region" aria-labelledby="app-update-title">
+          <h2 id="app-update-title" className="app-update-title">
+            {update.title}
+          </h2>
+          <p className="app-update-date">
+            Versión {update.version} · {formatUpdateDate(update.date)}
+          </p>
+          <div id="app-update-summary">
+            <p className="app-update-description">{update.summary}</p>
 
-        {update.changes.length > 0 && (
-          <ul className="app-update-changes">
-            {update.changes.map((change, index) => (
-              <li key={index}>
-                <strong>{CHANGE_TYPE_LABEL[change.type]} · {change.module}:</strong> {change.text}
-              </li>
-            ))}
-          </ul>
-        )}
+            {items.length > 0 && (
+              <ul className="app-update-changes">
+                {items.map((item, index) => (
+                  <li key={index}>
+                    <span className="app-update-item">
+                      {item.label && <strong>{item.label}: </strong>}
+                      {item.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {total > items.length && (
+              <p className="app-update-more">
+                Esta versión trae {total} cambios en total: los ves todos en Novedades.
+              </p>
+            )}
+          </div>
+        </div>
 
         <div className="app-update-actions">
           <button type="button" className="btn btn-primary btn-block" onClick={handleDismiss}>

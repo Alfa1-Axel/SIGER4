@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { NAV_ITEMS, NAV_SECTIONS } from './navigation'
+import { NAV_ITEMS, NAV_SECTIONS, isNavItemVisible, navItemLabel } from './navigation'
+import type { NavContext } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -24,9 +25,10 @@ interface SidebarProps {
 // la clase "open"; se cierra solo al elegir una opción, tocar el botón de
 // cierre, o el backdrop (manejado por AppShell).
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { profile, signOut, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
-  const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
-  const visibleItems = NAV_ITEMS.filter((item) => !item.visible || item.visible({ isAdmin, isSuperAdmin, hasRole, hasDepartments }))
+  const { profile, signOut, isAdmin, isSuperAdmin, isDepartmentOnly, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
+  const departmentCount = new Set([...coordinatedDepartmentIds, ...memberDepartmentIds]).size
+  const navContext: NavContext = { isAdmin, isSuperAdmin, hasRole, hasDepartments: departmentCount > 0, departmentCount, departmentOnly: isDepartmentOnly }
+  const visibleItems = NAV_ITEMS.filter((item) => isNavItemVisible(item, navContext))
   const navRef = useRef<HTMLElement>(null)
   const { pathname } = useLocation()
 
@@ -73,7 +75,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
                 >
                   <Icon name={item.icon} size={18} />
-                  {item.label}
+                  {navItemLabel(item, navContext)}
                 </NavLink>
               ))}
             </div>

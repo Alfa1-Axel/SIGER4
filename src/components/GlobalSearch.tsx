@@ -28,13 +28,13 @@ const DEBOUNCE_MS = 300
 // inicia sesión en la misma pestaña, se vuelven a pedir.
 type Lookups = { departments: Map<string, string>; stations: Map<string, string> }
 let lookupsCache: { key: string; promise: Promise<Lookups> } | null = null
-function loadLookups(profileId: string | null, withAvales: boolean) {
-  const key = `${profileId ?? ''}:${withAvales}`
+function loadLookups(profileId: string | null, withAvales: boolean, withStations: boolean) {
+  const key = `${profileId ?? ''}:${withAvales}:${withStations}`
   if (!lookupsCache || lookupsCache.key !== key) {
     const promise = Promise.all([
       fetchDepartments().catch(() => []),
       withAvales ? fetchAvalesDepartments().catch(() => []) : Promise.resolve([]),
-      fetchStations().catch(() => []),
+      withStations ? fetchStations().catch(() => []) : Promise.resolve([]),
     ]).then(([deps, avalesDeps, sts]) => ({
       departments: new Map([...avalesDeps, ...deps].map((d) => [d.id, d.name])),
       stations: new Map(sts.map((s) => [s.id, s.name])),
@@ -119,7 +119,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
     const id = ++requestId.current
     setLoading(true)
     setError(null)
-    loadLookups(ctx.profileId, ctx.hasAvalesAccess)
+    loadLookups(ctx.profileId, ctx.hasAvalesAccess, !ctx.departmentOnly)
       .then((lookups) =>
         searchEverything(
           term,
@@ -199,7 +199,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
             ref={inputRef}
             type="search"
             className="search-input"
-            placeholder="Buscar usuarios, documentos, informes, elementos…"
+            placeholder={ctx.departmentOnly ? 'Buscar tu departamento, informes, eventos, avisos…' : 'Buscar usuarios, documentos, informes, elementos…'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             role="combobox"
@@ -232,9 +232,14 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
         <div className="search-body" aria-live="polite">
           {tooShort && (
             <div className="search-hint">
-              <p>Escribí al menos {MIN_SEARCH_LENGTH} letras para buscar en los módulos a los que tenés acceso: usuarios, cuarteles, departamentos, informes, documentos, avales, inventario, cursos, calendario y notificaciones.</p>
               <p>
-                ¿Buscás cómo hacer algo? Probá con "pedir préstamo" o "cargar informe", o entrá al{' '}
+                Escribí al menos {MIN_SEARCH_LENGTH} letras para buscar en los módulos a los que tenés acceso:{' '}
+                {ctx.departmentOnly
+                  ? 'tu departamento, informes y actas, eventos de tu departamento, avales, notificaciones, ayuda y novedades.'
+                  : 'usuarios, cuarteles, departamentos, informes, documentos, avales, inventario, cursos, calendario, notificaciones y novedades.'}
+              </p>
+              <p>
+                ¿Buscás cómo hacer algo? Probá con "{ctx.departmentOnly ? 'ver informes' : 'pedir préstamo'}" o "cargar informe", o entrá al{' '}
                 <Link to="/ayuda" onClick={onClose}>
                   Centro de ayuda
                 </Link>

@@ -1,4 +1,6 @@
 import type { Notification, NotificationType } from '../types/database'
+import { canOpenPath, moduleForPath } from './moduleAccess'
+import type { AppModule } from './moduleAccess'
 
 // Etiqueta, módulo, importancia y destino de cada tipo de notificación. Lo
 // usan la bandeja (/notificaciones), el Inicio y la búsqueda global.
@@ -127,6 +129,35 @@ export function notificationLink(n: Pick<Notification, 'type' | 'link_path' | 's
     default:
       return null
   }
+}
+
+// Módulos a los que puede llevar un aviso general (no dirigido a la persona)
+// en modo departamento. Los de un módulo que ese modo no abre (un curso nuevo,
+// una circular, un préstamo, un evento regional) no se le muestran: serían un
+// aviso sin salida. Es el espejo de la política de 0107 sobre notifications.
+const GENERAL_NOTICE_MODULES: ReadonlySet<AppModule> = new Set<AppModule>(['inicio', 'departamentos', 'notificaciones', 'ajustes', 'roles', 'ayuda', 'novedades'])
+
+// ¿Este aviso corresponde mostrarlo? Siempre, salvo en modo departamento
+// para un aviso general que lleva a un módulo que su rol no abre. Los avisos
+// dirigidos a la persona (incluidos los de su departamento) se muestran
+// siempre; los avisos generales sin enlace también.
+export function isNotificationForRole(n: Pick<Notification, 'profile_id' | 'link_path'>, departmentOnly: boolean): boolean {
+  if (!departmentOnly || n.profile_id) return true
+  if (!n.link_path || !n.link_path.startsWith('/')) return true
+  const module = moduleForPath(n.link_path)
+  return !module || GENERAL_NOTICE_MODULES.has(module)
+}
+
+// Adónde lleva "Abrir", o null si el rol no puede abrir ese destino: nunca se
+// ofrece un botón que termine en "No tenés permiso".
+export function openableNotificationLink(
+  n: Pick<Notification, 'type' | 'link_path' | 'station_id'>,
+  canManageUsers: boolean,
+  departmentOnly: boolean,
+  hasAvalesAccess: boolean,
+): string | null {
+  const to = notificationLink(n, canManageUsers)
+  return to && canOpenPath(to, departmentOnly, hasAvalesAccess) ? to : null
 }
 
 export function timeAgo(iso: string): string {

@@ -4,6 +4,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { TasksSection } from '../components/TasksSection'
 import { DepartmentDashboard } from '../components/DepartmentDashboard'
+import { DepartmentHome } from '../components/DepartmentHome'
 import { openGlobalSearch } from '../lib/searchControl'
 import { fetchDashboardSummary } from '../lib/api/dashboard'
 import { fetchStations } from '../lib/api/stations'
@@ -12,7 +13,7 @@ import { fetchLatestUnreadNotifications, fetchUnreadNotificationCount } from '..
 import type { DashboardSummary } from '../lib/api/dashboard'
 import type { Notification, Station, VisibleDepartment } from '../types/database'
 import { translateAction, translateTable } from '../lib/audit/humanize'
-import { formatPercent } from '../lib/format'
+import { formatPercent, greeting, longToday } from '../lib/format'
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
@@ -29,13 +30,6 @@ function timeAgo(iso: string): string {
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `Hace ${hours}h`
   return `Hace ${Math.floor(hours / 24)}d`
-}
-
-function greeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Buen día'
-  if (hour < 20) return 'Buenas tardes'
-  return 'Buenas noches'
 }
 
 // Roles con alcance territorial (Regional, subsede o cuartel): para ellos
@@ -61,11 +55,18 @@ interface QuickAction {
   badge?: number
 }
 
-// Inicio: lo primero que ve cada usuario al ingresar. Responde, en este
-// orden: qué requiere atención, qué puede hacer (accesos según su rol), qué
-// llegó (notificaciones sin leer), qué viene (agenda) y, para los roles
-// territoriales, el estado de la Regional.
+// Inicio: lo primero que ve cada usuario al ingresar. Quien solo es
+// Coordinador o Miembro de Departamento tiene un Inicio propio, con su
+// departamento y nada global (DepartmentHome); el resto ve el de siempre.
 export function PanelPage() {
+  const { isDepartmentOnly } = useAuth()
+  return isDepartmentOnly ? <DepartmentHome /> : <GeneralHome />
+}
+
+// Responde, en este orden: qué requiere atención, qué puede hacer (accesos
+// según su rol), qué llegó (notificaciones sin leer), qué viene (agenda) y,
+// para los roles territoriales, el estado de la Regional.
+function GeneralHome() {
   const { profile, roles, isAdmin, isSuperAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   const { hasAnyAccess: hasReportsAccess } = useDepartmentReportsAccess()
@@ -149,8 +150,7 @@ export function PanelPage() {
     ...(coordinatedNames.length ? [`Coordinador de ${coordinatedNames.join(', ')}`] : []),
     ...(memberNames.length ? [`Miembro de ${memberNames.join(', ')}`] : []),
   ]
-  const todayRaw = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
-  const today = todayRaw.charAt(0).toUpperCase() + todayRaw.slice(1)
+  const today = longToday()
 
   return (
     <AppShell title="Inicio">

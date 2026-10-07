@@ -13,7 +13,7 @@ interface AccessDeniedProps {
 // en vez de redirigir en silencio: la persona entiende qué pasó y a dónde
 // volver. La protección real está siempre en la base (RLS), esto es solo la
 // explicación.
-export function AccessDenied({ title = 'No tenés acceso a esta sección', message, backTo = '/panel', backLabel = 'Volver al inicio' }: AccessDeniedProps) {
+export function AccessDenied({ title = 'No tenés permiso para ver esta sección', message, backTo = '/panel', backLabel = 'Volver al inicio' }: AccessDeniedProps) {
   return (
     <div className="access-denied" role="status">
       <span className="access-denied-icon" aria-hidden="true">

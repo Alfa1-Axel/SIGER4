@@ -3919,3 +3919,22 @@ kbd {
   background: transparent;
   border: none;
 }
+
+/* Inicio del modo departamento sin departamento asignado. */
+.dept-home-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.dept-home-empty .section-title,
+.dept-home-empty p {
+  margin: 0;
+}
+
+.dept-home-empty p {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+}

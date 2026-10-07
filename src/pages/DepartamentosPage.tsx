@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { SuccessNotice } from '../components/ui/SuccessNotice'
@@ -13,7 +13,8 @@ import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { describeSupabaseError } from '../lib/api/errors'
 
 export function DepartamentosPage() {
-  const { isAdmin } = useAuth()
+  const { isAdmin, isDepartmentOnly } = useAuth()
+  const navigate = useNavigate()
   const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +47,13 @@ export function DepartamentosPage() {
     }
   }, [])
 
+  // Modo departamento con un solo departamento: la lista no aporta nada, se
+  // abre directo (replace: "Atrás" vuelve a donde estaba, no a la lista).
+  const onlyDepartmentId = isDepartmentOnly && !loading && !error && departments.length === 1 ? departments[0].id : null
+  useEffect(() => {
+    if (onlyDepartmentId) navigate(`/departamentos/${onlyDepartmentId}`, { replace: true })
+  }, [onlyDepartmentId, navigate])
+
   const canCreateReports = departments.some((d) => d.is_active && canView(d.id))
   // Primero los propios (coordina o es miembro); después, para quien tiene
   // visión regional, el resto.
@@ -56,11 +64,23 @@ export function DepartamentosPage() {
     { key: 'others', title: mine.length > 0 ? 'Otros departamentos' : 'Departamentos', items: others },
   ].filter((s) => s.items.length > 0)
 
+  if (onlyDepartmentId) {
+    return (
+      <AppShell title="Mi departamento">
+        <div className="loading-state" role="status">
+          Abriendo tu departamento…
+        </div>
+      </AppShell>
+    )
+  }
+
+  const heading = isDepartmentOnly ? 'Mis departamentos' : 'Departamentos'
+
   return (
-    <AppShell title="Departamentos">
+    <AppShell title={heading}>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Departamentos</h1>
+          <h1 className="page-title">{heading}</h1>
           <p className="page-subtitle">
             {others.length > 0
               ? 'Áreas de la Regional 4 con su coordinador, miembros, informes y actas. Es la única lista de departamentos: Escuela → Avales regionales usa estos mismos.'

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
-import { createCalendarEvent, fetchCalendarEventById, updateCalendarEvent } from '../lib/api/calendar'
+import { DEPARTMENT_EVENT_TYPES, createCalendarEvent, fetchCalendarEventById, updateCalendarEvent } from '../lib/api/calendar'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
@@ -15,9 +15,6 @@ import { describeSupabaseError } from '../lib/api/errors'
 type ScopeTarget = 'region' | 'subsede' | 'station' | 'escuela'
 
 const SCOPELESS_TYPES: CalendarEventType[] = ['escuela', 'capacitacion']
-// Tipos para un evento de departamento (0103): sin los que nombran un
-// alcance territorial o la Escuela.
-const DEPARTMENT_EVENT_TYPES: CalendarEventType[] = ['reunion', 'capacitacion', 'mantenimiento', 'vencimiento', 'otro']
 
 function toDatetimeLocal(iso: string): string {
   const d = new Date(iso)

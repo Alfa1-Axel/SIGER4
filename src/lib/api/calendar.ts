@@ -1,6 +1,10 @@
 import { supabase } from '../supabaseClient'
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType } from '../../types/database'
 
+// Tipos de un evento de departamento (0103): sin los que nombran un alcance
+// territorial o la Escuela.
+export const DEPARTMENT_EVENT_TYPES: CalendarEventType[] = ['reunion', 'capacitacion', 'mantenimiento', 'vencimiento', 'otro']
+
 export async function fetchCalendarEvents(): Promise<CalendarEvent[]> {
   const { data, error } = await supabase.from('calendar_events').select('*').order('starts_at', { ascending: true })
   if (error) throw error

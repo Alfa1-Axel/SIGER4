@@ -7,6 +7,7 @@ import { SwUpdateBanner } from './components/SwUpdateBanner'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
+import { ModuleRoute } from './components/layout/ModuleRoute'
 import { UserCreatorRoute } from './components/layout/UserCreatorRoute'
 import { SchoolAvalesRoute } from './components/layout/SchoolAvalesRoute'
 import { SuperAdminRoute } from './components/layout/SuperAdminRoute'
@@ -73,29 +74,29 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
         <Route path="/panel" element={<ProtectedRoute><PanelPage /></ProtectedRoute>} />
-        <Route path="/cuarteles" element={<ProtectedRoute><CuartelesPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/nuevo" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/:id/editar" element={<ProtectedRoute><CuartelFormPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/:id" element={<ProtectedRoute><CuartelDetallePage /></ProtectedRoute>} />
+        <Route path="/cuarteles" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelesPage /></ModuleRoute>} />
+        <Route path="/cuarteles/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:id" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelDetallePage /></ModuleRoute>} />
         <Route
           path="/mapa"
           element={
-            <ProtectedRoute>
+            <ModuleRoute module="mapa" title="Mapa Regional">
               <Suspense fallback={<div className="loading-state" role="status">Cargando mapa…</div>}>
                 <MapaRegionalPage />
               </Suspense>
-            </ProtectedRoute>
+            </ModuleRoute>
           }
         />
-        <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
-        <Route path="/vehiculos/:id/editar" element={<ProtectedRoute><VehiculoFormPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ProtectedRoute><AsistenciaFormPage /></ProtectedRoute>} />
-        <Route path="/asistencia/:id/editar" element={<ProtectedRoute><AsistenciaFormPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/:stationId/intervenciones/nueva" element={<ProtectedRoute><IntervencionFormPage /></ProtectedRoute>} />
-        <Route path="/intervenciones/:id/editar" element={<ProtectedRoute><IntervencionFormPage /></ProtectedRoute>} />
-        <Route path="/escuela" element={<ProtectedRoute><EscuelaPage /></ProtectedRoute>} />
-        <Route path="/escuela/nuevo" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
-        <Route path="/escuela/:id/editar" element={<ProtectedRoute><CursoFormPage /></ProtectedRoute>} />
+        <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
+        <Route path="/vehiculos/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ModuleRoute module="cuarteles" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
+        <Route path="/asistencia/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/intervenciones/nueva" element={<ModuleRoute module="cuarteles" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
+        <Route path="/intervenciones/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
+        <Route path="/escuela" element={<ModuleRoute module="escuela" title="Escuela"><EscuelaPage /></ModuleRoute>} />
+        <Route path="/escuela/nuevo" element={<ModuleRoute module="escuela" title="Escuela"><CursoFormPage /></ModuleRoute>} />
+        <Route path="/escuela/:id/editar" element={<ModuleRoute module="escuela" title="Escuela"><CursoFormPage /></ModuleRoute>} />
         <Route path="/escuela/avales" element={<SchoolAvalesRoute><AvalesPage /></SchoolAvalesRoute>} />
         <Route path="/escuela/avales/nuevo" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
         {/* Rutas viejas de administración de departamentos/coordinadores de
@@ -111,28 +112,28 @@ export default function App() {
         <Route path="/usuarios/:id" element={<UserManagerRoute><UsuarioDetallePage /></UserManagerRoute>} />
         <Route path="/notificaciones" element={<ProtectedRoute><NotificacionesPage /></ProtectedRoute>} />
         <Route path="/notificaciones/nueva" element={<ProtectedRoute><NotificacionFormPage /></ProtectedRoute>} />
-        <Route path="/documentos" element={<ProtectedRoute><DocumentosPage /></ProtectedRoute>} />
-        <Route path="/documentos/nuevo" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
-        <Route path="/documentos/:id/editar" element={<ProtectedRoute><DocumentoFormPage /></ProtectedRoute>} />
-        <Route path="/documentos/carpetas/nueva" element={<ProtectedRoute><CarpetaFormPage /></ProtectedRoute>} />
-        <Route path="/documentos/papelera" element={<ProtectedRoute><PapeleraDocumentosPage /></ProtectedRoute>} />
-        <Route path="/documentos/carpetas/:id" element={<ProtectedRoute><CarpetaDetallePage /></ProtectedRoute>} />
+        <Route path="/documentos" element={<ModuleRoute module="documentos" title="Documentos"><DocumentosPage /></ModuleRoute>} />
+        <Route path="/documentos/nuevo" element={<ModuleRoute module="documentos" title="Documentos"><DocumentoFormPage /></ModuleRoute>} />
+        <Route path="/documentos/:id/editar" element={<ModuleRoute module="documentos" title="Documentos"><DocumentoFormPage /></ModuleRoute>} />
+        <Route path="/documentos/carpetas/nueva" element={<ModuleRoute module="documentos" title="Documentos"><CarpetaFormPage /></ModuleRoute>} />
+        <Route path="/documentos/papelera" element={<ModuleRoute module="documentos" title="Documentos"><PapeleraDocumentosPage /></ModuleRoute>} />
+        <Route path="/documentos/carpetas/:id" element={<ModuleRoute module="documentos" title="Documentos"><CarpetaDetallePage /></ModuleRoute>} />
         <Route path="/auditoria" element={<SuperAdminRoute title="Auditoría"><AuditoriaPage /></SuperAdminRoute>} />
-        <Route path="/cuarteles/:stationId/personal/nuevo" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
-        <Route path="/personal/:id/editar" element={<ProtectedRoute><PersonalFormPage /></ProtectedRoute>} />
-        <Route path="/cuarteles/:stationId/historial/nuevo" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
-        <Route path="/historial/:id/editar" element={<ProtectedRoute><EventoHistoricoFormPage /></ProtectedRoute>} />
+        <Route path="/cuarteles/:stationId/personal/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
+        <Route path="/personal/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/historial/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
+        <Route path="/historial/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
         <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
         <Route path="/calendario/nuevo" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
         <Route path="/calendario/:id/editar" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
         <Route path="/calendario/:id" element={<ProtectedRoute><EventoCalendarioDetallePage /></ProtectedRoute>} />
-        <Route path="/inventario" element={<ProtectedRoute><InventarioPage /></ProtectedRoute>} />
-        <Route path="/inventario/nuevo" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
-        <Route path="/inventario/solicitudes" element={<ProtectedRoute><SolicitudesPrestamoPage /></ProtectedRoute>} />
-        <Route path="/inventario/solicitudes/:id" element={<ProtectedRoute><SolicitudPrestamoDetallePage /></ProtectedRoute>} />
-        <Route path="/inventario/:itemId/solicitudes/nueva" element={<ProtectedRoute><SolicitudPrestamoFormPage /></ProtectedRoute>} />
-        <Route path="/inventario/:id/editar" element={<ProtectedRoute><InventarioFormPage /></ProtectedRoute>} />
-        <Route path="/inventario/:id" element={<ProtectedRoute><InventarioDetallePage /></ProtectedRoute>} />
+        <Route path="/inventario" element={<ModuleRoute module="inventario" title="Inventario"><InventarioPage /></ModuleRoute>} />
+        <Route path="/inventario/nuevo" element={<ModuleRoute module="inventario" title="Inventario"><InventarioFormPage /></ModuleRoute>} />
+        <Route path="/inventario/solicitudes" element={<ModuleRoute module="inventario" title="Inventario"><SolicitudesPrestamoPage /></ModuleRoute>} />
+        <Route path="/inventario/solicitudes/:id" element={<ModuleRoute module="inventario" title="Inventario"><SolicitudPrestamoDetallePage /></ModuleRoute>} />
+        <Route path="/inventario/:itemId/solicitudes/nueva" element={<ModuleRoute module="inventario" title="Inventario"><SolicitudPrestamoFormPage /></ModuleRoute>} />
+        <Route path="/inventario/:id/editar" element={<ModuleRoute module="inventario" title="Inventario"><InventarioFormPage /></ModuleRoute>} />
+        <Route path="/inventario/:id" element={<ModuleRoute module="inventario" title="Inventario"><InventarioDetallePage /></ModuleRoute>} />
         <Route path="/ayuda" element={<ProtectedRoute><AyudaPage /></ProtectedRoute>} />
         <Route path="/novedades" element={<ProtectedRoute><NovedadesPage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />

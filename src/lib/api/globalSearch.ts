@@ -2,7 +2,10 @@ import { supabase } from '../supabaseClient'
 import { fetchCoordinatingProfileIds } from './departments'
 import { DEPARTMENT_REPORT_TYPE_LABEL } from './departmentReports'
 import { NOTIFICATION_TYPE_LABEL } from '../notificationMeta'
-import { HELP_ARTICLES, canSeeHelpArticle, helpArticleMatches } from '../../config/helpContent'
+import { HELP_ARTICLES, canSeeHelpArticle, foldText, helpArticleMatches } from '../../config/helpContent'
+import { APP_UPDATES } from '../../config/appUpdates'
+import { canUseModule } from '../moduleAccess'
+import type { AppModule } from '../moduleAccess'
 import type { HelpAudienceContext } from '../../config/helpContent'
 import type { RoleKey } from '../../types/roles'
 import type {
@@ -37,6 +40,7 @@ export type SearchModule =
   | 'calendario'
   | 'notificaciones'
   | 'ayuda'
+  | 'novedades'
 
 export interface SearchResult {
   id: string
@@ -59,6 +63,7 @@ export const SEARCH_MODULE_LABEL: Record<SearchModule, string> = {
   calendario: 'Calendario',
   notificaciones: 'Notificaciones',
   ayuda: 'Ayuda',
+  novedades: 'Novedades',
 }
 
 export const SEARCH_MODULE_ICON: Record<SearchModule, string> = {
@@ -74,6 +79,7 @@ export const SEARCH_MODULE_ICON: Record<SearchModule, string> = {
   calendario: 'calendar',
   notificaciones: 'bell',
   ayuda: 'help',
+  novedades: 'magic',
 }
 
 export const SEARCH_MODULE_ORDER: SearchModule[] = [
@@ -89,7 +95,30 @@ export const SEARCH_MODULE_ORDER: SearchModule[] = [
   'cursos',
   'calendario',
   'notificaciones',
+  'novedades',
 ]
+
+// Módulo de la aplicación al que pertenece cada módulo de búsqueda: en modo
+// departamento solo se busca en los que ese modo abre.
+const APP_MODULE_OF: Record<SearchModule, AppModule> = {
+  usuarios: 'usuarios',
+  cuarteles: 'cuarteles',
+  departamentos: 'departamentos',
+  informes: 'departamentos',
+  documentos: 'documentos',
+  avales: 'avales',
+  inventario: 'inventario',
+  solicitudes: 'inventario',
+  cursos: 'escuela',
+  calendario: 'calendario',
+  notificaciones: 'notificaciones',
+  ayuda: 'ayuda',
+  novedades: 'novedades',
+}
+
+export function canSearchModule(module: SearchModule, ctx: Pick<SearchContext, 'departmentOnly'>): boolean {
+  return canUseModule(APP_MODULE_OF[module], ctx.departmentOnly)
+}
 
 export interface SearchContext extends HelpAudienceContext {
   profileId: string | null
@@ -317,14 +346,17 @@ async function searchCourses(like: string, limit: number): Promise<SearchResult[
   }))
 }
 
-async function searchEvents(like: string, limit: number): Promise<SearchResult[]> {
-  const { data, error } = await supabase
+async function searchEvents(like: string, limit: number, onlyDepartments: boolean): Promise<SearchResult[]> {
+  let query = supabase
     .from('calendar_events')
     .select('id, title, starts_at, status')
     .or(`title.ilike.${like},description.ilike.${like}`)
     .neq('status', 'cancelado')
     .order('starts_at', { ascending: false })
     .limit(limit)
+  // Modo departamento: solo eventos de sus departamentos (la RLS ya lo exige).
+  if (onlyDepartments) query = query.not('department_id', 'is', null)
+  const { data, error } = await query
   if (error) throw error
   return ((data ?? []) as Pick<CalendarEvent, 'id' | 'title' | 'starts_at'>[]).map((e) => ({
     id: e.id,
@@ -359,6 +391,20 @@ function searchHelp(term: string, ctx: SearchContext, limit: number): SearchResu
     .map((a) => ({ id: a.id, module: 'ayuda', title: a.title, subtitle: a.summary, to: `/ayuda#${a.id}` }))
 }
 
+// Novedades del sistema: texto local, sin consulta.
+function searchNews(term: string, limit: number): SearchResult[] {
+  const q = foldText(term)
+  return APP_UPDATES.filter((u) => foldText(`${u.title} ${u.summary} ${u.changes.map((c) => `${c.module} ${c.text}`).join(' ')}`).includes(q))
+    .slice(0, limit)
+    .map((u) => ({
+      id: u.id,
+      module: 'novedades' as const,
+      title: u.title,
+      subtitle: `Versión ${u.version} · ${formatDay(u.date)}`,
+      to: `/novedades#release-${u.id}`,
+    }))
+}
+
 export interface SearchLookups {
   departmentName: (id: string) => string
   stationName: (id: string) => string
@@ -375,7 +421,8 @@ export async function searchEverything(rawQuery: string, ctx: SearchContext, loo
   if (term.length < MIN_SEARCH_LENGTH) return { results: {}, failedModules: [] }
   const like = `%${term}%`
   const { limit, only } = options
-  const wants = (m: SearchModule) => !only || only === m
+  // Un módulo que el rol no abre (modo departamento) ni se consulta.
+  const wants = (m: SearchModule) => canSearchModule(m, ctx) && (!only || only === m)
 
   const tasks: [SearchModule[], () => Promise<Partial<Record<SearchModule, SearchResult[]>>>][] = []
   const add = (modules: SearchModule[], fn: () => Promise<Partial<Record<SearchModule, SearchResult[]>>>) => {
@@ -392,11 +439,12 @@ export async function searchEverything(rawQuery: string, ctx: SearchContext, loo
     return { inventario: r.items, solicitudes: r.requests }
   })
   add(['cursos'], async () => ({ cursos: await searchCourses(like, limit) }))
-  add(['calendario'], async () => ({ calendario: await searchEvents(like, limit) }))
+  add(['calendario'], async () => ({ calendario: await searchEvents(like, limit, ctx.departmentOnly) }))
   add(['notificaciones'], async () => ({ notificaciones: await searchNotifications(like, limit) }))
 
   const outcome: SearchOutcome = { results: {}, failedModules: [] }
   if (wants('ayuda')) outcome.results.ayuda = searchHelp(term, ctx, limit)
+  if (wants('novedades')) outcome.results.novedades = searchNews(term, limit)
   const settled = await Promise.allSettled(tasks.map(([, fn]) => fn()))
   settled.forEach((res, i) => {
     if (res.status === 'fulfilled') {

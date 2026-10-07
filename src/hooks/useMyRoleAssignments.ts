@@ -11,14 +11,15 @@ import type { RoleAssignment } from '../lib/roleAssignments'
 // que el propio usuario puede ver: su cuartel, su Regional y sus
 // departamentos.
 export function useMyRoleAssignments(): RoleAssignment[] {
-  const { profile, roles, scopes } = useAuth()
+  const { profile, roles, scopes, isDepartmentOnly } = useAuth()
   const [assignments, setAssignments] = useState<RoleAssignment[]>([])
 
   useEffect(() => {
     if (!profile) return
     let active = true
     Promise.all([
-      fetchStations().catch(() => []),
+      // Modo departamento: no consulta cuarteles (su rol no los usa).
+      isDepartmentOnly ? Promise.resolve([]) : fetchStations().catch(() => []),
       fetchRegions().catch(() => []),
       fetchSubsedes().catch(() => []),
       fetchVisibleDepartments().catch(() => []),
@@ -41,7 +42,7 @@ export function useMyRoleAssignments(): RoleAssignment[] {
     return () => {
       active = false
     }
-  }, [profile, roles, scopes])
+  }, [profile, roles, scopes, isDepartmentOnly])
 
   return assignments
 }

@@ -6,7 +6,9 @@ import { fetchUpcomingDepartmentEvents } from '../lib/api/calendar'
 import { fetchUnreadDepartmentNotifications } from '../lib/api/notifications'
 import { fetchPendingItems } from '../lib/api/pendingItems'
 import type { PendingItem } from '../lib/api/pendingItems'
-import { notificationLink } from '../lib/notificationMeta'
+import { openableNotificationLink } from '../lib/notificationMeta'
+import { useAuth } from '../hooks/useAuth'
+import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import type { CalendarEvent, DepartmentReport, Notification, VisibleDepartment } from '../types/database'
 
 const SELECTED_KEY = 'siger4:inicio-departamento'
@@ -35,6 +37,8 @@ function formatDay(iso: string, withTime: boolean): string {
 // atención, lo último y lo próximo. Si tiene varios, los distingue con un
 // selector.
 export function DepartmentDashboard({ departments }: { departments: VisibleDepartment[] }) {
+  const { isDepartmentOnly } = useAuth()
+  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   // Primero los que coordina.
   const mine = [...departments.filter((d) => d.my_relation === 'coordinador'), ...departments.filter((d) => d.my_relation === 'integrante')]
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -146,7 +150,7 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
               ))}
               {notices.map((n) => (
                 <li key={n.id}>
-                  <Link to={notificationLink(n, false) ?? '/notificaciones'}>
+                  <Link to={openableNotificationLink(n, false, isDepartmentOnly, hasAvalesAccess) ?? '/notificaciones'}>
                     <span className="dept-dashboard-item-title">{n.title}</span>
                     <span className="dept-dashboard-item-meta">Aviso sin leer</span>
                   </Link>

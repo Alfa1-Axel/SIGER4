@@ -6,6 +6,7 @@ import { fetchCurrentUserContext } from '../lib/api/profiles'
 import type { Profile, UserRole, UserScope } from '../types/database'
 import type { RoleKey } from '../types/roles'
 import { ADMIN_ROLES } from '../types/roles'
+import { isDepartmentOnly as rolesAreDepartmentOnly } from '../lib/moduleAccess'
 
 interface AuthContextValue {
   session: Session | null
@@ -23,6 +24,9 @@ interface AuthContextValue {
   // Solo informatica_r4 (is_super_admin() en la base): Auditoría y acciones
   // reservadas al administrador supremo.
   isSuperAdmin: boolean
+  // Modo departamento: sus únicos roles son Coordinador o Miembro de
+  // Departamento. Solo ve lo de su departamento (ver lib/moduleAccess.ts).
+  isDepartmentOnly: boolean
   // true mientras se detecto que el perfil esta desactivado y se esta
   // cerrando la sesion; ProtectedRoute lo usa para mostrar un mensaje claro
   // antes de redirigir al login, en vez de un error crudo o una pantalla en
@@ -138,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const roles = useMemo(() => userRoles.map((r) => r.role), [userRoles])
   const isAdmin = useMemo(() => roles.some((r) => ADMIN_ROLES.includes(r)), [roles])
   const isSuperAdmin = useMemo(() => roles.includes('informatica_r4'), [roles])
+  const isDepartmentOnly = useMemo(() => rolesAreDepartmentOnly(roles), [roles])
 
   const value: AuthContextValue = {
     session,
@@ -150,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAdmin,
     isSuperAdmin,
+    isDepartmentOnly,
     deactivated,
     async signIn(email, password) {
       const { error } = await supabase.auth.signInWithPassword({ email, password })

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { fetchCalendarEvents } from '../lib/api/calendar'
+import { DEPARTMENT_EVENT_TYPES, fetchCalendarEvents } from '../lib/api/calendar'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
@@ -56,7 +56,7 @@ function buildMonthGrid(year: number, month: number): Date[] {
 }
 
 export function CalendarioPage() {
-  const { isAdmin, hasRole, profile, scopes, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
+  const { isAdmin, isDepartmentOnly, hasRole, profile, scopes, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const hasDepartments = coordinatedDepartmentIds.length > 0 || memberDepartmentIds.length > 0
   const canCreate =
     isAdmin ||
@@ -86,10 +86,17 @@ export function CalendarioPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchCalendarEvents(), fetchRegions(), fetchSubsedes(), fetchStations(), fetchVisibleDepartments().catch(() => [])])
+    // Modo departamento: solo eventos de sus departamentos, sin territorio.
+    Promise.all([
+      fetchCalendarEvents(),
+      isDepartmentOnly ? Promise.resolve([] as Region[]) : fetchRegions(),
+      isDepartmentOnly ? Promise.resolve([] as Subsede[]) : fetchSubsedes(),
+      isDepartmentOnly ? Promise.resolve([] as Station[]) : fetchStations(),
+      fetchVisibleDepartments().catch(() => []),
+    ])
       .then(([eventsData, regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
-        setEvents(eventsData)
+        setEvents(isDepartmentOnly ? eventsData.filter((e) => e.department_id !== null) : eventsData)
         setDepartments(departmentsData)
         setRegions(regionsData)
         setSubsedes(subsedesData)
@@ -100,7 +107,7 @@ export function CalendarioPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [isDepartmentOnly])
 
   // Para distinguir y filtrar los eventos de cada departamento propio.
   const myDepartments = departments.filter((d) => d.my_relation)
@@ -155,7 +162,11 @@ export function CalendarioPage() {
           </button>
         </div>
       </div>
-      <p className="page-subtitle">Eventos de la Regional, de tu cuartel y de la Escuela. Tocá un día para ver qué hay.</p>
+      <p className="page-subtitle">
+        {isDepartmentOnly
+          ? 'Eventos de tu departamento. Tocá un día para ver qué hay.'
+          : 'Eventos de la Regional, de tu cuartel y de la Escuela. Tocá un día para ver qué hay.'}
+      </p>
 
       {error && (
         <div className="alert alert-danger" role="alert">{error}</div>
@@ -164,11 +175,13 @@ export function CalendarioPage() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los tipos</option>
-          {Object.entries(EVENT_TYPE_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
+          {Object.entries(EVENT_TYPE_LABEL)
+            .filter(([value]) => !isDepartmentOnly || DEPARTMENT_EVENT_TYPES.includes(value as CalendarEventType))
+            .map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
         </select>
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los estados</option>
@@ -178,17 +191,21 @@ export function CalendarioPage() {
             </option>
           ))}
         </select>
-        <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)} style={{ fontSize: 12 }}>
-          <option value="">Todo el alcance</option>
-          {myStationId && <option value="mi_cuartel">Mi cuartel</option>}
-          <option value="escuela">Escuela</option>
-          {myDepartments.length > 1 && <option value="departamentos">Mis departamentos</option>}
-          {myDepartments.map((d) => (
-            <option key={d.id} value={`dep:${d.id}`}>
-              {d.name}
-            </option>
-          ))}
-        </select>
+        {/* En modo departamento el alcance es siempre el departamento: el
+            selector solo aparece si tiene más de uno. */}
+        {(!isDepartmentOnly || myDepartments.length > 1) && (
+          <select value={scopeFilter} onChange={(e) => setScopeFilter(e.target.value)} style={{ fontSize: 12 }} aria-label={isDepartmentOnly ? 'Departamento' : 'Alcance'}>
+            <option value="">{isDepartmentOnly ? 'Todos mis departamentos' : 'Todo el alcance'}</option>
+            {!isDepartmentOnly && myStationId && <option value="mi_cuartel">Mi cuartel</option>}
+            {!isDepartmentOnly && <option value="escuela">Escuela</option>}
+            {!isDepartmentOnly && myDepartments.length > 1 && <option value="departamentos">Mis departamentos</option>}
+            {myDepartments.map((d) => (
+              <option key={d.id} value={`dep:${d.id}`}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {loading && <div className="loading-state" role="status">Cargando calendario…</div>}

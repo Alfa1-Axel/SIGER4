@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
+import { useAuth } from '../hooks/useAuth'
 import logoEscuela from '../assets/Logo escuela.png'
 
 // Identidad del módulo Escuela, común a todas sus pantallas: logo de la
@@ -13,6 +14,9 @@ import logoEscuela from '../assets/Logo escuela.png'
 // que se ve nítido también en pantallas de alta densidad.
 export function EscuelaHeader() {
   const { hasAccess } = useSchoolAvalesAccess()
+  // Modo departamento: Avales es lo único de Escuela que abre (Cursos no), así
+  // que no hay pestañas entre las que elegir.
+  const { isDepartmentOnly } = useAuth()
   return (
     <div className="module-header">
       <div className="module-identity">
@@ -22,7 +26,7 @@ export function EscuelaHeader() {
           <div className="module-identity-meta">Regional 4 · Escuela de Capacitación</div>
         </div>
       </div>
-      {hasAccess && (
+      {hasAccess && !isDepartmentOnly && (
         <nav className="tabs" aria-label="Secciones de Escuela">
           <NavLink to="/escuela" end className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
             Cursos

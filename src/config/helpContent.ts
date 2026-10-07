@@ -6,8 +6,17 @@
 // archivo; si el cambio es relevante, sumarlo también a Novedades
 // (src/config/appUpdates.ts).
 
+import { canUseModule } from '../lib/moduleAccess'
+import type { AppModule } from '../lib/moduleAccess'
+
+// Público de un artículo. 'solo_departamento' y 'otros_roles' separan al modo
+// departamento (quien solo es Coordinador o Miembro de Departamento) de los
+// demás: cada uno ve la ayuda de lo que su menú le ofrece.
 export type HelpAudience =
   | 'todos'
+  | 'solo_departamento'
+  | 'otros_roles'
+  | 'mis_departamentos'
   | 'pedir_prestamos'
   | 'gestionar_prestamos'
   | 'departamentos'
@@ -31,6 +40,10 @@ export interface HelpAudienceContext {
   canManageUsers: boolean
   // Coordinador de algún departamento, Secretario Regional o Informática.
   canNotifyDepartments: boolean
+  // Modo departamento: sus únicos roles son de departamento (lib/moduleAccess.ts).
+  departmentOnly: boolean
+  // Coordina o integra al menos un departamento, con su rol.
+  hasOwnDepartments: boolean
 }
 
 export type HelpSection = 'inicio' | 'inventario' | 'departamentos' | 'escuela' | 'documentos' | 'cuenta' | 'administracion' | 'faq'
@@ -59,12 +72,22 @@ export interface HelpArticle {
   answer?: string
   links?: { label: string; to: string }[]
   keywords: string[]
+  // Módulo del que habla: en modo departamento no se muestra la ayuda de un
+  // módulo que ese modo no abre (Inventario, Escuela, Documentos…).
+  module?: AppModule
 }
 
-export function canSeeHelpArticle(article: Pick<HelpArticle, 'audience'>, ctx: HelpAudienceContext): boolean {
+export function canSeeHelpArticle(article: Pick<HelpArticle, 'audience' | 'module'>, ctx: HelpAudienceContext): boolean {
+  if (article.module && !canUseModule(article.module, ctx.departmentOnly)) return false
   switch (article.audience) {
     case 'todos':
       return true
+    case 'solo_departamento':
+      return ctx.departmentOnly
+    case 'otros_roles':
+      return !ctx.departmentOnly
+    case 'mis_departamentos':
+      return ctx.hasOwnDepartments
     case 'pedir_prestamos':
       return ctx.canRequestLoans
     case 'gestionar_prestamos':
@@ -106,7 +129,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'usar-inicio',
     section: 'inicio',
-    audience: 'todos',
+    audience: 'otros_roles',
     title: 'Cómo usar el Inicio',
     summary: 'Lo que requiere tu atención, accesos rápidos y lo que viene.',
     steps: [
@@ -121,7 +144,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'buscar',
     section: 'inicio',
-    audience: 'todos',
+    audience: 'otros_roles',
     title: 'Buscar en SIGER4',
     summary: 'Encontrá documentos, informes, elementos, cuarteles y más desde cualquier pantalla.',
     steps: [
@@ -135,7 +158,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'notificaciones',
     section: 'inicio',
-    audience: 'todos',
+    audience: 'otros_roles',
     title: 'Ver y ordenar tus notificaciones',
     summary: 'Filtrá por no leídas, importantes o módulo, y marcá todo como leído.',
     steps: [
@@ -181,6 +204,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'pedir-elemento',
     section: 'inventario',
     audience: 'pedir_prestamos',
+    module: 'inventario',
     title: 'Pedir un elemento prestado',
     summary: 'Solicitá herramientas o equipos del Inventario Regional para tu cuartel.',
     steps: [
@@ -196,6 +220,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'mis-solicitudes',
     section: 'inventario',
     audience: 'todos',
+    module: 'inventario',
     title: 'Ver el estado de mis solicitudes',
     summary: 'Pendiente, aprobada, prestada o devuelta: qué significa cada estado.',
     steps: [
@@ -211,6 +236,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'gestionar-prestamos',
     section: 'inventario',
     audience: 'gestionar_prestamos',
+    module: 'inventario',
     title: 'Aprobar y registrar préstamos',
     summary: 'Aprobá o rechazá pedidos y registrá el retiro y la devolución.',
     steps: [
@@ -231,7 +257,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Cargar un informe o un acta',
     summary: 'Subí el acta o el informe de tu departamento, con fotos y videos.',
     steps: [
-      'Entrá a Departamentos → tu departamento → "Nuevo" → "Cargar informe o acta".',
+      'Entrá a tu departamento (menú "Mi departamento" o "Departamentos") → "Nuevo" → "Cargar informe o acta".',
       'Elegí el archivo, o tocá "Sacar foto" para fotografiar el papel. Podés sumar fotos y videos.',
       'Revisá el título (se completa con el nombre del archivo), el tipo y la fecha.',
       'Tocá "Guardar informe". Lo ven el coordinador, los miembros e Informática, y les llega un aviso.',
@@ -246,7 +272,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Redactar un informe en SIGER4',
     summary: 'Escribí el informe directamente, sin archivo.',
     steps: [
-      'En tu departamento, tocá "Nuevo" → "Redactar informe".',
+      'Entrá a tu departamento y tocá "Nuevo" → "Redactar informe".',
       'Escribí qué se hizo, quiénes participaron y qué se resolvió.',
       'Si querés, sumá fotos de respaldo. Tocá "Guardar informe".',
     ],
@@ -284,6 +310,110 @@ export const HELP_ARTICLES: HelpArticle[] = [
     keywords: ['aviso', 'avisar', 'notificar', 'notificación', 'departamento', 'coordinador'],
   },
 
+  // ---------------- Modo departamento (Coordinador y Miembro) ----------------
+  {
+    id: 'usar-inicio-departamento',
+    section: 'inicio',
+    audience: 'solo_departamento',
+    title: 'Cómo usar el Inicio de tu departamento',
+    summary: 'Tu departamento, lo que pide atención y lo último, en una pantalla.',
+    steps: [
+      'Arriba ves tu nombre y tu rol con el departamento ("Coordinador de Fuego", "Miembro de Forestal").',
+      '"Pendientes y avisos" junta lo que necesita tu atención. Si no hay nada, dice "Todo al día".',
+      'Más abajo están los últimos informes y actas y los próximos eventos de tu departamento.',
+      'Si estás en más de un departamento, elegí cuál ver con los botones de arriba de la tarjeta.',
+      '"Cargar informe", "Nuevo evento" y los accesos de abajo te llevan directo a lo que más usás.',
+    ],
+    links: [{ label: 'Ir al Inicio', to: '/panel' }],
+    keywords: ['inicio', 'panel', 'pendientes', 'avisos', 'departamento', 'todo al día', 'empezar'],
+  },
+  {
+    id: 'buscar-departamento',
+    section: 'inicio',
+    audience: 'solo_departamento',
+    title: 'Buscar en SIGER4',
+    summary: 'Encontrá tu departamento, sus informes, eventos, avisos y la ayuda.',
+    steps: [
+      'Tocá la lupa de arriba (o Ctrl + K en la computadora).',
+      'Escribí al menos 2 letras: los resultados aparecen agrupados.',
+      'Solo se busca en lo tuyo: tu departamento, sus informes y actas, sus eventos, tus notificaciones, la ayuda y las novedades.',
+    ],
+    keywords: ['buscar', 'búsqueda', 'encontrar', 'ctrl k', 'informe', 'departamento'],
+  },
+  {
+    id: 'notificaciones-departamento',
+    section: 'inicio',
+    audience: 'solo_departamento',
+    title: 'Ver las notificaciones de tu departamento',
+    summary: 'Los avisos de tu departamento y los tuyos, con su origen y su propio estado de leído.',
+    steps: [
+      'Abrí Notificaciones desde la campana del encabezado. El número rojo son las que no leíste.',
+      'Los avisos de tu departamento dicen de dónde vienen: "Departamento Fuego".',
+      'Filtrá por "No leídas" o por "Departamentos". Tocá "Abrir" para ir a lo que se avisa, o "Leída" para sacarla de pendientes.',
+      'Marcar una como leída es solo tuyo: no cambia nada para el resto del departamento.',
+    ],
+    links: [{ label: 'Ir a Notificaciones', to: '/notificaciones' }],
+    keywords: ['notificaciones', 'avisos', 'campana', 'departamento', 'leídas', 'no leídas', 'origen'],
+  },
+  {
+    id: 'ver-mi-departamento',
+    section: 'departamentos',
+    audience: 'mis_departamentos',
+    title: 'Ver mi departamento',
+    summary: 'Sus miembros, informes, actas y eventos, en un solo lugar.',
+    steps: [
+      'Entrá a "Mi departamento" desde el menú (si estás en varios, "Mis departamentos" y elegí uno). También desde "Ver departamento" en el Inicio.',
+      'Arriba están el coordinador y la cantidad de miembros. Más abajo, la lista de miembros.',
+      'En "Informes y actas" ves lo que cargó el departamento: tocá uno para leerlo, ver sus fotos y descargarlo.',
+      'En "Eventos" están las reuniones y prácticas del departamento.',
+      'Solo ves tus departamentos: no los de otros.',
+    ],
+    links: [{ label: 'Ir a mi departamento', to: '/departamentos' }],
+    keywords: ['departamento', 'miembros', 'informes', 'actas', 'eventos', 'ver', 'mi departamento'],
+  },
+  {
+    id: 'ver-informes',
+    section: 'departamentos',
+    audience: 'mis_departamentos',
+    title: 'Ver y descargar informes y actas',
+    summary: 'Leé un informe, mirá sus fotos y bajalo.',
+    steps: [
+      'Entrá a tu departamento: en "Informes y actas" están ordenados del más nuevo al más viejo.',
+      'Filtrá por tipo de informe y, si hace falta, mostrá también los archivados. Para buscar por palabras, usá la lupa de arriba.',
+      'Tocá un informe para leerlo y ver sus archivos y fotos. "Descargar" baja el archivo original.',
+      'Si lo cargaste vos (o coordinás el departamento), también lo podés editar o archivar.',
+    ],
+    links: [{ label: 'Ir a mi departamento', to: '/departamentos' }],
+    keywords: ['informe', 'acta', 'descargar', 'ver', 'archivo', 'foto', 'leer'],
+  },
+  {
+    id: 'que-puedo-hacer-departamento',
+    section: 'cuenta',
+    audience: 'solo_departamento',
+    title: 'Qué puedo hacer con mi rol',
+    summary: 'Lo que permite ser Coordinador o Miembro de Departamento.',
+    steps: [
+      'Los dos roles ven su departamento: miembros, informes, actas, eventos y avisos. No ven otros departamentos.',
+      'Los dos pueden cargar y redactar informes y actas, y cargar eventos del departamento. Cada uno edita lo que cargó.',
+      'El Coordinador además edita y archiva todos los informes del departamento, avisa a todos los miembros y sube los avales del departamento.',
+      'El Miembro no avisa a todo el departamento, no archiva informes ajenos y no sube avales.',
+      'Cuarteles, Escuela, Documentos, Inventario, Reportes y Usuarios no forman parte de estos roles: por eso no aparecen en el menú.',
+      'Si te asignan otro rol además, vas a ver también lo que ese rol permite.',
+    ],
+    links: [{ label: 'Ver mis roles', to: '/ajustes' }],
+    keywords: ['rol', 'permisos', 'coordinador', 'miembro', 'departamento', 'qué puedo hacer', 'puedo'],
+  },
+  {
+    id: 'sin-seccion-departamento',
+    section: 'faq',
+    audience: 'solo_departamento',
+    title: 'Qué hacer si no veo una sección',
+    summary: 'Tu menú muestra solo lo que tu rol necesita para trabajar en tu departamento.',
+    answer:
+      'Ver menos es normal: Coordinador y Miembro de Departamento usan su departamento, el calendario del departamento, las notificaciones, la ayuda y su perfil. Si no ves tu departamento, todavía no te asignaron uno. Si necesitás otra sección (por ejemplo Documentos o Inventario), pedile a Informática R4 que te asigne el rol que corresponde, contando qué necesitás hacer.',
+    keywords: ['menú', 'sección', 'no veo', 'falta', 'permiso', 'departamento', 'rol'],
+  },
+
   // ---------------- Escuela ----------------
   {
     id: 'subir-aval',
@@ -304,6 +434,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'cursos',
     section: 'escuela',
     audience: 'escuela_cursos',
+    module: 'escuela',
     title: 'Cursos de la Escuela',
     summary: 'Consultá y cargá cursos y capacitaciones.',
     steps: [
@@ -319,6 +450,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'subir-documento',
     section: 'documentos',
     audience: 'subir_documentos',
+    module: 'documentos',
     title: 'Subir un documento',
     summary: 'Circulares, actas y manuales para tu Regional o cuartel.',
     steps: [
@@ -351,7 +483,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     title: 'Qué hacer si no tengo permiso',
     summary: 'Cada rol ve y hace cosas distintas. Si te falta algo, se pide.',
     steps: [
-      'Si una pantalla dice "No tenés acceso", es por tu rol o tu alcance, no por un error.',
+      'Si una pantalla dice "No tenés permiso", es por tu rol o tu alcance, no por un error.',
       'Revisá en "Roles y permisos" qué puede hacer cada rol.',
       'Si necesitás un acceso, pedíselo a Informática R4 (o al coordinador de tu departamento, si es para Departamentos).',
     ],
@@ -430,7 +562,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'faq-no-veo-seccion',
     section: 'faq',
-    audience: 'todos',
+    audience: 'otros_roles',
     title: 'No veo una sección del menú',
     summary: 'El menú muestra solo lo que tu rol puede usar.',
     answer: 'Cada rol tiene su menú. Si creés que deberías ver una sección, pedíselo a Informática R4 indicando qué necesitás hacer.',
@@ -459,6 +591,7 @@ export const HELP_ARTICLES: HelpArticle[] = [
     id: 'faq-no-puedo-pedir',
     section: 'faq',
     audience: 'todos',
+    module: 'inventario',
     title: 'No me deja pedir un elemento',
     summary: 'Puede estar prestado, reservado o en mantenimiento.',
     answer:

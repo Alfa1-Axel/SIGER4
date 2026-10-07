@@ -9,10 +9,20 @@ import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchVisibleDepartments } from '../lib/api/departments'
-import { NOTIFICATION_CATEGORY_ICON, NOTIFICATION_CATEGORY_LABEL, NOTIFICATION_TYPE_LABEL, isImportantNotification, notificationLink, timeAgo, notificationCategory } from '../lib/notificationMeta'
+import {
+  NOTIFICATION_CATEGORY_ICON,
+  NOTIFICATION_CATEGORY_LABEL,
+  NOTIFICATION_TYPE_LABEL,
+  isImportantNotification,
+  isNotificationForRole,
+  openableNotificationLink,
+  timeAgo,
+  notificationCategory,
+} from '../lib/notificationMeta'
 import type { NotificationCategory } from '../lib/notificationMeta'
 import type { Notification, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import { describeSupabaseError } from '../lib/api/errors'
 
 type StatusFilter = 'todas' | 'no_leidas' | 'importantes'
@@ -21,7 +31,8 @@ const CATEGORY_ORDER: NotificationCategory[] = ['sistema', 'escuela', 'inventari
 // Bandeja de notificaciones (vista my_notifications, 0102): solo lo dirigido a
 // quien mira, con su propio estado de leído también en las masivas.
 export function NotificacionesPage() {
-  const { profile, isAdmin, hasRole, coordinatedDepartmentIds } = useAuth()
+  const { profile, isAdmin, isDepartmentOnly, hasRole, coordinatedDepartmentIds } = useAuth()
+  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   const navigate = useNavigate()
   // Los coordinadores de departamento avisan a su departamento (0103).
   const canCreate = isAdmin || hasRole('secretario_regional', 'director_escuela', 'instructor') || coordinatedDepartmentIds.length > 0
@@ -44,17 +55,24 @@ export function NotificacionesPage() {
     if (!profile) return
     let active = true
     fetchNotificationsForProfile(profile.id)
-      .then((data) => active && setNotifications(data))
+      // Modo departamento: sin avisos generales de módulos que su rol no abre.
+      .then((data) => active && setNotifications(data.filter((n) => isNotificationForRole(n, isDepartmentOnly))))
       .catch((err) => active && setError(describeSupabaseError(err, 'No pudimos cargar tus notificaciones. Reintentá en unos segundos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
-  }, [profile])
+  }, [profile, isDepartmentOnly])
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchRegions(), fetchSubsedes(), fetchStations(), fetchVisibleDepartments().catch(() => [])])
+    Promise.all([
+      fetchRegions(),
+      fetchSubsedes(),
+      // Sin cuarteles en modo departamento: no se piden.
+      isDepartmentOnly ? Promise.resolve([] as Station[]) : fetchStations(),
+      fetchVisibleDepartments().catch(() => []),
+    ])
       .then(([regionsData, subsedesData, stationsData, departmentsData]) => {
         if (!active) return
         setDepartmentNames(new Map(departmentsData.map((d) => [d.id, d.name])))
@@ -66,7 +84,7 @@ export function NotificacionesPage() {
     return () => {
       active = false
     }
-  }, [])
+  }, [isDepartmentOnly])
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
   const categoriesPresent = useMemo(
@@ -132,7 +150,11 @@ export function NotificacionesPage() {
   }
 
   function emptyMessage(): string {
-    if (notifications.length === 0) return 'No tenés notificaciones. Cuando haya novedades para vos o tu cuartel, aparecen acá.'
+    if (notifications.length === 0) {
+      return isDepartmentOnly
+        ? 'No tenés notificaciones. Cuando haya novedades para vos o tu departamento, aparecen acá.'
+        : 'No tenés notificaciones. Cuando haya novedades para vos o tu cuartel, aparecen acá.'
+    }
     if (status === 'no_leidas' && !category) return 'Estás al día: no tenés notificaciones sin leer.'
     if (status === 'importantes' && !category) return 'No hay avisos importantes pendientes.'
     return 'No hay notificaciones con este filtro.'
@@ -143,7 +165,11 @@ export function NotificacionesPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Notificaciones</h1>
-          <p className="page-subtitle">Avisos para vos, tu cuartel, tu Regional o la Escuela. Tocá uno para verlo completo.</p>
+          <p className="page-subtitle">
+            {isDepartmentOnly
+              ? 'Avisos de tu departamento y los tuyos. Tocá uno para verlo completo.'
+              : 'Avisos para vos, tu cuartel, tu Regional o la Escuela. Tocá uno para verlo completo.'}
+          </p>
         </div>
         {unreadCount > 0 && (
           <div className="page-header-actions">
@@ -206,7 +232,7 @@ export function NotificacionesPage() {
       <ul className="notification-list">
         {visible.map((n) => {
           const cat = notificationCategory(n)
-          const link = notificationLink(n, canManageUsers)
+          const link = openableNotificationLink(n, canManageUsers, isDepartmentOnly, hasAvalesAccess)
           const important = isImportantNotification(n)
           return (
             <li key={n.id} className={`notification-item${n.is_read ? '' : ' notification-item--unread'}`}>
@@ -260,7 +286,7 @@ export function NotificacionesPage() {
           scopeLabel={originLabel(openNotification)}
           onClose={() => setOpenNotification(null)}
           onOpenRelated={(() => {
-            const to = notificationLink(openNotification, canManageUsers)
+            const to = openableNotificationLink(openNotification, canManageUsers, isDepartmentOnly, hasAvalesAccess)
             return to ? () => navigate(to) : undefined
           })()}
         />

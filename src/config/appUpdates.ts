@@ -47,6 +47,24 @@ export interface AppUpdate {
 
 export const APP_UPDATES: AppUpdate[] = [
   {
+    id: '2026-10-06-modo-departamento',
+    version: '1.8.0',
+    date: '2026-10-06',
+    title: 'SIGER4 pensado para el trabajo en tu departamento',
+    summary: 'Si sos Coordinador o Miembro de Departamento, ves solo lo que usás en tu departamento. Con otro rol además, ves también lo de ese rol.',
+    changes: [
+      { type: 'nuevo', module: 'Inicio', text: 'Inicio propio para Coordinador y Miembro de Departamento: tu departamento con lo pendiente, los últimos informes y los próximos eventos, y accesos solo a lo que tu rol puede abrir. Si estás en más de un departamento, elegís cuál ver.' },
+      { type: 'mejora', module: 'Menú', text: 'El menú muestra solo lo que tu rol usa: Inicio, tu departamento, calendario, notificaciones, ayuda, novedades y tu perfil. Cuarteles, Escuela, Documentos e Inventario ya no aparecen si tu rol no los usa.' },
+      { type: 'mejora', module: 'Calendario', text: 'El calendario de quien trabaja con su departamento muestra solo los eventos de su departamento.' },
+      { type: 'mejora', module: 'Búsqueda', text: 'La búsqueda encuentra tu departamento, sus informes y actas, sus eventos, tus avisos, la ayuda y las novedades. Las novedades ahora se pueden buscar también desde la lupa.' },
+      { type: 'mejora', module: 'Ayuda', text: 'Guías para tu rol: cómo ver tu departamento, ver y descargar informes, tus notificaciones, qué podés hacer con tu rol y qué hacer si no ves una sección.' },
+      { type: 'mejora', module: 'Notificaciones', text: 'Los avisos de tu departamento dicen de dónde vienen y no ofrecen "Abrir" cuando el destino no es de tu rol.' },
+      { type: 'correccion', module: 'Inicio', text: 'Los pendientes del Inicio mostraban cuarteles de toda la Regional. Ahora cada persona ve solo los de su alcance.' },
+      { type: 'correccion', module: 'Permisos', text: 'Si entrás por enlace directo a una sección que tu rol no usa, ves "No tenés permiso", y el sistema tampoco entrega los datos de esa sección.' },
+    ],
+    severity: 'improvement',
+  },
+  {
     id: '2026-10-06-roles-departamento',
     version: '1.7.0',
     date: '2026-10-06',

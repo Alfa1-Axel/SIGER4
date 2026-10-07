@@ -18,3 +18,17 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
+
+// Saludo del Inicio según la hora.
+export function greeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Buen día'
+  if (hour < 20) return 'Buenas tardes'
+  return 'Buenas noches'
+}
+
+// "Martes, 6 de octubre", con la primera letra en mayúscula.
+export function longToday(): string {
+  const raw = new Date().toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })
+  return raw.charAt(0).toUpperCase() + raw.slice(1)
+}

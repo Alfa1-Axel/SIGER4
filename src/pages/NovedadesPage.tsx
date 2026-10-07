@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { APP_UPDATES, CHANGE_TYPE_LABEL, CURRENT_APP_UPDATE, formatUpdateDate } from '../config/appUpdates'
 import type { AppUpdateChangeType } from '../config/appUpdates'
@@ -16,6 +18,12 @@ const TYPE_HEADING: Record<AppUpdateChangeType, string> = {
 
 // Versión actual y qué cambió en cada actualización (src/config/appUpdates.ts).
 export function NovedadesPage() {
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (!hash) return
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+  }, [hash])
+
   return (
     <AppShell title="Novedades">
       <h1 className="page-title">Novedades</h1>

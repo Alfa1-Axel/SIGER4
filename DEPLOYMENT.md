@@ -9550,3 +9550,103 @@ Sin funciones para desplegar y sin cambios en push ni PWA.
 - **Roles y permisos queda abierto por URL** aunque no esté en el menú del modo departamento: es solo informativo y se llega desde el perfil y la Ayuda.
 - **La corrección de `get_pending_items()` cambia lo que ven otros roles:** los pendientes de cuarteles ahora son solo los de su alcance. Antes veían todos los cuarteles de la base, con un enlace que no podían abrir. Informática ve todos, como antes. El criterio es el mismo de `stations_select_scope`; se verificó rol por rol contra la RLS real.
 - **Quien no tiene ningún rol no entra en el modo departamento** y queda como estaba.
+
+## 64. Aviso de novedades usable en el celular y contacto directo con Informática (2026-10-07) — versión 1.9.0
+
+Sin migración, sin funciones para desplegar y sin cambios en permisos, RLS, push ni PWA. Solo el frontend.
+
+### 64.1 Qué pasaba
+
+1. **El aviso de novedades al ingresar no se podía usar en el celular.**
+   - Era una tarjeta fija, pegada al borde inferior de la pantalla, **sin altura máxima ni desplazamiento interno**, con la lista completa de cambios de la versión (la 1.8.0 traía 8, de dos a cuatro renglones cada uno).
+   - En una pantalla chica la tarjeta era más alta que la pantalla. Como estaba anclada abajo, crecía hacia arriba: el título y la **X** quedaban fuera de la pantalla, y al ser fija no se podía desplazar (deslizar movía la página de atrás). No quedaba claro cómo cerrarlo.
+2. **Ayuda decía "escribile a Informática" sin dar cómo.** Quien olvidó la contraseña ni siquiera llega a Ayuda, que está detrás del ingreso.
+
+### 64.2 Aviso de novedades
+
+La tarjeta se reparte en tres partes:
+
+| Parte | Qué hace |
+|---|---|
+| Encabezado fijo | Etiqueta de la versión y la **X** (40 px) arriba a la derecha |
+| Cuerpo | Es lo único que se desplaza, con sombras arriba y abajo cuando hay más texto |
+| Pie fijo | **"Entendido"** y **"Ver todas las novedades"**, siempre a la vista |
+
+- **Altura máxima según la pantalla:** `100dvh` menos el margen (con `100vh` de respaldo para navegadores viejos), que sigue a la barra del navegador del celular y respeta las muescas. En escritorio, hasta 560 px. Nunca se sale de la pantalla.
+- **Pantallas bajas** (celular de costado): los botones pasan a una fila para dejar lugar al texto.
+- **Es un resumen, no el historial de la versión.** Muestra hasta **3 puntos**:
+  - los `highlights` de la novedad (frases cortas escritas para el aviso), o
+  - si no los tiene (versiones anteriores), sus primeros cambios, cortados a 3 renglones.
+  - Si la versión tiene más cambios: "Esta versión trae N cambios en total: los ves todos en Novedades".
+  - **Novedades** (`/novedades`) sigue mostrando todas las versiones con todos sus cambios, sin cambios.
+- **Cómo se publica una novedad:** a la entrada de `src/config/appUpdates.ts` se le agrega `highlights` (2 o 3 frases de hasta unos 90 caracteres). Está explicado en el encabezado del archivo.
+- **Cerrar:** la X, "Entendido", la tecla Escape, o "Ver todas las novedades" (que además abre Novedades). Todos lo dejan como visto, igual que antes: no vuelve a aparecer en ese navegador.
+- **Sigue sin bloquear** la pantalla de atrás (decisión anterior).
+- **Teclado y lectores de pantalla:**
+  - al abrirse, el foco entra al aviso, y vuelve adonde estaba al cerrarlo;
+  - Tab recorre la X, el texto (se desplaza con las flechas), "Entendido" y "Ver todas", y después sigue a la aplicación: no queda atrapado;
+  - Escape solo lo cierra si el foco está adentro, para no pisar a la búsqueda;
+  - tiene título y descripción asociados.
+- Reabrir una versión vieja tocando su notificación también muestra el resumen.
+- **Fecha:** se leía "7 De Octubre De 2026" por una regla vieja de mayúsculas; ahora dice "7 de octubre de 2026".
+
+### 64.3 Contacto con Informática y Estadística
+
+**Una sola fuente:** `src/config/support.ts` (nombre, email, WhatsApp y armado de los enlaces) y el componente `SupportContact`. Para cambiar un dato de contacto se toca solo ese archivo.
+
+- **Email:** `mailto:dptoinformaticayestadisticar4@gmail.com`, con asunto "Consulta sobre SIGER4" y el mensaje en el cuerpo. Abre el programa de correo del dispositivo.
+- **WhatsApp:** `https://wa.me/5493573467529?text=…`. El número se toma como celular de Argentina (`3573467529`) y se le agrega el `+549` con el mismo helper que ya usan los contactos de cuarteles (`lib/contact.ts`). Se abre en otra pestaña, sin pasarle la página a WhatsApp (`noopener`). En el celular abre la aplicación si está instalada.
+- **Mensaje precargado:** `Hola soy [nombre] y tengo una duda/problema con SIGER4`.
+  - El nombre es el nombre completo del perfil, con espacios y saltos de línea normalizados y hasta 60 caracteres (se corta por caracteres completos, no por mitad de un emoji).
+  - Sin nombre (o en blanco, o sin sesión): `Hola soy usuario de SIGER4 y tengo una duda/problema con SIGER4`.
+  - Se codifica con `encodeURIComponent` (tildes, `/`, comillas, `&`, `<`).
+  - **No lleva nada más:** ni el email de la persona, ni su rol, cuartel, identificadores, sesión o datos técnicos.
+
+**Dónde está:**
+
+| Lugar | Cómo |
+|---|---|
+| **Ayuda** | Tarjeta "¿Necesitás ayuda?" al final: botones **"Enviar email"** y **"Contactar por WhatsApp"** y los datos a la vista (email y número). Un toque largo selecciona el dato entero para copiarlo. Reemplaza al texto suelto de antes |
+| Respuestas de Ayuda que mandan a Informática | Los mismos dos botones al final: "Qué hacer si no tengo permiso", "No veo una sección del menú" (y su versión del modo departamento), "Olvidé mi contraseña" y "No veo un departamento o sus informes". Se marcan con `contact: true` en `helpContent.ts` |
+| Pantallas "No tenés permiso" | El componente común `AccessDenied` suma los dos botones. Cubre Reportes, Usuarios, Auditoría, Avales, los módulos cerrados del modo departamento y el departamento que no se puede ver |
+| Ingreso | Los dos botones debajo de "¿Olvidaste la contraseña…?". Es el único lugar al que llega quien no puede entrar. Sin sesión se usa el mensaje sin nombre |
+
+**Lo que no se tocó:** los textos sueltos de otras pantallas ("pedile a Informática…") siguen siendo texto: no se convirtió cada pantalla en soporte técnico. Quien los lee tiene el contacto en Ayuda y en cualquier pantalla de permiso.
+
+### 64.4 Qué correr
+
+Nada en la base: sin migración. Desplegar el frontend (con Vercel, el push a `main`).
+
+### 64.5 Verificación
+
+- **Navegador** (Chrome; backend simulado; escritorio y Android emulado): 207 pruebas, 0 fallas.
+  - **Aviso:** pantalla chica (320×568), Android (360×640), de costado (640×360) y escritorio (1366×860), cada una en **modo claro y oscuro**.
+    - Entra completo, con la X arriba a la derecha y "Entendido" y "Ver todas" a la vista.
+    - Nada los tapa (se comprueba qué elemento queda arriba en cada botón), sin desborde horizontal.
+    - Contraste legible (mínimo 4,5:1) y fecha bien escrita.
+  - **Mucho texto** (25 cambios largos más un resumen enorme, en las cuatro pantallas): la tarjeta sigue entrando, el cuerpo se desplaza hasta el final, la X y "Entendido" siguen a la vista y la pantalla de atrás no se mueve.
+  - **Cerrar:** con la X, con "Entendido" y con Escape queda como visto y **no reaparece al volver a ingresar**. "Ver todas las novedades" abre la página completa con las 12 versiones.
+  - **Teclado:** el foco entra al aviso, Tab recorre X → texto → Entendido → Ver todas y sigue a la aplicación, Enter en la X lo cierra, Escape de la búsqueda no lo cierra.
+  - **Reabrir una versión vieja** desde Notificaciones: 3 puntos y "8 cambios en total", dentro de la pantalla.
+  - **Contacto:** el email es un `mailto:`; WhatsApp abre `wa.me/5493573467529` con el mensaje (se comprobó la URL que realmente se abre); nombre real, sin nombre, en blanco, con saltos de línea y comillas, y de 80 emojis (se corta a 60). Privacidad: el mensaje no contiene el email personal, el rol, identificadores ni datos técnicos.
+  - **Celular de 320 px, claro y oscuro:** la tarjeta de Ayuda sin scroll horizontal, botones del ancho de la tarjeta y el email partido en la arroba.
+  - **Otras pantallas:** respuestas de Ayuda con contacto (y sin él donde no corresponde), pantalla de permiso con el nombre de quien está logueado, ingreso en 320 px y escritorio, claro y oscuro.
+- **Regresión en navegador:** se repitieron las secciones 57 a 63 (33, 26, 51, 65, 33, 40, 127 y menú 8) y siguen sin fallas. La 58 ahora espera la versión 1.9.0.
+- **Build, lint y audit:** el build compila; lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **No se probó** en un celular real con WhatsApp y un programa de correo instalados (queda en el checklist).
+
+### 64.6 Checklist en producción
+
+- [ ] Después del deploy, ingresar con el celular: el aviso de la 1.9.0 entra completo, muestra 2 puntos, se desplaza si hace falta y se cierra con la X. Al volver a ingresar no reaparece.
+- [ ] Ayuda → "Enviar email": abre el programa de correo con la dirección del Dpto., el asunto y el mensaje con tu nombre.
+- [ ] Ayuda → "Contactar por WhatsApp": abre el chat con el número del Dpto. y el mensaje con tu nombre.
+- [ ] Entrar por URL a una sección sin permiso (por ejemplo `/auditoria` con un usuario común): aparece "No tenés permiso" con los dos botones.
+- [ ] Cerrar sesión: en el ingreso aparecen los dos botones debajo de "¿Olvidaste la contraseña…?".
+
+### 64.7 Riesgos y decisiones
+
+- **El aviso no bloquea la pantalla de atrás** (como antes): en el celular tapa la parte de abajo hasta cerrarlo. Si más adelante conviene un fondo oscurecido que se cierre al tocar afuera, es un cambio de estilo y de un manejador de toque.
+- **WhatsApp sin la aplicación instalada** abre WhatsApp Web o la página de `wa.me`. **El email** necesita un programa de correo configurado en el dispositivo; por eso la dirección queda a la vista para copiarla.
+- **El número se toma como celular de Argentina** sin 0 ni 15. Si el Dpto. cambia de número, se cambia en `src/config/support.ts`.
+- **El contacto en el ingreso es nuevo** y no estaba pedido; es una línea en `LoginPage.tsx` (y se puede sacar sin tocar nada más).
+- **El texto de cada punto del aviso se corta a 3 renglones.** Si una versión tiene un punto largo, el resto se lee en Novedades. Para controlar qué se ve, la novedad lleva `highlights`.

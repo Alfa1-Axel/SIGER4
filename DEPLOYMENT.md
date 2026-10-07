@@ -9650,3 +9650,181 @@ Nada en la base: sin migración. Desplegar el frontend (con Vercel, el push a `m
 - **El número se toma como celular de Argentina** sin 0 ni 15. Si el Dpto. cambia de número, se cambia en `src/config/support.ts`.
 - **El contacto en el ingreso es nuevo** y no estaba pedido; es una línea en `LoginPage.tsx` (y se puede sacar sin tocar nada más).
 - **El texto de cada punto del aviso se corta a 3 renglones.** Si una versión tiene un punto largo, el resto se lee en Novedades. Para controlar qué se ve, la novedad lleva `highlights`.
+
+## 65. Dotación actual del cuartel por categorías y lenguaje institucional (2026-10-07) — versión 1.10.0, migración 0108
+
+Una migración (0108) y el frontend. Sin Edge Functions, sin push ni PWA, sin cambios en roles y sin relajar ninguna política existente: la RLS nueva es solo de la tabla nueva.
+
+### 65.1 Qué faltaba
+
+1. **Cargar la dotación era cargar nombres.** La "dotación" de un cuartel salía de contar el personal activo de un registro nominal (`personnel`), de modo que para tener el número había que dar de alta a cada persona. Para gestión y reportes alcanza con saber cuántos integrantes hay en cada categoría.
+2. **Textos con distinto tono.** Había "Informática R4", "Escribile a…", "Contactá a un administrador", "No tenés permisos", "Error al cargar…", "No se encontró…", y "Personal" y "Dotación" para lo mismo.
+
+### 65.2 Dotación actual del cuartel
+
+Una **ficha por cuartel, editable**, con cantidades por categoría. No es una carga mensual ni anual: se actualiza cuando cambia la dotación real.
+
+| Grupo | Categorías |
+|---|---|
+| Aspirantes | Aspirantes menores · Aspirantes mayores |
+| Bomberos | Bomberos Nivel 1 · Nivel 2 · Nivel 3 · Nivel 4 |
+| Reserva y cuerpo auxiliar | Personal en reserva · Cuerpo auxiliar |
+
+**Categorías que no se agregaron** (para no inventar): cadetes, oficiales, suboficiales y comisión directiva. Los oficiales y suboficiales son jerarquías dentro de los niveles (contarlos aparte duplicaría gente) y la comisión directiva no es dotación operativa. Si hace falta alguna, es una columna más y una fila más en `src/lib/staffing.ts`.
+
+**Tabla `station_staffing`** (una fila por cuartel, `station_id` como clave primaria):
+
+- Ocho columnas enteras, `not null default 0`, con una regla de 0 a 9999 cada una (`station_staffing_counts_range`).
+- **`total` es una columna calculada por la base** (suma de las ocho): no se puede escribir, ni a mano ni desde la API.
+- `updated_at`, `updated_by_profile_id` y `updated_by_name` los completa **la base**, siempre (un disparador antes de escribir): lo que mande el cliente se ignora. La dotación no se puede pasar a otro cuartel.
+
+**Una sola cifra de dotación (sin duplicar fuentes de verdad).** `stations.personnel_count` sigue siendo *el* número que usan Asistencia, tarjetas, Inicio y reportes. Lo completa la base:
+
+| Situación del cuartel | `personnel_count` |
+|---|---|
+| Cargó la dotación por categorías | La suma de las categorías (`station_staffing.total`) |
+| Todavía no la cargó | El personal activo del registro nominal, como hasta ahora |
+
+- **Los cuarteles existentes conservan su número** hasta que carguen la dotación. No se calcula ni se inventa nada.
+- Con la dotación cargada, dar de alta, de baja o pasar a licencia a alguien del registro nominal **no la pisa**.
+- Si se borra la fila de dotación, vuelve el conteo nominal.
+- Pasar gente de una categoría a otra (mismo total) no genera un cambio en el cuartel ni en su auditoría.
+- El registro nominal **sigue existiendo y ahora es opcional** (la ficha lo dice: "no hace falta cargar nombres").
+- Función auxiliar `station_dotation_total(uuid)`: sin permisos para la API (solo la usan los disparadores).
+
+### 65.3 Permisos
+
+Los **mismos que la carga de personal** (0027). No se relajó nada.
+
+| Rol | Carga | Ve |
+|---|---|---|
+| Informática (y su integrante) | Cualquier cuartel | Todas |
+| Secretario Regional | Cuarteles de su Regional | Los de su Regional |
+| Presidente, Jefe de Cuerpo Activo, usuario de carga | **Solo su cuartel** | Su cuartel (y su subsede) |
+| Roles de Escuela | No | Solo si tienen un cuartel en su alcance |
+| Modo departamento (0107) | No | No: una política restrictiva (`not is_department_only()`) cierra la tabla |
+| Sin sesión | No | No |
+
+Lo comprobado en la base, con usuarios de cada rol: quien no tiene permiso recibe `42501` al guardar; el Presidente y el usuario de carga no pueden guardar en **otro cuartel**; un Miembro o Coordinador de Departamento no guarda ni lee, aunque tenga un cuartel asignado; `anon` ve 0 filas.
+
+La pantalla refleja la regla (quien no edita ve la dotación sin controles), pero la que decide es la base.
+
+### 65.4 Pantallas
+
+- **Ficha del cuartel → "Dotación actual"** (ancla `#dotacion`). Quien puede editar ve una tarjeta con las ocho categorías, el total en vivo y el botón **Guardar dotación**. Quien no, ve la lista de solo lectura y quiénes la actualizan.
+- **Cantidad con botones − y +** (`NumberStepper`, reutilizable):
+  - teclado numérico en el celular (`inputmode="numeric"`, `pattern="[0-9]*"`) y texto de 16 px (el celular no hace zoom);
+  - **solo enteros desde 0**: una letra, un signo o un punto se descarta y se avisa ("Solo números enteros, desde 0."); no baja de 0 ni pasa de 9999; un campo vacío vuelve a 0;
+  - flechas arriba/abajo suman o restan 1, RePág/AvPág 10; botones de 44 px o más;
+  - **el total no se escribe**: se calcula mientras se carga ("(antes N)" si hay cambios sin guardar).
+- **Estados:** cargando, error al cargar (con "Reintentar"), guardando (los controles se bloquean), guardado ("Dotación guardada. Total: N."), error al guardar (lo cargado no se pierde), sin permiso (mensaje claro), sin dotación cargada todavía, y "Cargá al menos una categoría antes de guardar" si se guarda en blanco. Muestra **fecha y quién actualizó**.
+- **Asistencia:** ya no hay "total de miembros". El resumen toma la dotación del cuartel al darlo de alta y la **guarda como dato histórico** (`attendance_summaries.total_members`, 0104): si la dotación cambia después, los resúmenes anteriores no se modifican. Si el cuartel no cargó su dotación, el formulario lo avisa y lleva a la ficha ("Cargar la dotación", directo a la tarjeta).
+- **Lista de cuarteles, ficha, Inicio:** dicen **Dotación** y **Móviles**. Inicio suma "Dotación total" de la Regional.
+- **Reportes (PDF):**
+  - *Reporte del cuartel:* "Dotación" en el resumen y cuadro "Dotación actual" por categoría.
+  - *Regional consolidado:* columna Dotación por cuartel y cuadro "Dotación por categoría" con los totales.
+  - *Asistencias:* aclara que la dotación es la que tenía el cuartel al cargar cada resumen, no la actual.
+- **Ayuda:** sección "Cuarteles y dotación" con "Qué es la dotación del cuartel" (para todos) y "Cargar la dotación del cuartel" (solo para quien la edita). Se encuentran con el buscador de Ayuda; en modo departamento no se muestran.
+- **Tareas pendientes de Inicio** (`get_pending_items()`): el texto ahora dice "Falta cargar la dotación actual del cuartel." (antes "personal activo") y "Falta cargar los móviles del cuartel.", y el enlace de "falta la dotación" lleva directo a `#dotacion`. Se cambia el texto partiendo de la definición que está en la base (la migración no copia la función), conserva `SECURITY DEFINER` y `search_path`, y si ya está cambiado no hace nada.
+
+### 65.5 Lenguaje institucional
+
+**Criterios**
+
+- Se habla como una herramienta interna del Cuerpo: **Cuartel, Regional, Departamento, Dotación, Aspirantes, Bomberos, Reserva, Cuerpo Auxiliar, Informática y Estadística, Acta, Informe, Asistencia, Personal, Novedades, Permisos, Rol, Alcance**.
+- Siempre **"Regional"**, nunca "Región" en pantalla (en el código quedan comentarios que usan la palabra; no se ven).
+- **"Móviles"** para los vehículos del cuartel (en las tarjetas y Inicio).
+- Frases cortas, en voseo, que dicen qué pasó y qué hacer. Sin jerga técnica ni errores crudos.
+- **Una sola derivación para consultas: "Consultá a Informática y Estadística"** (con los botones de contacto de la sección 64 donde hay lugar).
+
+**Textos corregidos (por tipo)**
+
+| Antes | Ahora |
+|---|---|
+| "No tenés permisos para cargar …" | "No tenés permiso para cargar … con tu rol actual." |
+| Título de pantalla sin permiso | "No tenés permiso para acceder a esta sección con tu rol actual" |
+| "Escribile al Dpto. de Informática y Estadística R4…" / "Contactá a un administrador" / "Pedile a Informática R4…" | "Consultá a Informática y Estadística…" |
+| "Error al cargar …" | "No pudimos cargar …. Reintentá en unos segundos." |
+| "No se encontró …" | "No encontramos …" |
+| "No pudimos determinar tu cuartel asignado. Contactá a un administrador." | "No pudimos identificar tu cuartel. Consultá a Informática y Estadística." |
+| Error genérico de la base | "No pudimos completar la acción. Intentá de nuevo; si sigue fallando, consultá a Informática y Estadística." |
+| Cuartel: "Personal" (tarjeta, ficha, Inicio) | "Dotación" |
+| Motivos del semáforo: "Falta cargar personal activo", "Faltan cargar vehículos" | "Falta cargar la dotación", "Faltan cargar los móviles" |
+| Pantalla de personal | "Nuevo integrante" / "Editar integrante" / "Registro de personal", con la aclaración de que la dotación se carga en la ficha, sin nombres |
+
+Alcanza a: pantalla sin permiso, ingreso y recuperación de contraseña, rutas de módulo y de Avales, Inicio y modo departamento, formularios (cuarteles, personal, intervenciones, vehículos, historial, calendario, notificaciones, cursos, documentos, inventario, préstamos, avales, departamentos, usuarios), listas y detalles, Auditoría, Ayuda, errores de la API, reportes PDF, y los motivos del semáforo.
+
+**Lo que no se tocó**
+
+- El nombre del rol **"Informática R4"** en descripciones de roles, porque es el nombre del rol.
+- La etiqueta de auditoría `personnel_count` ("Cantidad de personal"): es la misma columna que usa `intervention_summaries` (personal que intervino).
+
+### 65.6 Qué correr
+
+1. **Supabase → SQL Editor:** ejecutar `0108_station_staffing.sql` completo. Es idempotente (se puede repetir). Debe haberse corrido antes `0107` (y las anteriores, si todavía faltaran).
+2. **Verificar** que quedó aplicada (devuelve una fila por migración, `aplicada` o `FALTA`):
+
+```sql
+select nombre,
+       case when aplicada then 'aplicada' else 'FALTA' end as estado
+from (values
+  ('0103 roles por división',               exists (select 1 from pg_proc where proname = 'list_visible_departments')),
+  ('0104 resumen de asistencia',            exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'attendance_summaries' and column_name = 'observations')),
+  ('0105 roles de departamento (valores)',  exists (select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'role_key' and e.enumlabel = 'coordinador_departamento')),
+  ('0106 roles y avisos de departamento',   exists (select 1 from pg_proc where proname = 'sync_department_roles')),
+  ('0107 modo departamento',                exists (select 1 from pg_proc where proname = 'is_department_only')),
+  ('0108 dotación del cuartel',             to_regclass('public.station_staffing') is not null and exists (select 1 from pg_proc where proname = 'station_dotation_total'))
+) as m(nombre, aplicada)
+order by nombre;
+```
+
+3. **Frontend:** Vercel despliega solo con el push a `main`. Conviene correr la migración **antes** de abrir la ficha nueva: sin la tabla, la tarjeta de dotación muestra un aviso de error con "Reintentar" (el resto de la ficha funciona).
+4. **No hay** Edge Functions que desplegar ni variables nuevas.
+
+### 65.7 Verificación
+
+- **Base de datos** (PostgreSQL 16 local; migraciones 0001 a 0108 en una base armada de cero y en otra con datos): **49 pruebas, 0 fallas** en el test de 0108.
+  - **Cuenta y reglas:** el total es la suma de las 8 categorías; negativos y más de 9999 se rechazan (`23514`); el total no se puede escribir; una fila por cuartel; no se puede pasar a otro cuartel ni a uno inexistente; todo arranca en 0.
+  - **Una sola cifra:** sin dotación por categorías cuenta el personal activo; con ella, su total; sumar, dar de baja o pasar a licencia en el registro nominal no la pisa; borrarla vuelve al conteo nominal; mover gente de una categoría a otra (mismo total) no toca el cuartel ni su auditoría; cambiar el total sí queda en la auditoría del cuartel.
+  - **Asistencia:** el resumen toma la dotación del cuartel; uno nuevo toma la nueva y **el viejo conserva la que tenía**, incluso si se lo edita.
+  - **Permisos** (usuarios de cada rol, con la base real): el Presidente y el usuario de carga guardan en su cuartel y **no en otro** (`42501`); el Secretario Regional guarda en su Regional; Informática en cualquiera; Escuela y modo departamento no guardan; ven todas Informática y el Secretario Regional, y solo la suya el Presidente y el usuario de carga; Escuela y modo departamento ven 0; sin sesión, 0. Sin la política restrictiva, un Miembro con cuartel asignado la vería: es lo que cierra.
+  - **Autor y fecha:** quien guarda queda como autor aunque el cliente mande otro; el nombre sale del perfil.
+  - **Funciones internas:** `station_dotation_total()` no se puede llamar desde la API.
+  - **Tareas pendientes:** el texto dice "Falta cargar la dotación actual del cuartel.", el enlace lleva a `#dotacion` y vuelve al enlace común cuando la dotación está cargada; ya no hay "personal activo".
+  - **Idempotencia:** la migración se volvió a correr dos veces en cada base sin errores.
+  - **Regresión de la base:** los tests de 0098, 0099, 0100, 0102, 0103, 0104, 0106 y 0107 (42, 26, 15, 20, 79, 30, 48 y 88 pruebas) siguen sin fallas.
+- **Navegador** (Chrome; backend simulado con la RLS de la dotación emulada por rol; escritorio y Android emulado): **151 pruebas, 0 fallas.**
+  - **Controles:** son 8, en 3 grupos y en orden; teclado numérico y 16 px; botones − y + (el − se deshabilita en 0, el + en 9999); flechas y RePág/AvPág; **letras, signos y negativos no entran** (queda el aviso); más de 9999 se frena; vacío vuelve a 0.
+  - **Carga:** las 8 categorías con total en vivo (45), sin campo de total ni de nombres; "(antes N)" y "Descartar cambios"; guardar envía **solo el cuartel y las 8 cantidades**; queda la fecha y el autor; la ficha y la lista de cuarteles muestran el total nuevo; al volver a entrar están las cantidades.
+  - **Estados:** cargando, guardando (botón y controles bloqueados), guardado, error al guardar (no se pierde lo cargado), error al cargar (con "Reintentar" y el resto de la ficha funcionando), guardar en blanco.
+  - **Permisos en la pantalla** (14 casos): Informática, su integrante, Secretario Regional, Jefe, Presidente y los usuarios de carga editan **solo donde corresponde**; en otro cuartel, Escuela y los demás la ven sin controles. Perder el rol entre que se abre y se guarda: la base rechaza y la pantalla dice "No tenés permiso para cargar la dotación de este cuartel con tu rol actual", sin guardar nada. Modo departamento: pantalla de permiso y **ni se consulta la tabla**.
+  - **Asistencia:** muestra la dotación (45) y que sale del cuartel; **no hay campo de total**; sin dotación avisa y el enlace "Cargar la dotación" abre la ficha **con la tarjeta a la vista**; guardar el resumen funciona.
+  - **Reportes:** se generan los PDF del cuartel, del Regional consolidado y de Asistencias; nombran la dotación y piden la tabla a la base. **Inicio:** "Dotación total" suma la de todos los cuarteles y las tarjetas dicen Dotación y Móviles.
+  - **Ayuda:** las dos guías según el rol (la de carga solo para quien edita; nada en modo departamento) y la búsqueda de "dotación".
+  - **Lenguaje:** 18 pantallas, con un Administrador y un Presidente, sin "Región", "Escribile al", "No tenés permisos", "Error al cargar", "No se encontró" ni "Contactá a…"; las pantallas sin permiso y los errores de carga dicen lo nuevo.
+  - **Celular** (320×568, 360×640 y 1366×860, claro y oscuro): sin desborde, botones de 44 px o más, 9999 se lee completo, contraste de al menos 4,5:1.
+- **Regresión en navegador:** se repitieron las secciones 57 a 64 (33, 26, 51, 65, 33, 40, 127 y 207, y el menú 8) y siguen sin fallas. Hubo que actualizar aserciones que esperaban textos cambiados a propósito (versión 1.10.0, "Consultá a Informática y Estadística", "con tu rol actual", "Sale de la dotación actual del cuartel").
+- **Build, lint y audit:** el build compila; lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **No se probó** en un celular real (teclado numérico) ni con la migración corrida sobre la base de producción: lo primero queda en el checklist y lo segundo es el paso 1 de "Qué correr".
+
+### 65.8 Checklist en producción
+
+- [ ] Correr la migración 0108 y la consulta de verificación: las seis filas dicen `aplicada`.
+- [ ] Con un usuario de carga de un cuartel: Cuarteles → su cuartel → "Dotación actual": se ven los botones − y +, el total cambia mientras se carga y "Guardar dotación" lo guarda con tu nombre y la fecha.
+- [ ] En el celular (Android): al tocar una cantidad se abre el **teclado numérico**; los botones se tocan cómodos.
+- [ ] En la lista de cuarteles y en la ficha, la dotación cambia al total cargado.
+- [ ] Con un Presidente de otro cuartel: ve la dotación sin controles y no puede guardarla.
+- [ ] Asistencia → nuevo resumen: aparece "Dotación: N integrantes" sin campo para cargarla. Los resúmenes anteriores conservan su dotación.
+- [ ] Reportes → "Reporte General por Cuartel" y "Regional consolidado": el PDF trae la dotación por categoría.
+- [ ] Inicio: "Dotación total" suma la de todos los cuarteles; un cuartel sin dotación aparece en Tareas con "Falta cargar la dotación actual del cuartel." y el enlace lo lleva a la tarjeta.
+- [ ] Ayuda → "Cuarteles y dotación": se leen las dos guías (la de carga, solo con rol de carga).
+
+### 65.9 Riesgos y decisiones
+
+- **El número de dotación cambia de significado para un cuartel que carga sus categorías:** antes era "personal activo del registro nominal"; ahora incluye también aspirantes, personal en reserva y cuerpo auxiliar. Es lo que se pidió, pero los resúmenes de Asistencia nuevos del cuartel van a mostrar un total mayor que los anteriores. Los anteriores no se tocan.
+- **Cero a propósito:** una fila con todas las categorías en 0 vale dotación 0 (no vuelve al conteo nominal). Para volver al conteo nominal hay que borrar la fila (hoy, desde la base).
+- **No hay historial de la dotación por categoría.** La ficha guarda solo la última actualización (fecha y quién). El cambio del total sí queda en la auditoría del cuartel (`stations.personnel_count`). Si se necesita la evolución mes a mes, es una tabla de historial aparte; no se hizo para no duplicar datos que nadie pidió.
+- **Regional por `is_regional_role()`:** la regla de escritura es la misma que la de personal (0027). Si se quisiera restringir a un solo rol de Regional, se cambia ahí y en la política.
+- **El registro nominal queda como está:** sigue sirviendo para quien quiera llevar nombres y alimenta la dotación de los cuarteles que todavía no cargaron sus categorías.
+- **Intervenciones** conserva su propio campo "personal que intervino" (otra cosa: quiénes salieron al servicio).
+- **No se probó** en un celular real: el teclado numérico se verifica por atributos (`inputmode`, `pattern`) y en un Android emulado, pero queda en el checklist.

@@ -57,3 +57,7 @@ supabase/.branches
 /screenshots/
 /exports/
 *.log
+
+# El manual de usuario es material institucional externo: vive fuera del repositorio.
+# Por si una copia llega a esta carpeta, no se versiona.
+MANUAL_USUARIO_SIGER4*

@@ -1,36 +1,24 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AppShell } from './layout/AppShell'
 import { Icon } from './ui/Icon'
 import { DepartmentDashboard } from './DepartmentDashboard'
+import { PendientesResumen } from './PendientesResumen'
 import { SupportContact } from './SupportContact'
 import { openGlobalSearch } from '../lib/searchControl'
 import { fetchVisibleDepartments } from '../lib/api/departments'
-import { fetchUnreadNotificationCount } from '../lib/api/notifications'
 import { describeSupabaseError } from '../lib/api/errors'
 import { greeting, longToday } from '../lib/format'
 import { useAuth } from '../hooks/useAuth'
-import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import type { VisibleDepartment } from '../types/database'
 
-interface QuickAction {
-  to: string
-  label: string
-  description: string
-  icon: string
-  badge?: number
-}
-
 // Inicio del modo departamento (quien solo es Coordinador o Miembro de
-// Departamento): su departamento con lo pendiente, lo último y lo próximo, y
-// accesos solo a lo que su rol puede abrir. Sin cuarteles, documentos,
-// inventario, estado de la Regional ni tareas de otros módulos.
+// Departamento): su departamento con sus acciones y lo que tiene pendiente.
+// Sin cuarteles, documentos, inventario, estado de la Regional ni tareas de
+// otros módulos.
 export function DepartmentHome() {
   const { profile } = useAuth()
-  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
   // null mientras carga: así no se muestra "sin departamento" por un instante.
   const [departments, setDepartments] = useState<VisibleDepartment[] | null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -41,11 +29,6 @@ export function DepartmentHome() {
         if (!active) return
         setDepartments([])
         setError(describeSupabaseError(err, 'No pudimos cargar tu departamento. Reintentá en unos segundos.'))
-      })
-    fetchUnreadNotificationCount()
-      .then((count) => active && setUnreadCount(count))
-      .catch(() => {
-        // Las notificaciones siguen disponibles en su sección.
       })
     return () => {
       active = false
@@ -60,13 +43,6 @@ export function DepartmentHome() {
     ...(memberNames.length ? [`Miembro de ${memberNames.join(', ')}`] : []),
   ]
   const firstName = profile?.full_name?.split(' ')[0] ?? ''
-
-  const actions: QuickAction[] = [
-    { to: '/notificaciones', label: 'Notificaciones', description: unreadCount ? `${unreadCount} sin leer` : 'Al día', icon: 'bell', badge: unreadCount },
-    { to: '/calendario', label: 'Calendario', description: 'Eventos de tu departamento', icon: 'calendar' },
-  ]
-  if (hasAvalesAccess) actions.push({ to: '/escuela/avales', label: 'Avales regionales', description: 'Ver y subir los avales de tu departamento', icon: 'school' })
-  actions.push({ to: '/ajustes', label: 'Mi perfil', description: 'Tu rol y tus datos', icon: 'user' })
 
   return (
     <AppShell title="Inicio">
@@ -113,27 +89,7 @@ export function DepartmentHome() {
 
       {mine.length > 0 && <DepartmentDashboard departments={mine} />}
 
-      <div className="section-header">
-        <h2 className="section-title">Accesos rápidos</h2>
-      </div>
-      <nav className="quick-actions" aria-label="Accesos rápidos">
-        {actions.map((a) => (
-          <Link key={a.to} to={a.to} className="quick-action">
-            <span className="list-item-icon" style={{ position: 'relative' }}>
-              <Icon name={a.icon} size={18} />
-              {a.badge ? (
-                <span className="header-badge" style={{ top: -6, right: -6 }}>
-                  {a.badge > 9 ? '9+' : a.badge}
-                </span>
-              ) : null}
-            </span>
-            <span className="quick-action-text">
-              <strong>{a.label}</strong>
-              <span>{a.description}</span>
-            </span>
-          </Link>
-        ))}
-      </nav>
+      <PendientesResumen />
     </AppShell>
   )
 }

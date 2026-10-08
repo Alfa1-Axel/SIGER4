@@ -58,6 +58,7 @@ import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
 import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
 import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
 import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
+import { PendientesPage } from './pages/PendientesPage'
 
 export default function App() {
   return (
@@ -69,6 +70,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
         <Route path="/panel" element={<ProtectedRoute><PanelPage /></ProtectedRoute>} />
+        {/* Pendientes: se llega desde el Inicio ("Ver todos"); no está en el menú. */}
+        <Route path="/pendientes" element={<ProtectedRoute><PendientesPage /></ProtectedRoute>} />
         <Route path="/cuarteles" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelesPage /></ModuleRoute>} />
         <Route path="/cuarteles/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
         <Route path="/cuarteles/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />

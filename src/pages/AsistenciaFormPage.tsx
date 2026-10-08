@@ -8,9 +8,10 @@ import {
   updateAttendanceSummary,
 } from '../lib/api/attendance'
 import { fetchStationById } from '../lib/api/stations'
+import { fetchStationStaffing } from '../lib/api/stationStaffing'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
-import type { AttendanceSummary, Station } from '../types/database'
+import type { AttendanceSummary, Station, StationStaffing } from '../types/database'
 
 type FieldErrors = Partial<Record<'periodStart' | 'periodEnd' | 'attendanceRate' | 'observations', string>>
 
@@ -130,6 +131,20 @@ export function AsistenciaFormPage() {
     }
   }, [resolvedStationId])
 
+  // Efectivos cargados del cuartel: la referencia de los resúmenes nuevos.
+  // undefined mientras se piden; null si el cuartel todavía no los cargó.
+  const [staffing, setStaffing] = useState<StationStaffing | null | undefined>(undefined)
+  useEffect(() => {
+    if (!resolvedStationId) return
+    let active = true
+    fetchStationStaffing(resolvedStationId)
+      .then((row) => active && setStaffing(row))
+      .catch(() => active && setStaffing(null))
+    return () => {
+      active = false
+    }
+  }, [resolvedStationId])
+
   function setPeriod([start, end]: [string, string]) {
     setPeriodStart(start)
     setPeriodEnd(end)
@@ -200,8 +215,9 @@ export function AsistenciaFormPage() {
   const startError = show('periodStart')
   const endError = show('periodEnd')
   const observationsError = show('observations')
-  // Dotación: la de este resumen (si ya está guardado) o la activa hoy.
-  const members = existing ? existing.total_members : station?.personnel_count || null
+  // Efectivos de referencia: los de este resumen (si ya está guardado) o los
+  // que tiene hoy el cuartel cargados.
+  const members = existing ? existing.total_members : staffing && staffing.total > 0 ? staffing.total : null
 
   return (
     <AppShell title="Asistencia">
@@ -308,16 +324,20 @@ export function AsistenciaFormPage() {
 
         <div className="alert alert-info" role="note">
           <span className="alert-content">
-            <strong>Dotación:</strong>{' '}
+            <strong>Efectivos de referencia:</strong>{' '}
             {members ? (
               <>
-                {members} {members === 1 ? 'integrante' : 'integrantes'}
-                {existing ? ' al cargar este resumen' : ''}. Sale de la dotación actual del cuartel: no hace falta cargarla acá.
+                {members} {members === 1 ? 'efectivo' : 'efectivos'}
+                {existing ? ' al cargar este resumen' : staffing ? ` (año ${staffing.reference_year})` : ''}. Salen de los efectivos del cuartel: no hace falta cargarlos acá.
               </>
+            ) : existing ? (
+              <>este resumen se cargó cuando el cuartel todavía no tenía efectivos cargados.</>
+            ) : staffing === undefined ? (
+              <>cargando…</>
             ) : (
               <>
-                todavía no está cargada. Cargá la dotación actual del cuartel y el resumen la toma sola.{' '}
-                <Link to={`/cuarteles/${resolvedStationId}#dotacion`}>Cargar la dotación</Link>
+                Cargá primero los efectivos del cuartel para usar este dato en asistencia.{' '}
+                <Link to={`/cuarteles/${resolvedStationId}#efectivos`}>Cargar efectivos</Link>
               </>
             )}
             {existing?.present_average != null && ` Promedio de presentes cargado antes: ${existing.present_average}.`}
@@ -331,7 +351,7 @@ export function AsistenciaFormPage() {
         )}
 
         <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={submitting}>
-          {submitting ? 'Guardando…' : 'Guardar'}
+          {submitting ? 'Guardando…' : 'Guardar resumen'}
         </button>
       </form>
     </AppShell>

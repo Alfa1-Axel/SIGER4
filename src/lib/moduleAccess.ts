@@ -53,6 +53,8 @@ export function canUseModule(module: AppModule, departmentOnly: boolean): boolea
 // '/escuela/avales' va antes que '/escuela'.
 const PATH_MODULES: [string, AppModule][] = [
   ['/panel', 'inicio'],
+  // Pendientes es una extensión del Inicio: lo abre cualquier rol, también en modo departamento.
+  ['/pendientes', 'inicio'],
   ['/cuarteles', 'cuarteles'],
   ['/vehiculos', 'cuarteles'],
   ['/asistencia', 'cuarteles'],

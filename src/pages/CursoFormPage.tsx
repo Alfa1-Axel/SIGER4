@@ -253,7 +253,7 @@ export function CursoFormPage() {
           {error && <p className="field-error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar'}
+            {submitting ? 'Guardando…' : 'Guardar curso'}
           </button>
         </form>
       )}

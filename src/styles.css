@@ -806,7 +806,7 @@ a.card-solid:focus-visible {
 .quick-actions {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 24px;
 }
 
@@ -2467,6 +2467,52 @@ kbd {
   margin-top: 8px;
 }
 
+/* Año de referencia: un selector corto, cómodo con el dedo. */
+.staffing-year {
+  max-width: 220px;
+  margin-bottom: 14px;
+}
+
+.staffing-year select {
+  min-height: 46px;
+  font-size: 16px;
+}
+
+/* Actualizaciones anteriores de los efectivos (historial). */
+.staffing-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.staffing-history summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.staffing-history ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.staffing-history li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 12px;
+  color: var(--color-text-primary);
+}
+
+.staffing-history-by {
+  color: var(--color-text-muted);
+}
+
 .staffing-group {
   border: 0;
   margin: 0 0 14px;
@@ -2666,6 +2712,113 @@ kbd {
   border-radius: var(--radius-full);
   background: var(--color-success-soft);
   color: var(--color-success);
+}
+
+/* Inicio: resumen de pendientes y pantalla interna /pendientes. */
+.pending-summary-count {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.pending-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pending-groups .task-item-text {
+  gap: 3px;
+}
+
+.task-item-priority {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.task-item--alta .task-item-priority {
+  color: var(--color-danger);
+}
+
+.task-item-action {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-link);
+  white-space: nowrap;
+}
+
+.pending-unread {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  color: var(--color-text-primary);
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.pending-unread:hover {
+  background: var(--color-surface-hover);
+}
+
+.pending-unread .task-item-action {
+  margin-left: auto;
+}
+
+@media (max-width: 480px) {
+  /* En el celular el botón baja debajo del texto en vez de apretarlo. */
+  .pending-groups .task-item {
+    flex-wrap: wrap;
+  }
+
+  .pending-groups .task-item-action {
+    order: 3;
+    flex-basis: 100%;
+    padding-left: 0;
+  }
+}
+
+/* Inicio: línea de números (efectivos del cuartel o estado de la Regional). */
+.home-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 24px;
+}
+
+.home-strip-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.home-strip-value {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-strip-label,
+.home-strip-meta {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.home-strip-link {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .home-strip-link {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
 }
 
 /* Barras de filtros con chips; la segunda se desliza en el celular. */
@@ -3800,81 +3953,6 @@ kbd {
 .dept-dashboard-open {
   font-size: 13px;
   white-space: nowrap;
-}
-
-.dept-dashboard-attention {
-  margin-bottom: 14px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.dept-dashboard-clear {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  font-size: 14px;
-  color: var(--color-success);
-}
-
-.dept-dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-@media (max-width: 720px) {
-  .dept-dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.dept-dashboard-subtitle {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.dept-dashboard-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.dept-dashboard-list a {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  color: inherit;
-  text-decoration: none;
-}
-
-.dept-dashboard-list a:hover {
-  background: var(--color-surface-hover);
-}
-
-.dept-dashboard-list a:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-.dept-dashboard-item-title {
-  font-size: 14px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.dept-dashboard-item-meta {
-  font-size: 12px;
-  color: var(--color-text-muted);
 }
 
 .dept-dashboard-actions {

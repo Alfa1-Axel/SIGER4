@@ -180,7 +180,7 @@ export function CarpetaDetallePage() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Guardando…' : 'Guardar'}
+              {saving ? 'Guardando…' : 'Guardar carpeta'}
             </button>
             <button type="button" className="btn btn-outlined" onClick={() => setEditingFolder(false)}>
               Cancelar

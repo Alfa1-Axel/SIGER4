@@ -162,8 +162,8 @@ export function VehiculoFormPage() {
 
   if (!canEdit) {
     return (
-      <AppShell title="Vehículos">
-        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} vehículos con tu rol actual.</div>
+      <AppShell title="Móviles">
+        <div className="empty-state">No tenés permiso para {isEditing ? 'editar' : 'cargar'} móviles con tu rol actual.</div>
       </AppShell>
     )
   }
@@ -286,7 +286,7 @@ export function VehiculoFormPage() {
           {error && <p className="field-error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar'}
+            {submitting ? 'Guardando…' : 'Guardar móvil'}
           </button>
         </form>
       )}

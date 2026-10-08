@@ -98,7 +98,7 @@ const HISTORY_CATEGORY_LABEL: Record<StationHistoryCategory, string> = {
   institucional: 'Institucional',
   operativo: 'Operativo',
   personal: 'Personal',
-  vehiculos: 'Vehículos',
+  vehiculos: 'Móviles',
   infraestructura: 'Infraestructura',
   capacitacion: 'Capacitación',
   documentacion: 'Documentación',
@@ -177,13 +177,15 @@ export function CuartelDetallePage() {
   const [expandedPersonnelHistoryId, setExpandedPersonnelHistoryId] = useState<string | null>(null)
   const [personnelHistoryByPersonnelId, setPersonnelHistoryByPersonnelId] = useState<Record<string, PersonnelStatusHistory[]>>({})
 
-  // Enlaces a una sección de la ficha (por ejemplo "Cargar la dotación" desde
-  // Asistencia, /cuarteles/<id>#dotacion): se baja hasta ella al abrir.
+  // Enlaces a una sección de la ficha (por ejemplo "Cargar los efectivos" desde
+  // Asistencia, /cuarteles/<id>#efectivos): se baja hasta ella al abrir. El
+  // ancla vieja #dotacion (avisos anteriores a 0109) lleva a la misma tarjeta.
   const { hash } = useLocation()
   const stationLoaded = Boolean(station)
   useEffect(() => {
     if (!stationLoaded || !hash) return
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: 'start' })
+    const id = decodeURIComponent(hash.slice(1))
+    document.getElementById(id === 'dotacion' ? 'efectivos' : id)?.scrollIntoView({ block: 'start' })
   }, [stationLoaded, hash])
 
   async function reloadPersonnel(stationId: string) {
@@ -486,7 +488,7 @@ export function CuartelDetallePage() {
           <div className="card-grid" style={{ marginBottom: 20 }}>
             <div className="kpi-card" style={{ textAlign: 'center' }}>
               <div className="kpi-value">{station.personnel_count}</div>
-              <div className="kpi-label">Dotación</div>
+              <div className="kpi-label">Efectivos</div>
             </div>
             <div className="kpi-card" style={{ textAlign: 'center' }}>
               <div className="kpi-value">{station.vehicles_count}</div>
@@ -585,7 +587,7 @@ export function CuartelDetallePage() {
                 Activos en el registro: <strong>{activePersonnelCount}</strong> · Total registrado: {personnel.length}
               </span>
               <span style={{ display: 'block', marginTop: 2, fontSize: 12, color: 'var(--color-text-muted)' }}>
-                Es opcional: la dotación del cuartel se carga arriba, por categoría, y no hace falta cargar nombres.
+                Es opcional: los efectivos del cuartel se cargan arriba, por categoría, y no hace falta cargar nombres.
               </span>
             </div>
 
@@ -733,7 +735,7 @@ export function CuartelDetallePage() {
           {separatingPersonnel && (
             <ReasonPromptModal
               title={`${PERSONNEL_SEPARATION_OPTIONS.find((o) => o.value === separatingPersonnel.newStatus)?.label} — ${separatingPersonnel.person.last_name}, ${separatingPersonnel.person.first_name}`}
-              description="Este cambio queda registrado en el historial de la persona y deja de contar como personal activo del registro. Si la dotación del cuartel está cargada por categoría, actualizala arriba."
+              description="Este cambio queda registrado en el historial de la persona y deja de contar como personal activo del registro. Si los efectivos del cuartel están cargados por categoría, actualizalos arriba."
               confirmLabel="Confirmar"
               onConfirm={handleConfirmPersonnelSeparation}
               onClose={() => setSeparatingPersonnel(null)}
@@ -741,7 +743,7 @@ export function CuartelDetallePage() {
           )}
 
           <div className="section-header">
-            <h2 className="section-title">Vehículos</h2>
+            <h2 className="section-title">Móviles</h2>
             {canEdit && (
               <Link to={`/cuarteles/${station.id}/vehiculos/nuevo`} className="link-muted">
                 + Agregar
@@ -749,7 +751,7 @@ export function CuartelDetallePage() {
             )}
           </div>
           <div className="card row-list" style={{ marginBottom: 20 }}>
-            {vehicles.length === 0 && <div className="empty-state">No hay vehículos cargados para este cuartel.</div>}
+            {vehicles.length === 0 && <div className="empty-state">No hay móviles cargados para este cuartel.</div>}
             {vehicles.map((vehicle, i) => {
               const isDecommissioned = DECOMMISSION_STATUSES.includes(vehicle.status)
               const history = vehicleHistoryByVehicleId[vehicle.id]
@@ -818,7 +820,7 @@ export function CuartelDetallePage() {
           {decommissioningVehicle && (
             <ReasonPromptModal
               title={`${VEHICLE_DECOMMISSION_OPTIONS.find((o) => o.value === decommissioningVehicle.newStatus)?.label} — ${decommissioningVehicle.vehicle.internal_code}`}
-              description="Este cambio queda registrado en el historial del vehículo y no cuenta más como flota activa del cuartel."
+              description="Este cambio queda registrado en el historial del móvil y no cuenta más como móvil activo del cuartel."
               confirmLabel="Confirmar"
               onConfirm={handleConfirmVehicleDecommission}
               onClose={() => setDecommissioningVehicle(null)}
@@ -850,7 +852,7 @@ export function CuartelDetallePage() {
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', overflowWrap: 'anywhere' }}>
                     {[
-                      summary.total_members != null ? `Dotación: ${summary.total_members}` : null,
+                      summary.total_members != null ? `Efectivos: ${summary.total_members}` : null,
                       // Solo resúmenes anteriores a 0104, que se cargaban a mano.
                       summary.present_average != null ? `promedio ${summary.present_average} presentes` : null,
                       summary.observations,

@@ -1,19 +1,26 @@
 import { supabase } from '../supabaseClient'
 import type {
   AttendanceSummary,
+  CalendarEvent,
   Course,
   Department,
   DepartmentActivityReport,
   DepartmentManualMember,
   DepartmentMember,
+  DepartmentReportWithFiles,
   InterventionSummary,
+  InventoryItem,
+  InventoryLoanRequest,
   Profile,
   Station,
-  StationStaffing,
+  StationCompliance,
   Subsede,
   Vehicle,
 } from '../../types/database'
-import { fetchStaffingForStations, fetchStationStaffing } from './stationStaffing'
+import { fetchStaffingAsOf } from './stationStaffing'
+import type { StaffingSnapshot } from './stationStaffing'
+import { fetchStationCompliance } from './compliance'
+import { fetchDepartmentReports } from './departmentReports'
 
 const STATION_WITH_SUBSEDE_SELECT = '*, subsede:subsedes(*)'
 
@@ -102,17 +109,67 @@ export async function fetchVehiclesReportData(filters: ReportFilters): Promise<V
   return (data ?? []) as unknown as VehicleReportRow[]
 }
 
+// Fin del día (hora local) de una fecha AAAA-MM-DD, para filtrar por fecha y hora.
+function dayEnd(day: string): string {
+  return new Date(day + 'T23:59:59.999').toISOString()
+}
+function dayStart(day: string): string {
+  return new Date(day + 'T00:00:00').toISOString()
+}
+
+export interface StationLoanRow {
+  id: string
+  itemName: string
+  status: InventoryLoanRequest['status']
+  requestedAt: string
+  expectedReturnAt: string | null
+}
+
 export interface StationReportData {
   station: StationWithSubsede
   attendance: AttendanceSummary[]
   interventions: InterventionSummary[]
   vehicles: Vehicle[]
-  // Dotación actual por categorías; null si el cuartel todavía no la cargó.
-  staffing: StationStaffing | null
+  // Efectivos del cuartel: los vigentes al fin del período (o los actuales si
+  // no se eligió fin); null si todavía no tenía efectivos cargados a esa fecha.
+  staffing: StaffingSnapshot | null
+  // Estado de las cargas (semáforo) y, de ahí, lo que falta; null si no se pudo leer.
+  compliance: StationCompliance | null
+  // Elementos del Inventario Regional que están en el cuartel y los préstamos
+  // que pidió en el período.
+  inventoryItems: Pick<InventoryItem, 'id' | 'name' | 'category' | 'status'>[]
+  loans: StationLoanRow[]
+}
+
+async function fetchStationInventory(stationId: string, filters: ReportFilters) {
+  const itemsRes = await supabase.from('inventory_items').select('id, name, category, status').eq('station_id', stationId).order('name', { ascending: true })
+  if (itemsRes.error) throw itemsRes.error
+  let loansQuery = supabase.from('inventory_loan_requests').select('*').eq('requesting_station_id', stationId)
+  if (filters.periodStart) loansQuery = loansQuery.gte('created_at', dayStart(filters.periodStart))
+  if (filters.periodEnd) loansQuery = loansQuery.lte('created_at', dayEnd(filters.periodEnd))
+  const loansRes = await loansQuery.order('created_at', { ascending: false }).limit(40)
+  if (loansRes.error) throw loansRes.error
+  const loans = (loansRes.data ?? []) as InventoryLoanRequest[]
+  const ids = [...new Set(loans.map((l) => l.inventory_item_id))]
+  const names = new Map<string, string>()
+  if (ids.length > 0) {
+    const namesRes = await supabase.from('inventory_items').select('id, name').in('id', ids)
+    for (const row of (namesRes.data ?? []) as { id: string; name: string }[]) names.set(row.id, row.name)
+  }
+  return {
+    inventoryItems: (itemsRes.data ?? []) as StationReportData['inventoryItems'],
+    loans: loans.map((l) => ({
+      id: l.id,
+      itemName: names.get(l.inventory_item_id) ?? 'Elemento',
+      status: l.status,
+      requestedAt: l.created_at,
+      expectedReturnAt: l.expected_return_at,
+    })),
+  }
 }
 
 export async function fetchStationReportData(stationId: string, filters: ReportFilters): Promise<StationReportData | null> {
-  const [stationRes, attendanceRes, interventionsRes, vehiclesRes, staffing] = await Promise.all([
+  const [stationRes, attendanceRes, interventionsRes, vehiclesRes, staffingMap, compliance, inventory] = await Promise.all([
     supabase.from('stations').select(STATION_WITH_SUBSEDE_SELECT).eq('id', stationId).single(),
     (() => {
       let q = supabase.from('attendance_summaries').select('*').eq('station_id', stationId)
@@ -127,8 +184,12 @@ export async function fetchStationReportData(stationId: string, filters: ReportF
       return q.order('period_start', { ascending: true })
     })(),
     supabase.from('vehicles').select('*').eq('station_id', stationId).order('internal_code', { ascending: true }),
-    // Si no se puede leer, el reporte sale sin el cuadro de dotación.
-    fetchStationStaffing(stationId).catch(() => null),
+    // Lo que no se pueda leer no frena el reporte: sale sin esa parte.
+    fetchStaffingAsOf([stationId], filters.periodEnd ?? null).catch(() => new Map<string, StaffingSnapshot>()),
+    fetchStationCompliance()
+      .then((rows) => rows.find((r) => r.station_id === stationId) ?? null)
+      .catch(() => null),
+    fetchStationInventory(stationId, filters).catch(() => ({ inventoryItems: [] as StationReportData['inventoryItems'], loans: [] as StationLoanRow[] })),
   ])
 
   if (stationRes.error || !stationRes.data) return null
@@ -137,7 +198,10 @@ export async function fetchStationReportData(stationId: string, filters: ReportF
     attendance: (attendanceRes.data ?? []) as AttendanceSummary[],
     interventions: (interventionsRes.data ?? []) as InterventionSummary[],
     vehicles: (vehiclesRes.data ?? []) as Vehicle[],
-    staffing,
+    staffing: staffingMap.get(stationId) ?? null,
+    compliance,
+    inventoryItems: inventory.inventoryItems,
+    loans: inventory.loans,
   }
 }
 
@@ -147,8 +211,11 @@ export interface RegionalConsolidatedData {
   interventions: InterventionReportRow[]
   courses: Course[]
   vehicles: VehicleReportRow[]
-  // Dotación por categorías de los cuarteles que ya la cargaron.
-  staffing: StationStaffing[]
+  // Efectivos de cada cuartel que los tenía cargados: los vigentes al fin del
+  // período (o los actuales si no se eligió fin).
+  staffing: Map<string, StaffingSnapshot>
+  // Estado de las cargas de cada cuartel (semáforo).
+  compliance: StationCompliance[]
 }
 
 export async function fetchRegionalConsolidatedData(filters: ReportFilters): Promise<RegionalConsolidatedData> {
@@ -157,16 +224,18 @@ export async function fetchRegionalConsolidatedData(filters: ReportFilters): Pro
   else if (filters.subsedeId) stationsQuery = stationsQuery.eq('subsede_id', filters.subsedeId)
   else if (filters.regionId) stationsQuery = stationsQuery.eq('region_id', filters.regionId)
 
-  const [stationsRes, attendance, interventions, courses, vehicles] = await Promise.all([
+  const [stationsRes, attendance, interventions, courses, vehicles, allCompliance] = await Promise.all([
     stationsQuery.order('name', { ascending: true }),
     fetchAttendanceReportData(filters),
     fetchInterventionReportData(filters),
     fetchCoursesReportData(filters),
     fetchVehiclesReportData(filters),
+    fetchStationCompliance().catch(() => [] as StationCompliance[]),
   ])
 
   const stations = (stationsRes.data ?? []) as unknown as StationWithSubsede[]
-  const staffing = await fetchStaffingForStations(stations.map((s) => s.id)).catch(() => [] as StationStaffing[])
+  const ids = new Set(stations.map((s) => s.id))
+  const staffing = await fetchStaffingAsOf([...ids], filters.periodEnd ?? null).catch(() => new Map<string, StaffingSnapshot>())
 
   return {
     stations,
@@ -175,6 +244,28 @@ export async function fetchRegionalConsolidatedData(filters: ReportFilters): Pro
     courses,
     vehicles,
     staffing,
+    compliance: allCompliance.filter((c) => ids.has(c.station_id)),
+  }
+}
+
+export interface DepartmentReportExtras {
+  // Informes y actas del departamento con sus archivos (los ven quienes pueden
+  // leerlos: coordinador, integrantes e Informática).
+  reports: DepartmentReportWithFiles[]
+  events: CalendarEvent[]
+}
+
+export async function fetchDepartmentReportExtras(departmentId: string, filters: ReportFilters): Promise<DepartmentReportExtras> {
+  const reports = await fetchDepartmentReports(departmentId).catch(() => [] as DepartmentReportWithFiles[])
+  let eventsQuery = supabase.from('calendar_events').select('*').eq('department_id', departmentId).neq('status', 'cancelado')
+  if (filters.periodStart) eventsQuery = eventsQuery.gte('starts_at', dayStart(filters.periodStart))
+  if (filters.periodEnd) eventsQuery = eventsQuery.lte('starts_at', dayEnd(filters.periodEnd))
+  const eventsRes = await eventsQuery.order('starts_at', { ascending: false }).limit(60)
+  return {
+    reports: reports.filter(
+      (r) => (!filters.periodStart || r.report_date >= filters.periodStart) && (!filters.periodEnd || r.report_date <= filters.periodEnd),
+    ),
+    events: eventsRes.error ? [] : ((eventsRes.data ?? []) as CalendarEvent[]),
   }
 }
 

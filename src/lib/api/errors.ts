@@ -91,13 +91,14 @@ function describeStorageError(err: unknown): string | null {
 const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   attendance_rate_range: 'La tasa de asistencia tiene que estar entre 0 y 100.',
   attendance_period_valid: 'La fecha de fin tiene que ser igual o posterior a la de inicio.',
-  attendance_total_members_non_negative: 'La dotación no puede ser negativa.',
+  attendance_total_members_non_negative: 'Los efectivos de referencia no pueden ser negativos.',
   attendance_present_average_non_negative: 'El promedio de presentes no puede ser negativo.',
   attendance_observations_length: 'Las observaciones pueden tener hasta 1000 caracteres.',
   calendar_events_dates_check: 'La fecha de fin del evento tiene que ser posterior al inicio.',
   calendar_events_single_scope: 'Elegí un solo destino para el evento: un cuartel, una subsede, la Regional o un departamento.',
   notifications_scope_not_ambiguous: 'No pudimos generar el aviso automático de este cambio. Consultá a Informática y Estadística.',
-  station_staffing_counts_range: 'Cada categoría de la dotación tiene que ser un número entero entre 0 y 9999.',
+  station_staffing_counts_range: 'Cada categoría de efectivos tiene que ser un número entero entre 0 y 9999.',
+  station_staffing_year_range: 'El año de referencia de los efectivos tiene que estar entre 2000 y 2100.',
 }
 
 // Permiso denegado por la RLS al guardar: mensaje según la sección.
@@ -105,7 +106,7 @@ const RLS_TABLE_MESSAGES: Record<string, string> = {
   attendance_summaries: 'No tenés permiso para cargar asistencia de este cuartel con tu rol actual.',
   intervention_summaries: 'No tenés permiso para cargar intervenciones de este cuartel con tu rol actual.',
   calendar_events: 'No tenés permiso para cargar eventos con ese destino con tu rol actual.',
-  station_staffing: 'No tenés permiso para cargar la dotación de este cuartel con tu rol actual.',
+  station_staffing: 'No tenés permiso para cargar los efectivos de este cuartel con tu rol actual.',
 }
 
 export function describeSupabaseError(err: unknown, fallback = 'No pudimos completar la acción. Intentá de nuevo; si sigue fallando, consultá a Informática y Estadística.'): string {

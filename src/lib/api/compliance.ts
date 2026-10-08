@@ -19,7 +19,7 @@ export async function fetchStationComplianceById(stationId: string): Promise<Sta
 export function complianceReasons(c: StationCompliance): string[] {
   const reasons: string[] = []
   if (!c.has_contact_info) reasons.push('Falta el contacto institucional')
-  if (!c.has_personnel) reasons.push('Falta cargar la dotación')
+  if (!c.has_personnel) reasons.push('Faltan cargar los efectivos')
   if (!c.has_vehicles) reasons.push('Faltan cargar los móviles')
   if (!c.attendance_recent) reasons.push('Sin resumen de asistencia reciente')
   if (!c.interventions_recent) reasons.push('Sin resumen de intervenciones reciente')

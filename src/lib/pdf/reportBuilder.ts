@@ -43,6 +43,9 @@ export interface ReportContext {
   // (regional, subsede, departamentos, escuela) no pasan este campo y siguen
   // usando el par de logos institucionales fijo, sin cambios.
   stationLogoUrl?: string | null
+  // Qué se eligió para armar el reporte ("Cuartel: Luque", "Incluye: Efectivos,
+  // Asistencia"…): se imprime bajo el encabezado, junto con el alcance.
+  filtersLabel?: string[]
 }
 
 async function loadPdfImage(url: string): Promise<{ dataUrl: string; format: 'PNG' | 'JPEG' } | null> {
@@ -101,21 +104,23 @@ export class ReportBuilder {
     if (logoIzquierda) this.doc.addImage(logoIzquierda.dataUrl, logoIzquierda.format, PAGE_MARGIN, this.cursorY, 18, 18)
     if (logoDerecha) this.doc.addImage(logoDerecha.dataUrl, logoDerecha.format, this.pageWidth - PAGE_MARGIN - 18, this.cursorY, 18, 18)
 
+    // Quién habla (SIGER4 · Regional 4), qué reporte es y de qué trata.
+    this.doc.setFont('helvetica', 'bold')
+    this.doc.setFontSize(8.5)
+    this.doc.setTextColor(MUTED_COLOR)
+    this.doc.text('SIGER4 · REGIONAL 4', this.pageWidth / 2, this.cursorY + 4, { align: 'center' })
+
     this.doc.setFont('helvetica', 'bold')
     this.doc.setFontSize(14)
     this.doc.setTextColor(SECONDARY_COLOR)
-    this.doc.text(title, this.pageWidth / 2, this.cursorY + 7, { align: 'center' })
+    this.doc.text(title, this.pageWidth / 2, this.cursorY + 11, { align: 'center' })
 
     if (subtitle) {
       this.doc.setFont('helvetica', 'normal')
       this.doc.setFontSize(10)
       this.doc.setTextColor(MUTED_COLOR)
-      this.doc.text(subtitle, this.pageWidth / 2, this.cursorY + 13, { align: 'center' })
+      this.doc.text(subtitle, this.pageWidth / 2, this.cursorY + 17, { align: 'center' })
     }
-
-    this.doc.setFontSize(9)
-    this.doc.setTextColor(MUTED_COLOR)
-    this.doc.text(`Regional 4 — SIGER4 · ${scopeLabel}`, this.pageWidth / 2, this.cursorY + 18, { align: 'center' })
 
     this.cursorY += 24
     this.doc.setDrawColor(PRIMARY_COLOR)
@@ -123,6 +128,7 @@ export class ReportBuilder {
     this.doc.line(PAGE_MARGIN, this.cursorY, this.pageWidth - PAGE_MARGIN, this.cursorY)
     this.cursorY += 6
 
+    this.doc.setFont('helvetica', 'normal')
     this.doc.setFontSize(9)
     this.doc.setTextColor(MUTED_COLOR)
     this.doc.text(`Período: ${periodLabel}`, PAGE_MARGIN, this.cursorY)
@@ -132,7 +138,13 @@ export class ReportBuilder {
       this.cursorY,
       { align: 'right' },
     )
-    this.cursorY += 8
+    this.cursorY += 5
+
+    // Filtros aplicados: lo que se eligió para armar este reporte.
+    const filters = [`Alcance: ${scopeLabel}`, ...(this.context.filtersLabel ?? [])].join('  ·  ')
+    const wrapped = this.doc.splitTextToSize(`Filtros: ${filters}`, this.pageWidth - PAGE_MARGIN * 2) as string[]
+    this.doc.text(wrapped, PAGE_MARGIN, this.cursorY)
+    this.cursorY += wrapped.length * 4 + 4
   }
 
   private ensureSpace(neededHeight: number) {
@@ -232,6 +244,17 @@ export class ReportBuilder {
     const x = PAGE_MARGIN + (width - finalWidth) / 2
     this.doc.addImage(dataUrl, 'PNG', x, this.cursorY, finalWidth, height)
     this.cursorY += height + 6
+  }
+
+  // Aclaración corta bajo una tabla o un cuadro.
+  addNote(text: string) {
+    const wrapped = this.doc.splitTextToSize(text, this.pageWidth - PAGE_MARGIN * 2) as string[]
+    this.ensureSpace(wrapped.length * 4 + 4)
+    this.doc.setFont('helvetica', 'italic')
+    this.doc.setFontSize(8.5)
+    this.doc.setTextColor(MUTED_COLOR)
+    this.doc.text(wrapped, PAGE_MARGIN, this.cursorY)
+    this.cursorY += wrapped.length * 4 + 4
   }
 
   addEmptyState(message: string) {

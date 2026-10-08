@@ -1,6 +1,6 @@
-// Dotación actual del cuartel: cantidades por categoría (0108). Las categorías
-// y su orden están acá, en un solo lugar: lo usan la ficha del cuartel, los
-// reportes y la ayuda.
+// Efectivos del cuartel: cantidades por categoría (0108, año y historial en
+// 0109). Las categorías y su orden están acá, en un solo lugar: lo usan la
+// ficha del cuartel, Asistencia y los reportes.
 
 export type StaffingCategoryKey =
   | 'aspirantes_menores'
@@ -24,8 +24,8 @@ export interface StaffingGroup {
   categories: StaffingCategory[]
 }
 
-// Agrupadas como se piensa la dotación: aspirantes, bomberos por nivel, y
-// reserva con cuerpo auxiliar.
+// Agrupadas como se piensan los efectivos del cuartel: aspirantes, personal
+// activo (bomberos por nivel), y reserva con cuerpo auxiliar.
 export const STAFFING_GROUPS: StaffingGroup[] = [
   {
     title: 'Aspirantes',
@@ -35,7 +35,7 @@ export const STAFFING_GROUPS: StaffingGroup[] = [
     ],
   },
   {
-    title: 'Bomberos',
+    title: 'Personal activo',
     categories: [
       { key: 'bomberos_nivel_1', label: 'Bomberos Nivel 1' },
       { key: 'bomberos_nivel_2', label: 'Bomberos Nivel 2' },
@@ -46,7 +46,7 @@ export const STAFFING_GROUPS: StaffingGroup[] = [
   {
     title: 'Reserva y cuerpo auxiliar',
     categories: [
-      { key: 'personal_reserva', label: 'Personal en reserva' },
+      { key: 'personal_reserva', label: 'Reserva' },
       { key: 'cuerpo_auxiliar', label: 'Cuerpo auxiliar' },
     ],
   },
@@ -68,7 +68,17 @@ export const EMPTY_STAFFING: StaffingCounts = {
   cuerpo_auxiliar: 0,
 }
 
-// Total de la dotación: la suma de las categorías. En la base lo calcula la
+// Qué integra el total, para decirlo en pantalla y en los reportes.
+export const STAFFING_TOTAL_NOTE = 'Suma de aspirantes, bomberos de Nivel 1 a 4, reserva y cuerpo auxiliar.'
+
+// Años que se ofrecen como referencia: el actual, el siguiente (para cargar
+// por adelantado) y cinco hacia atrás. La base acepta de 2000 a 2100.
+export function staffingYearOptions(now: Date = new Date()): number[] {
+  const current = now.getFullYear()
+  return Array.from({ length: 7 }, (_, i) => current + 1 - i)
+}
+
+// Total de los efectivos: la suma de las categorías. En la base lo calcula la
 // misma suma (station_staffing.total), acá se usa para mostrarlo en vivo
 // mientras se carga.
 export function sumStaffing(counts: StaffingCounts): number {

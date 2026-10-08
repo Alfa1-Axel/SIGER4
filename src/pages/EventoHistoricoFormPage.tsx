@@ -16,7 +16,7 @@ const CATEGORY_OPTIONS: { value: StationHistoryCategory; label: string }[] = [
   { value: 'institucional', label: 'Institucional' },
   { value: 'operativo', label: 'Operativo' },
   { value: 'personal', label: 'Personal' },
-  { value: 'vehiculos', label: 'Vehículos' },
+  { value: 'vehiculos', label: 'Móviles' },
   { value: 'infraestructura', label: 'Infraestructura' },
   { value: 'capacitacion', label: 'Capacitación' },
   { value: 'documentacion', label: 'Documentación' },
@@ -166,7 +166,7 @@ export function EventoHistoricoFormPage() {
           {error && <p className="field-error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar'}
+            {submitting ? 'Guardando…' : 'Guardar evento'}
           </button>
         </form>
       )}

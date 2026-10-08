@@ -238,10 +238,33 @@ export interface StationStaffing {
   personal_reserva: number
   cuerpo_auxiliar: number
   total: number
+  // Año al que corresponden los efectivos (0109).
+  reference_year: number
   updated_by_profile_id: string | null
   updated_by_name: string | null
   created_at: string
   updated_at: string
+}
+
+// Foto de los efectivos de un cuartel cada vez que cambian (0109). La escribe
+// solo la base; sirve para saber con cuántos contaba el cuartel en un período
+// anterior.
+export interface StationStaffingHistory {
+  id: string
+  station_id: string
+  reference_year: number
+  aspirantes_menores: number
+  aspirantes_mayores: number
+  bomberos_nivel_1: number
+  bomberos_nivel_2: number
+  bomberos_nivel_3: number
+  bomberos_nivel_4: number
+  personal_reserva: number
+  cuerpo_auxiliar: number
+  total: number
+  recorded_by_profile_id: string | null
+  recorded_by_name: string | null
+  recorded_at: string
 }
 
 export interface Personnel {

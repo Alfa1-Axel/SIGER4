@@ -132,7 +132,7 @@ export function PersonalFormPage() {
     <AppShell title={isEditing ? 'Editar integrante' : 'Nuevo integrante'}>
       <h1 className="page-title">{isEditing ? 'Editar integrante' : 'Nuevo integrante'}</h1>
       <p className="page-subtitle">
-        Registro nominal del cuartel, opcional. La dotación (cantidad por categoría) se carga en la ficha del cuartel, sin nombres.
+        Registro nominal del cuartel, opcional. Los efectivos (cantidad por categoría) se cargan en la ficha del cuartel, sin nombres.
       </p>
 
       {!loading && !['activo', 'licencia', 'aspirante'].includes(status) && (
@@ -224,7 +224,7 @@ export function PersonalFormPage() {
           {error && <p className="field-error">{error}</p>}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
-            {submitting ? 'Guardando…' : 'Guardar'}
+            {submitting ? 'Guardando…' : 'Guardar integrante'}
           </button>
         </form>
       )}

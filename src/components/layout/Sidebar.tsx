@@ -72,7 +72,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                   // Nuevo usuario) no debe quedar activo en la ruta del otro.
                   end={NAV_ITEMS.some((other) => other.to !== item.to && other.to.startsWith(`${item.to}/`))}
                   onClick={onClose}
-                  className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+                  // Pendientes se abre desde el Inicio y no está en el menú: el Inicio sigue marcado.
+                  className={({ isActive }) => `sidebar-link${isActive || (item.to === '/panel' && pathname === '/pendientes') ? ' active' : ''}`}
                 >
                   <Icon name={item.icon} size={18} />
                   {navItemLabel(item, navContext)}

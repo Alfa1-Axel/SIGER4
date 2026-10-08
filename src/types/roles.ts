@@ -156,7 +156,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'regional',
     scopeLabel: 'Su Regional',
-    selfSummary: 'Gestionás la información de los cuarteles de tu Regional (datos, dotación, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales.',
+    selfSummary: 'Gestionás la información de los cuarteles de tu Regional (datos, efectivos, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales.',
     assignable: true,
   },
   {
@@ -186,7 +186,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    selfSummary: 'Podés gestionar la información de tu cuartel: datos, dotación, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes.',
+    selfSummary: 'Podés gestionar la información de tu cuartel: datos, efectivos, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes.',
     assignable: true,
   },
   {
@@ -196,7 +196,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    selfSummary: 'Podés gestionar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel.',
+    selfSummary: 'Podés gestionar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel.',
     assignable: true,
   },
   {
@@ -206,7 +206,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    selfSummary: 'Podés cargar y editar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel.',
+    selfSummary: 'Podés cargar y editar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel.',
     assignable: true,
   },
   {

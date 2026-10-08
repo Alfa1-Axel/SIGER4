@@ -8,20 +8,28 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchDepartments } from '../lib/api/departments'
 import { REPORT_GENERATORS, type ReportKey } from '../lib/pdf/reportGenerators'
+import { REPORT_SECTION_OPTIONS, allSections } from '../lib/pdf/reportSections'
+import type { ReportSection } from '../lib/pdf/reportSections'
 import type { Department, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
 const REPORT_TYPES: { key: ReportKey; label: string; needsStation?: boolean; needsDepartment?: boolean }[] = [
-  { key: 'asistencias', label: 'Reporte de Asistencias' },
-  { key: 'intervenciones', label: 'Reporte de Intervenciones' },
-  { key: 'cursos', label: 'Reporte de Cursos / Escuela' },
-  { key: 'vehiculos', label: 'Reporte de Vehículos' },
-  { key: 'cuartel_general', label: 'Reporte General por Cuartel', needsStation: true },
-  { key: 'regional_consolidado', label: 'Reporte Regional Consolidado' },
-  { key: 'departamentos_general', label: 'Departamentos Regionales — General' },
-  { key: 'departamento_especifico', label: 'Departamento específico', needsDepartment: true },
+  { key: 'cuartel_general', label: 'Reporte de cuartel', needsStation: true },
+  { key: 'regional_consolidado', label: 'Reporte Regional' },
+  { key: 'departamento_especifico', label: 'Reporte de departamento', needsDepartment: true },
+  { key: 'asistencias', label: 'Reporte de asistencia' },
+  { key: 'intervenciones', label: 'Reporte de intervenciones' },
+  { key: 'vehiculos', label: 'Reporte de móviles' },
+  { key: 'cursos', label: 'Reporte de cursos y Escuela' },
+  { key: 'departamentos_general', label: 'Departamentos: resumen general' },
 ]
+
+// 2026-09-01 → 01/09/2026, como se lee en el Cuerpo.
+function dmy(day: string): string {
+  const [y, m, d] = day.split('-')
+  return y && m && d ? `${d}/${m}/${y}` : day
+}
 
 // director_escuela y secretario_regional tienen visión regional/subsede/cuartel,
 // pero acotada a Escuela/capacitación y panorama general — no a datos
@@ -80,6 +88,8 @@ export function ReportesPage() {
   const [subsedeId, setSubsedeId] = useState('')
   const [stationId, setStationId] = useState(isStationOnly ? (profile?.station_id ?? '') : '')
   const [departmentId, setDepartmentId] = useState('')
+  // Qué secciones incluir en los reportes que lo permiten (todas por defecto).
+  const [sections, setSections] = useState<ReportSection[]>(allSections(availableReportTypes[0]?.key ?? 'asistencias'))
 
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -147,10 +157,41 @@ export function ReportesPage() {
   }
 
   function periodLabelFor(): string {
-    if (periodStart && periodEnd) return `${periodStart} a ${periodEnd}`
-    if (periodStart) return `Desde ${periodStart}`
-    if (periodEnd) return `Hasta ${periodEnd}`
+    if (periodStart && periodEnd) return `${dmy(periodStart)} al ${dmy(periodEnd)}`
+    if (periodStart) return `Desde el ${dmy(periodStart)}`
+    if (periodEnd) return `Hasta el ${dmy(periodEnd)}`
     return 'Todo el histórico disponible'
+  }
+
+  // Cambiar de reporte vuelve a marcar todas sus secciones.
+  function selectReport(key: ReportKey) {
+    setReportKey(key)
+    setSections(allSections(key))
+    setError(null)
+  }
+
+  function toggleSection(key: ReportSection) {
+    setSections((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
+    setError(null)
+  }
+
+  const sectionOptions = REPORT_SECTION_OPTIONS[reportKey] ?? []
+
+  // Lo que se eligió, para imprimirlo bajo el encabezado del PDF.
+  function filtersAppliedFor(stationIdUsed: string | null): string[] {
+    const list: string[] = []
+    if (reportDef.needsDepartment) {
+      if (departmentId) list.push(`Departamento: ${departments.find((d) => d.id === departmentId)?.name ?? 'seleccionado'}`)
+    } else if (reportKey !== 'departamentos_general') {
+      if (stationIdUsed) list.push(`Cuartel: ${stations.find((s) => s.id === stationIdUsed)?.name ?? 'seleccionado'}`)
+      else if (subsedeId) list.push(`Subsede: ${subsedes.find((s) => s.id === subsedeId)?.name ?? 'seleccionada'}`)
+      else if (regionId) list.push(`Regional: ${regions.find((r) => r.id === regionId)?.name ?? 'seleccionada'}`)
+      else list.push('Regional: todo el alcance disponible')
+    }
+    if (sectionOptions.length > 0) {
+      list.push(sections.length === sectionOptions.length ? 'Incluye: todo' : `Incluye: ${sectionOptions.filter((o) => sections.includes(o.key)).map((o) => o.label).join(', ')}`)
+    }
+    return list
   }
 
   async function handleGenerate() {
@@ -163,6 +204,10 @@ export function ReportesPage() {
     }
     if (reportDef.needsDepartment && !departmentId) {
       setError('Seleccioná un departamento para este reporte.')
+      return
+    }
+    if (sectionOptions.length > 0 && sections.length === 0) {
+      setError('Elegí al menos una sección para incluir en el reporte.')
       return
     }
 
@@ -191,6 +236,8 @@ export function ReportesPage() {
         },
         scopeLabel: scopeLabelFor(),
         periodLabel: periodLabelFor(),
+        filtersApplied: filtersAppliedFor(effectiveStationId),
+        sections: sectionOptions.length > 0 ? sections : undefined,
         generatedByLabel: profile?.full_name ?? 'Usuario SIGER4',
         profileId: profile?.id ?? null,
         departmentId: reportDef.needsDepartment ? departmentId || null : null,
@@ -234,7 +281,7 @@ export function ReportesPage() {
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div className="field">
           <label htmlFor="reportType">Tipo de reporte</label>
-          <select id="reportType" value={reportKey} onChange={(e) => setReportKey(e.target.value as ReportKey)}>
+          <select id="reportType" value={reportKey} onChange={(e) => selectReport(e.target.value as ReportKey)}>
             {availableReportTypesWithCoordinator.map((r) => (
               <option key={r.key} value={r.key}>
                 {r.label}
@@ -346,6 +393,19 @@ export function ReportesPage() {
           </div>
         )}
 
+        {sectionOptions.length > 0 && (
+          <div className="field">
+            <span className="field-label">Qué incluir</span>
+            <div className="filter-bar" role="group" aria-label="Qué incluir en el reporte">
+              {sectionOptions.map((o) => (
+                <button key={o.key} type="button" className="chip" aria-pressed={sections.includes(o.key)} onClick={() => toggleSection(o.key)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {error && <p className="field-error">{error}</p>}
 
         <button type="button" className="btn btn-primary btn-block" disabled={generating} onClick={handleGenerate}>
@@ -354,7 +414,7 @@ export function ReportesPage() {
 
         {confirmedKey === reportKey && (
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 8, fontStyle: 'italic' }}>
-            Reporte generado y descargado. La solicitud quedó registrada en auditoría.
+            Reporte generado y descargado. Queda registrado en Auditoría.
           </p>
         )}
       </div>
@@ -366,7 +426,7 @@ export function ReportesPage() {
             type="button"
             className="card-solid"
             style={{ textAlign: 'left', cursor: 'pointer', border: reportKey === report.key ? '2px solid var(--color-primary)' : undefined }}
-            onClick={() => setReportKey(report.key)}
+            onClick={() => selectReport(report.key)}
           >
             <Icon name="chart" size={20} />
             <h3 style={{ margin: '8px 0 0', fontSize: 14 }}>{report.label}</h3>

@@ -1,41 +1,52 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { NumberStepper } from './ui/NumberStepper'
-import { fetchStationStaffing, saveStationStaffing } from '../lib/api/stationStaffing'
+import { fetchStationStaffing, fetchStationStaffingHistory, saveStationStaffing } from '../lib/api/stationStaffing'
 import { describeSupabaseError } from '../lib/api/errors'
-import { EMPTY_STAFFING, MAX_STAFFING_COUNT, STAFFING_GROUPS, sameStaffing, staffingCountsOf, sumStaffing } from '../lib/staffing'
+import { EMPTY_STAFFING, MAX_STAFFING_COUNT, STAFFING_GROUPS, STAFFING_TOTAL_NOTE, sameStaffing, staffingCountsOf, staffingYearOptions, sumStaffing } from '../lib/staffing'
 import type { StaffingCategoryKey, StaffingCounts } from '../lib/staffing'
-import type { StationStaffing } from '../types/database'
+import type { StationStaffing, StationStaffingHistory } from '../types/database'
 
 interface StationStaffingCardProps {
   stationId: string
-  // Quién carga la dotación: los mismos roles que cargan el personal del
+  // Quién carga los efectivos: los mismos roles que cargan el personal del
   // cuartel (la base lo vuelve a exigir).
   canEdit: boolean
-  // Lo que hoy figura como dotación del cuartel (stations.personnel_count):
-  // mientras no haya categorías cargadas, es el personal activo del registro
-  // nominal.
+  // Lo que hoy figura como total del cuartel (stations.personnel_count):
+  // mientras no haya efectivos cargados por categoría, es el personal activo
+  // del registro nominal.
   currentTotal: number
   // Avisa el nuevo total al guardar, para que la ficha lo muestre sin recargar.
   onSaved: (total: number) => void
 }
 
-function formatUpdated(row: StationStaffing): string {
+const formatDay = (iso: string) => new Date(iso).toLocaleDateString('es-AR', { dateStyle: 'medium' })
+
+function formatUpdated(row: Pick<StationStaffing, 'updated_at' | 'updated_by_name'>): string {
   const when = new Date(row.updated_at).toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' })
   return row.updated_by_name ? `${when} · ${row.updated_by_name}` : when
 }
 
-// Dotación actual del cuartel: cantidad de integrantes por categoría, que se
-// edita cuando cambia la dotación real (no es una carga mensual). El total se
-// calcula solo. Se muestra en la ficha del cuartel (id "dotacion").
+// Efectivos del cuartel: cantidad de personas por categoría, que se edita
+// cuando cambian (no es una carga mensual). El total se calcula solo y cada
+// cambio queda en el historial. Se muestra en la ficha del cuartel (id
+// "efectivos").
 export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved }: StationStaffingCardProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saved, setSaved] = useState<StationStaffing | null>(null)
   const [counts, setCounts] = useState<StaffingCounts>(EMPTY_STAFFING)
+  const [year, setYear] = useState<number>(new Date().getFullYear())
+  const [history, setHistory] = useState<StationStaffingHistory[]>([])
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [justSaved, setJustSaved] = useState(false)
+
+  const loadHistory = useCallback(() => {
+    fetchStationStaffingHistory(stationId)
+      .then(setHistory)
+      .catch(() => setHistory([]))
+  }, [stationId])
 
   const load = useCallback(() => {
     let active = true
@@ -46,23 +57,28 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
         if (!active) return
         setSaved(row)
         setCounts(staffingCountsOf(row))
+        setYear(row?.reference_year ?? new Date().getFullYear())
         setStatus('ready')
+        loadHistory()
       })
       .catch((err) => {
         if (!active) return
-        setLoadError(describeSupabaseError(err, 'No pudimos cargar la dotación. Reintentá en unos segundos.'))
+        setLoadError(describeSupabaseError(err, 'No pudimos cargar los efectivos. Reintentá en unos segundos.'))
         setStatus('error')
       })
     return () => {
       active = false
     }
-  }, [stationId])
+  }, [stationId, loadHistory])
 
   useEffect(() => load(), [load])
 
   const baseline = staffingCountsOf(saved)
-  const dirty = !sameStaffing(counts, baseline)
+  const baselineYear = saved?.reference_year ?? new Date().getFullYear()
+  const dirty = !sameStaffing(counts, baseline) || year !== baselineYear
   const total = sumStaffing(counts)
+  // Se ofrece también el año ya guardado, aunque ya no esté entre los recientes.
+  const years = [...new Set([...staffingYearOptions(), baselineYear, year])].sort((a, b) => b - a)
 
   function change(key: StaffingCategoryKey, value: number) {
     setJustSaved(false)
@@ -72,6 +88,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
 
   function discard() {
     setCounts(baseline)
+    setYear(baselineYear)
     setSaveError(null)
     setJustSaved(false)
   }
@@ -86,34 +103,38 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
     setSaveError(null)
     setJustSaved(false)
     try {
-      const row = await saveStationStaffing(stationId, counts)
+      const row = await saveStationStaffing(stationId, counts, year)
       setSaved(row)
       setCounts(staffingCountsOf(row))
+      setYear(row.reference_year)
       setJustSaved(true)
       onSaved(row.total)
+      loadHistory()
     } catch (err) {
-      setSaveError(describeSupabaseError(err, 'No pudimos guardar la dotación. Reintentá en unos segundos.'))
+      setSaveError(describeSupabaseError(err, 'No pudimos guardar los efectivos. Reintentá en unos segundos.'))
     } finally {
       setSaving(false)
     }
   }
 
+  // Las actualizaciones anteriores a la actual (la primera foto es la vigente).
+  const previous = history.slice(1)
+
   return (
-    <section id="dotacion" className="anchor-target" aria-labelledby="dotacion-title">
+    <section id="efectivos" className="anchor-target" aria-labelledby="efectivos-title">
       <div className="section-header">
-        <h2 id="dotacion-title" className="section-title">
-          Dotación actual
+        <h2 id="efectivos-title" className="section-title">
+          Efectivos del cuartel
         </h2>
       </div>
       <div className="card staffing-card" style={{ marginBottom: 20 }}>
         <p className="staffing-intro">
-          Cantidad de integrantes por categoría. Se actualiza cuando cambia la dotación real del cuartel; el total se calcula solo y no hace falta cargar
-          nombres.
+          Cantidad de efectivos por categoría. Se actualiza cuando cambian; el total se calcula solo y no hace falta cargar nombres.
         </p>
 
         {status === 'loading' && (
           <div className="loading-state" role="status">
-            Cargando la dotación…
+            Cargando los efectivos…
           </div>
         )}
 
@@ -130,6 +151,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
           <>
             {saved ? (
               <>
+                <p className="staffing-meta">Efectivos al año {saved.reference_year}.</p>
                 {STAFFING_GROUPS.map((group) => (
                   <div key={group.title}>
                     <h3 className="staffing-group-title">{group.title}</h3>
@@ -144,19 +166,21 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
                   </div>
                 ))}
                 <div className="staffing-total">
-                  <span className="staffing-total-label">Dotación total</span>
+                  <span className="staffing-total-label">Total de efectivos</span>
                   <span className="staffing-total-value">{saved.total}</span>
                 </div>
-                <p className="staffing-meta">Última actualización: {formatUpdated(saved)}</p>
+                <p className="staffing-meta">
+                  {STAFFING_TOTAL_NOTE} Última actualización: {formatUpdated(saved)}
+                </p>
               </>
             ) : (
               <div className="empty-state">
-                Este cuartel todavía no cargó su dotación por categorías.
+                Este cuartel todavía no cargó sus efectivos por categoría.
                 {currentTotal > 0 && ` Figuran ${currentTotal} en el registro de personal.`}
               </div>
             )}
             <p className="staffing-meta">
-              La dotación la actualizan el Presidente, el Jefe de Cuerpo Activo o el usuario de carga del cuartel, el Secretario Regional y Informática y
+              Los efectivos los actualizan el Presidente, el Jefe de Cuerpo Activo o el usuario de carga del cuartel, el Secretario Regional e Informática y
               Estadística.
             </p>
           </>
@@ -167,11 +191,22 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
             {!saved && (
               <div className="alert alert-info" role="note" style={{ marginBottom: 14 }}>
                 <span className="alert-content">
-                  Todavía no cargaste la dotación de este cuartel.
-                  {currentTotal > 0 && ` Hoy figuran ${currentTotal} en el registro de personal.`} Cargá la dotación actual por categoría.
+                  Todavía no cargaste los efectivos de este cuartel.
+                  {currentTotal > 0 && ` Figuran ${currentTotal} en el registro de personal.`} Cargá la cantidad de cada categoría.
                 </span>
               </div>
             )}
+
+            <div className="field staffing-year">
+              <label htmlFor="staffing-year">Año de referencia</label>
+              <select id="staffing-year" value={year} disabled={saving} onChange={(e) => { setJustSaved(false); setSaveError(null); setYear(Number(e.target.value)) }}>
+                {years.map((y) => (
+                  <option key={y} value={y}>
+                    {y}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {STAFFING_GROUPS.map((group) => (
               <fieldset key={group.title} className="staffing-group">
@@ -193,14 +228,14 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
             ))}
 
             <div className="staffing-total" aria-live="polite">
-              <span className="staffing-total-label">Dotación total</span>
+              <span className="staffing-total-label">Total de efectivos</span>
               <span className="staffing-total-value">
                 {total}
                 {saved && dirty && <span className="staffing-total-before"> (antes {saved.total})</span>}
               </span>
             </div>
             <p className="staffing-meta">
-              Cada categoría va de 0 a {MAX_STAFFING_COUNT}.
+              {STAFFING_TOTAL_NOTE} Cada categoría va de 0 a {MAX_STAFFING_COUNT}.
               {saved && ` Última actualización: ${formatUpdated(saved)}.`}
             </p>
 
@@ -211,13 +246,13 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
             )}
             {justSaved && !dirty && (
               <div className="alert alert-success" role="status" style={{ marginTop: 12 }}>
-                Dotación guardada. Total: {saved?.total}.
+                Efectivos guardados. Total: {saved?.total}.
               </div>
             )}
 
             <div className="staffing-actions" style={{ marginTop: 12 }}>
               <button type="submit" className="btn btn-primary" disabled={saving || (!dirty && Boolean(saved))}>
-                {saving ? 'Guardando…' : 'Guardar dotación'}
+                {saving ? 'Guardando…' : 'Guardar efectivos'}
               </button>
               {dirty && !saving && (
                 <button type="button" className="btn btn-ghost" onClick={discard}>
@@ -226,6 +261,22 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
               )}
             </div>
           </form>
+        )}
+
+        {status === 'ready' && previous.length > 0 && (
+          <details className="staffing-history">
+            <summary>Actualizaciones anteriores ({previous.length})</summary>
+            <ul>
+              {previous.map((h) => (
+                <li key={h.id}>
+                  <span>
+                    {formatDay(h.recorded_at)} · {h.total} {h.total === 1 ? 'efectivo' : 'efectivos'} · año {h.reference_year}
+                  </span>
+                  {h.recorded_by_name && <span className="staffing-history-by">{h.recorded_by_name}</span>}
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </div>
     </section>

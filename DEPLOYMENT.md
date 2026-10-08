@@ -9513,7 +9513,7 @@ Sin funciones para desplegar y sin cambios en push ni PWA.
 ### 63.6 Verificación
 
 - **Postgres 16 local, 0107:** 88 pruebas, 0 fallas. Cada usuario se mide con las políticas de 0107 y sin ellas:
-  - para Informática, Presidente de cuartel, Escuela, Secretario Regional y para quien combina Coordinador con un rol de cuartel **no hay ninguna diferencia** en ninguna tabla;
+  - para Informática, Presidente de CD, Escuela, Secretario Regional y para quien combina Coordinador con un rol de cuartel **no hay ninguna diferencia** en ninguna tabla;
   - quien solo es Coordinador o Miembro de Departamento recibe 0 filas de cuarteles, vehículos, personal, asistencia, intervenciones, documentos, carpetas, versiones, archivos, cursos, inventario y mapa, y solo los eventos de su departamento;
   - lo suyo no cambia: sus departamentos, miembros, informes, adjuntos, avales (el coordinador, no el miembro) y las Regionales y subsedes;
   - notificaciones: sus avisos personales y los generales abiertos; no los de Escuela, Documentos ni evento regional;
@@ -9541,7 +9541,7 @@ Sin funciones para desplegar y sin cambios en push ni PWA.
 - [ ] Con ese usuario, abrir a mano `/documentos`, `/inventario`, `/cuarteles` y `/escuela`: cada una dice "No tenés permiso para ver esta sección".
 - [ ] Con un usuario solo Miembro de Departamento: mismo menú, sin "Avisar al departamento" ni Avales, y "Todo al día" si no hay pendientes.
 - [ ] Un usuario con Coordinador de Departamento **y** un rol de cuartel: sigue viendo Cuarteles, Documentos e Inventario además de su departamento.
-- [ ] Un Presidente de cuartel: ya no recibe en sus pendientes los cuarteles de otras Regionales o subsedes; sí el suyo.
+- [ ] Un Presidente de CD: ya no recibe en sus pendientes los cuarteles de otras Regionales o subsedes; sí el suyo.
 - [ ] Buscar "fuego" con el Coordinador de Fuego: encuentra su departamento y no Forestal. Buscar un elemento del inventario: sin resultados.
 - [ ] Cargar un informe desde el celular con ese usuario.
 
@@ -9902,7 +9902,7 @@ Las explicaciones, tal como están en el código (los dos últimos roles están 
 | Secretario Regional | Su Regional | Gestionás la información de los cuarteles de tu Regional (datos, dotación, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales. |
 | Coordinador de Departamento | Solo los departamentos que coordina | Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También ves y cargás los avales de tu departamento. No ves otros departamentos. |
 | Miembro de Departamento | Solo los departamentos de los que es miembro | Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. No ves otros departamentos. |
-| Presidente de Cuartel | Su propio cuartel | Podés gestionar la información de tu cuartel: datos, dotación, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes. |
+| Presidente de CD | Su propio cuartel | Podés gestionar la información de tu cuartel: datos, dotación, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes. |
 | Jefe de Cuerpo Activo | Su propio cuartel | Podés gestionar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel. |
 | Usuario de carga de cuartel | Su propio cuartel | Podés cargar y editar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. |
 | Secretario de Comisión | Su propio cuartel | Podés gestionar los documentos, el historial institucional y el calendario de tu cuartel. Consultás el personal, los móviles, la asistencia y las intervenciones, sin editarlos. |
@@ -10075,7 +10075,7 @@ Orden de arriba hacia abajo: saludo breve (con el rol), búsqueda, **accesos rá
 
 | Rol | Accesos |
 |---|---|
-| Presidente de Cuartel | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Subir documento · Calendario |
+| Presidente de CD | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Subir documento · Calendario |
 | Jefe de Cuerpo Activo | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Generar reporte · Usuarios |
 | Usuario de carga (con o sin departamento) | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Generar reporte · Subir documento |
 | Informática y Estadística | Usuarios · Cuarteles · Generar reporte · Subir documento · Solicitudes de préstamo · Auditoría (su integrante: Departamentos) |
@@ -10215,3 +10215,68 @@ order by nombre;
 - **El recordatorio semanal sigue diciendo "revisar cargas pendientes, novedades y documentación institucional"** (texto de la función de la base, ver 66.14): no se tocó.
 - **Los pendientes de inventario del Inicio se calculan en el navegador** (préstamos propios o a su cargo); los del servidor ya vienen filtrados. Ambos pasan por la RLS.
 - **No se probó en un celular real.** El teclado numérico y los toques se comprobaron por atributos y en un Android emulado (320, 360 y 1366 px, claro y oscuro); quedan en el checklist.
+
+## 68. Mapa: el formulario de punto de referencia se muestra al abrirlo; el rol se llama "Presidente de CD"; limpieza (2026-10-08) — versión 1.12.1
+
+Sin migración, sin Edge Functions, sin cambios en RLS, permisos, push ni PWA. Solo el frontend.
+
+### 68.1 Mapa Regional: scroll automático al formulario
+
+**Problema.** Al tocar "+ Punto de referencia" (o "Editar" en el globo de un punto), el formulario se abría debajo del mapa, fuera de la pantalla. En el celular parecía que no había pasado nada.
+
+**Ahora.**
+- Al abrir el formulario (nuevo o edición) la pantalla baja sola hasta él, con desplazamiento suave (sin animación si el dispositivo pide menos movimiento).
+- El encabezado fijo no tapa el título ni el primer campo: el formulario usa el mismo margen de ancla que el resto de las pantallas (`anchor-target`).
+- Si el formulario ya estaba abierto y la persona subió, tocar de nuevo vuelve a bajar.
+- Si se toca antes de que termine de cargar el mapa, el pedido espera y baja cuando el formulario aparece.
+- **Foco:** en la computadora (mouse) queda el cursor en "Nombre", sin saltos (`preventScroll`). En el celular no se enfoca ningún campo, para que el teclado no se abra solo y tape el formulario recién abierto.
+- Escribir en el formulario no vuelve a mover la pantalla.
+
+**No cambia:** los permisos (siguen siendo Informática y el Secretario Regional), la carga manual de latitud y longitud (el mapa no tiene selección por toque), el guardado, la edición, desactivar/reactivar ni eliminar. Archivo: `src/pages/MapaRegionalPage.tsx`.
+
+### 68.2 Denominación visible: "Presidente de CD"
+
+- Todo texto visible que decía "Presidente de Cuartel" pasa a **"Presidente de CD"**: selector de roles (alta y edición de usuarios), detalle del usuario, Mi perfil ("Tu rol en SIGER4"), Inicio, autoridades de la ficha del cuartel, búsqueda y reportes. Todos salen de **un solo lugar**: la etiqueta de `src/types/roles.ts`.
+- **El nombre técnico del rol no cambia** (`presidente_cuartel`): no se tocaron permisos, RLS, migraciones ni datos. Se comprobó que ninguna migración, función de la base ni Edge Function guarda la etiqueta: **no hace falta migración**.
+- Cuatro textos de ayuda que nombraban al rol como "el Presidente" ahora dicen "el Presidente de CD" (Asistencia sin permiso, tarjeta de efectivos de solo lectura, Inventario y solicitud de préstamo sin permiso).
+- En esta documentación se actualizaron las cuatro menciones anteriores; el nombre de las secciones históricas no cambia.
+- "CD" es Comisión Directiva.
+
+### 68.3 Relevamiento y limpieza de archivos
+
+**Se revisó** (sin borrar a ciegas): los 309 archivos versionados (los más pesados son `DEPLOYMENT.md`, `package-lock.json` y los íconos de la PWA), `public/`, `scripts/`, `supabase/` (migraciones, funciones y scripts de operación), `src/` (archivos sin importar y exportaciones sin uso), la raíz del proyecto y lo ignorado por Git (`dist/`, `node_modules/`, `.env`, `supabase/.temp/`, `*.tsbuildinfo`, `.claude/`), las capturas y salidas de prueba locales y las carpetas de trabajo temporales.
+
+| Elemento | Qué es | Decisión |
+|---|---|---|
+| `src/lib/api/dashboard.ts` | Consulta de un panel viejo: ninguna pantalla la importa (`fetchDashboardSummary` y `DashboardSummary` sin uso desde que el Inicio se simplificó) | **Se eliminó** (queda en el historial de Git) |
+| `src/styles/` | Carpeta vacía (Git no versiona carpetas vacías) | **Se eliminó** (local) |
+| `dist/`, `*.tsbuildinfo` | Salida de `npm run build` (regenerable, ya estaban en `.gitignore`) | **Se borraron** del equipo local |
+| Capturas, salidas de prueba y base de pruebas locales (unos 400 MB, fuera del proyecto, en la carpeta temporal del equipo) | Material de las pruebas de rondas anteriores | **Se borraron** |
+| `.gitignore` | Faltaba una guarda para que el manual de usuario (material externo) no entre al repositorio si una copia llega a esta carpeta | **Se agregó** `MANUAL_USUARIO_SIGER4*` |
+| `Logo escuela.png` y `LG INFORMATICA Y ESTADÍSTICA.png` (raíz, sin versionar) | Originales de los logos: el de Informática es la única copia en alta resolución (338 KB; la de `public/logos/` está reducida). `public/logos/README.md` los cita como fuente | **Se dejaron** |
+| `public/icons/push-informatica-512.png` y `manifest-icon-512.png` | Archivos idénticos (236 KB duplicados); uno lo usa el aviso push (`src/sw.ts`) y el otro el manifiesto de la PWA | **Se dejaron**: unificarlos implica tocar el código de push/PWA |
+| `scripts/generate-icons.cjs` | Genera los íconos de la PWA | **Se dejó**: es herramienta de mantenimiento |
+| `supabase/cleanup_test_data.sql`, `reset_functional_db.sql`, `seed_example.sql`, `create_admin_user_example.sql` | Scripts de operación documentados en este archivo | **Se dejaron** |
+| `DEPLOYMENT.md` (734 KB) | Historial acumulado de 68 rondas; varias secciones describen cosas que ya no existen (marcadas con notas al inicio) | **Se dejó**: es documentación vigente; dividirlo sería un trabajo aparte |
+| Cinco exportaciones sin uso (`fetchCoordinatedDepartments`, `fetchMapReferencePointById`, `fetchUnreadDepartmentNotifications`, `markNotificationRead`, `getRoleCategory`) | Funciones sueltas dentro de archivos que sí se usan | **Se dejaron**: no pesan y podrían volver a servir; sacarlas es opcional |
+| Carpeta `c:\tmp` del equipo | Material de otro proyecto (no es de SIGER4) | **No se tocó** |
+
+### 68.4 Qué correr
+
+Nada en la base. Desplegar el frontend (con Vercel, el push a `main`).
+
+### 68.5 Verificación
+
+- **Navegador** (Chrome; backend simulado; escritorio y Android emulado, claro y oscuro): **69 pruebas nuevas, 0 fallas.**
+  - **Mapa:** en 320×568, 360×640 y 1366×860, claro y oscuro, "+ Punto de referencia" abre "Nuevo punto de referencia" y la pantalla baja hasta el formulario, que queda a la vista y por debajo del encabezado; en la computadora queda el cursor en "Nombre" y en el celular no; tocar de nuevo con el formulario abierto vuelve a bajar; con "menos movimiento" también baja; escribir en el formulario no lo mueve; **el punto se guarda** con su nombre y coordenadas y el formulario se cierra; "Editar" desde el globo de un punto abre "Editar punto de referencia" con sus datos y baja hasta él; Informática y el Secretario Regional ven el botón (este último con su Regional ya elegida) y el Presidente de CD y el Jefe de Cuerpo Activo no; sin desborde horizontal y sin errores de página.
+  - **Rol:** el selector de roles del alta, el detalle del usuario, Mi perfil y el Inicio dicen "Presidente de CD", y **ninguna de las 34 visitas** (17 pantallas, con Informática y con un Presidente de CD) dice "Presidente de cuartel"; la tarjeta de efectivos nombra al "Presidente de CD".
+- **Regresión en navegador:** se repitieron las secciones 57 a 67 y el menú: 33, 21, 43 (59 y 59b), 64, 33, 42, 120, 59, 210 y 268 pruebas y el menú (8), **sin fallas**. Se actualizó la comprobación del rol (ahora "Presidente de CD") y la que fija la versión técnica (1.12.1).
+- **Build, lint y audit:** el build compila (sin imports rotos tras quitar `dashboard.ts`); lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **No se probó** en un celular real: el desplazamiento se comprobó en un Android emulado y en pantallas de 320 y 360 px.
+
+### 68.6 Notas y decisiones
+
+- **El manual de usuario vive fuera del repositorio.** No se versiona ni se despliega.
+- **Nombre del sistema.** La pantalla de ingreso, el nombre de la app instalada (`manifest`), `index.html` y la descripción de `package.json` dicen "Sistema Integral de Gestión de la Regional 4". La sigla se desarrolla institucionalmente como "Sistema Informático de GEstión Regional 4". No se unificó para no cambiar sin pedido el nombre visible de la app instalada; son cuatro textos si se decide hacerlo (`LoginPage.tsx`, `vite.config.ts`, `index.html`, `package.json`).
+- **Mapa Regional como vista compartida.** Hoy los roles de cuartel ven en el mapa su propio cuartel (y los de su subsede si tienen ese alcance asignado), y los puntos con alcance de Regional solo si tienen la Regional asignada; los puntos sin alcance los ve cualquiera. El globo del cuartel muestra contacto y ubicación; las autoridades y el año de fundación están en la ficha. Para que el mapa sea una vista institucional de todos los cuarteles de la Regional hace falta una decisión de permisos (lectura de datos institucionales de todos los cuarteles, sin abrir su información interna) y una migración: **no se hizo**.
+- **"Vehículo" y "móvil".** La pantalla de carga de un móvil conserva los títulos "Nuevo Vehículo" y "Tipo de vehículo". Es una diferencia de lenguaje con el resto del sistema que no se tocó en esta ronda.

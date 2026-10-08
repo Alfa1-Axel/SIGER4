@@ -116,7 +116,7 @@ export function SolicitudPrestamoFormPage() {
       <AppShell title="Solicitar préstamo">
         <AccessDenied
           title="No podés solicitar elementos"
-          message="Solicitan préstamos el Jefe de Cuerpo Activo, el Presidente y los usuarios de carga de cada cuartel, el Secretario Regional e Informática. Si lo necesitás, pedíselo a alguno de ellos."
+          message="Solicitan préstamos el Jefe de Cuerpo Activo, el Presidente de CD y los usuarios de carga de cada cuartel, el Secretario Regional e Informática. Si lo necesitás, pedíselo a alguno de ellos."
           backTo={itemId ? `/inventario/${itemId}` : '/inventario'}
           backLabel="Volver al elemento"
         />

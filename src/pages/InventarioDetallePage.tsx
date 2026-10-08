@@ -156,7 +156,7 @@ export function InventarioDetallePage() {
         )}
         {isAvailable && !canRequest && (
           <p className="field-help" style={{ margin: '6px 0 0' }}>
-            Lo solicitan el Jefe de Cuerpo Activo, el Presidente y los usuarios de carga de cada cuartel, el Secretario
+            Lo solicitan el Jefe de Cuerpo Activo, el Presidente de CD y los usuarios de carga de cada cuartel, el Secretario
             Regional e Informática.
           </p>
         )}

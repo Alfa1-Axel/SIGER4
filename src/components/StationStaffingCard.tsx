@@ -180,7 +180,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
               </div>
             )}
             <p className="staffing-meta">
-              Los efectivos los actualizan el Presidente, el Jefe de Cuerpo Activo o el usuario de carga del cuartel, el Secretario Regional e Informática y
+              Los efectivos los actualizan el Presidente de CD, el Jefe de Cuerpo Activo o el usuario de carga del cuartel, el Secretario Regional e Informática y
               Estadística.
             </p>
           </>

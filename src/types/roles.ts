@@ -181,7 +181,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
   },
   {
     key: 'presidente_cuartel',
-    label: 'Presidente de Cuartel',
+    label: 'Presidente de CD',
     description: 'Máxima autoridad institucional del cuartel.',
     category: 'cuartel',
     scope: 'cuartel',

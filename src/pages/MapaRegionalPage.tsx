@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
@@ -202,6 +202,12 @@ export function MapaRegionalPage() {
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  // Al abrir el formulario (nuevo o edición) la pantalla baja hasta él: queda
+  // debajo del mapa y, en el celular, no se veía que se había abierto.
+  const formRef = useRef<HTMLDivElement | null>(null)
+  const pendingScroll = useRef(false)
+  const [scrollRequest, setScrollRequest] = useState(0)
+
   async function loadAll() {
     setError(null)
     try {
@@ -226,6 +232,21 @@ export function MapaRegionalPage() {
   useEffect(() => {
     void loadAll()
   }, [])
+
+  useEffect(() => {
+    // Hasta que el mapa cargó no hay formulario en pantalla: el pedido espera.
+    if (!pendingScroll.current || !formOpen || loading) return
+    const form = formRef.current
+    if (!form) return
+    pendingScroll.current = false
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    form.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+    // El teclado del celular taparía el formulario recién abierto: el foco al
+    // primer campo es solo para quien usa mouse; sin saltos extra.
+    if (window.matchMedia('(pointer: fine)').matches) {
+      form.querySelector<HTMLInputElement>('#pointName')?.focus({ preventScroll: true })
+    }
+  }, [scrollRequest, formOpen, loading])
 
   const filteredStations = useMemo(
     () => (subsedeFilter ? stations.filter((s) => s.subsede_id === subsedeFilter) : stations),
@@ -275,6 +296,8 @@ export function MapaRegionalPage() {
       regionId: !isAdmin && profile?.region_id ? profile.region_id : '',
     })
     setFormOpen(true)
+    pendingScroll.current = true
+    setScrollRequest((n) => n + 1)
   }
 
   function openEditForm(point: MapReferencePoint) {
@@ -292,6 +315,8 @@ export function MapaRegionalPage() {
       stationId: point.station_id ?? '',
     })
     setFormOpen(true)
+    pendingScroll.current = true
+    setScrollRequest((n) => n + 1)
   }
 
   async function handleSubmitForm(event: FormEvent) {
@@ -473,7 +498,7 @@ export function MapaRegionalPage() {
           </div>
 
           {formOpen && (
-            <div className="card-solid" style={{ marginBottom: 20 }}>
+            <div ref={formRef} className="card-solid anchor-target" style={{ marginBottom: 20 }}>
               <div className="section-header">
                 <h2 className="section-title">{editingId ? 'Editar punto de referencia' : 'Nuevo punto de referencia'}</h2>
               </div>

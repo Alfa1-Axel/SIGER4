@@ -205,7 +205,7 @@ export function AsistenciaFormPage() {
       <AppShell title="Asistencia">
         <div className="empty-state">
           No tenés permiso para cargar asistencia de este cuartel con tu rol actual. La cargan Informática, el Secretario Regional y, en su
-          propio cuartel, el Presidente, el Jefe de Cuerpo Activo y el usuario de carga.
+          propio cuartel, el Presidente de CD, el Jefe de Cuerpo Activo y el usuario de carga.
         </div>
       </AppShell>
     )

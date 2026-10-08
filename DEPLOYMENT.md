@@ -6,6 +6,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 66):** Ayuda, Novedades y la guía de Roles y permisos ya no existen en SIGER4. Las secciones que las describen (22, 34 y 35, 58.4, 59, 60, 64 y 65) quedan como historial; para publicar una versión solo se sube el número en `package.json` y `package-lock.json`.
 
+> **Nota (sección 67):** la "Dotación actual" de la sección 65 pasó a llamarse **Efectivos del cuartel** y suma año de referencia e historial (migración 0109); el modelo, los permisos y lo que correr están en la sección 67. El Inicio, las tareas y los reportes que describen las secciones 59, 61 y 65 fueron reemplazados por lo de la sección 67 (Inicio más corto, pantalla de Pendientes y reportes institucionales).
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -9999,3 +10001,217 @@ Nada en la base. Desplegar el frontend (con Vercel, el push a `main`). Quien ten
 - **Un rol nuevo necesita su explicación** (`selfSummary`): el tipo lo exige. Si cambia lo que puede hacer un rol, hay que actualizar también su texto, que es informativo y no autoriza nada: lo que manda es la base.
 - **La explicación de Mi perfil se arma con los datos que la persona puede ver** (su cuartel, su Regional, sus departamentos). Si la base no devuelve un nombre, se muestra "Cuartel" o "Regional" sin nombre en vez de fallar.
 - **No se probó en un celular real.** El menú, el perfil y el contacto se comprobaron en un Android emulado, en pantallas de 320 y 360 px, en modo claro y oscuro; los enlaces de correo y WhatsApp se comprobaron como enlaces (WhatsApp, además, abriendo la URL real), pero el correo y la aplicación de WhatsApp instalados quedan en el checklist.
+
+## 67. Efectivos del cuartel con año e historial, Inicio más limpio, pantalla interna de Pendientes y reportes institucionales (2026-10-08) — versión 1.12.0, migración 0109
+
+Una migración (0109) y el frontend. Sin Edge Functions, sin push ni PWA, sin cambios en roles y **sin relajar ninguna política existente**: la RLS nueva es solo de la tabla nueva (historial) y es más estricta que la de la tabla de efectivos (nadie escribe en ella desde la aplicación).
+
+### 67.1 Qué cambia, en una mirada
+
+| Tema | Antes | Ahora |
+|---|---|---|
+| Cuartel | "Dotación actual", sin año ni historial | **Efectivos del cuartel**: 8 categorías, **año de referencia**, última actualización con responsable e **historial de actualizaciones** |
+| Asistencia | Usaba el personal del registro nominal si no había dotación | Usa **solo los efectivos cargados** como referencia (informativa); sin ellos, pide cargarlos primero |
+| Inicio | Estado de la Regional, métricas, tareas largas, actividad, vencimientos, lista de cuarteles | Saludo, **accesos rápidos del rol** (hasta 6), **Pendientes** (hasta 4 + "Ver todos"), un resumen de una línea y hasta 3 próximos eventos |
+| Pendientes | Bloque largo "Tareas y pendientes" en el Inicio | **Pantalla interna `/pendientes`** (sin menú, sin ser un módulo), agrupada por módulo y prioridad |
+| Reportes | Una lista de reportes con datos sueltos | Cuatro reportes institucionales (cuartel, Regional, departamento, asistencia) con **encabezado, filtros aplicados y secciones elegibles** |
+| Lenguaje | "Dotación", "vehículos", "Guardar" | "Efectivos", "móviles", botones que dicen qué hacen |
+
+### 67.2 Modelo de efectivos (una sola fuente de verdad)
+
+No se creó ninguna tabla de efectivos nueva: se extendió la de la sección 65.
+
+| Pieza | Qué guarda | Quién la escribe |
+|---|---|---|
+| `station_staffing` (0108 + `reference_year` en 0109) | **Una fila por cuartel** con las 8 categorías, el total (calculado por la base), el **año de referencia**, quién y cuándo | La aplicación, con los roles de siempre; autor y fecha los pone la base |
+| `station_staffing_history` (0109, nueva) | Una **foto por cada cambio** de cantidades o de año: las 8 categorías, el total, el año, quién y cuándo | **Solo la base** (disparador `station_staffing_record_history()`); ningún rol puede insertar, modificar ni borrar |
+| `stations.personnel_count` | La cifra única del cuartel: la suma de las categorías o, si todavía no cargó efectivos, el personal activo del registro nominal | La base (como en 0108) |
+| `attendance_summaries.total_members` | **Efectivos de referencia** del resumen: el total de los efectivos del cuartel **al dar de alta el resumen** | La base; `null` si el cuartel no tenía efectivos cargados |
+
+**Categorías (en este orden, en 3 grupos):** Aspirantes — Aspirantes menores, Aspirantes mayores · Personal activo — Bomberos Nivel 1, Nivel 2, Nivel 3, Nivel 4 · Reserva y cuerpo auxiliar — Reserva, Cuerpo auxiliar. **Total de efectivos** = suma de las ocho ("Suma de aspirantes, bomberos de Nivel 1 a 4, reserva y cuerpo auxiliar"). Cada categoría va de 0 a 9999 (la base lo exige con una restricción).
+
+**Año de referencia.** Por defecto, el año actual; el selector ofrece siete años (el siguiente, el actual y cinco hacia atrás) y la base acepta de 2000 a 2100. Los cuarteles que ya tenían efectivos (0108) toman como año el de su última actualización.
+
+**Historial.** Cada vez que cambian las cantidades **o el año** se guarda una foto (guardar sin cambios no crea ninguna). Los cuarteles que ya habían cargado reciben su primera foto con la fecha de su última actualización. Sirve para que un reporte de un período anterior diga **con cuántos efectivos contaba el cuartel en ese momento** y no con los de hoy: los efectivos valen desde la fecha de una foto hasta la siguiente. En la ficha se ve como "Actualizaciones anteriores (N)", con fecha, total, año y quién las cargó.
+
+### 67.3 Cómo se cargan y se editan
+
+**Cuarteles → el cuartel → "Efectivos del cuartel"** (ancla `#efectivos`; el enlace viejo `#dotacion` ya no existe).
+
+- Selector **"Año de referencia"** y, debajo, las 8 categorías con **botones − y +** (mínimo 0, máximo 9999), teclado numérico en el celular y letras, signos y negativos que no entran.
+- **Total de efectivos** en vivo, con "(antes N)" si hay cambios sin guardar, y la leyenda de qué categorías lo integran.
+- **"Guardar efectivos"** (deshabilitado si no hay cambios) y "Descartar cambios". Al guardar: "Efectivos guardados. Total: N." y la ficha muestra el total nuevo sin recargar.
+- Siempre se ve la **última actualización** (fecha y responsable). Cargar el año nuevo con las mismas cantidades también es un cambio y entra al historial.
+- Desde el Inicio: "Actualizar efectivos" (o "Cargar efectivos" si todavía no hay) abre la tarjeta ya a la vista. En el celular los botones miden 44 px o más.
+
+### 67.4 Permisos
+
+No cambian los permisos de escritura de 0108; se suma el historial con el mismo alcance de lectura.
+
+| Rol | Efectivos | Historial |
+|---|---|---|
+| Informática y Estadística (y su integrante) | Carga en cualquier cuartel; ve todos | Ve todos |
+| Secretario Regional | Carga y ve los cuarteles de su Regional (**comparativos** en Reportes y en el Inicio) | Los de su Regional |
+| Jefe de Cuerpo Activo, Presidente y usuario de carga | Carga **solo su cuartel** | El de su cuartel |
+| Secretario de Comisión, Invitado | Ven los de su cuartel, sin cargar | El de su cuartel |
+| Director de Escuela, Instructor y Coordinador de Escuela | No cargan ni leen los efectivos (la lectura Regional es solo del Secretario Regional) | Sin acceso |
+| Coordinador y Miembro de Departamento (modo departamento) | No cargan; **no abren Cuarteles ni consultan la tabla** | Sin acceso |
+
+La base lo decide, no la pantalla: la política de escritura de `station_staffing` es la de 0108 (misma regla que el personal del cuartel), la de lectura de `station_staffing_history` repite el alcance de la tabla y una política **restrictiva** cierra el modo departamento (0107).
+
+### 67.5 Asistencia
+
+- El resumen muestra **"Efectivos de referencia: N efectivos (año AAAA)"** y que salen de los efectivos del cuartel ("no hace falta cargarlos acá"). **No hay campo de total ni de promedio de presentes.**
+- Sin efectivos cargados: **"Cargá primero los efectivos del cuartel para usar este dato en asistencia."**, con el enlace "Cargar efectivos" que abre la tarjeta.
+- El dato es **informativo**: no se usa para calcular la tasa (que sigue siendo la que carga la persona).
+- **Los resúmenes anteriores siguen andando.** Conservan sus efectivos (o `null`, y lo dicen: "este resumen se cargó cuando el cuartel todavía no tenía efectivos cargados"), aunque después cambien; el "promedio de presentes" viejo se sigue viendo donde existía.
+- En la base, `attendance_summaries_before_write()` se parchó leyendo su definición vigente: toma `station_staffing.total` en lugar de `stations.personnel_count`, **sin pisar ninguna otra validación** (se verifica que conserve `security definer` y la validación de períodos superpuestos).
+
+### 67.6 Inicio
+
+Orden de arriba hacia abajo: saludo breve (con el rol), búsqueda, **accesos rápidos**, **Pendientes**, tu departamento (si coordinás uno o sos miembro), **una línea de resumen** y **próximos eventos** (hasta 3, con "Ver calendario"; si no hay, no ocupa lugar). Se quitaron las métricas, el estado de la Regional, la carga de datos por cuartel, la actividad reciente, los vencimientos y las listas de cuarteles, informes y avisos: cada cosa tiene su pantalla.
+
+**Accesos rápidos por rol** (los arma `src/lib/homeActions.ts`; son comodidad, cada pantalla mantiene su guarda y la base su RLS):
+
+| Rol | Accesos |
+|---|---|
+| Presidente de Cuartel | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Subir documento · Calendario |
+| Jefe de Cuerpo Activo | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Generar reporte · Usuarios |
+| Usuario de carga (con o sin departamento) | Registrar asistencia · Actualizar efectivos · Solicitar elemento · Mi cuartel · Generar reporte · Subir documento |
+| Informática y Estadística | Usuarios · Cuarteles · Generar reporte · Subir documento · Solicitudes de préstamo · Auditoría (su integrante: Departamentos) |
+| Secretario Regional | Cuarteles · Solicitudes de préstamo · Generar reporte · Departamentos · Subir documento · Calendario |
+| Coordinador de Escuela | Escuela · Avales regionales · Mi cuartel · Documentos · Calendario |
+| Solo Coordinador o Miembro de Departamento | **Sin grilla**: su departamento con "Cargar informe", "Ver informes", "Ver calendario" y, si coordina, "Avisar al departamento" (y "Ver avales" si tiene acceso) |
+
+**Resumen de una línea.** Para quien trabaja en un cuartel: "N efectivos del cuartel · año AAAA", "Actualizados el …" y "Actualizar efectivos" (o, sin carga, "Todavía no están cargados los efectivos del cuartel" y "Cargar efectivos"; quien solo mira, "Ver efectivos"). Para Informática y la Regional: cuarteles, efectivos y cuántos tienen cargas pendientes, con "Ver cuarteles".
+
+**Modo departamento.** Su Inicio es el de siempre en estructura (sección 63) pero más corto: la tarjeta de su departamento y Pendientes. **No consulta ningún módulo cerrado** (cuarteles, documentos, inventario, cursos, préstamos).
+
+### 67.7 Pendientes (pantalla interna)
+
+- **Dónde:** `/pendientes`. Se llega desde el Inicio ("Ver todos", o "N pendientes más"). **No está en el menú** (ni en el celular), no es un módulo, la búsqueda no la ofrece y el Inicio sigue marcado como activo.
+- **Qué muestra:** todos los pendientes de la persona, **agrupados por módulo**, ordenados por prioridad (**Urgente**, **Pendiente**, **Para revisar**), cada uno con su descripción y un **botón con la acción concreta** ("Cargar efectivos", "Registrar asistencia", "Registrar entrega", "Ver solicitud", "Ver aviso"…). Estado vacío: **"No tenés pendientes"**. Si falla la consulta: "No pudimos revisar todos tus pendientes. Probá de nuevo en unos segundos.", sin romper la pantalla.
+- **Fuentes** (un solo código, `src/hooks/usePendientes.ts`, que usan el resumen del Inicio y la pantalla): `get_pending_items()` (cargas de cuartel, préstamos vencidos, documentos, usuarios nuevos, cursos y departamentos sin movimiento, eventos), las solicitudes de préstamo propias o a su cargo, los avales nuevos, los informes nuevos de departamentos y los **avisos sin leer que piden hacer algo** (o son de un departamento). El resto de los avisos solo se cuenta: "N notificaciones sin leer · Ver notificaciones".
+- **Alcance por rol.** Lo filtra el servidor (`get_pending_items()` y la RLS de cada tabla): el jefe o usuario de carga ve su cuartel; el Secretario Regional, su Regional; Informática, todo; el Coordinador y el Miembro de Departamento, solo su departamento (sin consultar préstamos ni otros módulos cerrados).
+- **Nunca un pendiente que no se pueda abrir.** Antes de mostrarlo se verifica que el rol pueda abrir el destino (`canOpenPath`); si el servidor mandara un enlace a un módulo cerrado, se descarta. La URL directa a `/pendientes` abre la pantalla para todos los roles con sesión; sin sesión lleva al ingreso.
+
+### 67.8 Reportes institucionales
+
+**Reportes → "Tipo de reporte"** lista primero los cuatro institucionales; el resto sigue (Reporte de intervenciones, de móviles, de cursos y Escuela, Departamentos: resumen general). Todos son **PDF**; **no hay exportación a Excel** (no existía y no se agregó).
+
+| Reporte | Contenido | Secciones elegibles ("Qué incluir") |
+|---|---|---|
+| **Cuartel** | Datos del cuartel; **efectivos por categoría** vigentes al fin del período (desde el historial) con total y año; asistencia del período con variación, efectivos de referencia y observaciones; intervenciones; móviles; inventario y préstamos; estado de cargas y pendientes | Efectivos · Asistencia · Intervenciones · Móviles · Inventario · Pendientes |
+| **Regional** | **Comparativo por cuartel** (efectivos, asistencia, último resumen, cargas); efectivos por categoría cuartel por cuartel con **total de la Regional**; **cuarteles con cargas pendientes** y qué les falta; resumen | Efectivos · Asistencia · Intervenciones · Móviles · Cargas pendientes |
+| **Departamento** | Coordinador e integrantes; informes y actas; eventos del departamento; archivos asociados; actividad | Coordinador e integrantes · Informes y actas · Eventos · Archivos · Actividad |
+| **Asistencia** | Período, cuartel, tasa, variación respecto del resumen anterior, **efectivos de referencia**, observaciones e historial comparativo | — |
+
+- **Filtros simples:** cuartel (o toda la Regional), departamento, período y tipo de información. Sin ninguna sección elegida: "Elegí al menos una sección".
+- **Encabezado de cada PDF:** SIGER4 · Regional 4 · tipo de reporte · período · **fecha de generación** y una línea **"Filtros"** con lo aplicado (cuartel, departamento, "Incluye: …" o "Incluye: todo"). Identidad visual de siempre, sobria, con paginado.
+- **Efectivos "al" fin del período:** con período, se piden al historial (`recorded_at` hasta el fin del período) y el PDF dice "Efectivos al dd/mm/aaaa"; sin período, los actuales. Un reporte de un mes anterior no cambia porque hoy cambien los efectivos.
+- **Sin datos sensibles de más:** no hay nombres de integrantes del registro nominal ni datos de contacto personales; el de departamento lista coordinador e integrantes por nombre, que ya ven quienes pueden abrir el departamento.
+- **Alcance:** Reportes sigue limitado a Informática, Secretario Regional, Director de Escuela, Jefe de Cuerpo Activo y usuario de carga. El Jefe y el usuario de carga solo ven su cuartel (el selector ofrece uno, y **las consultas piden únicamente los efectivos de ese cuartel**). Presidente, Escuela, Coordinador y Miembro de Departamento reciben "No tenés permiso" por URL directa.
+
+### 67.9 Terminología y botones
+
+| Antes | Ahora |
+|---|---|
+| Dotación, "Dotación actual", "Guardar dotación" | **Efectivos**, "Efectivos del cuartel", "Guardar efectivos" |
+| Personal en reserva | Reserva |
+| Vehículos | **Móviles** (menú de reportes, ficha, formularios, historial) |
+| Botones "Guardar" | "Guardar efectivos", "Guardar resumen", "Guardar integrante", "Guardar móvil", "Guardar elemento", "Guardar curso", "Guardar evento", "Guardar cuartel", "Guardar carpeta" |
+| "Tareas y pendientes", "Todo al día" | "Pendientes", "No tenés pendientes" |
+| Accesos genéricos del Inicio | "Registrar asistencia", "Actualizar efectivos", "Solicitar elemento", "Generar reporte", "Subir documento", "Cargar informe", "Ver pendientes" |
+
+Se revisaron las pantallas principales: ya no hay botones "Gestionar", "Administrar" ni "Ver más", ni la palabra "dotación" ni "miembros" (para cuarteles). "Miembros" se mantiene donde son los de un **departamento**. Siempre "Regional". El semáforo de cargas y las tareas del servidor hablan de efectivos y móviles (`get_pending_items`: "Falta cargar los efectivos del cuartel.", enlace `#efectivos`).
+
+### 67.10 UI y UX
+
+- Tarjeta de efectivos con grupos, total destacado y estados (cargando, guardando, guardado, error al guardar sin perder lo cargado, error al cargar con "Reintentar").
+- Inicio más corto y de lectura rápida; se podaron los estilos del panel viejo (`styles.css`) y se sumaron los del resumen, los accesos y los pendientes.
+- Claro y oscuro con contraste de al menos 4,5:1 en la tarjeta de efectivos; sin cambios en la paleta ni rediseño global.
+
+### 67.11 Seguridad
+
+- **RLS:** `station_staffing_history` con RLS activada: lectura con el alcance de la tabla de efectivos + política restrictiva del modo departamento; `insert/update/delete/truncate` revocados a `authenticated`; sin acceso para `anon`. La función del disparador es `security definer` con `search_path = public` y **no se puede llamar desde la API**.
+- **Sin relajar nada:** no se tocó ninguna política existente; los helpers (`is_informatica_r4`, `is_regional_role`, `my_station_ids`, `my_region_ids`, `my_subsede_ids`, `is_department_only`) se usan como están.
+- **RPC:** `get_pending_items()` conserva `security definer` y `search_path`; solo cambia el texto y el enlace de efectivos. `attendance_summaries_before_write()` conserva su definición salvo la lectura de efectivos.
+- **Consultas y exportaciones:** las del frontend pasan por la RLS; el reporte del Jefe/usuario de carga pide solo su cuartel; Pendientes no ofrece enlaces que el rol no pueda abrir; el modo departamento no consulta módulos cerrados (ni siquiera préstamos).
+- **Búsqueda:** no devuelve la pantalla de Pendientes ni ninguna pantalla interna.
+
+### 67.12 Qué no se tocó
+
+Edge Functions, push, PWA, ingreso y claves de acceso (passkeys), Auditoría, el rediseño global, Inventario (salvo los pendientes de préstamos en el Inicio), roles y permisos, y el historial de Git. No hay exportación a Excel (no existía).
+
+### 67.13 Qué correr
+
+1. **Supabase → SQL Editor:** ejecutar `0109_station_staffing_year_and_history.sql` completo. Es idempotente (se puede repetir). Deben estar aplicadas las anteriores (0104 a 0108).
+2. **Verificar** (devuelve una fila por migración; las filas 0103 a 0108 son las de la sección 65 y se agrega la 0109):
+
+```sql
+select nombre,
+       case when aplicada then 'aplicada' else 'FALTA' end as estado
+from (values
+  ('0103 roles por división',               exists (select 1 from pg_proc where proname = 'list_visible_departments')),
+  ('0104 resumen de asistencia',            exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'attendance_summaries' and column_name = 'observations')),
+  ('0105 roles de departamento (valores)',  exists (select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'role_key' and e.enumlabel = 'coordinador_departamento')),
+  ('0106 roles y avisos de departamento',   exists (select 1 from pg_proc where proname = 'sync_department_roles')),
+  ('0107 modo departamento',                exists (select 1 from pg_proc where proname = 'is_department_only')),
+  ('0108 dotación del cuartel',             to_regclass('public.station_staffing') is not null and exists (select 1 from pg_proc where proname = 'station_dotation_total')),
+  ('0109 efectivos: año e historial',       to_regclass('public.station_staffing_history') is not null and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'station_staffing' and column_name = 'reference_year'))
+) as m(nombre, aplicada)
+order by nombre;
+```
+
+3. **Frontend:** Vercel despliega solo con el push a `main`. **Conviene correr la migración antes de abrir el frontend nuevo:** sin ella, la tarjeta de efectivos no puede leer el año y el reporte con período no encuentra el historial (la ficha avisa con "Reintentar" y el resto funciona).
+4. **No hay** Edge Functions que desplegar ni variables nuevas.
+
+### 67.14 Verificación
+
+- **Base de datos** (PostgreSQL 16 local; migraciones 0001 a 0109 en una base armada de cero y en otra con datos): **44 pruebas, 0 fallas** en el test de 0109.
+  - **Año:** por defecto el actual; se puede cargar otro (2025); fuera de 2000 a 2100 y vacío se rechazan (`23514`, `23502`).
+  - **Historial:** la primera carga deja una foto con las cantidades, el total, el año, quién y cuándo (lo pone la base, no el cliente); cambiar una cantidad, **solo el año** o mover gente de una categoría a otra suman una foto; **guardar sin cambios no suma**; "vigente al" una fecha devuelve la foto correcta (marzo: 26, junio: 28) y antes de la primera carga no hay efectivos; borrar la fila de efectivos no borra el historial; el relleno inicial crea la foto que faltaba y no se duplica al repetirlo.
+  - **Permisos** (usuarios de cada rol, con la base real): Informática y el Secretario Regional leen todos; el Presidente y el usuario de carga, solo el de su cuartel; Escuela y modo departamento ven 0; sin sesión, denegado. **Nadie escribe historial desde la aplicación**: ni Informática ni un rol de cuartel pueden insertar, modificar ni borrar (`42501`) y el historial queda intacto tras los intentos.
+  - **Asistencia:** sin efectivos cargados el resumen queda vacío (aunque el registro nominal tenga gente); con efectivos toma su total; el resumen anterior sigue vacío y editarlo no le pone los de hoy; si después cambian los efectivos, el nuevo toma el total nuevo y el anterior **conserva el suyo**; efectivos en cero no inventan un cero.
+  - **Pendientes del servidor:** "Falta cargar los efectivos del cuartel.", enlace `#efectivos`, y ya no se habla de dotación. `get_pending_items()` conserva `security definer` y `search_path`; `attendance_summaries_before_write()` conserva su definición de seguridad y la validación de superposición; la función del historial **no se puede llamar desde la API**.
+  - **Idempotencia:** la migración se corrió dos veces en cada base sin errores, y la consulta de verificación de 67.13 devuelve las siete filas `aplicada` en ambas.
+  - **Regresión de la base:** los tests de 0098, 0099, 0100, 0102, 0103, 0104, 0106, 0107 y 0108 (42, 26, 15, 20, 79, 30, 48, 88 y 49 pruebas) siguen sin fallas. Para 0104 y 0108 se actualizaron las aserciones de lo que cambia a propósito: el total de asistencia sale solo de los efectivos y el pendiente habla de efectivos con `#efectivos`.
+- **Navegador** (Chrome; backend simulado con la RLS emulada por rol, el historial y el año; escritorio y Android emulado): **268 pruebas nuevas, 0 fallas.**
+  - **Efectivos:** grupos y categorías en orden; selector de año; total en vivo (45) con su leyenda; un negativo no entra; guardar envía el cuartel, las 8 cantidades y el año (no el total ni el autor); queda la última actualización con quien cargó; cambiar solo el año habilita guardar y suma al historial ("Actualizaciones anteriores (1)", con fecha, total, año y quién); estados (cargando, guardando con controles bloqueados, error al guardar sin perder lo cargado, error al cargar con "Reintentar"); **permisos en la pantalla** (Informática, Jefe y Presidente editan solo en su cuartel; en otro cuartel, Escuela y el resto solo miran; la base rechaza un guardado sin permiso con "No tenés permiso para cargar los efectivos de este cuartel con tu rol actual" y no deja nada); modo departamento: pantalla de permiso y **ni se consulta la tabla**.
+  - **Asistencia:** "Efectivos de referencia: 45 efectivos (año 2026)", sin campo de total ni de promedio; sin efectivos, el mensaje de cargarlos primero y el enlace que deja la tarjeta a la vista; un resumen viejo conserva sus efectivos (28) o dice que no los tenía; guardar el resumen funciona.
+  - **Inicio por rol** (Presidente, Jefe, Coordinador con usuario de carga, Informática, su integrante, Secretario Regional, Escuela y los dos del modo departamento): los accesos rápidos de la tabla de 67.6, en ese orden y como mucho 6; "Registrar asistencia" y "Actualizar efectivos" abren las pantallas de **su** cuartel; Pendientes con "Ver todos" y hasta 4; sin los bloques largos de antes ni "Dotación"; resumen de una línea (efectivos del cuartel y año, o cuarteles, efectivos y cargas pendientes de la Regional); próximos eventos, a lo sumo 3.
+  - **Pendientes:** "Ver todos" abre `/pendientes`; el total del Inicio coincide con el de la pantalla; cada uno trae prioridad y un botón con la acción concreta; agrupados por módulo; **no está en el menú** (computadora y celular) y el Inicio queda marcado; tocar uno lleva a donde se resuelve; la URL directa abre la pantalla en cinco roles y, sin sesión, lleva al ingreso; el modo departamento solo ve módulos de departamento y **un pendiente cuyo destino no puede abrir se descarta aunque el servidor lo mande**; estados vacío ("No tenés pendientes") y de error; la búsqueda de "pendientes" no ofrece la pantalla.
+  - **Reportes:** los cuatro institucionales primero y "móviles" en lugar de "vehículos"; las secciones elegibles de cada uno; PDF de **cuartel** (encabezado con SIGER4, Regional, tipo, período, fecha y filtros; efectivos al fin del período pedidos al historial; asistencia con variación y efectivos de referencia; intervenciones, móviles, inventario y estado de cargas; sin "Dotación"), con secciones elegidas (las que no se piden no salen y se aclara en "Incluye: …"), sin ninguna sección (pide elegir una), **Regional** (comparativo por cuartel, efectivos por categoría con total de la Regional, cuarteles con cargas pendientes), **departamento** y **asistencia**; el Jefe de Cuerpo Activo solo ve los reportes de su cuartel y **pide solo sus efectivos**; Presidente, Miembro de Departamento y Coordinador de Escuela reciben "No tenés permiso".
+  - **Textos:** los botones de guardar de ocho formularios dicen qué guardan; ninguna pantalla principal tiene "Gestionar", "Administrar", "Ver más" ni "Dotación"; la lista y la ficha del cuartel dicen Efectivos y Móviles.
+  - **Celular y oscuro** (320×568, 360×640 y 1366×860, claro y oscuro): efectivos, Inicio de tres perfiles, Pendientes y Reportes sin desborde horizontal; botones − y + y selector de año de 44 px o más; 9999 se lee completo; contraste de al menos 4,5:1; los PDF se generan y descargan también desde el celular emulado. Se vieron las capturas.
+- **Regresión en navegador:** se repitieron las secciones 57 a 66 y el menú: 33, 21, 43 (59 y 59b), 64, 33, 42, 120, 59, 210 y 8, **sin fallas**. Se actualizaron las aserciones de lo que cambia a propósito: las tareas del Inicio pasan a Pendientes, el Inicio del modo departamento es más corto (sin lista de eventos ni de miembros), "Dotación" pasa a "Efectivos" y los accesos del Inicio. La suite de la sección 65 (dotación) se retiró: la reemplazan las pruebas de esta sección, que cubren lo mismo con el modelo nuevo.
+- **Un fallo real que encontraron las pruebas y se corrigió:** el Inicio del modo departamento pedía las solicitudes de préstamo (Inventario, módulo cerrado para ese modo). Ahora no las consulta, y el aviso de error de Pendientes tiene en cuenta que ese modo no las usa.
+- **Build, lint y audit:** el build compila; lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **No se probó** en un celular real ni con la migración corrida sobre la base de producción: lo primero queda en el checklist y lo segundo es el paso 1 de "Qué correr".
+
+### 67.15 Checklist en producción
+
+- [ ] Correr la migración 0109 y la consulta de verificación: las siete filas dicen `aplicada`.
+- [ ] Cuarteles → un cuartel con efectivos ya cargados: la tarjeta muestra el **año** (el de su última actualización) y "Actualizaciones anteriores (1)".
+- [ ] Con un usuario de carga: cargar efectivos, cambiar el año, guardar; aparece "Efectivos guardados. Total: N." con tu nombre y la fecha.
+- [ ] En el celular (Android): el teclado numérico se abre al tocar una cantidad; los botones − y + y el selector de año se tocan cómodos.
+- [ ] Asistencia → nuevo resumen: "Efectivos de referencia: N efectivos (año AAAA)" sin campo para cargarlos. En un cuartel sin efectivos: "Cargá primero los efectivos del cuartel…" y el enlace abre la tarjeta.
+- [ ] Un resumen de asistencia anterior se abre y conserva sus efectivos.
+- [ ] Inicio de cada rol (Presidente, Jefe, Secretario Regional, Informática, Escuela, Coordinador y Miembro de Departamento): accesos rápidos del rol (hasta 6), Pendientes con 4 como máximo y "Ver todos".
+- [ ] "Ver todos" abre Pendientes: agrupado por módulo, con botón de acción en cada uno. No aparece en el menú, ni en la computadora ni en el celular.
+- [ ] Un Miembro de Departamento: en Pendientes solo ve lo de su departamento.
+- [ ] Reportes → Reporte de cuartel con un período anterior: "Efectivos al dd/mm/aaaa" con los que tenía el cuartel entonces. El encabezado trae la fecha de generación y los filtros.
+- [ ] Reporte Regional: comparativo por cuartel, efectivos por categoría, total de la Regional y cuarteles con cargas pendientes.
+- [ ] Un Jefe de Cuerpo Activo en Reportes: solo su cuartel.
+
+### 67.16 Riesgos y decisiones
+
+- **La referencia de Asistencia cambia de origen.** Antes, un cuartel sin efectivos cargados usaba el personal activo del registro nominal; ahora el resumen nuevo queda **sin efectivos de referencia** hasta que el cuartel los cargue (y la pantalla lo pide). Los resúmenes ya guardados no se tocan. Es lo que se pidió ("Cargá primero los efectivos…"), pero los cuarteles que no carguen verán "—" en el reporte de asistencia.
+- **El año es del dato, no una vigencia automática.** Un cuartel puede tener efectivos "del 2025" mientras no los actualice; no se vencen ni se pide recargarlos solos. Si se quiere un recordatorio anual, es una tarea del servidor aparte.
+- **El historial empieza en 0109.** Para los cuarteles que ya habían cargado efectivos, la primera foto lleva la fecha de su última actualización; **un reporte de un período anterior a esa fecha no encuentra efectivos** y lo dice ("El cuartel todavía no tenía efectivos cargados al dd/mm/aaaa"); no usa los de hoy ni inventa.
+- **Una foto por cambio, no por día.** Si se guarda dos veces el mismo día con cantidades distintas, quedan dos fotos; el reporte usa la última hasta el fin del período.
+- **El Director de Escuela genera reportes pero no lee efectivos.** La lectura Regional de la tabla es de `is_regional_role()` (solo el Secretario Regional), así que en sus reportes las columnas de efectivos salen sin datos ("—"). Se dejó así para no ampliar permisos; abrir la lectura sería una política nueva (`is_escuela_role()`) en 0108/0109.
+- **Sin Excel.** Los reportes son PDF; una exportación a planilla sería un cambio nuevo (y habría que cuidar que respete lo mismo que el PDF).
+- **El recordatorio semanal sigue diciendo "revisar cargas pendientes, novedades y documentación institucional"** (texto de la función de la base, ver 66.14): no se tocó.
+- **Los pendientes de inventario del Inicio se calculan en el navegador** (préstamos propios o a su cargo); los del servidor ya vienen filtrados. Ambos pasan por la RLS.
+- **No se probó en un celular real.** El teclado numérico y los toques se comprobaron por atributos y en un Android emulado (320, 360 y 1366 px, claro y oscuro); quedan en el checklist.

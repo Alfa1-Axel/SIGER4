@@ -4,6 +4,8 @@
 en marcha") al final de este documento: checklist completo de configuración, datos mínimos a cargar,
 matriz de permisos final y checklist de prueba manual.**
 
+> **Nota (sección 66):** Ayuda, Novedades y la guía de Roles y permisos ya no existen en SIGER4. Las secciones que las describen (22, 34 y 35, 58.4, 59, 60, 64 y 65) quedan como historial; para publicar una versión solo se sube el número en `package.json` y `package-lock.json`.
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -9828,3 +9830,172 @@ order by nombre;
 - **El registro nominal queda como está:** sigue sirviendo para quien quiera llevar nombres y alimenta la dotación de los cuarteles que todavía no cargaron sus categorías.
 - **Intervenciones** conserva su propio campo "personal que intervino" (otra cosa: quiénes salieron al servicio).
 - **No se probó** en un celular real: el teclado numérico se verifica por atributos (`inputmode`, `pattern`) y en un Android emulado, pero queda en el checklist.
+
+## 66. Se retiran Ayuda, Novedades y la guía de Roles y permisos; cada persona ve su rol en Mi perfil (2026-10-07) — versión 1.11.0
+
+Sin migración, sin funciones para desplegar y sin cambios en permisos, RLS, guardas, Auditoría, push ni PWA. Solo el frontend (y, por una dependencia del build, el cálculo de la versión en `vite.config.ts`).
+
+### 66.1 La decisión
+
+Para quien usa el sistema todos los días, SIGER4 se simplifica:
+
+- **No hay una sección general de Roles y permisos.** Nadie lee qué hacen todos los roles.
+- **No hay una sección de Ayuda.**
+- **No hay Novedades:** ni página, ni aviso al ingresar, ni ventana de actualización, ni versión que lleve a un historial. Si hay cambios en el sistema, se comunican por WhatsApp.
+- **Cada persona ve solo su rol**, en Mi perfil: qué rol tiene, dónde aplica y qué puede hacer con él.
+
+Es una decisión sobre lo que se ve. El motor de roles y permisos (RLS, helpers, guardas de ruta, creación y edición de usuarios) no se tocó.
+
+### 66.2 Qué se quitó y dónde
+
+| Dónde | Antes | Ahora |
+|---|---|---|
+| Menú lateral y menú del celular (sección Cuenta) | Roles y permisos · Ayuda · Novedades | Solo Notificaciones y Mi perfil y ajustes |
+| Rutas | `/roles`, `/ayuda`, `/novedades` | Llevan al Inicio (66.6) |
+| Búsqueda global | Grupos "Ayuda" y "Novedades"; el texto de orientación mandaba al Centro de ayuda | No existen; el texto nombra solo los módulos de trabajo |
+| Inicio de quien solo tiene roles de departamento | Accesos "Qué puedo hacer" y "Qué hacer si no veo una sección" | Acceso a "Mi perfil" y, si no tiene departamento, el contacto con Informática y Estadística |
+| Al ingresar | Ventana con la novedad de la versión (y una notificación por usuario y versión) | Nada: no aparece ni se crea la notificación |
+| Pie de cada pantalla | "v1.x" que llevaba a Novedades | Solo "Sistema creado por Dpto. Informática y Estadística R4" |
+| Mi perfil y ajustes | Línea de versión con "Ver novedades" y "Ver qué permite cada rol" | "Tu rol en SIGER4" (66.4) |
+| Usuarios | Botón "Roles y permisos" | Sin botón |
+| Alta y edición de usuarios | Enlace "Ver qué permite cada rol" | Sin enlace; el selector de roles sigue igual (66.4) |
+| Notificaciones | Las "novedad del sistema" abrían el aviso de esa versión | Ya no se muestran (66.8) |
+
+**Código retirado** (más de 2.300 líneas eliminadas): las páginas `AyudaPage`, `NovedadesPage` y `RolesPage`; el contenido de ayuda (`config/helpContent.ts`, unas 35 guías); el historial de versiones (`config/appUpdates.ts`); el aviso al ingresar (`AppUpdateBanner`, `appUpdateSeen`, `appUpdateBannerControl`); y los estilos de todo eso.
+
+**Ayuda contextual.** No se armó una base de artículos ni tutoriales. Los textos cortos que corresponden a una pantalla ya estaban en ella (en Inventario, quiénes pueden solicitar un préstamo; en la carga de informes, qué se puede subir; en Cuarteles, la explicación de la dotación). Lo único que se sumó es lo de Mi perfil y el contacto.
+
+### 66.3 Qué queda en el menú
+
+| Sección | Opciones |
+|---|---|
+| Gestión | Inicio · Cuarteles · Mapa Regional · Calendario · Escuela · Documentos · Departamentos · Inventario · Reportes (cada una según el rol, como antes) |
+| Administración | Usuarios · Nuevo usuario · Auditoría (según el rol, como antes) |
+| Cuenta | **Notificaciones · Mi perfil y ajustes** |
+| Modo departamento (solo roles de departamento) | Inicio · Calendario · Mi departamento (o Mis departamentos) · Notificaciones · Mi perfil y ajustes |
+
+### 66.4 Mi perfil: "Tu rol en SIGER4"
+
+Debajo de los datos de la persona, una tarjeta con **solo los roles que tiene**:
+
+- **Rol y alcance en un renglón**, como "Coordinador de Departamento · Fuego" o "Jefe de Cuerpo Activo · Cuartel Villa del Rosario". En pantallas angostas el alcance baja a su propia línea.
+- **Una explicación breve** de qué puede hacer con ese rol, escrita en segunda persona.
+- **Varios roles:** uno por renglón. Un mismo rol con varios departamentos (o cuarteles) se agrupa en un solo renglón, con la explicación una sola vez ("Coordinador de Departamento · Fuego, Forestal").
+- **Un rol al que le falta su división** (por ejemplo, un Presidente sin cuartel asignado o un Miembro sin departamento): en vez de prometer permisos, dice qué falta y a quién consultar ("Todavía no tenés un cuartel asignado, por eso no ves sus datos. Consultá a Informática y Estadística.").
+- **Sin ningún rol:** "Todavía no tenés un rol asignado. Consultá a Informática y Estadística."
+- Cierra con quién asigna los roles: Informática y Estadística (los de departamento, también su coordinador).
+
+**Dónde viven los textos:** `selfSummary` de cada rol en `src/types/roles.ts`. Reemplazó a la lista larga de permisos que solo mostraba la guía retirada. El tipo lo exige: un rol nuevo no compila sin su explicación.
+
+Las explicaciones, tal como están en el código (los dos últimos roles están retirados: avisan que ya no dan permisos):
+
+| Rol | Alcance | Qué ve la persona que lo tiene |
+|---|---|---|
+| Dpto. Informática y Estadística R4 | Todo el sistema | Tenés acceso total al sistema: ves, cargás y editás en todos los módulos y cuarteles, administrás usuarios y roles, y accedés a Auditoría. |
+| Integrante de Informática | Todo el sistema (salvo usuarios Informática R4) | Ves, cargás y editás en los módulos operativos de todo el sistema y administrás usuarios y roles, salvo los de Informática R4. No accedés a Auditoría. |
+| Director de Escuela Regional | Su Regional (Escuela Regional) | Gestionás la Escuela Regional: cursos, capacitaciones y eventos de Escuela. Consultás los datos de los cuarteles de tu Regional, generás reportes regionales, aprobás préstamos de Inventario y podés dar de alta usuarios. |
+| Instructor | Su Regional (Escuela Regional) | Creás y editás cursos y capacitaciones de la Escuela Regional y sus eventos en el Calendario. Consultás los datos de los cuarteles de tu Regional, sin editarlos. |
+| Coordinador de Escuela | Avales: todos los departamentos | Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados. |
+| Secretario de Escuela | Avales: todos los departamentos | Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados. |
+| Secretario Regional | Su Regional | Gestionás la información de los cuarteles de tu Regional (datos, dotación, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales. |
+| Coordinador de Departamento | Solo los departamentos que coordina | Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También ves y cargás los avales de tu departamento. No ves otros departamentos. |
+| Miembro de Departamento | Solo los departamentos de los que es miembro | Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. No ves otros departamentos. |
+| Presidente de Cuartel | Su propio cuartel | Podés gestionar la información de tu cuartel: datos, dotación, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes. |
+| Jefe de Cuerpo Activo | Su propio cuartel | Podés gestionar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel. |
+| Usuario de carga de cuartel | Su propio cuartel | Podés cargar y editar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. |
+| Secretario de Comisión | Su propio cuartel | Podés gestionar los documentos, el historial institucional y el calendario de tu cuartel. Consultás el personal, los móviles, la asistencia y las intervenciones, sin editarlos. |
+| Invitado / Solo lectura | Su cuartel, solo lectura | Podés consultar la información de tu cuartel. No podés cargar ni editar datos. |
+| Coordinador de departamento (rol retirado) | Sin uso | Este rol ya no se usa y no da permisos. Si tenés otros roles, rigen esos. Consultá a Informática y Estadística para quitarlo. |
+| Administrativo (rol retirado) | Sin uso | Este rol ya no se usa y no da permisos. Si tenés otros roles, rigen esos. Consultá a Informática y Estadística para quitarlo. |
+
+**Qué ve cada uno.** Solo lo propio: se comprobó con ocho perfiles distintos que la tarjeta nunca nombra un rol que la persona no tiene.
+
+**Selector de roles al crear o editar usuarios.** Sigue como estaba: lo ven solo quienes pueden crear o editar usuarios (Informática, el Jefe de Cuerpo Activo y el Director de Escuela), y cada uno solo los roles que puede asignar (el Jefe, solo los de cuartel). Es la herramienta de administración, no una guía: un Coordinador o Miembro de Departamento, o un Presidente, no pueden abrirla.
+
+### 66.5 Contacto con Informática y Estadística
+
+El contacto no desapareció con la Ayuda: está donde se lo necesita.
+
+| Dónde | Cómo |
+|---|---|
+| **Mi perfil y ajustes** | Tarjeta "Consultas a Informática y Estadística": botones "Enviar email" y "Contactar por WhatsApp" y los datos a la vista para copiar |
+| **Pantallas de "No tenés permiso"** | Los dos botones, como antes |
+| **Ingreso** | Los dos botones debajo de "¿Olvidaste la contraseña…?", como antes |
+| **Inicio de quien tiene rol de departamento pero ningún departamento asignado** | Los dos botones (antes mandaba a un artículo de Ayuda) |
+
+Los datos y el armado de los enlaces siguen en un solo lugar (`src/config/support.ts`):
+
+- **Email:** `dptoinformaticayestadisticar4@gmail.com`, con asunto "Consulta sobre SIGER4".
+- **WhatsApp:** `3573467529` (celular de Argentina, se abre como `wa.me/5493573467529`), en otra pestaña y sin pasarle la página.
+- **Mensaje precargado:** "Hola soy [nombre] y tengo una duda/problema con SIGER4", con el nombre real de la persona; si no se conoce, "Hola soy usuario de SIGER4 y tengo una duda/problema con SIGER4". No lleva ningún otro dato.
+
+### 66.6 Enlaces viejos
+
+`/ayuda`, `/novedades` y `/roles`, con cualquier `#ancla` o subruta, **llevan al Inicio** (`/panel`); quien no tiene sesión llega al ingreso. No queda ninguna pantalla rota ni ningún enlace muerto dentro de la aplicación. Vale también para enlaces que alguien tenga guardados o de avisos viejos.
+
+### 66.7 Búsqueda global
+
+Ya no devuelve Ayuda, Novedades ni Roles. Sigue buscando usuarios (según el rol), cuarteles, departamentos, informes y actas, documentos, avales, inventario y solicitudes, cursos, calendario y notificaciones, y en modo departamento solo lo que ese modo abre. El texto de orientación nombra únicamente esos módulos y da un ejemplo ("Buscá por nombre o por título…").
+
+### 66.8 Notificaciones de "novedad del sistema"
+
+El aviso al ingresar generaba una notificación por usuario y versión (`ensure_app_update_notification`, migración 0079). Ya **no se generan**, y las que quedaron en la base **se ocultan sin borrarlas**: no aparecen en la bandeja, no suman al contador del encabezado, no se muestran en el Inicio ni en la búsqueda (filtro `type <> 'actualizacion_sistema'` en las consultas a `my_notifications`).
+
+La función de la base, el índice y la columna `app_update_id` siguen existiendo y sin uso. No hace falta migración; si algún día se quiere limpiar, es una migración aparte.
+
+### 66.9 Versión
+
+- **Pie:** sin versión.
+- **Mi perfil:** sin línea de versión ni enlace a novedades.
+- **Versión técnica:** la de `package.json` (ahora **1.11.0**, y el mismo número en `package-lock.json`). `vite.config.ts` la publica como `__SIGER4_APP_VERSION__` y solo se ve en el panel "Versión / actualización de la app (informática)" de Mi perfil, que es para Informática: ahí está junto al build y la fecha de compilación, para comparar con el último commit, y con el botón de limpiar la caché. No es una pantalla de usuario ni un historial.
+- **`src/config/appUpdates.ts` ya no existe.** `vite.config.ts` lo leía para avisar de versiones desparejas: se quitó esa lectura (si no, el build no arrancaba).
+- **Cómo se publica ahora una versión:** solo se sube el número en `package.json` y `package-lock.json`. Se terminó la regla de agregar una novedad en `appUpdates.ts` con cada versión.
+
+### 66.10 Qué no se tocó
+
+- **Seguridad:** RLS, helpers de permisos, guardas de ruta, permisos internos, creación y edición de usuarios, Auditoría. No se borró ningún rol, ni enum, ni constante que el sistema use.
+- **Edge Functions, push y PWA.** En particular, la barra fina de la PWA "Hay una actualización de SIGER4 disponible · Actualizar ahora" **se mantiene**: no muestra novedades ni changelog, es el mecanismo que permite a la app instalada cargar el código nuevo. Si se prefiere retirarla, es un cambio aparte.
+- **Historial de Git.**
+
+### 66.11 Qué correr
+
+Nada en la base. Desplegar el frontend (con Vercel, el push a `main`). Quien tenga la aplicación abierta o instalada con la versión vieja verá la barra técnica de actualización de siempre; hasta que actualice, puede ver una vez más el aviso de novedades de esa versión vieja.
+
+### 66.12 Verificación
+
+- **Navegador** (Chrome; backend simulado; escritorio y Android emulado): **211 pruebas nuevas, 0 fallas.**
+  - **Menú:** ocho roles distintos (Presidente, Jefe de Cuerpo Activo, Escuela, Secretario Regional, Coordinador de Departamento con usuario de carga, Miembro con usuario de carga, Integrante de Informática e Informática), más el modo departamento de un Coordinador y de un Miembro: ninguno ve Ayuda, Novedades ni Roles y permisos, ningún enlace va a esas rutas y siguen Notificaciones y Mi perfil y ajustes. Informática conserva Usuarios y Auditoría. En el menú del celular (320 y 360 px), igual.
+  - **Búsqueda:** "ayuda", "novedades", "roles", "permisos", "pedir préstamo", "qué cambió" y "guía" no devuelven nada de esas secciones; el texto de orientación no las nombra ni lleva al Centro de ayuda. La búsqueda de siempre sigue (Fuego, Luque, Forestal, motobomba, con el rol que corresponde).
+  - **Enlaces viejos:** siete direcciones (`/ayuda`, `/ayuda#…`, `/novedades`, `/novedades#…`, `/roles`, `/roles/otra-cosa`) con cinco tipos de usuario (incluidos los dos del modo departamento y Escuela) llevan al Inicio sin errores; sin sesión, al ingreso.
+  - **Al ingresar:** con tres usuarios, no aparece ninguna ventana de novedades, no se guarda ninguna marca de "visto" y no se pide generar la notificación.
+  - **Pie y versión:** solo la autoría, sin enlaces, también en el ingreso. Un usuario común no ve ningún número de versión ni la palabra "novedades" en su perfil; Informática ve la versión técnica (1.11.0), el build y la fecha en su panel, sin enlace a novedades.
+  - **Mi perfil:** ocho perfiles (Presidente, Miembro de Departamento, Coordinador con usuario de carga, Jefe con tres roles, Secretario Regional, Escuela, Informática e Integrante) muestran exactamente sus roles, cada uno con su alcance y su explicación breve, y **ninguno nombra un rol que no tiene**. Un Presidente sin cuartel y un Miembro sin departamento ven qué falta y a quién consultar, sin permisos prometidos; quien no tiene ningún rol, un aviso para consultar.
+  - **Contacto:** la tarjeta de Mi perfil trae email y WhatsApp con el nombre real (tres usuarios), el mensaje genérico si no hay nombre, y los datos para copiar; las pantallas de "No tenés permiso" y el ingreso siguen con los dos botones. Además, en las pruebas de la sección 64 que se conservaron: el mensaje está bien codificado, no lleva datos de más, WhatsApp abre realmente el chat con el mensaje y funciona con nombres raros o muy largos.
+  - **Modo departamento:** el Inicio ya no tiene "Qué puedo hacer" ni enlaces a Ayuda; trae "Mi perfil", que abre la tarjeta del rol. Sin departamento asignado, ofrece el contacto.
+  - **Usuarios:** sin botón ni enlaces a la guía; el alta de Informática sigue completa (selector con las 14 opciones, descripción y alcance de cada una) y **crea la cuenta** con su rol y su cuartel; el Jefe de Cuerpo Activo ve solo los roles de cuartel; un Miembro, un Coordinador de Departamento y un Presidente no pueden abrir el alta.
+  - **Notificaciones:** una "novedad del sistema" vieja no aparece en la bandeja, no suma al contador, no sale en el Inicio ni en la búsqueda; las de siempre se ven, se abren y se marcan.
+  - **Celular y oscuro** (320, 360 y 1366 px, claro y oscuro): el perfil de un usuario con tres roles entra en la pantalla, sin desborde horizontal y con contraste de al menos 4,5:1.
+  - **Guardas:** Auditoría, Usuarios, los módulos cerrados del modo departamento y un departamento ajeno siguen cerrados, y diez pantallas de siempre cargan sin errores.
+- **Regresión en navegador:** se repitieron las secciones 57 a 65 y el menú: 33, 21, 43 (59 y 59b), 64, 33, 41, 120, 59 y 147, y el menú 8, **sin fallas**. Para llegar ahí se retiraron las comprobaciones de lo que ya no existe (aviso de novedades en cuatro pantallas y dos temas, Centro de ayuda, guía de roles y versión del pie) y se cambiaron por las equivalentes de esta sección; el resto quedó igual. Se vieron las capturas del perfil, el menú del celular, el Inicio sin departamento y la búsqueda.
+- **Build, lint y audit:** el build compila (la PWA pesa unos 58 KiB menos); lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **Sin migración:** no hay nada que probar en la base.
+
+### 66.13 Checklist en producción
+
+- [ ] Ingresar con un usuario común: el menú no tiene Ayuda, Novedades ni Roles y permisos (ni en la computadora ni en el celular) y no aparece ningún aviso de novedades. El pie dice solo "Sistema creado por Dpto. Informática y Estadística R4".
+- [ ] Probar en el navegador `/ayuda`, `/novedades` y `/roles`: cada una lleva al Inicio.
+- [ ] Mi perfil y ajustes: "Tu rol en SIGER4" muestra solo tu rol, dónde aplica y qué podés hacer. Con un usuario con varios roles (por ejemplo, Jefe de Cuerpo Activo y Coordinador de Departamento), aparece una explicación por rol.
+- [ ] Mi perfil → "Enviar email": abre el correo con `dptoinformaticayestadisticar4@gmail.com`, el asunto y el mensaje con tu nombre. "Contactar por WhatsApp": abre el chat con 3573467529 y "Hola soy [tu nombre]…".
+- [ ] Un Coordinador o Miembro de Departamento: su Inicio tiene el acceso a "Mi perfil" y ya no "Qué puedo hacer"; no puede abrir la creación de usuarios.
+- [ ] La búsqueda (lupa o Ctrl+K) no ofrece Ayuda ni Novedades y sigue encontrando departamentos, cuarteles, informes e inventario.
+- [ ] Notificaciones: las de siempre se ven y se marcan como leídas; no aparece ninguna "Novedad del sistema" vieja y el número rojo del encabezado coincide con la lista.
+- [ ] Informática: crear un usuario y editar uno existente funciona como siempre, con el selector de roles; en Mi perfil y ajustes se ve la versión técnica en el panel de Informática.
+
+### 66.14 Riesgos y decisiones
+
+- **Las novedades dependen ahora de un canal externo (WhatsApp).** Nada dentro del sistema avisa de un cambio. Si más adelante se quiere un canal interno, tendría que ser algo nuevo y distinto de lo que se retiró.
+- **El mensaje del recordatorio semanal sigue diciendo "revisar cargas pendientes, novedades y documentación institucional"** (texto de la función de la base que lo genera, de las migraciones 0036 a 0085). Se usa "novedades" en sentido general, no como sección. Se lo sacó de la descripción que aparece en Mi perfil; si se quiere cambiar también el mensaje real, es una migración de una línea.
+- **Las secciones 22, 34 y 35, 58.4, 59, 60, 64 y 65 de este documento describen cosas que ya no existen** (banner de novedades, Centro de ayuda, guía de roles, aviso al ingresar). Se dejan como historial; esta sección las reemplaza.
+- **Un rol nuevo necesita su explicación** (`selfSummary`): el tipo lo exige. Si cambia lo que puede hacer un rol, hay que actualizar también su texto, que es informativo y no autoriza nada: lo que manda es la base.
+- **La explicación de Mi perfil se arma con los datos que la persona puede ver** (su cuartel, su Regional, sus departamentos). Si la base no devuelve un nombre, se muestra "Cuartel" o "Regional" sin nombre en vez de fallar.
+- **No se probó en un celular real.** El menú, el perfil y el contacto se comprobaron en un Android emulado, en pantallas de 320 y 360 px, en modo claro y oscuro; los enlaces de correo y WhatsApp se comprobaron como enlaces (WhatsApp, además, abriendo la URL real), pero el correo y la aplicación de WhatsApp instalados quedan en el checklist.

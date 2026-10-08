@@ -8,6 +8,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 67):** la "Dotación actual" de la sección 65 pasó a llamarse **Efectivos del cuartel** y suma año de referencia e historial (migración 0109); el modelo, los permisos y lo que correr están en la sección 67. El Inicio, las tareas y los reportes que describen las secciones 59, 61 y 65 fueron reemplazados por lo de la sección 67 (Inicio más corto, pantalla de Pendientes y reportes institucionales).
 
+> **Nota (sección 69):** en Documentos, "General" ya no son los documentos sin carpeta: son los **publicados para todos** (los sin carpeta pasaron a "Sin carpeta"), cada documento tiene una visibilidad (para todos, para su alcance o restringido) y cada departamento tiene su espacio documental. El modo departamento ahora abre Documentos (solo lo de sus departamentos y lo publicado). Ver la sección 69.
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -10280,3 +10282,141 @@ Nada en la base. Desplegar el frontend (con Vercel, el push a `main`).
 - **Nombre del sistema.** La pantalla de ingreso, el nombre de la app instalada (`manifest`), `index.html` y la descripción de `package.json` dicen "Sistema Integral de Gestión de la Regional 4". La sigla se desarrolla institucionalmente como "Sistema Informático de GEstión Regional 4". No se unificó para no cambiar sin pedido el nombre visible de la app instalada; son cuatro textos si se decide hacerlo (`LoginPage.tsx`, `vite.config.ts`, `index.html`, `package.json`).
 - **Mapa Regional como vista compartida.** Hoy los roles de cuartel ven en el mapa su propio cuartel (y los de su subsede si tienen ese alcance asignado), y los puntos con alcance de Regional solo si tienen la Regional asignada; los puntos sin alcance los ve cualquiera. El globo del cuartel muestra contacto y ubicación; las autoridades y el año de fundación están en la ficha. Para que el mapa sea una vista institucional de todos los cuarteles de la Regional hace falta una decisión de permisos (lectura de datos institucionales de todos los cuarteles, sin abrir su información interna) y una migración: **no se hizo**.
 - **"Vehículo" y "móvil".** La pantalla de carga de un móvil conserva los títulos "Nuevo Vehículo" y "Tipo de vehículo". Es una diferencia de lenguaje con el resto del sistema que no se tocó en esta ronda.
+
+## 69. Documentos: visibilidad por documento (General publicado, alcance, restringido) y espacio documental de cada departamento (2026-10-09) — versión 1.13.0, migración 0110
+
+Una migración (0110) y el frontend. Sin Edge Functions, sin push ni PWA, sin cambios en el ingreso y **sin relajar ninguna política existente**: las lecturas nuevas son permisivas pero acotadas (publicado, departamento) y todo lo que quita visibilidad es restrictivo o un disparador. No hay tablas nuevas: todo vive en `documents`.
+
+### 69.1 El problema
+
+- "General" era solo un nombre para los documentos sin carpeta: no había forma de **publicar algo para todos**. Un documento solo lo veía quien estaba dentro de su alcance (Regional, subsede, cuartel o persona), y uno con alcance Regional solo lo veía quien tuviera esa Regional asignada.
+- No existía diferencia entre un documento "de interés general" y uno interno.
+- Los departamentos no tenían dónde cargar sus propios documentos, y el modo departamento (0107) cerraba Documentos por completo.
+
+### 69.2 Modelo
+
+| Dato | Dónde | Valores |
+|---|---|---|
+| **Visibilidad** | `documents.visibility` (nueva, por defecto `alcance`) | `alcance` (como siempre) · `todos` (publicado) · `restringido` |
+| **Alcance** | `region_id`, `subsede_id`, `station_id`, `profile_id` y **`department_id`** (nueva) | Exactamente uno: `documents_single_scope` (0032) pasó a contar también el departamento. Los documentos existentes, todos con departamento nulo, siguen cumpliéndola |
+
+- **Todo documento que ya existía queda en `alcance`**: nada se publica solo.
+- `documents_published_not_personal`: un documento dirigido a una persona no se publica para todos.
+- `department_id` es `on delete restrict` (como los informes, 0098): un departamento con documentos no se puede borrar sin tratarlos antes.
+
+**Quién ve qué (RLS de `documents`)**
+
+| Regla | Tipo | Efecto |
+|---|---|---|
+| `documents_select_scope` (0003/0014/0019) | permisiva, sin cambios | Quien está dentro del alcance |
+| `documents_select_published` | permisiva, nueva | `visibility = 'todos'` y **no** en la papelera y **con** archivo subido, para cualquier perfil activo |
+| `documents_select_department` | permisiva, nueva | Documentos de un departamento: su coordinador, sus integrantes e Informática (`can_view_department_reports`, la misma regla que los informes) |
+| `documents_restricted_visibility` | **restrictiva**, nueva | Un `restringido` solo lo ve quien lo cargó, quienes lo administran (`document_is_manageable`) y, si es para una persona, esa persona |
+| `documents_department_only_block` (0107) | restrictiva, **reemplazada** | El modo departamento sigue cerrado salvo los documentos de sus departamentos y los publicados |
+
+**Quién escribe**
+
+| Acción | Quién | Cómo |
+|---|---|---|
+| Cargar un documento de cuartel o Regional | Como siempre (0053) | Políticas sin tocar |
+| Cargar en un departamento | Coordinador, integrantes e Informática, en departamentos activos | `documents_insert_department` |
+| Editar, papelera y restaurar un documento de departamento | Quien lo cargó, el coordinador e Informática | `documents_update_department` (`can_manage_department_document`) |
+| **Publicar para todos** | **Solo Informática (y su integrante) y el Secretario Regional** | Disparador `documents_check_publication`: bloquea (`42501`) pasar a `todos`; no exige nada al editar el título de uno ya publicado, y despublicar lo puede hacer quien lo edita |
+| Purga definitiva | Informática, solo sobre la papelera (0053) | Sin cambios |
+
+**Archivos (Storage, bucket `documents`)**: políticas nuevas para leer lo publicado y lo de un departamento y para subir y borrar archivos de un documento de departamento; la política restrictiva del modo departamento (0107) ahora deja pasar esos dos casos. Las políticas de lectura consultan `documents` con la RLS de quien lee, así que **un documento restringido tampoco entrega su archivo** a quien no lo ve. Las URL firmadas (10 minutos) se piden con la misma regla.
+
+**Versiones**: reemplazar el archivo de un documento de departamento guarda la anterior (`document_versions`, políticas nuevas de lectura y alta, y la del modo departamento ajustada).
+
+**Avisos**: `notify_document_created()` (0056) no avisa de un documento restringido ni de uno de departamento (no hay a quién), ni de uno sin alcance. Los demás siguen avisando a su alcance.
+
+### 69.3 Pantallas
+
+**Documentos (portada).** "Espacios" y "Carpetas":
+- **General**: lo publicado para todos, con su cantidad.
+- **Departamento X**: uno por departamento donde la persona trabaja (Informática, todos).
+- **Sin carpeta**: lo de mi alcance sin carpeta, sin lo publicado ni lo de un departamento.
+- Las carpetas, como antes.
+
+**Cómo cambia "General"**: antes eran los documentos sin carpeta; ahora son los publicados. Los sin carpeta pasan a **"Sin carpeta"** (`/documentos/carpetas/sin-carpeta`). Un enlace viejo a `/documentos/carpetas/general` muestra lo publicado.
+
+**Listas** (General, Sin carpeta, carpetas y espacio de departamento): cada documento dice de quién es ("Cuartel …", "Departamento …", "Regional") y lleva la etiqueta **"Visible para todos"** o **"Restringido"** si corresponde. Los botones de editar y eliminar salen **por documento**, según quién lo administra (antes, por carpeta).
+
+**Espacio del departamento** (`/documentos/departamentos/:id`): lista, "Subir documento" con el departamento ya elegido, enlace a la pantalla del departamento y la explicación de quién lo ve. Quien no pertenece (o es el Secretario Regional) ve "No podés ver estos documentos".
+
+**Cargar y editar** (`/documentos/nuevo`, `/documentos/:id/editar`): dos preguntas sin términos técnicos.
+- **¿Dónde va?** Regional, Subsede, Cuartel, Departamento o Usuario específico, según el rol (un rol de cuartel, solo su cuartel; quien trabaja en un departamento, el suyo; si es de ambos, elige).
+- **¿Quién lo puede ver?** "Visible para todos" (solo para quien publica), "Visible solo para su alcance" y "Restringido", cada una con su explicación ("el coordinador y los integrantes de Fuego…"). Para una persona puntual queda solo "su alcance". Al publicar algo de un departamento avisa que pasa a ser una publicación general. Las combinaciones confusas no se ofrecen.
+- Preselecciones: `?departamento=` (desde el espacio o desde Mi departamento), `?visibilidad=todos` (desde General) y `?folderId=`.
+- Pantallas de error claras: el documento que no existe o no se ve (**"No encontramos el documento"**, antes quedaba cargando para siempre) y el que se ve pero no se puede editar (**"No podés editar este documento"**).
+
+**Mi departamento / Inicio**: en la pantalla del departamento, "Documentos del departamento" y, en "Nuevo", "Subir documento"; en la tarjeta del Inicio, "Ver documentos".
+
+**Papelera**: los departamentos tienen la suya (cada persona ve y restaura lo que puede administrar).
+
+**Modo departamento**: **Documentos entra a su menú** (Inicio, Calendario, Documentos, Mi departamento, Notificaciones y Mi perfil). Ve el espacio de su departamento y lo publicado; no ve cuarteles, carpetas ni documentos de la Regional.
+
+**Búsqueda global**: encuentra lo publicado, lo de tu alcance y lo de tu departamento; no los restringidos que no administrás, los de otros departamentos ni los de la papelera. Cada resultado abre el espacio donde está y dice si es "Publicado para todos" o "Restringido". Sin cambios en Ayuda, Novedades ni Roles.
+
+**Descarga denegada**: el mensaje pasó a "El archivo no está disponible, fue eliminado o no tenés permiso para verlo".
+
+### 69.4 Qué correr
+
+1. **Supabase → SQL Editor:** ejecutar `0110_documents_visibility_and_departments.sql` completo (idempotente). Debe estar aplicada la 0109 (y las anteriores).
+2. **Verificar**: la consulta de la sección 67.13 con una fila más:
+
+```sql
+  ('0110 documentos: visibilidad y departamentos', exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'documents' and column_name = 'visibility')
+     and exists (select 1 from pg_proc where proname = 'can_publish_documents_to_all'))
+```
+
+3. **Frontend:** Vercel despliega solo con el push. Conviene correr la migración **antes** de abrir la versión nueva: sin ella, la lista de Documentos falla porque las consultas piden las columnas nuevas (la pantalla muestra "No pudimos cargar los documentos").
+4. **Orden:** no volver a correr la 0107 después de la 0110: recrearía el bloqueo viejo del modo departamento sobre Documentos.
+5. Sin Edge Functions ni variables nuevas.
+
+### 69.5 Verificación
+
+- **Base de datos** (PostgreSQL 16 local, armada de cero con las migraciones 0001 a 0110 sin errores; 0110 vuelta a aplicar dos veces sin errores): **103 pruebas, 0 fallas** en el test de 0110, con usuarios de cada rol, la RLS real y un Storage simulado con RLS.
+  - **Publicar:** el Presidente de CD, el usuario de carga, el integrante y el coordinador de un departamento **no pueden** publicar para todos ni cambiar uno suyo a "todos" (`42501`, y el cambio no se aplica); el Secretario Regional, Informática y su integrante sí. Editar el título de uno ya publicado no exige permiso de publicar; despublicar lo puede hacer quien lo administra. Un documento para una persona no se publica (`23514`) y una visibilidad desconocida se rechaza.
+  - **Lo publicado lo ve cualquier usuario autenticado:** un usuario sin rol, el Presidente, el usuario de carga de otro cuartel, el Invitado, el coordinador y el integrante en modo departamento (el de otro departamento también), y puede leer su archivo. **Sin sesión no ve nada** (documentos ni archivos) y no puede cargar. Un publicado **en la papelera** o **sin archivo subido** no se ve, ni su archivo; y quien no es del alcance sigue sin ver lo no publicado.
+  - **Restringido:** un Invitado del cuartel (y uno de la Regional) **no** lo ve ni lo descarga aunque esté dentro del alcance; sí quien lo cargó, Informática, el Secretario Regional dentro de su Regional y, si es para una persona, esa persona.
+  - **Alcance de siempre, sin cambios:** cada cuartel ve el suyo y no el de otro; no se puede cargar en un cuartel ajeno ni sin rol; el Presidente manda a la papelera lo de su cuartel.
+  - **Departamentos:** el integrante de Fuego ve lo de Fuego y **no lo de Forestal**, ni sus archivos; carga y sube archivos en el suyo y no en Forestal ni en un cuartel (`42501`); en modo departamento no ve documentos de cuartel ni de la Regional ni carpetas; **un documento no puede ser de un departamento y de un cuartel a la vez**; no cambia un documento a otro departamento; agrega versiones al suyo y no al de Forestal. El coordinador ve y edita lo que cargó un integrante, lo manda a la papelera y lo restaura; el integrante de otro departamento **no edita ni manda a la papelera** el de Fuego (no se actualiza ninguna fila), ni uno ajeno del propio departamento. Quien integra dos departamentos ve y carga en los dos y no en FASME. El Presidente, el usuario de carga, el Secretario Regional y quien no tiene rol **no ven** documentos privados de un departamento. Informática ve todos.
+  - **Publicar un documento de departamento:** lo publica Informática, y pasa a verlo cualquier usuario (y su archivo); si el departamento lo manda a la papelera, **deja de verse para todos**.
+  - **Avisos:** un restringido o uno de departamento no genera aviso; uno de alcance sigue avisando a su cuartel.
+  - **Funciones y políticas:** la función del disparador no se llama desde la API; los helpers conservan `security definer` y `search_path`; las dos políticas nuevas de quitar visibilidad son restrictivas; las de escritura de cuartel y Regional (0053) siguen como estaban.
+  - **Cadena 0108 → 0109 → 0110 en una base nueva:** `get_pending_items()` termina con "Falta cargar los efectivos del cuartel." y el enlace `#efectivos`.
+- **Navegador** (Chrome; backend simulado con la RLS emulada por rol; escritorio y Android emulado, claro y oscuro): **141 pruebas nuevas, 0 fallas.**
+  - **Portada:** General con lo publicado (2), un espacio por departamento donde se trabaja (Informática, los 5; el Miembro de Forestal, solo Forestal con sus 2 documentos; quien tiene dos, los dos), "Sin carpeta" sin lo restringido de otros; el Secretario Regional ve General y ningún espacio privado de un departamento; el menú del modo departamento incluye Documentos.
+  - **General:** lista lo publicado con "Visible para todos"; el Presidente de CD no puede publicar ni editar; Informática y el Secretario Regional ven "Publicar documento" (con `?visibilidad=todos`); cualquier usuario abre un publicado (se pide la URL firmada) y, si la descarga se niega, **avisa y no abre nada**.
+  - **Restringidos y URL directa:** el restringido aparece con su etiqueta para quien lo administra y no para el Presidente; la URL directa a un restringido sin permiso, a un documento de la Regional o de otro departamento (modo departamento) dice **"No encontramos el documento"**, y a un publicado ajeno **"No podés editar este documento"**.
+  - **Espacio del departamento:** el integrante de Forestal ve y edita lo suyo, el publicado desde el departamento lleva "Visible para todos", y entrar al de Fuego dice "No podés ver estos documentos"; el coordinador edita lo de un integrante; Informática, todo; el Presidente de CD, el Secretario Regional y el Coordinador de Escuela **no** entran.
+  - **Cargar:** desde el espacio del departamento ya viene el departamento, sin alcances de cuartel ni Regional, **sin "Visible para todos"**, con la explicación de quién lo ve, y guarda `department_id`, `visibility = alcance` y ningún otro alcance (vuelve al espacio y el documento ya figura); Informática publica en General (`todos`, con alcance Regional) y puede elegir los cinco alcances; un documento para una persona fuerza "su alcance"; el Presidente de CD no ve la opción de publicar y guarda uno restringido de su cuartel; el usuario con cuartel y departamento elige entre los dos; el Coordinador de Escuela recibe "No podés cargar documentos" (que ahora nombra a los departamentos); editar cambia la visibilidad conservando el departamento; un publicado se ve como publicado y avisa quién puede cambiarlo.
+  - **Papelera, búsqueda, accesos:** la papelera del departamento (enviar un documento, verlo en la papelera con su botón "Restaurar" y sin la purga, que es solo de Informática); la búsqueda encuentra lo publicado (y abre General), lo restringido solo para Informática, lo de un departamento (y abre su espacio) y **no** lo restringido, lo de otro departamento ni lo de la papelera; "Documentos del departamento", "Nuevo > Subir documento" y "Ver documentos" en la tarjeta del Inicio.
+  - **Lenguaje y celular:** sin "Región", "Presidente de cuartel" ni botones genéricos; **320, 360 y 1366 px, claro y oscuro**: la portada, el espacio del departamento, el formulario y el del departamento sin desborde horizontal, con las opciones de visibilidad dentro de la pantalla y de 44 px o más de alto. Se vieron las capturas.
+- **Regresión en navegador:** se repitieron las secciones 57 a 68 y el menú: 33, 21, 43 (59 y 59b), 64, 33, 42, 120, 59, 210, 268, 69 y 8, **sin fallas**. Se actualizaron las comprobaciones de lo que cambia a propósito: el menú del modo departamento ahora incluye Documentos (y ya no es una URL cerrada), la búsqueda de ese modo encuentra los documentos publicados, el botón "Ver documentos" de su tarjeta y la versión técnica (1.13.0). Con una captura que se cortó por tiempo en una corrida (no por un error) y salió bien al repetirla.
+- **Build, lint y audit:** el build compila; lint sin errores y con las mismas 8 advertencias de antes; audit sin vulnerabilidades.
+- **No se probó** en un celular real ni con la migración corrida sobre la base de producción: lo primero queda en el checklist y lo segundo es el paso 1 de "Qué correr".
+
+### 69.6 Checklist en producción
+
+- [ ] Correr la migración 0110 y la consulta de verificación: las ocho filas dicen `aplicada`.
+- [ ] Documentos → General aparece vacío (nada se publicó solo) y los documentos de siempre están en "Sin carpeta" o en sus carpetas.
+- [ ] Con Informática o el Secretario Regional: General → "Publicar documento" → subir una circular de prueba. Con un usuario común (de otro cuartel y de un departamento): la ve en General y puede abrirla.
+- [ ] Con un Presidente de CD: al cargar un documento **no** aparece "Visible para todos".
+- [ ] Un documento "Restringido" de un cuartel: lo ve quien lo cargó y Informática; un Invitado de ese cuartel, no, ni lo encuentra en la búsqueda.
+- [ ] Un Coordinador de Departamento: Documentos → Departamento (el suyo) → subir un archivo. Un integrante lo ve; un integrante de otro departamento, no.
+- [ ] Un Miembro de Departamento (solo ese rol): en el menú aparece Documentos y ve su departamento y lo publicado; no ve cuarteles ni carpetas.
+- [ ] En el celular: el formulario de carga entra en pantalla, las opciones de visibilidad se tocan cómodas y el archivo se sube.
+
+### 69.7 Riesgos y decisiones
+
+- **"General" cambió de significado.** Antes era "sin carpeta"; ahora es lo publicado. Los documentos sin carpeta no se perdieron: están en "Sin carpeta". Quien tenga guardado el enlace a General vería lo publicado.
+- **Qué es público**: lo que Informática o el Secretario Regional publiquen es visible para **cualquier perfil activo**, incluidos los Invitados y quien trabaja solo en un departamento. La URL firmada del archivo dura 10 minutos y se pide en cada apertura; un documento despublicado, restringido o en la papelera deja de entregarse al instante.
+- **Privacidad de los departamentos**: los documentos de un departamento los ven su coordinador, sus integrantes e Informática; **el Secretario Regional y el Director de Escuela no los ven** (igual que los informes, 0098), salvo que se publiquen para todos. Si se quisiera que los vea el Secretario Regional, es una política de lectura nueva.
+- **Un integrante edita lo que cargó**; lo de otras personas del departamento lo edita el coordinador. Es la regla de los informes.
+- **No hay estado "borrador / no publicado"**: el sistema no lo tenía y no se agregó. "Restringido" cubre lo que no tiene que verse todavía, y se puede pasar a "para todos" cuando corresponda.
+- **El aviso "Nuevo documento"** no sale para restringidos ni de departamento. Si se quisiera avisar a un departamento, es una función aparte (`notify_department`).
+- **Las pruebas de base de 0098 a 0109 no se repitieron en esta ronda**: la base local con los datos de esas pruebas se había borrado en la limpieza de la sección 68. Se armó una base nueva con las migraciones 0001 a 0110 (sin errores, y 0110 aplicada dos veces) y se probó 0110 con una suite propia y autosuficiente. La regla que probaba 0107 sobre Documentos (el modo departamento no ve documentos de cuartel ni de la Regional) se comprobó de nuevo en la suite de 0110.
+- **La migración 0108 apareció modificada en una copia local** (sin su bloque final, el que cambia los textos y el enlace de las tareas pendientes) y no estaba en ningún commit. Se restauró a la versión publicada: con el bloque, una base nueva termina con "Falta cargar los efectivos del cuartel." y `#efectivos` (0108 y luego 0109); sin él, 0109 no encontraba el texto que reemplaza. No hizo falta una migración nueva: 0109 ya deja los textos vigentes.
+- **No se probó en un celular real.**

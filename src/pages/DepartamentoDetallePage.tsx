@@ -498,6 +498,12 @@ export function DepartamentoDetallePage() {
         description: 'Escribilo acá y sumá fotos si querés.',
         icon: 'edit',
       },
+      {
+        to: `/documentos/nuevo?departamento=${department.id}`,
+        label: 'Subir documento',
+        description: 'Un archivo para el espacio de documentos del departamento.',
+        icon: 'file',
+      },
     )
   }
   if (canLogActivity) {
@@ -547,6 +553,12 @@ export function DepartamentoDetallePage() {
           </div>
         )}
       </div>
+      {canViewReports(department.id) && (
+        <Link to={`/documentos/departamentos/${department.id}`} className="btn btn-outlined btn-sm" style={{ marginBottom: 16, marginRight: 8 }}>
+          <Icon name="file" size={14} />
+          Documentos del departamento
+        </Link>
+      )}
       {showAvalesLink && (
         <Link to={`/escuela/avales?departamento=${department.id}`} className="link-muted" style={{ display: 'inline-block', marginBottom: 16 }}>
           Ver los avales regionales de este departamento (Escuela) →

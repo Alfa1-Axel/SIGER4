@@ -38,6 +38,7 @@ import { NotificacionFormPage } from './pages/NotificacionFormPage'
 import { DocumentosPage } from './pages/DocumentosPage'
 import { DocumentoFormPage } from './pages/DocumentoFormPage'
 import { CarpetaDetallePage } from './pages/CarpetaDetallePage'
+import { DocumentosDepartamentoPage } from './pages/DocumentosDepartamentoPage'
 import { CarpetaFormPage } from './pages/CarpetaFormPage'
 import { PapeleraDocumentosPage } from './pages/PapeleraDocumentosPage'
 import { AuditoriaPage } from './pages/AuditoriaPage'
@@ -115,6 +116,7 @@ export default function App() {
         <Route path="/documentos/carpetas/nueva" element={<ModuleRoute module="documentos" title="Documentos"><CarpetaFormPage /></ModuleRoute>} />
         <Route path="/documentos/papelera" element={<ModuleRoute module="documentos" title="Documentos"><PapeleraDocumentosPage /></ModuleRoute>} />
         <Route path="/documentos/carpetas/:id" element={<ModuleRoute module="documentos" title="Documentos"><CarpetaDetallePage /></ModuleRoute>} />
+        <Route path="/documentos/departamentos/:id" element={<ModuleRoute module="documentos" title="Documentos"><DocumentosDepartamentoPage /></ModuleRoute>} />
         <Route path="/auditoria" element={<SuperAdminRoute title="Auditoría"><AuditoriaPage /></SuperAdminRoute>} />
         <Route path="/cuarteles/:stationId/personal/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
         <Route path="/personal/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />

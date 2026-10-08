@@ -123,6 +123,7 @@ export const FIELD_LABELS: Record<string, string> = {
   observations: 'Observaciones',
   last_service_at: 'Último service',
   storage_path: 'Archivo',
+  visibility: 'Visibilidad',
   note: 'Nota',
   reason: 'Motivo',
   event_date: 'Fecha del evento',

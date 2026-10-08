@@ -7,8 +7,11 @@ import { fetchProfiles } from '../lib/api/users'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
-import type { DocumentFolder, DocumentRecord, Profile, Region, Station, Subsede } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import { canManageDocument } from '../lib/documentAccess'
+import type { DocumentFolder, DocumentRecord, Profile, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useDocumentAccess } from '../hooks/useDocumentAccess'
 import { describeSupabaseError } from '../lib/api/errors'
 
 const RETENTION_DAYS = 30
@@ -20,12 +23,16 @@ function daysRemaining(purgeAfter: string | null): number {
 }
 
 export function PapeleraDocumentosPage() {
-  const { isAdmin, hasRole, profile: currentProfile } = useAuth()
+  const { isAdmin, hasRole, profile: currentProfile, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   // Enviar a la papelera / restaurar usa el mismo alcance que editar el
   // documento (documents_update_admin_regional_station, 0053) — no solo
   // informática. La purga definitiva sí es exclusiva de informática (ver
   // documents_delete_informatica), reflejado acá con "canPurge".
-  const canManage = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  // Los departamentos tienen su propia papelera: ven y restauran lo suyo (0110).
+  const canManage =
+    isAdmin ||
+    hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo') ||
+    coordinatedDepartmentIds.length + memberDepartmentIds.length > 0
   const canPurge = isAdmin
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
@@ -34,20 +41,23 @@ export function PapeleraDocumentosPage() {
   const [regions, setRegions] = useState<Region[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [stations, setStations] = useState<Station[]>([])
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const access = useDocumentAccess(stations, subsedes)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [purgingAll, setPurgingAll] = useState(false)
 
   async function reload() {
-    const [documentsData, foldersData, profilesData, regionsData, subsedesData, stationsData] = await Promise.all([
+    const [documentsData, foldersData, profilesData, regionsData, subsedesData, stationsData, departmentsData] = await Promise.all([
       fetchTrashedDocuments(),
       fetchDocumentFolders(),
       fetchProfiles(),
       fetchRegions(),
       fetchSubsedes(),
       fetchStations(),
+      fetchVisibleDepartments().catch(() => [] as VisibleDepartment[]),
     ])
     setDocuments(documentsData)
     setFolders(foldersData)
@@ -55,6 +65,7 @@ export function PapeleraDocumentosPage() {
     setRegions(regionsData)
     setSubsedes(subsedesData)
     setStations(stationsData)
+    setDepartments(departmentsData)
   }
 
   useEffect(() => {
@@ -67,10 +78,12 @@ export function PapeleraDocumentosPage() {
     }
   }, [])
 
+  const manageable = documents.filter((doc) => canManageDocument(doc, access))
   const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders])
   const profileById = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
 
   function scopeLabel(doc: DocumentRecord): string {
+    if (doc.department_id) return `Departamento ${departments.find((d) => d.id === doc.department_id)?.name ?? ''}`.trim()
     if (doc.station_id) return stations.find((s) => s.id === doc.station_id)?.name ?? 'Cuartel'
     if (doc.subsede_id) return subsedes.find((s) => s.id === doc.subsede_id)?.name ?? 'Subsede'
     if (doc.region_id) return regions.find((r) => r.id === doc.region_id)?.name ?? 'Regional'
@@ -163,11 +176,11 @@ export function PapeleraDocumentosPage() {
       )}
 
       {loading && <div className="loading-state" role="status">Cargando papelera…</div>}
-      {!loading && documents.length === 0 && <div className="empty-state">La papelera está vacía.</div>}
+      {!loading && manageable.length === 0 && <div className="empty-state">La papelera está vacía.</div>}
 
-      {!loading && documents.length > 0 && (
+      {!loading && manageable.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-          {documents.map((doc) => {
+          {manageable.map((doc) => {
             const remaining = daysRemaining(doc.purge_after)
             const deletedBy = doc.deleted_by_profile_id ? profileById.get(doc.deleted_by_profile_id)?.full_name : null
             return (
@@ -175,7 +188,7 @@ export function PapeleraDocumentosPage() {
                 <div className="list-item-body">
                   <h3 className="list-item-title">{doc.title}</h3>
                   <p className="list-item-subtitle">
-                    Carpeta: {doc.folder_id ? folderById.get(doc.folder_id)?.name ?? 'Desconocida' : 'General'} · Alcance: {scopeLabel(doc)}
+                    {doc.department_id ? 'Espacio' : 'Carpeta'}: {doc.department_id ? 'Documentos del departamento' : doc.folder_id ? folderById.get(doc.folder_id)?.name ?? 'Desconocida' : 'Sin carpeta'} · Alcance: {scopeLabel(doc)}
                   </p>
                   <p className="list-item-subtitle">
                     Eliminado por {deletedBy ?? 'usuario desconocido'} el{' '}
@@ -211,7 +224,7 @@ export function PapeleraDocumentosPage() {
         </div>
       )}
 
-      {canPurge && documents.length > 0 && (
+      {canPurge && manageable.length > 0 && (
         <button type="button" className="btn btn-danger-outline btn-block" disabled={purgingAll} onClick={handlePurgeExpired}>
           {purgingAll ? 'Purgando…' : 'Purgar vencidos ahora'}
         </button>

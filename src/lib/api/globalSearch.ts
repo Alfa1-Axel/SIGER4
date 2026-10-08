@@ -239,22 +239,39 @@ async function searchReports(like: string, ctx: SearchContext, limit: number, de
   }))
 }
 
-async function searchDocuments(like: string, limit: number): Promise<SearchResult[]> {
+// Documentos: los publicados para todos, los de tu alcance y los de tu
+// departamento (la RLS decide; los restringidos solo les llegan a quien los
+// administra). Nunca los de la papelera ni los que no tienen archivo todavía.
+async function searchDocuments(like: string, limit: number, departmentName: (id: string) => string): Promise<SearchResult[]> {
   const { data, error } = await supabase
     .from('documents')
-    .select('id, title, category, folder_id, created_at, storage_path, deleted_at')
+    .select('id, title, category, folder_id, department_id, visibility, created_at, storage_path, deleted_at')
     .or(`title.ilike.${like},category.ilike.${like}`)
     .is('deleted_at', null)
     .neq('storage_path', 'pending')
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error
-  return ((data ?? []) as Pick<DocumentRecord, 'id' | 'title' | 'category' | 'folder_id' | 'created_at'>[]).map((d) => ({
+  return ((data ?? []) as Pick<DocumentRecord, 'id' | 'title' | 'category' | 'folder_id' | 'department_id' | 'visibility' | 'created_at'>[]).map((d) => ({
     id: d.id,
     module: 'documentos',
     title: d.title,
-    subtitle: [d.category, formatDay(d.created_at)].filter(Boolean).join(' · '),
-    to: `/documentos/carpetas/${d.folder_id ?? 'general'}`,
+    subtitle: [
+      d.category,
+      d.department_id ? departmentName(d.department_id) : null,
+      d.visibility === 'todos' ? 'Publicado para todos' : d.visibility === 'restringido' ? 'Restringido' : null,
+      formatDay(d.created_at),
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    // Cada documento se abre en el espacio donde vive.
+    to: d.department_id
+      ? `/documentos/departamentos/${d.department_id}`
+      : d.folder_id
+        ? `/documentos/carpetas/${d.folder_id}`
+        : d.visibility === 'todos'
+          ? '/documentos/carpetas/general'
+          : '/documentos/carpetas/sin-carpeta',
   }))
 }
 
@@ -405,7 +422,7 @@ export async function searchEverything(rawQuery: string, ctx: SearchContext, loo
   add(['cuarteles'], async () => ({ cuarteles: await searchStations(like, limit) }))
   add(['departamentos'], async () => ({ departamentos: await searchDepartments(like, limit) }))
   add(['informes'], async () => ({ informes: await searchReports(like, ctx, limit, lookups.departmentName) }))
-  add(['documentos'], async () => ({ documentos: await searchDocuments(like, limit) }))
+  add(['documentos'], async () => ({ documentos: await searchDocuments(like, limit, lookups.departmentName) }))
   add(['avales'], async () => ({ avales: await searchAvales(like, ctx, limit, lookups.departmentName) }))
   add(['inventario', 'solicitudes'], async () => {
     const r = await searchInventory(like, limit, lookups.stationName)

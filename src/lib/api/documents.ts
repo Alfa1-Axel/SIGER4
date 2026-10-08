@@ -1,6 +1,6 @@
 import { FunctionsHttpError } from '@supabase/functions-js'
 import { supabase } from '../supabaseClient'
-import type { DocumentRecord, DocumentVersion, DocumentFolder } from '../../types/database'
+import type { DocumentRecord, DocumentVersion, DocumentFolder, DocumentVisibility } from '../../types/database'
 
 // Mismo motivo que el helper equivalente en lib/api/users.ts: el cliente de
 // supabase-js lanza FunctionsHttpError con un mensaje genérico para
@@ -57,6 +57,51 @@ export async function fetchRecentDocumentsByStation(stationId: string, limit = 3
     .neq('storage_path', 'pending')
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
+// General: lo publicado para todos (visibility = 'todos', 0110). Nunca trae
+// documentos en la papelera ni sin archivo (la base tampoco los publica).
+export async function fetchPublishedDocuments(): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('visibility', 'todos')
+    .is('deleted_at', null)
+    .neq('storage_path', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
+// Espacio de un departamento: sus documentos (los ven su coordinador, sus
+// integrantes e Informática; la RLS decide).
+export async function fetchDocumentsByDepartment(departmentId: string): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .eq('department_id', departmentId)
+    .is('deleted_at', null)
+    .neq('storage_path', 'pending')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as DocumentRecord[]
+}
+
+// "Sin carpeta": documentos del alcance de la persona que no están en una
+// carpeta, ni son de un departamento ni están publicados (esos tienen su
+// propio espacio).
+export async function fetchUnfiledDocuments(): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from('documents')
+    .select('*')
+    .is('folder_id', null)
+    .is('department_id', null)
+    .neq('visibility', 'todos')
+    .is('deleted_at', null)
+    .neq('storage_path', 'pending')
+    .order('created_at', { ascending: false })
   if (error) throw error
   return (data ?? []) as DocumentRecord[]
 }
@@ -157,6 +202,8 @@ export interface DocumentInput {
   subsede_id?: string | null
   station_id?: string | null
   profile_id?: string | null
+  department_id?: string | null
+  visibility?: DocumentVisibility
   uploaded_by_profile_id?: string | null
   folder_id?: string | null
 }

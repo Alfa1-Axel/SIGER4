@@ -296,12 +296,20 @@ export interface PersonnelStatusHistory {
   created_at: string
 }
 
+// Quién ve un documento (0110): "alcance" (quien está dentro de su alcance),
+// "todos" (publicado para todos los usuarios) o "restringido" (solo quien lo
+// cargó y quienes administran ese alcance).
+export type DocumentVisibility = 'alcance' | 'todos' | 'restringido'
+
 export interface DocumentRecord {
   id: string
   region_id: string | null
   subsede_id: string | null
   station_id: string | null
   profile_id: string | null
+  // Espacio documental de un departamento (0110): excluyente con los demás alcances.
+  department_id: string | null
+  visibility: DocumentVisibility
   title: string
   category: string
   description: string | null

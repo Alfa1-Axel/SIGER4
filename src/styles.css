@@ -4033,3 +4033,50 @@ kbd {
   font-size: 14px;
   color: var(--color-text-secondary);
 }
+
+/* Visibilidad de un documento: cada opción con su explicación debajo. */
+.visibility-options {
+  display: grid;
+  gap: 8px;
+}
+
+.visibility-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.visibility-option input {
+  width: auto;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.visibility-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.visibility-option-text span {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.visibility-option--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.visibility-option--selected .visibility-option-text span {
+  color: var(--color-primary-soft-text);
+}

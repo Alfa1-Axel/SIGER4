@@ -83,6 +83,9 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
             <Link to={`/departamentos/${selected.id}#informes`} className="btn btn-outlined btn-sm">
               Ver informes
             </Link>
+            <Link to={`/documentos/departamentos/${selected.id}`} className="btn btn-outlined btn-sm">
+              Ver documentos
+            </Link>
             <Link to="/calendario" className="btn btn-outlined btn-sm">
               <Icon name="calendar" size={14} />
               Ver calendario

@@ -3,21 +3,26 @@ import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchDocuments, fetchDocumentFolders, fetchPendingDocuments, cleanupPendingDocuments } from '../lib/api/documents'
-import type { DocumentFolder, DocumentRecord } from '../types/database'
+import { fetchVisibleDepartments } from '../lib/api/departments'
+import type { DocumentFolder, DocumentRecord, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
-// Vista por carpetas: cada carpeta activa es una tarjeta que lleva a
-// /documentos/carpetas/:id (CarpetaDetallePage), donde vive el listado de
-// documentos de esa carpeta y el formulario de carga. Los documentos sin
-// carpeta (folder_id null — históricos previos a este módulo, o cargados
-// directo) se agrupan en la carpeta pseudo "General".
+// Documentos se organiza en espacios y carpetas:
+//   - General: lo publicado para todos (visibilidad "Visible para todos").
+//   - Un espacio por departamento: lo que cargan su coordinador e integrantes.
+//   - Sin carpeta: lo de mi alcance que no está en ninguna carpeta.
+//   - Las carpetas (cada una con su alcance).
+// Cada tarjeta lleva a su listado; allí se ve de quién es cada documento y
+// quién lo ve.
 export function DocumentosPage() {
-  const { isAdmin, hasRole } = useAuth()
+  const { isAdmin, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const canManageFolders = isAdmin || hasRole('secretario_regional', 'usuario_carga_cuartel', 'presidente_cuartel', 'secretario_comision', 'jefe_cuerpo_activo')
+  const hasDepartments = coordinatedDepartmentIds.length + memberDepartmentIds.length > 0
 
   const [folders, setFolders] = useState<DocumentFolder[]>([])
   const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [departments, setDepartments] = useState<VisibleDepartment[]>([])
   const [pendingDocuments, setPendingDocuments] = useState<DocumentRecord[]>([])
   const [showPendingList, setShowPendingList] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -25,9 +30,13 @@ export function DocumentosPage() {
   const [cleaningUp, setCleaningUp] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
   // La carga funciona desde escritorio y celular (DEPLOYMENT.md sección 56).
-  const canUploadFiles = canManageFolders
+  // Quien trabaja en un departamento también carga documentos (en el suyo).
+  const canUploadFiles = canManageFolders || hasDepartments
 
-  const unfiledCount = documents.filter((doc) => !doc.folder_id).length
+  const publishedCount = documents.filter((doc) => doc.visibility === 'todos').length
+  const unfiledCount = documents.filter((doc) => !doc.folder_id && !doc.department_id && doc.visibility !== 'todos').length
+  // Un espacio por departamento donde la persona trabaja (Informática, todos).
+  const departmentSpaces = departments.filter((d) => isAdmin || Boolean(d.my_relation))
 
   async function reload() {
     // fetchDocuments() ya excluye storage_path='pending' (documentos sin
@@ -35,13 +44,15 @@ export function DocumentosPage() {
     // pendientes para el banner de informática se pide aparte, y solo si
     // corresponde (no tiene sentido pedirla para un rol que no va a ver el
     // banner ni puede limpiarlos).
-    const [foldersData, documentsData, pendingData] = await Promise.all([
+    const [foldersData, documentsData, pendingData, departmentsData] = await Promise.all([
       fetchDocumentFolders(),
       fetchDocuments(),
       isAdmin ? fetchPendingDocuments() : Promise.resolve([]),
+      fetchVisibleDepartments().catch(() => [] as VisibleDepartment[]),
     ])
     setFolders(foldersData)
     setDocuments(documentsData)
+    setDepartments(departmentsData)
     setPendingDocuments(pendingData)
   }
 
@@ -74,14 +85,18 @@ export function DocumentosPage() {
     return documents.filter((doc) => doc.folder_id === folderId).length
   }
 
+  function departmentDocumentCount(departmentId: string): number {
+    return documents.filter((doc) => doc.department_id === departmentId).length
+  }
+
   return (
     <AppShell title="Documentos">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
         <div>
           <h1 className="page-title">Documentos</h1>
-          <p className="page-subtitle">Documentación institucional organizada por carpetas: circulares, actas, manuales y más.</p>
+          <p className="page-subtitle">Documentación institucional: lo publicado para todos, lo de tu departamento y lo de tu alcance, en carpetas.</p>
         </div>
-        {canManageFolders && (
+        {canUploadFiles && (
           <Link to="/documentos/papelera" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
             <Icon name="trash" size={14} />
             Papelera
@@ -125,46 +140,82 @@ export function DocumentosPage() {
       {loading && <div className="loading-state" role="status">Cargando carpetas…</div>}
 
       {!loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <Link to="/documentos/carpetas/general" className="card-solid list-item">
-            <span className="list-item-icon">
-              <Icon name="file" size={18} />
-            </span>
-            <div className="list-item-body">
-              <h3 className="list-item-title">General</h3>
-              <p className="list-item-subtitle">Documentos sin carpeta asignada</p>
-            </div>
-            <span className="badge badge-info">{unfiledCount}</span>
-          </Link>
+        <>
+          <div className="section-header">
+            <h2 className="section-title">Espacios</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+            <Link to="/documentos/carpetas/general" className="card-solid list-item">
+              <span className="list-item-icon">
+                <Icon name="file" size={18} />
+              </span>
+              <div className="list-item-body">
+                <h3 className="list-item-title">General</h3>
+                <p className="list-item-subtitle">Publicados para todos: circulares y material institucional común</p>
+              </div>
+              <span className="badge badge-info">{publishedCount}</span>
+            </Link>
 
-          {folders
-            .filter((folder) => folder.is_active)
-            .map((folder) => (
-              <Link key={folder.id} to={`/documentos/carpetas/${folder.id}`} className="card-solid list-item">
+            {departmentSpaces.map((department) => (
+              <Link key={department.id} to={`/documentos/departamentos/${department.id}`} className="card-solid list-item">
                 <span className="list-item-icon">
-                  <Icon name="file" size={18} />
+                  <Icon name="clipboardList" size={18} />
                 </span>
                 <div className="list-item-body">
-                  <h3 className="list-item-title">{folder.name}</h3>
-                  {folder.description && <p className="list-item-subtitle">{folder.description}</p>}
+                  <h3 className="list-item-title">Departamento {department.name}</h3>
+                  <p className="list-item-subtitle">Lo que cargan su coordinador y sus integrantes</p>
                 </div>
-                <span className="badge badge-info">{documentCountFor(folder.id)}</span>
+                <span className="badge badge-info">{departmentDocumentCount(department.id)}</span>
               </Link>
             ))}
 
-          {folders.filter((f) => f.is_active).length === 0 && (
-            <div className="empty-state">Todavía no hay carpetas propias. Los documentos sin carpeta quedan en "General".</div>
-          )}
-        </div>
+            <Link to="/documentos/carpetas/sin-carpeta" className="card-solid list-item">
+              <span className="list-item-icon">
+                <Icon name="file" size={18} />
+              </span>
+              <div className="list-item-body">
+                <h3 className="list-item-title">Sin carpeta</h3>
+                <p className="list-item-subtitle">Documentos de tu alcance que no están en ninguna carpeta</p>
+              </div>
+              <span className="badge badge-info">{unfiledCount}</span>
+            </Link>
+          </div>
+
+          <div className="section-header">
+            <h2 className="section-title">Carpetas</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {folders
+              .filter((folder) => folder.is_active)
+              .map((folder) => (
+                <Link key={folder.id} to={`/documentos/carpetas/${folder.id}`} className="card-solid list-item">
+                  <span className="list-item-icon">
+                    <Icon name="file" size={18} />
+                  </span>
+                  <div className="list-item-body">
+                    <h3 className="list-item-title">{folder.name}</h3>
+                    {folder.description && <p className="list-item-subtitle">{folder.description}</p>}
+                  </div>
+                  <span className="badge badge-info">{documentCountFor(folder.id)}</span>
+                </Link>
+              ))}
+
+            {folders.filter((f) => f.is_active).length === 0 && (
+              <div className="empty-state">Todavía no hay carpetas propias. Los documentos sin carpeta quedan en "Sin carpeta".</div>
+            )}
+          </div>
+        </>
       )}
 
-      {canManageFolders && (
+      {canUploadFiles && (
         <div className="fab-menu">
           {showAddMenu && (
             <div className="fab-menu-panel" role="menu">
-              <Link to="/documentos/carpetas/nueva" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
-                Crear carpeta
-              </Link>
+              {canManageFolders && (
+                <Link to="/documentos/carpetas/nueva" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
+                  Crear carpeta
+                </Link>
+              )}
               {canUploadFiles && (
                 <Link to="/documentos/nuevo" className="btn btn-ghost" role="menuitem" onClick={() => setShowAddMenu(false)}>
                   Subir documento

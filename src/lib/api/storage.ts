@@ -212,7 +212,9 @@ export async function uploadDocumentFile(documentId: string, file: File): Promis
 
 export async function getDocumentSignedUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase.storage.from('documents').createSignedUrl(storagePath, 60 * 10)
-  if (error) throw new Error('El archivo no está disponible o fue eliminado del almacenamiento.')
+  // Sin permiso para verlo (un documento restringido, de otro departamento o que ya no está publicado) la base
+  // tampoco entrega la URL: se dice sin dar detalles.
+  if (error) throw new Error('El archivo no está disponible, fue eliminado o no tenés permiso para verlo.')
   return data.signedUrl
 }
 

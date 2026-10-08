@@ -5,9 +5,10 @@ import type { RoleKey } from '../types/roles'
 // Miembro de Departamento) usa la aplicación a través de su departamento:
 // Inicio departamental, el departamento (miembros, informes, actas, eventos
 // y avisos), el calendario de su departamento, Notificaciones y su perfil.
-// Todo lo demás (cuarteles, mapa, Escuela, Documentos,
-// Inventario, Reportes, Usuarios, Auditoría) no se le ofrece: ni en el menú,
-// ni en el Inicio, ni en la búsqueda, ni por URL directa.
+// Documentos se le abre solo para lo de sus departamentos y lo publicado para
+// todos (0110): la base no le devuelve nada más. Todo lo demás (cuarteles,
+// mapa, Escuela, Inventario, Reportes, Usuarios, Auditoría) no se le ofrece:
+// ni en el menú, ni en el Inicio, ni en la búsqueda, ni por URL directa.
 //
 // Con un rol más (Informática, Escuela, un cuartel…) ya no es modo
 // departamento: los permisos se suman y rige lo de siempre. Es el espejo de
@@ -40,6 +41,7 @@ const DEPARTMENT_ONLY_MODULES: ReadonlySet<AppModule> = new Set<AppModule>([
   'inicio',
   'departamentos',
   'calendario',
+  'documentos',
   'avales',
   'notificaciones',
   'ajustes',

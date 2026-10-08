@@ -379,10 +379,7 @@ export function UsuarioFormPage() {
         <fieldset className="form-section">
           <legend className="form-section-title">3. Roles</legend>
           <p className="form-section-help">
-            Qué puede hacer. Elegí al menos uno: en el paso 4 te pedimos dónde aplica cada rol.{' '}
-            <Link to="/roles" className="link-muted">
-              Ver qué permite cada rol
-            </Link>
+            Qué puede hacer. Elegí al menos uno: en el paso 4 te pedimos dónde aplica cada rol.
           </p>
           <div className="field">
             <RoleGroupedPicker roles={assignableRoles} selected={selectedRoles} onToggle={toggleRole} />

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { AppShell } from './layout/AppShell'
 import { Icon } from './ui/Icon'
 import { DepartmentDashboard } from './DepartmentDashboard'
+import { SupportContact } from './SupportContact'
 import { openGlobalSearch } from '../lib/searchControl'
 import { fetchVisibleDepartments } from '../lib/api/departments'
 import { fetchUnreadNotificationCount } from '../lib/api/notifications'
@@ -65,7 +66,7 @@ export function DepartmentHome() {
     { to: '/calendario', label: 'Calendario', description: 'Eventos de tu departamento', icon: 'calendar' },
   ]
   if (hasAvalesAccess) actions.push({ to: '/escuela/avales', label: 'Avales regionales', description: 'Ver y subir los avales de tu departamento', icon: 'school' })
-  actions.push({ to: '/ayuda#que-puedo-hacer-departamento', label: 'Qué puedo hacer', description: 'Lo que permite tu rol, paso a paso', icon: 'help' })
+  actions.push({ to: '/ajustes', label: 'Mi perfil', description: 'Tu rol y tus datos', icon: 'user' })
 
   return (
     <AppShell title="Inicio">
@@ -106,10 +107,7 @@ export function DepartmentHome() {
             Tu rol trabaja con un departamento, pero Informática y Estadística todavía no te asignó uno. Cuando te sumen, lo vas a ver acá con sus informes,
             actas, eventos y avisos.
           </p>
-          <Link to="/ayuda#sin-seccion-departamento" className="btn btn-outlined btn-sm">
-            Qué hacer si no veo una sección
-            <Icon name="arrowRight" size={14} />
-          </Link>
+          <SupportContact variant="inline" lead="¿Creés que es un error? Consultá a Informática y Estadística:" />
         </div>
       )}
 

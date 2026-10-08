@@ -24,19 +24,15 @@ function resolveBuildVersion(): string {
 
 const BUILD_VERSION = resolveBuildVersion()
 const BUILD_TIME = new Date().toISOString()
-// Versión "humana" del sistema (ej. "1.4.0"). La que ven los usuarios sale
-// de la novedad más reciente de src/config/appUpdates.ts; package.json tiene
-// que tener la misma. Si no coinciden, el build lo avisa (no lo frena).
+// Versión técnica del sistema (ej. "1.11.0"), la de package.json. Es solo para
+// el control del desarrollo: se ve únicamente en el panel de versión que
+// Informática tiene en Mi perfil y ajustes. No se muestra a los usuarios ni
+// hay changelog dentro de la aplicación.
 const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version as string
-const LATEST_UPDATE_VERSION = /version:\s*'([^']+)'/.exec(readFileSync(new URL('./src/config/appUpdates.ts', import.meta.url), 'utf-8'))?.[1]
-if (LATEST_UPDATE_VERSION && LATEST_UPDATE_VERSION !== APP_VERSION) {
-  console.warn(
-    `[SIGER4] La versión de package.json (${APP_VERSION}) no coincide con la última novedad de src/config/appUpdates.ts (${LATEST_UPDATE_VERSION}). Actualizá las dos antes del deploy.`,
-  )
-}
 
 export default defineConfig({
   define: {
+    __SIGER4_APP_VERSION__: JSON.stringify(APP_VERSION),
     __SIGER4_BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
     __SIGER4_BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },

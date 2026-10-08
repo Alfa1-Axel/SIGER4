@@ -3,9 +3,15 @@
 // puede ver, cargar, editar, auditar y administrar todo.
 //
 // Los roles son un enum de Postgres (role_key): no hay tabla de roles en la
-// base, así que la metadata visual (grupo, alcance, permisos principales)
-// vive acá. Es la única fuente para mostrar roles en la UI; la autorización
+// base, así que la metadata visual (grupo, alcance, resumen de lo que puede
+// hacer) vive acá. Es la única fuente para mostrar roles en la UI; la autorización
 // real sigue estando en RLS/Edge Functions, nunca en este archivo.
+//
+// No hay una pantalla con la explicación de todos los roles: cada persona ve
+// solo el suyo en Mi perfil ("Tu rol en SIGER4", selfSummary). La descripción
+// y el alcance de cada rol se muestran a quien asigna roles al crear o editar
+// un usuario (RoleGroupedPicker). La matriz completa de permisos está en
+// DEPLOYMENT.md (secciones 31.4 y 53).
 export type RoleKey =
   | 'informatica_r4'
   | 'integrante_informatica'
@@ -63,17 +69,6 @@ export const ROLE_CATEGORIES: RoleCategoryDefinition[] = [
   },
 ]
 
-// Niveles de alcance que usa el sistema. "Subsede" no tiene roles propios:
-// es un alcance (scope) que se le asigna a un usuario, no un tipo de rol.
-export const SCOPE_LEVELS: { label: string; description: string }[] = [
-  { label: 'Sistema (global)', description: 'Todo el sistema: todas las Regionales, subsedes y cuarteles.' },
-  { label: 'Regional', description: 'Todos los cuarteles y subsedes de la Regional.' },
-  { label: 'Subsede', description: 'Los cuarteles de una subsede. Se asigna como alcance del usuario, no hay roles exclusivos de subsede.' },
-  { label: 'Cuartel', description: 'Un solo cuartel: el propio del usuario.' },
-  { label: 'Escuela', description: 'Escuela Regional: cursos, capacitaciones y avales.' },
-  { label: 'Departamento', description: 'Uno o más departamentos de la sección Departamentos (Fuego, Forestal, FASME...). El Coordinador y los Miembros de Departamento ven solo los suyos: miembros, informes, actas, eventos y avisos.' },
-]
-
 export interface RoleDefinition {
   key: RoleKey
   label: string
@@ -83,9 +78,10 @@ export interface RoleDefinition {
   scope: 'system' | 'regional' | 'escuela' | 'cuartel' | 'departamento'
   // Alcance en lenguaje institucional, para mostrar junto al rol.
   scopeLabel: string
-  // Permisos principales, resumidos de la matriz final de permisos
-  // (DEPLOYMENT.md, secciones 31.4 y 53). Informativo, no autoriza nada.
-  permissions: string[]
+  // Qué puede hacer quien tiene el rol, en segunda persona y en pocas frases.
+  // Se muestra solo a quien lo tiene (Mi perfil → "Tu rol en SIGER4"); no hay
+  // pantalla con los de todos los roles. Informativo, no autoriza nada.
+  selfSummary: string
   // false = rol retirado: se muestra solo si un usuario todavía lo tiene,
   // para poder identificarlo y quitarlo, pero nunca se ofrece para asignar.
   assignable: boolean
@@ -100,13 +96,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'informatica',
     scope: 'system',
     scopeLabel: 'Todo el sistema',
-    permissions: [
-      'Ve, carga y edita en todos los módulos y cuarteles.',
-      'Gestiona usuarios, roles y alcances. Es el único que puede eliminar usuarios y modificar a otro Informática R4.',
-      'Purga definitiva de documentos y configuración del sistema.',
-      'Avales regionales: ve y carga en todos los departamentos, y es el único que edita, archiva o elimina avales.',
-      'Único rol con acceso a Auditoría.',
-    ],
+    selfSummary: 'Tenés acceso total al sistema: ves, cargás y editás en todos los módulos y cuarteles, administrás usuarios y roles, y accedés a Auditoría.',
     assignable: true,
   },
   {
@@ -116,13 +106,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'informatica',
     scope: 'system',
     scopeLabel: 'Todo el sistema (salvo usuarios Informática R4)',
-    permissions: [
-      'Ve, carga y edita en los módulos operativos de todo el sistema.',
-      'Gestiona usuarios, roles y alcances, excepto a usuarios Informática R4.',
-      'Notificaciones manuales solo dentro de su Regional.',
-      'Avales regionales: ve y carga en todos los departamentos. No edita, archiva ni elimina.',
-      'Sin acceso a Auditoría (exclusiva de Dpto. Informática y Estadística R4).',
-    ],
+    selfSummary: 'Ves, cargás y editás en los módulos operativos de todo el sistema y administrás usuarios y roles, salvo los de Informática R4. No accedés a Auditoría.',
     assignable: true,
   },
   {
@@ -132,15 +116,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Su Regional (Escuela Regional)',
-    permissions: [
-      'Crea y edita cursos y capacitaciones.',
-      'Calendario: eventos de Escuela y Capacitación.',
-      'Lectura regional de cuarteles, personal, vehículos, asistencia e intervenciones (sin escritura).',
-      'Alta de usuarios con cualquier rol, salvo Informática y roles de Avales.',
-      'Reportes regionales, Inventario Regional y aprobación de préstamos.',
-      'Departamentos: ve todos, para los reportes (sin informes ni actas).',
-      'Sin acceso a Avales regionales.',
-    ],
+    selfSummary: 'Gestionás la Escuela Regional: cursos, capacitaciones y eventos de Escuela. Consultás los datos de los cuarteles de tu Regional, generás reportes regionales, aprobás préstamos de Inventario y podés dar de alta usuarios.',
     assignable: true,
   },
   {
@@ -150,13 +126,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Su Regional (Escuela Regional)',
-    permissions: [
-      'Crea y edita cursos y capacitaciones.',
-      'Calendario: eventos de Escuela y Capacitación.',
-      'Lectura regional de cuarteles y datos operativos (sin escritura).',
-      'Notificaciones manuales dentro de su Regional.',
-      'Sin acceso a Reportes ni a Avales regionales.',
-    ],
+    selfSummary: 'Creás y editás cursos y capacitaciones de la Escuela Regional y sus eventos en el Calendario. Consultás los datos de los cuarteles de tu Regional, sin editarlos.',
     assignable: true,
   },
   {
@@ -166,12 +136,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Avales: todos los departamentos',
-    permissions: [
-      'Avales regionales: ve todos los departamentos y sus documentos.',
-      'Carga avales en cualquier departamento activo.',
-      'No edita, archiva ni elimina avales ya cargados.',
-      'No suma permisos en cursos, cuarteles ni otros módulos.',
-    ],
+    selfSummary: 'Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados.',
     assignable: true,
   },
   {
@@ -181,12 +146,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Avales: todos los departamentos',
-    permissions: [
-      'Avales regionales: ve todos los departamentos y sus documentos.',
-      'Carga avales en cualquier departamento activo.',
-      'No edita, archiva ni elimina avales ya cargados.',
-      'No suma permisos en cursos, cuarteles ni otros módulos.',
-    ],
+    selfSummary: 'Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados.',
     assignable: true,
   },
   {
@@ -196,13 +156,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'regional',
     scopeLabel: 'Su Regional',
-    permissions: [
-      'Crea y edita cuarteles, personal, vehículos, asistencia, intervenciones e historial de su Regional.',
-      'Documentos y carpetas de su Regional (sin purga definitiva).',
-      'Calendario regional, Inventario Regional y aprobación de préstamos.',
-      'Departamentos: ve todos; carga integrantes sin usuario, actividad y eventos, y puede avisar a un departamento.',
-      'Reportes regionales.',
-    ],
+    selfSummary: 'Gestionás la información de los cuarteles de tu Regional (datos, dotación, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales.',
     assignable: true,
   },
   {
@@ -212,12 +166,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos que coordina',
-    permissions: [
-      'Ve y edita su departamento: datos, miembros, informes, actas y eventos.',
-      'Suma y quita miembros y avisa a todo su departamento.',
-      'Avales regionales: ve y carga los de su departamento. No edita, archiva ni elimina.',
-      'Recibe los avisos de su departamento. No ve otros departamentos.',
-    ],
+    selfSummary: 'Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También ves y cargás los avales de tu departamento. No ves otros departamentos.',
     assignable: true,
   },
   {
@@ -227,11 +176,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos de los que es miembro',
-    permissions: [
-      'Ve su departamento: miembros, informes, actas y eventos.',
-      'Carga informes, actas, actividad y eventos de su departamento.',
-      'Recibe los avisos de su departamento. No ve otros departamentos.',
-    ],
+    selfSummary: 'Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. No ves otros departamentos.',
     assignable: true,
   },
   {
@@ -241,12 +186,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    permissions: [
-      'Edita datos del cuartel, personal, vehículos, asistencia e intervenciones de su cuartel.',
-      'Documentos, carpetas e historial institucional de su cuartel.',
-      'Calendario de su cuartel y solicitudes de préstamo.',
-      'Sin acceso a Reportes.',
-    ],
+    selfSummary: 'Podés gestionar la información de tu cuartel: datos, dotación, personal, móviles, asistencia, intervenciones, documentos, historial y calendario. No accedés a Reportes.',
     assignable: true,
   },
   {
@@ -256,12 +196,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    permissions: [
-      'Edita datos operativos del cuartel: personal, vehículos, asistencia e intervenciones.',
-      'Gestiona usuarios de su cuartel: alta con roles de cuartel, contraseña, activar y desactivar.',
-      'Documentos, historial y calendario de su cuartel.',
-      'Reportes de su cuartel y solicitudes de préstamo.',
-    ],
+    selfSummary: 'Podés gestionar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel.',
     assignable: true,
   },
   {
@@ -271,11 +206,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    permissions: [
-      'Carga y edita personal, vehículos, asistencia e intervenciones de su cuartel.',
-      'Documentos, historial y calendario de su cuartel.',
-      'Reportes de su cuartel y solicitudes de préstamo.',
-    ],
+    selfSummary: 'Podés cargar y editar la información operativa de tu cuartel (dotación, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel.',
     assignable: true,
   },
   {
@@ -285,12 +216,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    permissions: [
-      'Documentos, carpetas e historial institucional de su cuartel.',
-      'Calendario de su cuartel.',
-      'Solo lectura de personal, vehículos, asistencia e intervenciones.',
-      'Sin acceso a Reportes.',
-    ],
+    selfSummary: 'Podés gestionar los documentos, el historial institucional y el calendario de tu cuartel. Consultás el personal, los móviles, la asistencia y las intervenciones, sin editarlos.',
     assignable: true,
   },
   {
@@ -300,7 +226,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'otros',
     scope: 'cuartel',
     scopeLabel: 'Su cuartel, solo lectura',
-    permissions: ['Solo lectura dentro de su cuartel.', 'Sin acceso a Auditoría, Reportes ni carga de datos.'],
+    selfSummary: 'Podés consultar la información de tu cuartel. No podés cargar ni editar datos.',
     assignable: true,
   },
 ]
@@ -318,7 +244,7 @@ export const RETIRED_ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'otros',
     scope: 'escuela',
     scopeLabel: 'Sin uso',
-    permissions: ['No da ningún permiso desde la migración 0097.'],
+    selfSummary: 'Este rol ya no se usa y no da permisos. Si tenés otros roles, rigen esos. Consultá a Informática y Estadística para quitarlo.',
     assignable: false,
   },
   {
@@ -328,7 +254,7 @@ export const RETIRED_ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'otros',
     scope: 'cuartel',
     scopeLabel: 'Sin uso',
-    permissions: ['No se ofrece en ningún formulario desde la migración 0043.'],
+    selfSummary: 'Este rol ya no se usa y no da permisos. Si tenés otros roles, rigen esos. Consultá a Informática y Estadística para quitarlo.',
     assignable: false,
   },
 ]

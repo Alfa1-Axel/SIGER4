@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import { Icon } from './ui/Icon'
 import { groupRolesByCategory } from '../types/roles'
 import type { RoleDefinition, RoleKey } from '../types/roles'
@@ -56,9 +55,6 @@ export function RoleGroupedPicker({ roles, selected, onToggle, disabled, lockedR
           </div>
         </section>
       ))}
-      <Link to="/roles" className="link-muted" target="_blank" rel="noopener noreferrer">
-        Ver qué permite cada rol (guía de roles y permisos)
-      </Link>
     </div>
   )
 }

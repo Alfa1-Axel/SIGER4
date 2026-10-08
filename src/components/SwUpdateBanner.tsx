@@ -5,9 +5,10 @@ import { Icon } from './ui/Icon'
 // Reemplaza el auto-reload silencioso de vite-plugin-pwa (ver main.tsx):
 // cuando hay una versión nueva del service worker esperando, se avisa acá en
 // vez de recargar la página sola. "Actualizar ahora" aplica el SW nuevo
-// (dispara un reload real, pero recién ahí, con el usuario al tanto). Mismo
-// patrón de montaje que AppUpdateBanner/NotificationPushBridge: una sola vez
-// dentro de App, no depende de en qué pantalla esté el usuario.
+// (dispara un reload real, pero recién ahí, con el usuario al tanto). Es un
+// aviso técnico de la PWA, sin novedades ni changelog. Mismo patrón de montaje
+// que NotificationPushBridge: una sola vez dentro de App, no depende de en qué
+// pantalla esté el usuario.
 export function SwUpdateBanner() {
   const [visible, setVisible] = useState(isSwUpdateAvailable())
 

@@ -1692,75 +1692,6 @@ input[type='file']::file-selector-button:hover {
   color: var(--color-text-secondary);
 }
 
-/* Novedades: una tarjeta por versión. */
-.release-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.release-date {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.release-title {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
-}
-
-.release-summary {
-  margin: 0 0 12px;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.release-group + .release-group {
-  margin-top: 12px;
-}
-
-.release-group-title {
-  margin: 0 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.release-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.release-list li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 1.45;
-}
-
-.release-list .badge {
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-/* Versión en el pie de página. */
-.app-footer-version {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 /* ============================================================
    Alertas, estados vacíos y de carga
    ============================================================ */
@@ -2344,95 +2275,6 @@ kbd {
   white-space: nowrap;
 }
 
-/* Centro de ayuda. */
-.help-search {
-  margin-bottom: 14px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.help-section {
-  margin-bottom: 22px;
-  scroll-margin-top: 16px;
-}
-
-.help-section-title {
-  margin-bottom: 10px;
-}
-
-.help-article {
-  margin-bottom: 8px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  scroll-margin-top: 16px;
-}
-
-.help-article summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.help-article summary::-webkit-details-marker {
-  display: none;
-}
-
-.help-article summary:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
-  border-radius: var(--radius-lg);
-}
-
-.help-article summary svg {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform 0.15s ease;
-}
-
-.help-article[open] summary svg {
-  transform: rotate(90deg);
-}
-
-.help-article-heading {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 14px;
-}
-
-.help-article-heading span {
-  font-size: 13px;
-  color: var(--color-text-secondary);
-}
-
-.help-article-body {
-  padding: 0 14px 14px;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.help-steps {
-  margin: 0 0 10px;
-  padding-left: 20px;
-}
-
-.help-steps li + li {
-  margin-top: 4px;
-}
-
-.help-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 /* Contacto directo con Informática y Estadística (components/SupportContact.tsx). */
 .support-contact {
   display: flex;
@@ -2515,19 +2357,6 @@ kbd {
   font-size: 13px;
   color: var(--color-text-muted);
   text-align: center;
-}
-
-.help-article-body .support-contact-inline {
-  align-items: flex-start;
-  margin-top: 4px;
-}
-
-.help-article-body .support-contact-inline .support-contact-actions {
-  justify-content: flex-start;
-}
-
-.help-article-body .support-contact-lead {
-  text-align: left;
 }
 
 .access-denied .support-contact-inline {
@@ -3588,215 +3417,6 @@ kbd {
   padding: 6px 12px;
 }
 
-/* ============================================================
-   Novedades del sistema (AppUpdateBanner)
-   ============================================================ */
-
-/* Por encima de todo, sin bloquear el uso del sistema: el contenedor no
-   recibe toques, solo la tarjeta. La tarjeta tiene un alto máximo según la
-   pantalla y se reparte en encabezado (con la X), cuerpo que se desplaza y
-   pie con los botones. Así el cierre y "Entendido" quedan siempre a la vista,
-   sin importar cuánto texto traiga la novedad. */
-.app-update-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 10010;
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 12px;
-  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-  padding-left: calc(12px + env(safe-area-inset-left, 0px));
-  padding-right: calc(12px + env(safe-area-inset-right, 0px));
-  pointer-events: none;
-}
-
-.app-update-card {
-  pointer-events: auto;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 420px;
-  /* vh de respaldo; dvh sigue a la barra del navegador del celular. */
-  max-height: calc(100vh - 24px - env(safe-area-inset-bottom, 0px));
-  max-height: calc(100dvh - 24px - env(safe-area-inset-bottom, 0px));
-  padding: 0;
-  overflow: hidden;
-  box-shadow: var(--shadow-lg);
-  animation: app-update-in 0.2s ease;
-}
-
-/* El foco entra a la tarjeta al abrirse; sus botones tienen su propio foco. */
-.app-update-card:focus {
-  outline: none;
-}
-
-@keyframes app-update-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-update-card {
-    animation: none;
-  }
-}
-
-@media (min-width: 900px) {
-  .app-update-overlay {
-    justify-content: flex-end;
-    padding: 24px;
-  }
-  .app-update-card {
-    max-height: min(560px, calc(100vh - 48px));
-    max-height: min(560px, calc(100dvh - 48px));
-  }
-}
-
-.app-update-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 8px 4px 16px;
-}
-
-.app-update-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-md);
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-}
-
-.app-update-close:hover {
-  background: var(--color-surface-hover);
-}
-
-.app-update-close:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
-/* Lo único que se desplaza. Las sombras de arriba y de abajo avisan que hay
-   más texto cuando el contenido no entra. */
-.app-update-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  padding: 0 16px 12px;
-  background:
-    linear-gradient(var(--color-surface) 30%, rgba(255, 255, 255, 0)) center top / 100% 18px no-repeat local,
-    linear-gradient(rgba(255, 255, 255, 0), var(--color-surface) 70%) center bottom / 100% 18px no-repeat local,
-    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0)) center top / 100% 7px no-repeat scroll,
-    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, 0.16), rgba(0, 0, 0, 0)) center bottom / 100% 7px no-repeat scroll;
-}
-
-.app-update-body:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
-}
-
-.app-update-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--color-text-primary);
-  margin: 0 0 2px;
-}
-
-.app-update-date {
-  font-size: 12px;
-  color: var(--color-text-muted);
-  margin: 0 0 10px;
-}
-
-.app-update-description {
-  font-size: 14px;
-  color: var(--color-text-secondary);
-  margin: 0 0 12px;
-}
-
-.app-update-changes {
-  list-style: none;
-  margin: 0 0 12px;
-  padding: 0;
-  font-size: 14px;
-  color: var(--color-text-primary);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.app-update-changes li {
-  position: relative;
-  padding-left: 16px;
-}
-
-.app-update-changes li::before {
-  content: '';
-  position: absolute;
-  left: 3px;
-  top: 0.55em;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-primary);
-}
-
-/* Un punto del aviso ocupa a lo sumo 3 renglones: el resto está en Novedades. */
-.app-update-item {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-}
-
-.app-update-more {
-  margin: 0;
-  font-size: 13px;
-  color: var(--color-text-muted);
-}
-
-/* Pie fijo: los botones nunca quedan fuera de la pantalla. */
-.app-update-actions {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 12px 16px 16px;
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
-}
-
-/* Pantallas bajas (celular de costado): botones en fila para dejar lugar al texto. */
-@media (max-height: 520px) {
-  .app-update-actions {
-    flex-direction: row;
-    padding-top: 10px;
-    padding-bottom: 12px;
-  }
-  .app-update-actions .btn {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}
-
 /* Barra fina, no bloqueante: hay una versión nueva del service worker
    esperando (ver SwUpdateBanner.tsx). */
 .sw-update-banner {
@@ -3955,22 +3575,6 @@ kbd {
   color: var(--color-text-muted);
 }
 
-.role-card {
-  padding: 12px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  min-width: 0;
-}
-
-.role-permissions {
-  margin: 8px 0 0;
-  padding-left: 18px;
-  font-size: 13px;
-  color: var(--color-text-secondary);
-  line-height: 1.5;
-}
-
 /* Roles por división: rol + dónde aplica (ficha, Mi perfil, guía). */
 .role-assignments {
   list-style: none;
@@ -4018,42 +3622,74 @@ kbd {
   color: var(--color-text-primary);
 }
 
-.role-examples {
+/* Mi perfil: "Tu rol en SIGER4" (components/OwnRolesCard.tsx). Solo los roles de
+   la persona, con dónde aplican y qué puede hacer con ellos. */
+.own-roles-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.role-example {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr) minmax(0, 2fr);
-  gap: 4px 12px;
+.own-role {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  min-width: 0;
+}
+
+.own-role--missing {
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
+}
+
+.own-role-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.own-role-name {
+  font-weight: 700;
+}
+
+.own-role-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-secondary);
+  min-width: 0;
+}
+
+.own-role-summary {
+  margin: 6px 0 0;
   font-size: 13px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.role-example:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.role-example-role {
-  font-weight: 600;
-}
-
-.role-example-division {
-  color: var(--color-primary-soft-text);
-}
-
-.role-example-result {
+  line-height: 1.45;
   color: var(--color-text-secondary);
 }
 
-@media (max-width: 640px) {
-  .role-example {
-    grid-template-columns: 1fr;
+/* En pantallas angostas el alcance baja a su propio renglón, sin el punto
+   separador colgado al final de la línea del rol. */
+@media (max-width: 520px) {
+  .own-role-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
   }
+
+  .own-role-sep {
+    display: none;
+  }
+}
+
+.own-roles-note {
+  margin: 10px 0 0;
 }
 
 /* Coordinador / integrante por departamento (alta y ficha de usuario). */

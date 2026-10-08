@@ -5,6 +5,12 @@ import type { AppModule } from './moduleAccess'
 // Etiqueta, módulo, importancia y destino de cada tipo de notificación. Lo
 // usan la bandeja (/notificaciones), el Inicio y la búsqueda global.
 
+// Las novedades del sistema ya no se muestran dentro de SIGER4: se comunican
+// por WhatsApp. Las notificaciones de este tipo que quedaron de versiones
+// anteriores se ocultan (no se borran) en la bandeja, el contador, el Inicio y
+// la búsqueda.
+export const HIDDEN_NOTIFICATION_TYPE: NotificationType = 'actualizacion_sistema'
+
 export type NotificationCategory = 'sistema' | 'escuela' | 'inventario' | 'documentos' | 'calendario' | 'cuarteles' | 'departamentos'
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
@@ -120,8 +126,6 @@ export function notificationLink(n: Pick<Notification, 'type' | 'link_path' | 's
       return '/reportes'
     case 'informe_departamento':
       return '/departamentos'
-    case 'actualizacion_sistema':
-      return '/novedades'
     case 'alerta_admin':
       return canManageUsers ? '/usuarios' : null
     case 'recordatorio_semanal':
@@ -135,7 +139,7 @@ export function notificationLink(n: Pick<Notification, 'type' | 'link_path' | 's
 // en modo departamento. Los de un módulo que ese modo no abre (un curso nuevo,
 // una circular, un préstamo, un evento regional) no se le muestran: serían un
 // aviso sin salida. Es el espejo de la política de 0107 sobre notifications.
-const GENERAL_NOTICE_MODULES: ReadonlySet<AppModule> = new Set<AppModule>(['inicio', 'departamentos', 'notificaciones', 'ajustes', 'roles', 'ayuda', 'novedades'])
+const GENERAL_NOTICE_MODULES: ReadonlySet<AppModule> = new Set<AppModule>(['inicio', 'departamentos', 'notificaciones', 'ajustes'])
 
 // ¿Este aviso corresponde mostrarlo? Siempre, salvo en modo departamento
 // para un aviso general que lleva a un módulo que su rol no abre. Los avisos

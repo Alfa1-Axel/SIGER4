@@ -130,9 +130,9 @@ export interface Notification {
   body: string | null
   is_read: boolean
   created_at: string
-  // Solo para type='actualizacion_sistema' -- id estable de la novedad en
-  // APP_UPDATES (src/config/appUpdates.ts) que originó esta notificación.
-  // Null para el resto de los tipos.
+  // Solo para type='actualizacion_sistema': notificaciones de novedades que
+  // generaban las versiones anteriores. Ya no se crean ni se muestran (ver
+  // HIDDEN_NOTIFICATION_TYPE); la columna sigue en la base. Null en el resto.
   app_update_id: string | null
   // Departamento de origen (0106): solo informativo, para mostrar
   // "Departamento Fuego" y filtrar. Null en el resto.

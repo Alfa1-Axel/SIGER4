@@ -5,14 +5,12 @@ import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { ImagePicker } from '../components/ui/ImagePicker'
 import { SystemSettingsSection } from '../components/SystemSettingsSection'
-import { CURRENT_APP_UPDATE, CURRENT_VERSION, formatUpdateDate } from '../config/appUpdates'
 import { PasskeysSection } from '../components/PasskeysSection'
 import { passkeysAvailable } from '../lib/auth/loginHelpers'
 import { useAuth } from '../hooks/useAuth'
 import { usePushNotifications } from '../hooks/usePushNotifications'
-import { Link } from 'react-router-dom'
-import { RoleAssignmentsList } from '../components/RoleAssignmentsList'
-import { useMyRoleAssignments } from '../hooks/useMyRoleAssignments'
+import { OwnRolesCard } from '../components/OwnRolesCard'
+import { SupportContact } from '../components/SupportContact'
 import { updateProfile } from '../lib/api/users'
 import { deleteAvatar, uploadAvatar } from '../lib/api/storage'
 import { createNotification } from '../lib/api/notifications'
@@ -131,8 +129,7 @@ function describePushInfraStatus(infra: PushInfraDiagnostics): { message: string
 }
 
 export function AjustesPage() {
-  const { profile, user, roles, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
-  const roleAssignments = useMyRoleAssignments()
+  const { profile, user, isAdmin, hasRole, signOut, refreshProfile } = useAuth()
   const push = usePushNotifications(profile?.id)
   const [clearingCache, setClearingCache] = useState(false)
   const [clearCacheError, setClearCacheError] = useState<string | null>(null)
@@ -424,10 +421,6 @@ export function AjustesPage() {
     <AppShell title="Mi perfil y ajustes">
       <h1 className="page-title">Mi perfil y ajustes</h1>
       <p className="page-subtitle">Tus datos personales, rol y alcance dentro del sistema.</p>
-      <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: -12, marginBottom: 16 }}>
-        SIGER4 {CURRENT_APP_UPDATE.version} · actualizado el {formatUpdateDate(CURRENT_APP_UPDATE.date)} ·{' '}
-        <Link to="/novedades">Ver novedades</Link>
-      </p>
 
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -443,21 +436,12 @@ export function AjustesPage() {
             {user?.email && <ContactLink kind="email" value={user.email} />}
           </div>
         </div>
+      </div>
 
-        {(roles.length > 0 || roleAssignments.length > 0) && (
-          <div style={{ marginTop: 16 }}>
-            <div className="kpi-label" style={{ marginBottom: 6 }}>
-              Tus roles y dónde aplican
-            </div>
-            <RoleAssignmentsList assignments={roleAssignments} />
-            <p className="field-help" style={{ marginTop: 8 }}>
-              Los asigna Informática; los departamentos, también su coordinador.{' '}
-              <Link to="/roles" className="link-muted">
-                Ver qué permite cada rol
-              </Link>
-            </p>
-          </div>
-        )}
+      <OwnRolesCard />
+
+      <div style={{ marginBottom: 20 }}>
+        <SupportContact />
       </div>
 
       <div className="section-header">
@@ -958,7 +942,7 @@ export function AjustesPage() {
       <div className="card-solid" style={{ marginBottom: 20 }}>
         <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 12 }}>
           Todos los lunes al mediodía, SIGER4 envía un recordatorio institucional para revisar
-          cargas pendientes, novedades y documentación. Podés desactivarlo si no lo querés recibir.
+          cargas pendientes y documentación. Podés desactivarlo si no lo querés recibir.
         </p>
         <button
           type="button"
@@ -1007,7 +991,7 @@ export function AjustesPage() {
           </div>
           <div className="card-solid" style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
-              Versión: <code style={{ fontFamily: 'var(--font-mono)' }}>{CURRENT_VERSION}</code> · Build:{' '}
+              Versión: <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_APP_VERSION__}</code> · Build:{' '}
               <code style={{ fontFamily: 'var(--font-mono)' }}>{__SIGER4_BUILD_VERSION__}</code>
             </p>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12 }}>

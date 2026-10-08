@@ -11,9 +11,9 @@ import {
 } from '../config/support'
 
 interface SupportContactProps {
-  // 'card': bloque de la sección Ayuda, con los datos a la vista para copiar.
+  // 'card': bloque de Mi perfil, con los datos a la vista para copiar.
   // 'inline': solo los dos botones (más una frase opcional), para las pantallas
-  // de "No tenés permiso", las respuestas de Ayuda y el ingreso.
+  // de "No tenés permiso", el Inicio sin departamento y el ingreso.
   variant?: 'card' | 'inline'
   // Frase que va antes de los botones en la variante 'inline'.
   lead?: string
@@ -52,11 +52,11 @@ export function SupportContact({ variant = 'card', lead }: SupportContactProps) 
       <div className="support-contact-heading">
         <Icon name="info" size={18} />
         <h2 id={titleId} className="support-contact-title">
-          ¿Necesitás ayuda?
+          Consultas a Informática y Estadística
         </h2>
       </div>
       <p className="support-contact-text">
-        ¿No encontraste lo que buscabas? Consultá al {SUPPORT_NAME} contando qué querías hacer y en qué pantalla estabas.
+        Si tenés una duda o un problema con SIGER4, consultá al {SUPPORT_NAME} contando qué querías hacer y en qué pantalla estabas.
       </p>
       <div className="support-contact-actions">
         <a className="btn btn-primary" href={mailto}>

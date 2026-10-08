@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Icon } from './ui/Icon'
 import {
   MIN_SEARCH_LENGTH,
@@ -135,10 +135,9 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
         if (id !== requestId.current) return
         setOutcome(result)
         setActiveIndex(0)
-        // Error solo si fallaron todos los módulos consultados (la Ayuda es
-        // local y nunca falla).
-        const remoteOk = Object.keys(result.results).some((m) => m !== 'ayuda')
-        if (result.failedModules.length > 0 && !remoteOk) setError('No pudimos buscar. Revisá tu conexión y volvé a intentar.')
+        // Error solo si fallaron todos los módulos consultados.
+        const someOk = Object.keys(result.results).length > 0
+        if (result.failedModules.length > 0 && !someOk) setError('No pudimos buscar. Revisá tu conexión y volvé a intentar.')
       })
       .catch(() => {
         if (id === requestId.current) setError('No pudimos buscar. Revisá tu conexión y volvé a intentar.')
@@ -235,16 +234,10 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
               <p>
                 Escribí al menos {MIN_SEARCH_LENGTH} letras para buscar en los módulos a los que tenés acceso:{' '}
                 {ctx.departmentOnly
-                  ? 'tu departamento, informes y actas, eventos de tu departamento, avales, notificaciones, ayuda y novedades.'
-                  : 'usuarios, cuarteles, departamentos, informes, documentos, avales, inventario, cursos, calendario, notificaciones y novedades.'}
+                  ? 'tu departamento, informes y actas, eventos de tu departamento, avales y notificaciones.'
+                  : 'usuarios, cuarteles, departamentos, informes, documentos, avales, inventario, cursos, calendario y notificaciones.'}
               </p>
-              <p>
-                ¿Buscás cómo hacer algo? Probá con "{ctx.departmentOnly ? 'ver informes' : 'pedir préstamo'}" o "cargar informe", o entrá al{' '}
-                <Link to="/ayuda" onClick={onClose}>
-                  Centro de ayuda
-                </Link>
-                .
-              </p>
+              <p>Buscá por nombre o por título, por ejemplo "{ctx.departmentOnly ? 'acta de octubre' : 'motobomba'}".</p>
             </div>
           )}
           {!tooShort && loading && !outcome && <div className="loading-state" role="status">Buscando…</div>}

@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { NotificationDetailModal } from '../components/ui/NotificationDetailModal'
-import { forceShowAppUpdateBanner } from '../lib/appUpdateBannerControl'
 import { fetchNotificationsForProfile, markNotificationsRead } from '../lib/api/notifications'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
@@ -126,11 +125,6 @@ export function NotificacionesPage() {
 
   async function handleOpen(n: Notification) {
     if (!n.is_read) await markRead([n.id])
-    // Las novedades del sistema abren el aviso real de esa versión.
-    if (n.type === 'actualizacion_sistema' && n.app_update_id) {
-      forceShowAppUpdateBanner(n.app_update_id)
-      return
-    }
     setOpenNotification({ ...n, is_read: true })
   }
 
@@ -152,8 +146,8 @@ export function NotificacionesPage() {
   function emptyMessage(): string {
     if (notifications.length === 0) {
       return isDepartmentOnly
-        ? 'No tenés notificaciones. Cuando haya novedades para vos o tu departamento, aparecen acá.'
-        : 'No tenés notificaciones. Cuando haya novedades para vos o tu cuartel, aparecen acá.'
+        ? 'No tenés notificaciones. Cuando haya avisos para vos o tu departamento, aparecen acá.'
+        : 'No tenés notificaciones. Cuando haya avisos para vos o tu cuartel, aparecen acá.'
     }
     if (status === 'no_leidas' && !category) return 'Estás al día: no tenés notificaciones sin leer.'
     if (status === 'importantes' && !category) return 'No hay avisos importantes pendientes.'

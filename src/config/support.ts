@@ -1,9 +1,9 @@
 import { buildMailto, buildWhatsAppUrl } from '../lib/contact'
 
 // Contacto directo con el Dpto. de Informática y Estadística R4. Es la única
-// fuente: la sección Ayuda, las pantallas de "No tenés permiso", las
-// respuestas de Ayuda que mandan a Informática y el ingreso lo usan desde
-// acá (components/SupportContact.tsx).
+// fuente: Mi perfil, las pantallas de "No tenés permiso", el Inicio de un
+// departamento sin asignar y el ingreso lo usan desde acá
+// (components/SupportContact.tsx).
 export const SUPPORT_NAME = 'Dpto. de Informática y Estadística R4'
 export const SUPPORT_EMAIL = 'dptoinformaticayestadisticar4@gmail.com'
 // Celular de Argentina sin 0 ni 15: lib/contact.ts le agrega el +549.

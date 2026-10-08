@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { HIDDEN_NOTIFICATION_TYPE } from '../notificationMeta'
 import type { Notification, NotificationType } from '../../types/database'
 
 // RLS ya restringe el resultado a lo que el perfil actual puede ver (propias,
@@ -28,6 +29,7 @@ export async function fetchNotificationsForProfile(_profileId: string, limit = 1
   const { data, error } = await supabase
     .from('my_notifications')
     .select('*')
+    .neq('type', HIDDEN_NOTIFICATION_TYPE)
     .order('created_at', { ascending: false })
     .limit(limit)
   if (error) throw error
@@ -42,6 +44,7 @@ export async function fetchUnreadNotificationCount(): Promise<number> {
   const { count, error } = await supabase
     .from('my_notifications')
     .select('id', { count: 'exact', head: true })
+    .neq('type', HIDDEN_NOTIFICATION_TYPE)
     .eq('is_read', false)
   if (error) throw error
   return count ?? 0
@@ -52,6 +55,7 @@ export async function fetchLatestUnreadNotifications(limit = 3): Promise<Notific
   const { data, error } = await supabase
     .from('my_notifications')
     .select('*')
+    .neq('type', HIDDEN_NOTIFICATION_TYPE)
     .eq('is_read', false)
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -64,6 +68,7 @@ export async function fetchUnreadDepartmentNotifications(departmentId: string, l
   const { data, error } = await supabase
     .from('my_notifications')
     .select('*')
+    .neq('type', HIDDEN_NOTIFICATION_TYPE)
     .eq('is_read', false)
     .eq('department_id', departmentId)
     .order('created_at', { ascending: false })
@@ -110,33 +115,4 @@ export async function createNotification(input: NotificationInput): Promise<Noti
     .single()
   if (error) throw error
   return data as Notification
-}
-
-// Notificación interna de "hay una novedad nueva" (ver AppUpdateBanner.tsx).
-//
-// Historial de este helper (para no repetir los mismos dos intentos
-// fallidos): primero un insert simple + catch(23505) -- el navegador loguea
-// igual la petición como 409 en Network aunque el código trate el error
-// bien. Después un upsert con { onConflict: 'profile_id,app_update_id',
-// ignoreDuplicates: true } -- PostgREST responde 400 Bad Request, porque el
-// índice de deduplicación (idx_notifications_app_update_dedup, migración
-// 0077) es un índice único PARCIAL ("where app_update_id is not null"), y
-// PostgREST no puede traducir on_conflict a un índice parcial (limitación
-// de la capa REST, no de Postgres). Solución final: la lógica de insert +
-// "on conflict ... where ... do nothing" se mueve a una RPC de Postgres
-// (ensure_app_update_notification, migración 0079), que sí soporta el
-// conflict target parcial porque es SQL plano ejecutado server-side, no
-// algo que PostgREST tenga que inferir. profile_id se resuelve ahí adentro
-// desde current_profile_id() (nunca un parámetro), así que no hace falta
-// pasarlo acá.
-//
-// La RPC nunca pisa is_read/read_at de una notificación existente ("do
-// nothing" no ejecuta ningún update), y nunca lanza excepción si el usuario
-// no tiene perfil activo -- devuelve created=false sin insertar.
-export async function createAppUpdateNotification(appUpdateId: string, title: string): Promise<void> {
-  const { error } = await supabase.rpc('ensure_app_update_notification', {
-    p_app_update_id: appUpdateId,
-    p_title: title,
-  })
-  if (error) throw error
 }

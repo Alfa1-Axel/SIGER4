@@ -2,7 +2,6 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
-import { AppUpdateBanner } from './components/AppUpdateBanner'
 import { SwUpdateBanner } from './components/SwUpdateBanner'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
@@ -29,7 +28,6 @@ import { EscuelaPage } from './pages/EscuelaPage'
 import { CursoFormPage } from './pages/CursoFormPage'
 import { AvalesPage } from './pages/AvalesPage'
 import { AvalFormPage } from './pages/AvalFormPage'
-import { RolesPage } from './pages/RolesPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
@@ -59,8 +57,6 @@ import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
 import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
 import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
 import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
-import { NovedadesPage } from './pages/NovedadesPage'
-import { AyudaPage } from './pages/AyudaPage'
 import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
 
 export default function App() {
@@ -69,7 +65,6 @@ export default function App() {
       <SwUpdateBanner />
       <AuthProvider>
         <NotificationPushBridge />
-        <AppUpdateBanner />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
@@ -106,7 +101,6 @@ export default function App() {
         <Route path="/escuela/avales/:id/editar" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
         <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
-        <Route path="/roles" element={<ProtectedRoute><RolesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<UserManagerRoute><UsuariosPage /></UserManagerRoute>} />
         <Route path="/usuarios/nuevo" element={<UserCreatorRoute><UsuarioFormPage /></UserCreatorRoute>} />
         <Route path="/usuarios/:id" element={<UserManagerRoute><UsuarioDetallePage /></UserManagerRoute>} />
@@ -134,8 +128,6 @@ export default function App() {
         <Route path="/inventario/:itemId/solicitudes/nueva" element={<ModuleRoute module="inventario" title="Inventario"><SolicitudPrestamoFormPage /></ModuleRoute>} />
         <Route path="/inventario/:id/editar" element={<ModuleRoute module="inventario" title="Inventario"><InventarioFormPage /></ModuleRoute>} />
         <Route path="/inventario/:id" element={<ModuleRoute module="inventario" title="Inventario"><InventarioDetallePage /></ModuleRoute>} />
-        <Route path="/ayuda" element={<ProtectedRoute><AyudaPage /></ProtectedRoute>} />
-        <Route path="/novedades" element={<ProtectedRoute><NovedadesPage /></ProtectedRoute>} />
         <Route path="/departamentos" element={<ProtectedRoute><DepartamentosPage /></ProtectedRoute>} />
         <Route path="/departamentos/nuevo" element={<ProtectedRoute><DepartamentoFormPage /></ProtectedRoute>} />
         {/* Informes y actas de un departamento (0098). */}
@@ -145,6 +137,11 @@ export default function App() {
         <Route path="/departamentos/:departmentId/informes/nuevo" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/informes/:id/editar" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />
+        {/* Pantallas retiradas: Ayuda, Novedades y la guía de Roles y permisos
+            ya no existen. Si alguien entra por un enlace viejo, va al Inicio. */}
+        <Route path="/ayuda/*" element={<Navigate to="/panel" replace />} />
+        <Route path="/novedades/*" element={<Navigate to="/panel" replace />} />
+        <Route path="/roles/*" element={<Navigate to="/panel" replace />} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>

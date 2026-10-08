@@ -80,13 +80,9 @@ export const NAV_ITEMS: NavItem[] = [
   // Solo informatica_r4 (is_super_admin() en la base, ver 0097).
   { to: '/auditoria', label: 'Auditoría', icon: 'clipboardList', section: 'Administración', module: 'auditoria', visible: (ctx) => ctx.isSuperAdmin },
   { to: '/notificaciones', label: 'Notificaciones', icon: 'bell', section: 'Cuenta', module: 'notificaciones' },
+  // En Mi perfil cada persona ve su propio rol y qué puede hacer con él. No
+  // hay pantallas de Ayuda, Novedades ni una guía con todos los roles.
   { to: '/ajustes', label: 'Mi perfil y ajustes', icon: 'settings', section: 'Cuenta', module: 'ajustes' },
-  // Página informativa, abierta por URL y desde el perfil y la Ayuda; en
-  // modo departamento el menú se limita a lo que usa todos los días (la
-  // Ayuda tiene "Qué puedo hacer con mi rol").
-  { to: '/roles', label: 'Roles y permisos', icon: 'info', section: 'Cuenta', module: 'roles', visible: (ctx) => !ctx.departmentOnly },
-  { to: '/ayuda', label: 'Ayuda', icon: 'help', section: 'Cuenta', module: 'ayuda' },
-  { to: '/novedades', label: 'Novedades', icon: 'magic', section: 'Cuenta', module: 'novedades' },
 ]
 
 export const NAV_SECTIONS: NavSection[] = ['Gestión', 'Administración', 'Cuenta']

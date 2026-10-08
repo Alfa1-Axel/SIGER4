@@ -45,18 +45,10 @@ export function UsuariosPage() {
 
   return (
     <AppShell title="Usuarios">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <h1 className="page-title">Usuarios</h1>
-          <p className="page-subtitle">
-            {isJefeCuerpoActivo ? 'Usuarios de tu cuartel. Tocá uno para editar sus datos o su contraseña.' : 'Cuentas del sistema con sus roles y alcances. Tocá una para editarla.'}
-          </p>
-        </div>
-        <Link to="/roles" className="btn btn-outlined btn-sm" style={{ whiteSpace: 'nowrap' }}>
-          <Icon name="clipboardList" size={14} />
-          Roles y permisos
-        </Link>
-      </div>
+      <h1 className="page-title">Usuarios</h1>
+      <p className="page-subtitle">
+        {isJefeCuerpoActivo ? 'Usuarios de tu cuartel. Tocá uno para editar sus datos o su contraseña.' : 'Cuentas del sistema con sus roles y alcances. Tocá una para editarla.'}
+      </p>
 
       <div className="search-input" style={{ marginBottom: 20 }}>
         <Icon name="search" size={16} />

@@ -4,8 +4,8 @@ import type { RoleKey } from '../types/roles'
 // Modo departamento: quien tiene SOLO roles de departamento (Coordinador o
 // Miembro de Departamento) usa la aplicación a través de su departamento:
 // Inicio departamental, el departamento (miembros, informes, actas, eventos
-// y avisos), el calendario de su departamento, Notificaciones, Ayuda,
-// Novedades y su perfil. Todo lo demás (cuarteles, mapa, Escuela, Documentos,
+// y avisos), el calendario de su departamento, Notificaciones y su perfil.
+// Todo lo demás (cuarteles, mapa, Escuela, Documentos,
 // Inventario, Reportes, Usuarios, Auditoría) no se le ofrece: ni en el menú,
 // ni en el Inicio, ni en la búsqueda, ni por URL directa.
 //
@@ -29,18 +29,13 @@ export type AppModule =
   | 'auditoria'
   | 'notificaciones'
   | 'ajustes'
-  | 'roles'
-  | 'ayuda'
-  | 'novedades'
 
 export function isDepartmentOnly(roles: readonly RoleKey[]): boolean {
   return roles.length > 0 && roles.every((r) => DEPARTMENT_ROLES.includes(r))
 }
 
 // Módulos que el modo departamento sí abre. 'avales' lo abre cada coordinador
-// para su departamento (SchoolAvalesRoute decide por su acceso real); 'roles'
-// es solo informativo y se llega desde el perfil y la ayuda, por eso no se
-// cierra aunque no esté en el menú.
+// para su departamento (SchoolAvalesRoute decide por su acceso real).
 const DEPARTMENT_ONLY_MODULES: ReadonlySet<AppModule> = new Set<AppModule>([
   'inicio',
   'departamentos',
@@ -48,9 +43,6 @@ const DEPARTMENT_ONLY_MODULES: ReadonlySet<AppModule> = new Set<AppModule>([
   'avales',
   'notificaciones',
   'ajustes',
-  'roles',
-  'ayuda',
-  'novedades',
 ])
 
 export function canUseModule(module: AppModule, departmentOnly: boolean): boolean {
@@ -80,9 +72,6 @@ const PATH_MODULES: [string, AppModule][] = [
   ['/auditoria', 'auditoria'],
   ['/notificaciones', 'notificaciones'],
   ['/ajustes', 'ajustes'],
-  ['/roles', 'roles'],
-  ['/ayuda', 'ayuda'],
-  ['/novedades', 'novedades'],
 ]
 
 // Módulo al que pertenece una ruta interna (con o sin query o #ancla), o

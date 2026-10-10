@@ -11,6 +11,9 @@ import { fetchStationById } from '../lib/api/stations'
 import { fetchStationStaffing } from '../lib/api/stationStaffing'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 import type { AttendanceSummary, Station, StationStaffing } from '../types/database'
 
 type FieldErrors = Partial<Record<'periodStart' | 'periodEnd' | 'attendanceRate' | 'observations', string>>
@@ -90,6 +93,8 @@ export function AsistenciaFormPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Si otra persona cambió el resumen mientras se editaba: lo que se intentó guardar.
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [submitted, setSubmitted] = useState(false)
 
@@ -157,6 +162,7 @@ export function AsistenciaFormPage() {
     setError(null)
     if (Object.keys(fieldErrors).length > 0) return
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         station_id: resolvedStationId,
@@ -166,7 +172,8 @@ export function AsistenciaFormPage() {
         observations: observations.trim() || null,
       }
       if (isEditing && id) {
-        await updateAttendanceSummary(id, input)
+        attempted = input
+        await updateAttendanceSummary(id, input, existing?.row_version)
       } else {
         await createAttendanceSummary(input)
       }
@@ -174,7 +181,11 @@ export function AsistenciaFormPage() {
         state: { notice: `Resumen de asistencia del ${formatDay(periodStart)} al ${formatDay(periodEnd)} guardado.` },
       })
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el resumen de asistencia. Reintentá en unos segundos.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el resumen de asistencia. Reintentá en unos segundos.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -349,6 +360,35 @@ export function AsistenciaFormPage() {
             {error}
           </div>
         )}
+
+        {conflict && existing && id && (
+
+          <EditConflictPanel
+
+            table="attendance_summaries"
+
+            recordId={id}
+
+            base={existing as unknown as RowSnapshot}
+
+            mine={conflict.mine}
+
+            onSave={(patch, version) => updateAttendanceSummary(id, patch as Parameters<typeof updateAttendanceSummary>[1], version)}
+
+            onResolved={async () => {
+
+              navigate(`/cuarteles/${resolvedStationId}`, { state: { notice: 'Resumen de asistencia guardado.' } })
+
+            }}
+
+            onDiscard={() => window.location.reload()}
+
+            onClose={() => setConflict(null)}
+
+          />
+
+        )}
+
 
         <button type="submit" className="btn btn-primary btn-block" style={{ marginTop: 16 }} disabled={submitting}>
           {submitting ? 'Guardando…' : 'Guardar resumen'}

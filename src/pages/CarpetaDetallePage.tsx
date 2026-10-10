@@ -24,6 +24,9 @@ import type { DocumentFolder, DocumentRecord, Station, Subsede, VisibleDepartmen
 import { useAuth } from '../hooks/useAuth'
 import { useDocumentAccess } from '../hooks/useDocumentAccess'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 // Una carpeta, o uno de los dos espacios que no son carpeta:
 //   "general"      lo publicado para todos (visibilidad "Visible para todos").
@@ -51,6 +54,8 @@ export function CarpetaDetallePage() {
   const [trashingId, setTrashingId] = useState<string | null>(null)
 
   const [editingFolder, setEditingFolder] = useState(false)
+  // Otra persona cambió la carpeta mientras se editaba: lo que se intentó guardar.
+  const [folderConflict, setFolderConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
@@ -138,12 +143,17 @@ export function CarpetaDetallePage() {
     if (!id || isSpace) return
     setSaving(true)
     setError(null)
+    const input = { name, description: description || null }
     try {
-      const updated = await updateDocumentFolder(id, { name, description: description || null })
+      const updated = await updateDocumentFolder(id, input, folder?.row_version)
       setFolder(updated)
       setEditingFolder(false)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar la carpeta.'))
+      if (isEditConflict(err)) {
+        setFolderConflict({ mine: input })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar la carpeta.'))
+      }
     } finally {
       setSaving(false)
     }
@@ -201,6 +211,22 @@ export function CarpetaDetallePage() {
             <label htmlFor="description">Descripción (opcional)</label>
             <textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} />
           </div>
+          {folderConflict && id && (
+            <EditConflictPanel
+              table="document_folders"
+              recordId={id}
+              base={folder as unknown as RowSnapshot}
+              mine={folderConflict.mine}
+              onSave={(patch, version) => updateDocumentFolder(id, patch as Parameters<typeof updateDocumentFolder>[1], version)}
+              onResolved={(saved) => {
+                setFolder(saved as typeof folder)
+                setFolderConflict(null)
+                setEditingFolder(false)
+              }}
+              onDiscard={() => window.location.reload()}
+              onClose={() => setFolderConflict(null)}
+            />
+          )}
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Guardando…' : 'Guardar carpeta'}

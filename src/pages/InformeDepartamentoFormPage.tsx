@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
@@ -14,7 +14,12 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from './DepartamentoDetallePage'
 import type { Department, DepartmentActivityType, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
-import { describeSupabaseError } from '../lib/api/errors'
+import { describeSupabaseError, postgrestCode } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import { useFormDraft } from '../hooks/useFormDraft'
+import { DraftRecoveryBanner, DraftStatusLine } from '../components/FormDraftUi'
+import type { RowSnapshot } from '../lib/concurrency'
 
 function todayDateInputValue(): string {
   const d = new Date()
@@ -49,6 +54,10 @@ export function InformeDepartamentoFormPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La actividad tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -63,6 +72,7 @@ export function InformeDepartamentoFormPage() {
             return
           }
           deptId = report.department_id
+          setExisting(report as unknown as RowSnapshot)
           setTitle(report.title)
           setDescription(report.description ?? '')
           setActivityDate(report.activity_date)
@@ -103,6 +113,31 @@ export function InformeDepartamentoFormPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, departmentIdFromQuery])
 
+  // Borrador en el servidor (0113).
+  const draftValue = useMemo(
+    () => ({ title, description, activityDate, activityType, stationId, subsedeId, attendeesCount, hoursWorked }),
+    [title, description, activityDate, activityType, stationId, subsedeId, attendeesCount, hoursWorked],
+  )
+  const draft = useFormDraft({
+    formKey: 'actividad-departamento',
+    contextKey: isEditing ? `edit:${id}` : `nuevo:${departmentIdFromQuery ?? 'general'}`,
+    value: draftValue,
+    enabled: !loading && (isEditing ? Boolean(existing) : true),
+    recordId: id ?? null,
+    baseVersion: existing?.row_version ?? null,
+  })
+
+  function applyDraft(d: typeof draftValue) {
+    setTitle(d.title)
+    setDescription(d.description)
+    setActivityDate(d.activityDate)
+    setActivityType(d.activityType)
+    setStationId(d.stationId)
+    setSubsedeId(d.subsedeId)
+    setAttendeesCount(d.attendeesCount)
+    setHoursWorked(d.hoursWorked)
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
@@ -112,6 +147,7 @@ export function InformeDepartamentoFormPage() {
     if (!resolvedDepartmentId) return setError('No pudimos determinar el departamento de esta actividad.')
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         department_id: resolvedDepartmentId,
@@ -125,15 +161,27 @@ export function InformeDepartamentoFormPage() {
         hours_worked: hoursWorked ? Number(hoursWorked) : 0,
       }
       if (isEditing && id) {
-        await updateDepartmentActivityReport(id, input)
+        attempted = input
+        await updateDepartmentActivityReport(id, input, existing?.row_version)
       } else {
-        await createDepartmentActivityReport({ ...input, created_by_profile_id: currentProfile?.id ?? null })
+        // El id lo eligió el borrador de antemano: si la respuesta se pierde y se reintenta,
+        // el segundo intento no duplica la actividad.
+        try {
+          await createDepartmentActivityReport({ ...input, id: draft.clientRecordId, created_by_profile_id: currentProfile?.id ?? null })
+        } catch (createErr) {
+          if (postgrestCode(createErr) !== '23505' || !(await fetchDepartmentActivityReportById(draft.clientRecordId))) throw createErr
+        }
       }
+      void draft.resolve()
       navigate(`/departamentos/${resolvedDepartmentId}`, {
         state: { notice: isEditing ? 'Se guardaron los cambios de la actividad.' : 'Actividad registrada. Ya suma en las estadísticas del departamento.' },
       })
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar la actividad. Reintentá en unos segundos.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar la actividad. Reintentá en unos segundos.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -185,6 +233,7 @@ export function InformeDepartamentoFormPage() {
       </p>
 
       <form onSubmit={handleSubmit} className="card-solid" noValidate>
+        <DraftRecoveryBanner draft={draft} subject="una actividad" onApply={applyDraft} currentVersion={existing?.row_version ?? null} />
         <div className="field">
           <label htmlFor="title">Título</label>
           <input id="title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Capacitación de rescate vehicular" />
@@ -258,6 +307,21 @@ export function InformeDepartamentoFormPage() {
             ))}
           </select>
         </div>
+
+        {conflict && existing && id && (
+          <EditConflictPanel
+            table="department_activity_reports"
+            recordId={id}
+            base={existing}
+            mine={conflict.mine}
+            onSave={(patch, version) => updateDepartmentActivityReport(id, patch as Parameters<typeof updateDepartmentActivityReport>[1], version)}
+            onResolved={() => navigate(`/departamentos/${resolvedDepartmentId}`, { state: { notice: 'Se guardaron los cambios de la actividad.' } })}
+            onDiscard={() => window.location.reload()}
+            onClose={() => setConflict(null)}
+          />
+        )}
+
+        <DraftStatusLine draft={draft} isNew={!isEditing} onApply={applyDraft} />
 
         {error && <p className="field-error">{error}</p>}
 

@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type {
   Department,
   DepartmentDirectoryEntry,
@@ -130,10 +131,8 @@ export async function createDepartment(input: DepartmentInput): Promise<Departme
   return data as Department
 }
 
-export async function updateDepartment(id: string, input: Partial<DepartmentInput>): Promise<Department> {
-  const { data, error } = await supabase.from('departments').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as Department
+export async function updateDepartment(id: string, input: Partial<DepartmentInput>, expectedVersion?: number | null): Promise<Department> {
+  return updateVersioned<Department>('departments', id, input, expectedVersion)
 }
 
 export async function deleteDepartment(id: string): Promise<void> {
@@ -198,11 +197,6 @@ export async function createDepartmentManualMember(input: DepartmentManualMember
   return data as DepartmentManualMember
 }
 
-export async function updateDepartmentManualMember(
-  id: string,
-  input: Partial<DepartmentManualMemberInput>,
-): Promise<DepartmentManualMember> {
-  const { data, error } = await supabase.from('department_manual_members').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as DepartmentManualMember
+export async function updateDepartmentManualMember(id: string, input: Partial<DepartmentManualMemberInput>, expectedVersion?: number | null): Promise<DepartmentManualMember> {
+  return updateVersioned<DepartmentManualMember>('department_manual_members', id, input, expectedVersion)
 }

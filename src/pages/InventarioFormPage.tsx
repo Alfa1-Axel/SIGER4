@@ -16,6 +16,9 @@ import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPa
 import type { InventoryCategory, InventoryItemHistory, InventoryStatus, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 export function InventarioFormPage() {
   const { id } = useParams<{ id?: string }>()
@@ -44,6 +47,10 @@ export function InventarioFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     if (!canEdit) return
@@ -64,6 +71,7 @@ export function InventarioFormPage() {
     if (!id) return
     let active = true
     Promise.all([fetchInventoryItemById(id), fetchInventoryItemHistory(id)]).then(([item, historyData]) => {
+      setExisting((item ?? null) as unknown as RowSnapshot | null)
       if (!active || !item) return
       setName(item.name)
       setCategory(item.category)
@@ -98,6 +106,7 @@ export function InventarioFormPage() {
     }
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         name,
@@ -113,13 +122,18 @@ export function InventarioFormPage() {
         observations: observations || null,
       }
       if (isEditing && id) {
-        await updateInventoryItem(id, input)
+        attempted = input
+        await updateInventoryItem(id, input, existing?.row_version)
       } else {
         await createInventoryItem({ ...input, created_by_profile_id: profile?.id ?? null })
       }
       navigate('/inventario')
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el elemento.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el elemento.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -251,6 +265,35 @@ export function InventarioFormPage() {
           </div>
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="inventory_items"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateInventoryItem(id, patch as Parameters<typeof updateInventoryItem>[1], version)}
+
+              onResolved={async () => {
+
+                navigate('/inventario')
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar elemento'}

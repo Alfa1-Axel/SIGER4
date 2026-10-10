@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { DepartmentReport, DepartmentReportFile, DepartmentReportType, DepartmentReportWithFiles } from '../../types/database'
 import { buildDepartmentReportFilePath, removeDepartmentReportObjects, uploadDepartmentReportObject } from './storage'
 
@@ -63,10 +64,12 @@ export interface DepartmentReportInput {
   report_date: string
 }
 
-export async function createDepartmentReport(departmentId: string, input: DepartmentReportInput): Promise<DepartmentReport> {
+// id: lo elige la pantalla de antemano (borrador) para que reintentar un alta cuya
+// respuesta se perdió choque con el primer intento (23505) y no lo duplique.
+export async function createDepartmentReport(departmentId: string, input: DepartmentReportInput, id?: string): Promise<DepartmentReport> {
   const { data, error } = await supabase
     .from('department_reports')
-    .insert({ department_id: departmentId, ...input })
+    .insert({ ...(id ? { id } : {}), department_id: departmentId, ...input })
     .select('*')
     .single()
   if (error) throw error
@@ -75,10 +78,8 @@ export async function createDepartmentReport(departmentId: string, input: Depart
 
 // Sin permiso, PostgREST no encuentra fila para devolver (PGRST116), que
 // describeSupabaseError traduce a "no tenés permisos".
-export async function updateDepartmentReport(id: string, input: DepartmentReportInput): Promise<DepartmentReport> {
-  const { data, error } = await supabase.from('department_reports').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as DepartmentReport
+export async function updateDepartmentReport(id: string, input: Partial<DepartmentReportInput>, expectedVersion?: number | null): Promise<DepartmentReport> {
+  return updateVersioned<DepartmentReport>('department_reports', id, input, expectedVersion)
 }
 
 export async function setDepartmentReportArchived(id: string, archived: boolean): Promise<DepartmentReport> {

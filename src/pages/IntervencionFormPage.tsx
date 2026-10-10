@@ -11,6 +11,9 @@ import { fetchStationById } from '../lib/api/stations'
 import type { InterventionTimeOfDay } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 const TIME_OF_DAY_OPTIONS: { value: InterventionTimeOfDay; label: string }[] = [
   { value: 'diurno', label: 'Diurno' },
@@ -50,11 +53,16 @@ export function IntervencionFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     if (!id) return
     let active = true
     fetchInterventionSummaryById(id).then((summary) => {
+      setExisting((summary ?? null) as unknown as RowSnapshot | null)
       if (!active || !summary) return
       setResolvedStationId(summary.station_id)
       setPeriodStart(summary.period_start)
@@ -88,6 +96,7 @@ export function IntervencionFormPage() {
     event.preventDefault()
     setError(null)
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         station_id: resolvedStationId,
@@ -102,13 +111,18 @@ export function IntervencionFormPage() {
         observations: observations || null,
       }
       if (isEditing && id) {
-        await updateInterventionSummary(id, input)
+        attempted = input
+        await updateInterventionSummary(id, input, existing?.row_version)
       } else {
         await createInterventionSummary(input)
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el resumen de intervenciones.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el resumen de intervenciones.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -234,6 +248,35 @@ export function IntervencionFormPage() {
           </div>
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="intervention_summaries"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateInterventionSummary(id, patch as Parameters<typeof updateInterventionSummary>[1], version)}
+
+              onResolved={async () => {
+
+                navigate(`/cuarteles/${resolvedStationId}`)
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar resumen'}

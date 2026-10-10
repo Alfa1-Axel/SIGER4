@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { MapReferencePoint, MapReferencePointType } from '../../types/database'
 
 // RLS (map_reference_points_select_scope, migración 0084) ya filtra a lo que
@@ -20,6 +21,7 @@ export async function fetchMapReferencePointById(id: string): Promise<MapReferen
 export interface MapReferencePointInput {
   name: string
   type: MapReferencePointType
+  subtype?: string | null
   description?: string | null
   latitude: number
   longitude: number
@@ -35,10 +37,8 @@ export async function createMapReferencePoint(input: MapReferencePointInput): Pr
   return data as MapReferencePoint
 }
 
-export async function updateMapReferencePoint(id: string, input: Partial<MapReferencePointInput>): Promise<MapReferencePoint> {
-  const { data, error } = await supabase.from('map_reference_points').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as MapReferencePoint
+export async function updateMapReferencePoint(id: string, input: Partial<MapReferencePointInput>, expectedVersion?: number | null): Promise<MapReferencePoint> {
+  return updateVersioned<MapReferencePoint>('map_reference_points', id, input, expectedVersion)
 }
 
 // Borrado físico: la RLS (map_reference_points_delete_admin) ya lo

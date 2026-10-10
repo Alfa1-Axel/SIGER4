@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { AttendanceSummary } from '../../types/database'
 
 export async function fetchAttendanceByStation(stationId: string): Promise<AttendanceSummary[]> {
@@ -34,8 +35,6 @@ export async function createAttendanceSummary(input: AttendanceSummaryInput): Pr
   return data as AttendanceSummary
 }
 
-export async function updateAttendanceSummary(id: string, input: Partial<AttendanceSummaryInput>): Promise<AttendanceSummary> {
-  const { data, error } = await supabase.from('attendance_summaries').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as AttendanceSummary
+export async function updateAttendanceSummary(id: string, input: Partial<AttendanceSummaryInput>, expectedVersion?: number | null): Promise<AttendanceSummary> {
+  return updateVersioned<AttendanceSummary>('attendance_summaries', id, input, expectedVersion)
 }

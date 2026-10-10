@@ -101,6 +101,10 @@
   --map-ref-riesgo: #b42318;
   --map-ref-estrategico: #2f855a;
   --map-ref-otro: #6b7280;
+  /* Lugares relevantes y abastecimiento (v1.14.0). Abastecimiento va en un azul grisáceo neutro a propósito:
+     ningún color de punto sugiere que haya agua disponible; el estado se lee en la ficha. */
+  --map-ref-lugar: #a8552a;
+  --map-ref-abastecimiento: #4a6685;
   --map-marker-outline: #1b222c;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667080' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 
@@ -4079,4 +4083,381 @@ kbd {
 
 .visibility-option--selected .visibility-option-text span {
   color: var(--color-primary-soft-text);
+}
+
+/* ---------------------------------------------------------------
+   Utilidades y panel de conflicto de edición (v1.14.0)
+   --------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.conflict-panel {
+  scroll-margin-top: 80px;
+}
+
+.conflict-lead,
+.conflict-help,
+.conflict-kept {
+  margin: 6px 0;
+}
+
+.conflict-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.conflict-field {
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+}
+
+.conflict-field-name {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.conflict-choice {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .conflict-choice {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.conflict-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.conflict-option input {
+  width: auto;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.conflict-option--selected {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-soft-text);
+}
+
+.conflict-option-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.conflict-option--selected .conflict-option-label {
+  color: var(--color-primary-soft-text);
+}
+
+.conflict-value {
+  display: block;
+  max-height: 9rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.conflict-mine-only {
+  min-width: 0;
+}
+
+.conflict-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.conflict-actions .btn {
+  min-height: 44px;
+}
+
+.conflict-pending {
+  font-size: 13px;
+}
+
+.conflict-error {
+  margin: 6px 0;
+  font-weight: 600;
+}
+
+.conflict-copy {
+  width: 100%;
+  margin: 6px 0;
+}
+
+/* ---------------------------------------------------------------
+   Autoguardado de borradores (v1.14.0)
+   --------------------------------------------------------------- */
+.draft-status {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.draft-status--ok {
+  color: var(--color-success);
+}
+
+.draft-status--warn {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+
+.draft-recovery-text {
+  margin: 4px 0 8px;
+}
+
+.draft-recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.draft-recovery-actions .btn {
+  min-height: 44px;
+}
+
+.draft-status .btn {
+  min-height: 36px;
+}
+
+/* ---------------------------------------------------------------
+   Fichas del Mapa Regional (v1.14.0)
+   --------------------------------------------------------------- */
+.sheet-header {
+  margin-bottom: 8px;
+}
+
+.sheet-kind {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.sheet-review {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+
+.sheet-actions .btn {
+  min-height: 44px;
+}
+
+.sheet-section {
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+}
+
+.sheet-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.sheet-section--private {
+  border-left: 4px solid var(--color-warning-border);
+}
+
+.sheet-subtitle {
+  margin: 14px 0 6px;
+  font-size: 14px;
+}
+
+.sheet-dl {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px 16px;
+  margin: 0;
+}
+
+.sheet-dl dt {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.sheet-dl dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+@media (min-width: 720px) {
+  .sheet-dl {
+    grid-template-columns: 220px 1fr;
+  }
+  .sheet-dl dt {
+    margin-top: 6px;
+  }
+  .sheet-dl dd {
+    margin-top: 6px;
+  }
+}
+
+.sheet-help,
+.sheet-meta,
+.sheet-provenance,
+.sheet-footnote,
+.empty-note {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.sheet-provenance {
+  margin-top: 12px;
+}
+
+.sheet-footnote {
+  margin: 8px 0 24px;
+}
+
+.sheet-characteristics {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.sheet-source {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.sheet-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sheet-list-item {
+  padding: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.sheet-note {
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.sheet-diff {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.sheet-before {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.sheet-after {
+  font-weight: 600;
+}
+
+.sheet-review-form {
+  margin-top: 8px;
+}
+
+.sheet-review-form input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.sheet-uploader {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.sheet-characteristics-editor {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  margin: 0 0 16px;
+}
+
+.sheet-characteristics-editor legend {
+  font-weight: 600;
+  padding: 0 6px;
+}
+
+.sheet-characteristic-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 720px) {
+  .sheet-characteristic-row {
+    grid-template-columns: 2fr 2fr 1fr 2fr auto;
+    align-items: end;
+  }
+}
+
+.verification-results {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+.verification-results legend {
+  font-weight: 600;
+  margin-bottom: 6px;
 }

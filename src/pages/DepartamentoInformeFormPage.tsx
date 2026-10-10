@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { AccessDenied } from '../components/ui/AccessDenied'
 import { AttachmentsPicker } from '../components/ui/AttachmentsPicker'
+import { EditConflictPanel } from '../components/EditConflictPanel'
 import { Icon } from '../components/ui/Icon'
 import { fetchDepartments } from '../lib/api/departments'
 import {
@@ -16,11 +17,13 @@ import {
   removeDepartmentReportFile,
   updateDepartmentReport,
 } from '../lib/api/departmentReports'
-import { describeSupabaseError } from '../lib/api/errors'
+import { describeSupabaseError, postgrestCode } from '../lib/api/errors'
+import { isEditConflict } from '../lib/concurrency'
 import { formatBytes } from '../lib/format'
 import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
-import { useSessionDraft } from '../hooks/useSessionDraft'
-import type { Department, DepartmentReportFile, DepartmentReportType, DepartmentReportWithFiles } from '../types/database'
+import { useFormDraft } from '../hooks/useFormDraft'
+import { DraftRecoveryBanner, DraftStatusLine } from '../components/FormDraftUi'
+import type { Department, DepartmentReport, DepartmentReportFile, DepartmentReportType, DepartmentReportWithFiles } from '../types/database'
 
 type Mode = 'redactar' | 'cargar'
 
@@ -91,13 +94,13 @@ export function DepartamentoInformeFormPage() {
   const [uploads, setUploads] = useState<UploadState[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [removingFileId, setRemovingFileId] = useState<string | null>(null)
+  // Otra persona cambió el informe mientras se editaba: lo que se intentó guardar.
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   const draftValue = useMemo<ReportDraft>(
     () => ({ departmentId, reportType, title, reportDate, body, observations }),
     [departmentId, reportType, title, reportDate, body, observations],
   )
-  const { readDraft, clearDraft } = useSessionDraft<ReportDraft>(`informe-departamento:${departmentFromQuery || 'nuevo'}`, draftValue, !isEditing)
-  const [restoredDraft, setRestoredDraft] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -122,19 +125,6 @@ export function DepartamentoInformeFormPage() {
     }
   }, [reportId])
 
-  useEffect(() => {
-    if (isEditing) return
-    const draft = readDraft()
-    if (draft && (draft.title || draft.body || draft.observations)) {
-      if (draft.departmentId) setDepartmentId(draft.departmentId)
-      setReportType(draft.reportType)
-      setTitle(draft.title)
-      setReportDate(draft.reportDate || todayInputValue())
-      setBody(draft.body)
-      setObservations(draft.observations)
-      setRestoredDraft(true)
-    }
-  }, [isEditing, readDraft])
 
   // Departamentos donde puede cargar: los que ve y están activos.
   const { canView } = access
@@ -145,6 +135,26 @@ export function DepartamentoInformeFormPage() {
     if (isEditing || departmentId || writableDepartments.length !== 1) return
     setDepartmentId(writableDepartments[0].id)
   }, [isEditing, departmentId, writableDepartments])
+
+  // Borrador en el servidor (0113). Recién se activa cuando el formulario terminó de
+  // cargar y de elegir solo el departamento, para no guardar un borrador vacío.
+  const draft = useFormDraft<ReportDraft>({
+    formKey: 'informe-departamento',
+    contextKey: isEditing ? `edit:${reportId}` : `nuevo:${departmentFromQuery || 'general'}`,
+    value: draftValue,
+    enabled: !loading && !loadError && (isEditing ? Boolean(existing) : writableDepartments.length !== 1 || Boolean(departmentId)),
+    recordId: reportId ?? null,
+    baseVersion: existing?.row_version ?? null,
+  })
+
+  function applyDraft(d: ReportDraft) {
+    if (d.departmentId && !isEditing) setDepartmentId(d.departmentId)
+    setReportType(d.reportType)
+    setTitle(d.title)
+    setReportDate(d.reportDate || todayInputValue())
+    setBody(d.body)
+    setObservations(d.observations)
+  }
 
   const selectedDepartment = departments.find((d) => d.id === departmentId) ?? null
   const backHref = existing
@@ -164,15 +174,6 @@ export function DepartamentoInformeFormPage() {
     setFiles(next)
     setError(null)
     if (!title.trim() && next.length > 0 && mode === 'cargar') setTitle(titleFromFileName(next[0].name))
-  }
-
-  function handleDiscardDraft() {
-    clearDraft()
-    setTitle('')
-    setBody('')
-    setObservations('')
-    setReportDate(todayInputValue())
-    setRestoredDraft(false)
   }
 
   async function handleRemoveExistingFile(file: DepartmentReportFile) {
@@ -215,6 +216,17 @@ export function DepartamentoInformeFormPage() {
     return failed
   }
 
+  // Cierre del guardado de un informe existente: sube los archivos nuevos y vuelve al detalle.
+  async function finishEdit(report: DepartmentReportWithFiles) {
+    const failed = files.length ? await uploadAll(report, files) : []
+    void draft.resolve()
+    navigate(`/departamentos/informes/${report.id}`, {
+      state: failed.length
+        ? { notice: `Se guardaron los cambios, pero no se pudieron subir: ${failed.join('; ')}. Probá agregarlos de nuevo.`, noticeTone: 'warning' }
+        : { notice: files.length ? 'Se guardaron los cambios y los archivos nuevos.' : 'Se guardaron los cambios.' },
+    })
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError(null)
@@ -241,17 +253,22 @@ export function DepartamentoInformeFormPage() {
     }
     try {
       if (existing) {
-        await updateDepartmentReport(existing.id, input)
-        const failed = files.length ? await uploadAll(existing, files) : []
-        navigate(`/departamentos/informes/${existing.id}`, {
-          state: failed.length
-            ? { notice: `Se guardaron los cambios, pero no se pudieron subir: ${failed.join('; ')}. Probá agregarlos de nuevo.`, noticeTone: 'warning' }
-            : { notice: files.length ? 'Se guardaron los cambios y los archivos nuevos.' : 'Se guardaron los cambios.' },
-        })
+        await updateDepartmentReport(existing.id, input, existing.row_version)
+        await finishEdit(existing)
         return
       }
 
-      const created = await createDepartmentReport(departmentId, input)
+      // El id lo eligió el borrador de antemano: si la respuesta se pierde y se reintenta,
+      // el segundo intento no duplica el informe sino que retoma el primero.
+      let created: DepartmentReport
+      try {
+        created = await createDepartmentReport(departmentId, input, draft.clientRecordId)
+      } catch (createErr) {
+        if (postgrestCode(createErr) !== '23505') throw createErr
+        const already = await fetchDepartmentReport(draft.clientRecordId)
+        if (!already) throw createErr
+        created = already
+      }
       const failed = files.length ? await uploadAll(created, files) : []
 
       // Un informe "cargado" sin texto y sin ningún archivo subido no sirve:
@@ -268,7 +285,7 @@ export function DepartamentoInformeFormPage() {
         return
       }
 
-      clearDraft()
+      void draft.resolve()
       navigate(`/departamentos/informes/${created.id}`, {
         state: failed.length
           ? { notice: `Se guardó el informe, pero no se pudieron subir: ${failed.join('; ')}. Agregalos desde "Editar".`, noticeTone: 'warning' }
@@ -276,8 +293,12 @@ export function DepartamentoInformeFormPage() {
       })
     } catch (err) {
       setUploads(null)
-      setError(describeSupabaseError(err, 'No pudimos guardar el informe. Reintentá en unos segundos.'))
       setSubmitting(false)
+      if (existing && isEditConflict(err)) {
+        setConflict({ mine: input })
+        return
+      }
+      setError(describeSupabaseError(err, 'No pudimos guardar el informe. Reintentá en unos segundos.'))
     }
   }
 
@@ -379,14 +400,7 @@ export function DepartamentoInformeFormPage() {
       )}
 
       <form onSubmit={handleSubmit} className="card-solid" noValidate>
-        {restoredDraft && (
-          <div className="alert alert-info" role="status">
-            <span className="alert-content">Recuperamos lo que habías escrito. Revisalo y, si hacía falta, volvé a elegir los archivos.</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={handleDiscardDraft} style={{ color: 'inherit' }}>
-              Empezar de cero
-            </button>
-          </div>
-        )}
+        <DraftRecoveryBanner draft={draft} subject="un informe" onApply={applyDraft} currentVersion={existing?.row_version ?? null} />
 
         <div className="form-row">
           <div className="field">
@@ -526,11 +540,26 @@ export function DepartamentoInformeFormPage() {
           </div>
         )}
 
+        {conflict && existing && (
+          <EditConflictPanel
+            table="department_reports"
+            recordId={existing.id}
+            base={existing as unknown as Record<string, unknown>}
+            mine={conflict.mine}
+            onSave={(patch, version) => updateDepartmentReport(existing.id, patch, version)}
+            onResolved={() => finishEdit(existing)}
+            onDiscard={() => window.location.reload()}
+            onClose={() => setConflict(null)}
+          />
+        )}
+
         {error && (
           <div className="alert alert-danger" role="alert">
             {error}
           </div>
         )}
+
+        <DraftStatusLine draft={draft} isNew={!isEditing} onApply={applyDraft} />
 
         <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
           {submitting ? (uploads ? 'Subiendo archivos…' : 'Guardando…') : isEditing ? 'Guardar cambios' : 'Guardar informe'}

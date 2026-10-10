@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { Course, CourseStatus, Profile, Station } from '../../types/database'
 
 export async function fetchCourses(): Promise<Course[]> {
@@ -33,10 +34,8 @@ export async function createCourse(input: CourseInput): Promise<Course> {
   return data as Course
 }
 
-export async function updateCourse(id: string, input: Partial<CourseInput>): Promise<Course> {
-  const { data, error } = await supabase.from('courses').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as Course
+export async function updateCourse(id: string, input: Partial<CourseInput>, expectedVersion?: number | null): Promise<Course> {
+  return updateVersioned<Course>('courses', id, input, expectedVersion)
 }
 
 // Candidatos a instructor: perfiles con rol director_escuela o instructor.

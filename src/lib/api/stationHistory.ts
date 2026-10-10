@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { StationHistoryCategory, StationHistoryEvent } from '../../types/database'
 
 export async function fetchStationHistoryEvents(stationId: string): Promise<StationHistoryEvent[]> {
@@ -32,10 +33,8 @@ export async function createStationHistoryEvent(input: StationHistoryEventInput)
   return data as StationHistoryEvent
 }
 
-export async function updateStationHistoryEvent(id: string, input: Partial<StationHistoryEventInput>): Promise<StationHistoryEvent> {
-  const { data, error } = await supabase.from('station_history_events').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as StationHistoryEvent
+export async function updateStationHistoryEvent(id: string, input: Partial<StationHistoryEventInput>, expectedVersion?: number | null): Promise<StationHistoryEvent> {
+  return updateVersioned<StationHistoryEvent>('station_history_events', id, input, expectedVersion)
 }
 
 export async function deleteStationHistoryEvent(id: string): Promise<void> {

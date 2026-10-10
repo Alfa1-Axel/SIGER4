@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { Profile, Station } from '../../types/database'
 import type { RoleKey } from '../../types/roles'
 
@@ -41,10 +42,8 @@ export async function createStation(input: StationInput): Promise<Station> {
   return data as Station
 }
 
-export async function updateStation(id: string, input: Partial<StationInput>): Promise<Station> {
-  const { data, error } = await supabase.from('stations').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as Station
+export async function updateStation(id: string, input: Partial<StationInput>, expectedVersion?: number | null): Promise<Station> {
+  return updateVersioned<Station>('stations', id, input, expectedVersion)
 }
 
 const STATION_AUTHORITY_ROLES: RoleKey[] = ['presidente_cuartel', 'jefe_cuerpo_activo', 'secretario_comision']

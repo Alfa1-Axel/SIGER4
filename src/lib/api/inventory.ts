@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { InventoryItem, InventoryItemHistory, InventoryCategory, InventoryStatus } from '../../types/database'
 
 export async function fetchInventoryItems(): Promise<InventoryItem[]> {
@@ -35,10 +36,8 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<In
   return data as InventoryItem
 }
 
-export async function updateInventoryItem(id: string, input: Partial<InventoryItemInput>): Promise<InventoryItem> {
-  const { data, error } = await supabase.from('inventory_items').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as InventoryItem
+export async function updateInventoryItem(id: string, input: Partial<InventoryItemInput>, expectedVersion?: number | null): Promise<InventoryItem> {
+  return updateVersioned<InventoryItem>('inventory_items', id, input, expectedVersion)
 }
 
 export async function deleteInventoryItem(id: string): Promise<void> {

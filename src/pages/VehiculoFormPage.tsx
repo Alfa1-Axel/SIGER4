@@ -7,6 +7,9 @@ import { fetchStationById } from '../lib/api/stations'
 import type { VehicleStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 // Solo los 3 estados operativos son editables libremente desde este
 // formulario. Vendido/transferido/baja requieren un motivo obligatorio y se
@@ -76,11 +79,16 @@ export function VehiculoFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     if (!id) return
     let active = true
     fetchVehicleById(id).then((vehicle) => {
+      setExisting((vehicle ?? null) as unknown as RowSnapshot | null)
       if (!active || !vehicle) return
       setResolvedStationId(vehicle.station_id)
       setInternalCode(vehicle.internal_code)
@@ -135,6 +143,7 @@ export function VehiculoFormPage() {
     const resolvedVehicleType = vehicleTypeSelect === OTHER_VEHICLE_TYPE ? vehicleTypeOther.trim() : vehicleTypeSelect
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         station_id: resolvedStationId,
@@ -148,13 +157,18 @@ export function VehiculoFormPage() {
         last_service_at: lastServiceAt || null,
       }
       if (isEditing && id) {
-        await updateVehicle(id, input)
+        attempted = input
+        await updateVehicle(id, input, existing?.row_version)
       } else {
         await createVehicle(input)
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el vehículo.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el vehículo.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -284,6 +298,35 @@ export function VehiculoFormPage() {
           )}
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="vehicles"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateVehicle(id, patch as Parameters<typeof updateVehicle>[1], version)}
+
+              onResolved={async () => {
+
+                navigate(`/cuarteles/${resolvedStationId}`)
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar móvil'}

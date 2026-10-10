@@ -12,9 +12,13 @@ import {
 } from '../lib/api/schoolAvales'
 import { isDocumentMimeAllowed } from '../lib/api/storage'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 import { formatBytes } from '../lib/format'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
-import { useSessionDraft } from '../hooks/useSessionDraft'
+import { useFormDraft } from '../hooks/useFormDraft'
+import { DraftRecoveryBanner, DraftStatusLine } from '../components/FormDraftUi'
 import type { AvalesDepartment, SchoolAvalDocument } from '../types/database'
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -64,11 +68,26 @@ export function AvalFormPage() {
   const [notFound, setNotFound] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [restoredDraft, setRestoredDraft] = useState(false)
+  // Si otra persona cambió el aval mientras se editaba: lo que se intentó guardar.
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   const blockedEdit = isEditing && !canManage
   const draftValue = useMemo<AvalDraft>(() => ({ departmentId, title, description, observations }), [departmentId, title, description, observations])
-  const { readDraft, clearDraft } = useSessionDraft<AvalDraft>('aval-nuevo', draftValue, !isEditing && !loading)
+  // Borrador en el servidor (0113): solo en el alta (los datos de un aval ya cargado los edita
+  // Informática y son pocos). El archivo no es parte del borrador.
+  const draft = useFormDraft<AvalDraft>({
+    formKey: 'aval-escuela',
+    contextKey: 'nuevo',
+    value: draftValue,
+    enabled: !isEditing && !loading && !loadError,
+  })
+
+  function applyDraft(d: AvalDraft) {
+    if (d.departmentId && departments.some((x) => x.id === d.departmentId && x.is_active)) setDepartmentId(d.departmentId)
+    setTitle(d.title)
+    setDescription(d.description)
+    setObservations(d.observations)
+  }
 
   useEffect(() => {
     if (blockedEdit) {
@@ -93,24 +112,15 @@ export function AvalFormPage() {
           return
         }
         const activeDepartments = departmentsData.filter((d) => d.is_active)
-        const draft = readDraft()
-        const hasDraft = Boolean(draft && (draft.title || draft.description || draft.observations))
-        const draftDepartment = draft ? activeDepartments.find((d) => d.id === draft.departmentId) : undefined
         const fromQuery = activeDepartments.find((d) => d.id === searchParams.get('departamento'))
-        setDepartmentId(draftDepartment?.id ?? fromQuery?.id ?? (activeDepartments.length === 1 ? activeDepartments[0].id : ''))
-        if (draft && hasDraft) {
-          setTitle(draft.title)
-          setDescription(draft.description)
-          setObservations(draft.observations)
-          setRestoredDraft(true)
-        }
+        setDepartmentId(fromQuery?.id ?? (activeDepartments.length === 1 ? activeDepartments[0].id : ''))
       })
       .catch((err) => active && setLoadError(describeSupabaseError(err, 'No pudimos cargar los departamentos.')))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
-  }, [id, blockedEdit, searchParams, readDraft])
+  }, [id, blockedEdit, searchParams])
 
   // Al crear, solo departamentos activos (los únicos donde la base deja
   // cargar). Al editar (admin), todos, incluido el actual aunque esté inactivo.
@@ -122,14 +132,6 @@ export function AvalFormPage() {
     setFile(selected)
     setError(null)
     if (selected && !title.trim()) setTitle(titleFromFileName(selected.name))
-  }
-
-  function handleDiscardDraft() {
-    clearDraft()
-    setTitle('')
-    setDescription('')
-    setObservations('')
-    setRestoredDraft(false)
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -145,15 +147,18 @@ export function AvalFormPage() {
     }
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const target = `/escuela/avales?departamento=${departmentId}`
       if (isEditing && id) {
-        await updateSchoolAvalDocument(id, {
+        const input = {
           title: cleanTitle,
           description: description.trim() || null,
           observations: observations.trim() || null,
           department_id: departmentId,
-        })
+        }
+        attempted = input
+        await updateSchoolAvalDocument(id, input, existing?.row_version)
         navigate(target, { state: { notice: 'Los datos del aval se guardaron.' } })
       } else if (file) {
         await uploadSchoolAvalDocument({
@@ -163,10 +168,14 @@ export function AvalFormPage() {
           observations: observations.trim() || null,
           file,
         })
-        clearDraft()
+        void draft.resolve()
         navigate(target, { state: { notice: `"${cleanTitle}" se subió correctamente.` } })
       }
     } catch (err) {
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+        return
+      }
       setError(describeSupabaseError(err, isEditing ? 'No pudimos guardar los cambios. Reintentá en unos segundos.' : 'No pudimos subir el aval. Reintentá en unos segundos.'))
     } finally {
       setSubmitting(false)
@@ -232,14 +241,7 @@ export function AvalFormPage() {
 
       {!loading && !loadError && !notFound && departmentOptions.length > 0 && (
         <form onSubmit={handleSubmit} className="card-solid" noValidate>
-          {restoredDraft && (
-            <div className="alert alert-info" role="status">
-              <span className="alert-content">Recuperamos los datos que habías escrito. Revisalos y elegí el archivo.</span>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={handleDiscardDraft} style={{ color: 'inherit' }}>
-                Empezar de cero
-              </button>
-            </div>
-          )}
+          <DraftRecoveryBanner draft={draft} subject="un aval" onApply={applyDraft} />
 
           <div className="field">
             <label htmlFor="department">Departamento</label>
@@ -317,6 +319,21 @@ export function AvalFormPage() {
             <div className="alert alert-danger" role="alert">
               {error}
             </div>
+          )}
+
+          <DraftStatusLine draft={draft} isNew onApply={applyDraft} />
+
+          {conflict && existing && id && (
+            <EditConflictPanel
+              table="school_avales_documents"
+              recordId={id}
+              base={existing as unknown as RowSnapshot}
+              mine={conflict.mine}
+              onSave={(patch, version) => updateSchoolAvalDocument(id, patch as unknown as Parameters<typeof updateSchoolAvalDocument>[1], version)}
+              onResolved={() => navigate(`/escuela/avales?departamento=${departmentId}`, { state: { notice: 'Los datos del aval se guardaron.' } })}
+              onDiscard={() => window.location.reload()}
+              onClose={() => setConflict(null)}
+            />
           )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>

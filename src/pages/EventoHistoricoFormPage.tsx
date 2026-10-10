@@ -11,6 +11,9 @@ import { fetchStationById } from '../lib/api/stations'
 import type { StationHistoryCategory } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 const CATEGORY_OPTIONS: { value: StationHistoryCategory; label: string }[] = [
   { value: 'institucional', label: 'Institucional' },
@@ -53,11 +56,16 @@ export function EventoHistoricoFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     if (!id) return
     let active = true
     fetchStationHistoryEventById(id).then((event) => {
+      setExisting((event ?? null) as unknown as RowSnapshot | null)
       if (!active || !event) return
       setResolvedStationId(event.station_id)
       setTitle(event.title)
@@ -87,6 +95,7 @@ export function EventoHistoricoFormPage() {
     event.preventDefault()
     setError(null)
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         station_id: resolvedStationId,
@@ -97,13 +106,18 @@ export function EventoHistoricoFormPage() {
         is_highlighted: isHighlighted,
       }
       if (isEditing && id) {
-        await updateStationHistoryEvent(id, input)
+        attempted = input
+        await updateStationHistoryEvent(id, input, existing?.row_version)
       } else {
         await createStationHistoryEvent(input)
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el evento del historial.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el evento del historial.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -164,6 +178,35 @@ export function EventoHistoricoFormPage() {
           </div>
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="station_history_events"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateStationHistoryEvent(id, patch as Parameters<typeof updateStationHistoryEvent>[1], version)}
+
+              onResolved={async () => {
+
+                navigate(`/cuarteles/${resolvedStationId}`)
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar evento'}

@@ -3,6 +3,8 @@ import { fetchCoordinatingProfileIds } from './departments'
 import { DEPARTMENT_REPORT_TYPE_LABEL } from './departmentReports'
 import { HIDDEN_NOTIFICATION_TYPE, NOTIFICATION_TYPE_LABEL } from '../notificationMeta'
 import { canUseModule } from '../moduleAccess'
+import { searchMapPoints } from './mapPoints'
+import { pointKindLabel } from '../mapPointMeta'
 import type { AppModule } from '../moduleAccess'
 import type { RoleKey } from '../../types/roles'
 import type {
@@ -35,6 +37,7 @@ export type SearchModule =
   | 'solicitudes'
   | 'cursos'
   | 'calendario'
+  | 'mapa'
   | 'notificaciones'
 
 export interface SearchResult {
@@ -56,6 +59,7 @@ export const SEARCH_MODULE_LABEL: Record<SearchModule, string> = {
   solicitudes: 'Solicitudes de préstamo',
   cursos: 'Cursos de Escuela',
   calendario: 'Calendario',
+  mapa: 'Lugares del mapa',
   notificaciones: 'Notificaciones',
 }
 
@@ -70,6 +74,7 @@ export const SEARCH_MODULE_ICON: Record<SearchModule, string> = {
   solicitudes: 'tag',
   cursos: 'school',
   calendario: 'calendar',
+  mapa: 'mapPin',
   notificaciones: 'bell',
 }
 
@@ -84,6 +89,7 @@ export const SEARCH_MODULE_ORDER: SearchModule[] = [
   'solicitudes',
   'cursos',
   'calendario',
+  'mapa',
   'notificaciones',
 ]
 
@@ -100,6 +106,7 @@ const APP_MODULE_OF: Record<SearchModule, AppModule> = {
   solicitudes: 'inventario',
   cursos: 'escuela',
   calendario: 'calendario',
+  mapa: 'mapa',
   notificaciones: 'notificaciones',
 }
 
@@ -275,6 +282,19 @@ async function searchDocuments(like: string, limit: number, departmentName: (id:
   }))
 }
 
+// Lugares del mapa: nombre, localidad, dirección o clase. La base (RLS) devuelve solo los puntos que esta
+// persona ya ve en el mapa y nunca contactos ni notas: solo lo del listado.
+async function searchMapPlaces(term: string, limit: number): Promise<SearchResult[]> {
+  const rows = await searchMapPoints(term, limit)
+  return rows.map((p) => ({
+    id: p.id,
+    module: 'mapa',
+    title: p.name,
+    subtitle: [pointKindLabel(p.type, p.subtype), p.locality].filter(Boolean).join(' · '),
+    to: `/mapa/puntos/${p.id}`,
+  }))
+}
+
 async function searchAvales(like: string, ctx: SearchContext, limit: number, departmentName: (id: string) => string): Promise<SearchResult[]> {
   if (!ctx.hasAvalesAccess) return []
   const { data, error } = await supabase
@@ -430,6 +450,7 @@ export async function searchEverything(rawQuery: string, ctx: SearchContext, loo
   })
   add(['cursos'], async () => ({ cursos: await searchCourses(like, limit) }))
   add(['calendario'], async () => ({ calendario: await searchEvents(like, limit, ctx.departmentOnly) }))
+  add(['mapa'], async () => ({ mapa: await searchMapPlaces(term, limit) }))
   add(['notificaciones'], async () => ({ notificaciones: await searchNotifications(like, limit) }))
 
   const outcome: SearchOutcome = { results: {}, failedModules: [] }

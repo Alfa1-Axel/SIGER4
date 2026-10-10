@@ -141,6 +141,9 @@ export function describeSupabaseError(err: unknown, fallback = 'No pudimos compl
       const constraint = err.message.match(/check constraint "([^"]+)"/)?.[1]
       return (constraint && CHECK_CONSTRAINT_MESSAGES[constraint]) || 'Algún dato no cumple las reglas de carga. Revisá los valores e intentá de nuevo.'
     }
+    // P0409: otra persona cambió el registro mientras se editaba (0112). Las
+    // pantallas que lo conocen muestran el panel de conflicto; el resto, este texto.
+    if (err.code === 'P0409') return 'Este registro fue actualizado mientras lo editabas. Recargá la página para ver la versión actual.'
     // P0001: "raise exception" explícito de un trigger nuestro (ver
     // validate_inventory_loan_request_item_status en 0057) -- el mensaje ya
     // está pensado para mostrarse tal cual, en español, al usuario.

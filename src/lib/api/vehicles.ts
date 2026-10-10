@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { Vehicle, VehicleStatus, VehicleStatusHistory } from '../../types/database'
 
 // Estados que sacan al vehiculo de la flota activa del cuartel (no cuentan
@@ -39,10 +40,8 @@ export async function createVehicle(input: VehicleInput): Promise<Vehicle> {
   return data as Vehicle
 }
 
-export async function updateVehicle(id: string, input: Partial<VehicleInput>): Promise<Vehicle> {
-  const { data, error } = await supabase.from('vehicles').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as Vehicle
+export async function updateVehicle(id: string, input: Partial<VehicleInput>, expectedVersion?: number | null): Promise<Vehicle> {
+  return updateVersioned<Vehicle>('vehicles', id, input, expectedVersion)
 }
 
 // Unico camino soportado para pasar un vehiculo a vendido/transferido/baja:

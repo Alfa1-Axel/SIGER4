@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
 import { fetchCurrentUserContext } from '../lib/api/profiles'
+import { clearAllLocalDrafts } from '../lib/localDrafts'
 import type { Profile, UserRole, UserScope } from '../types/database'
 import type { RoleKey } from '../types/roles'
 import { ADMIN_ROLES } from '../types/roles'
@@ -162,6 +163,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error?.message ?? null, code: error?.code, status: error?.status }
     },
     async signOut() {
+      // Cierre voluntario: ninguna copia local de borradores sobrevive en este
+      // dispositivo. (Si la sesión se pierde sola, la copia queda a nombre de la
+      // misma persona y solo ella la puede recuperar al volver a ingresar.)
+      clearAllLocalDrafts()
       await supabase.auth.signOut()
     },
     hasRole(...checked) {

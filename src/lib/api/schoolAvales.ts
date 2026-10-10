@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { AvalesDepartment, SchoolAvalDocument } from '../../types/database'
 import { removeSchoolAvalFile, uploadSchoolAvalFile } from './storage'
 
@@ -96,10 +97,8 @@ export interface SchoolAvalMetadataInput {
 // Solo informatica_r4 (RLS). Si otro rol lo intenta, PostgREST no encuentra
 // fila para devolver (PGRST116), que describeSupabaseError traduce a "no
 // tenés permisos".
-export async function updateSchoolAvalDocument(id: string, input: SchoolAvalMetadataInput): Promise<SchoolAvalDocument> {
-  const { data, error } = await supabase.from('school_avales_documents').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as SchoolAvalDocument
+export async function updateSchoolAvalDocument(id: string, input: SchoolAvalMetadataInput, expectedVersion?: number | null): Promise<SchoolAvalDocument> {
+  return updateVersioned<SchoolAvalDocument>('school_avales_documents', id, input, expectedVersion)
 }
 
 export async function setSchoolAvalArchived(id: string, archived: boolean): Promise<SchoolAvalDocument> {

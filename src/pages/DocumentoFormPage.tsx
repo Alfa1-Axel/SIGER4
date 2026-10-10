@@ -13,11 +13,15 @@ import { DOCUMENT_SCOPE_LABEL, DOCUMENT_VISIBILITY_LABEL, canManageDocument, can
 import type { DocumentScopeKind } from '../lib/documentAccess'
 import { FilePicker } from '../components/ui/FilePicker'
 import { AccessDenied } from '../components/ui/AccessDenied'
-import { useSessionDraft } from '../hooks/useSessionDraft'
+import { useFormDraft } from '../hooks/useFormDraft'
+import { DraftRecoveryBanner, DraftStatusLine } from '../components/FormDraftUi'
 import type { DocumentRecord, DocumentVersion, DocumentVisibility, Profile, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { useDocumentAccess } from '../hooks/useDocumentAccess'
-import { describeSupabaseError } from '../lib/api/errors'
+import { describeSupabaseError, postgrestCode } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024
 const DOCUMENT_ACCEPT = 'application/pdf,.pdf,.doc,.docx,.xls,.xlsx,image/png,image/jpeg,image/webp,image/heic,image/heif,.heic,.heif'
@@ -29,9 +33,10 @@ interface DocumentDraft {
 }
 
 // Alta y edición de documentos, desde escritorio o celular. El archivo se
-// elige con FilePicker (archivo o foto). Si Android recarga la app mientras
-// el selector está abierto, el borrador de sessionStorage conserva título,
-// tipo y descripción (ver useSessionDraft / DEPLOYMENT.md sección 56).
+// elige con FilePicker (archivo o foto). El texto (título, tipo y descripción)
+// se guarda solo como borrador (useFormDraft, DEPLOYMENT.md sección 70): si
+// Android recarga la app mientras el selector está abierto, o se corta la
+// conexión, se ofrece recuperarlo. El archivo no es parte del borrador.
 //
 // Dos preguntas, sin términos técnicos:
 //   - ¿Dónde va? (el alcance: Regional, subsede, cuartel, departamento o una
@@ -97,29 +102,30 @@ export function DocumentoFormPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const draftValue = useMemo<DocumentDraft>(() => ({ title, category, description }), [title, category, description])
-  const { readDraft, clearDraft } = useSessionDraft<DocumentDraft>(
-    `documento-nuevo:${folderIdFromQuery ?? departmentFromQuery ?? 'general'}`,
-    draftValue,
-    !isEditing,
-  )
-  const [restoredDraft, setRestoredDraft] = useState(false)
-
-  useEffect(() => {
-    if (isEditing) return
-    const draft = readDraft()
-    if (draft && (draft.title || draft.category || draft.description)) {
-      setTitle(draft.title)
-      setCategory(draft.category)
-      setDescription(draft.description)
-      setRestoredDraft(true)
-    }
-  }, [isEditing, readDraft])
   const [existing, setExisting] = useState<DocumentRecord | null>(null)
+  // Otra persona cambió el documento mientras se editaba: lo que se intentó guardar.
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
   const [notFound, setNotFound] = useState(false)
 
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Borrador en el servidor (0113): título, tipo y descripción. Sin archivo.
+  const draft = useFormDraft<DocumentDraft>({
+    formKey: 'documento',
+    contextKey: isEditing ? `edit:${id}` : `nuevo:${folderIdFromQuery ?? departmentFromQuery ?? 'general'}`,
+    value: draftValue,
+    enabled: !loading && (isEditing ? Boolean(existing) : true),
+    recordId: id ?? null,
+    baseVersion: existing?.row_version ?? null,
+  })
+
+  function applyDraft(d: DocumentDraft) {
+    setTitle(d.title)
+    setCategory(d.category)
+    setDescription(d.description)
+  }
 
   useEffect(() => {
     if (!canCreate) return
@@ -280,19 +286,26 @@ export function DocumentoFormPage() {
     }
   }
 
-  function handleDiscardDraft() {
-    clearDraft()
-    setTitle('')
-    setCategory('')
-    setDescription('')
-    setRestoredDraft(false)
-  }
-
   // Adónde se vuelve después de guardar: al espacio donde queda el documento.
   function spaceAfterSave(folderId: string | null): string {
     if (scopeTarget === 'department' && departmentId) return `/documentos/departamentos/${departmentId}`
     if (folderId) return `/documentos/carpetas/${folderId}`
     return effectiveVisibility === 'todos' ? '/documentos/carpetas/general' : '/documentos/carpetas/sin-carpeta'
+  }
+
+  // Cierre de la edición de un documento: archivo nuevo (si se eligió) y vuelta al espacio.
+  async function finishEdit(documentId: string, current: DocumentRecord) {
+    void draft.resolve()
+    if (selectedFile) {
+      if (current.storage_path && current.storage_path !== 'pending') {
+        await addDocumentVersion(documentId, current.storage_path, currentProfile?.id ?? null)
+      }
+      const path = await uploadDocumentFile(documentId, selectedFile)
+      await updateDocumentStoragePath(documentId, path)
+    }
+    navigate(spaceAfterSave(scopeTarget === 'department' ? null : current.folder_id), {
+      state: { notice: selectedFile ? 'Se guardaron los cambios y el archivo nuevo.' : 'Se guardaron los cambios.' },
+    })
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -314,6 +327,7 @@ export function DocumentoFormPage() {
     }
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         title: title.trim(),
@@ -324,32 +338,41 @@ export function DocumentoFormPage() {
       }
 
       if (isEditing && id && existing) {
-        await updateDocument(id, input)
-        if (selectedFile) {
-          if (existing.storage_path && existing.storage_path !== 'pending') {
-            await addDocumentVersion(id, existing.storage_path, currentProfile?.id ?? null)
-          }
-          const path = await uploadDocumentFile(id, selectedFile)
-          await updateDocumentStoragePath(id, path)
-        }
-        navigate(spaceAfterSave(scopeTarget === 'department' ? null : existing.folder_id), {
-          state: { notice: selectedFile ? 'Se guardaron los cambios y el archivo nuevo.' : 'Se guardaron los cambios.' },
-        })
+        attempted = input
+        await updateDocument(id, input, existing.row_version)
+        await finishEdit(id, existing)
       } else {
         // Un documento de departamento va en el espacio del departamento, no en una carpeta.
         const folderId = scopeTarget === 'department' ? null : folderIdFromQuery || null
-        const created = await createDocument({
-          ...input,
-          folder_id: folderId,
-          uploaded_by_profile_id: currentProfile?.id ?? null,
-        })
-        const path = await uploadDocumentFile(created.id, selectedFile!)
-        await updateDocumentStoragePath(created.id, path)
-        clearDraft()
+        // El id lo eligió el borrador de antemano: si la respuesta se pierde y se reintenta,
+        // el segundo intento retoma el documento del primero en vez de duplicarlo.
+        let created: DocumentRecord
+        try {
+          created = await createDocument({
+            ...input,
+            id: draft.clientRecordId,
+            folder_id: folderId,
+            uploaded_by_profile_id: currentProfile?.id ?? null,
+          })
+        } catch (createErr) {
+          if (postgrestCode(createErr) !== '23505') throw createErr
+          const already = await fetchDocumentById(draft.clientRecordId)
+          if (!already) throw createErr
+          created = already
+        }
+        if (created.storage_path === 'pending') {
+          const path = await uploadDocumentFile(created.id, selectedFile!)
+          await updateDocumentStoragePath(created.id, path)
+        }
+        void draft.resolve()
         navigate(spaceAfterSave(folderId), { state: { notice: `"${title.trim()}" se subió correctamente.` } })
       }
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el documento. Reintentá en unos segundos.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el documento. Reintentá en unos segundos.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -407,14 +430,7 @@ export function DocumentoFormPage() {
         <div className="loading-state" role="status">Cargando datos del documento…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid" noValidate>
-          {restoredDraft && (
-            <div className="alert alert-info" role="status">
-              <span className="alert-content">Recuperamos los datos que habías escrito. Revisalos y elegí el archivo.</span>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={handleDiscardDraft} style={{ color: 'inherit' }}>
-                Empezar de cero
-              </button>
-            </div>
-          )}
+          <DraftRecoveryBanner draft={draft} subject="un documento" onApply={applyDraft} currentVersion={existing?.row_version ?? null} />
           {!isEditing && fileField}
 
           <div className="field">
@@ -561,6 +577,21 @@ export function DocumentoFormPage() {
             <div className="alert alert-danger" role="alert">
               {error}
             </div>
+          )}
+
+          <DraftStatusLine draft={draft} isNew={!isEditing} onApply={applyDraft} />
+
+          {conflict && existing && id && (
+            <EditConflictPanel
+              table="documents"
+              recordId={id}
+              base={existing as unknown as RowSnapshot}
+              mine={conflict.mine}
+              onSave={(patch, version) => updateDocument(id, patch as Parameters<typeof updateDocument>[1], version)}
+              onResolved={() => finishEdit(id, existing)}
+              onDiscard={() => window.location.reload()}
+              onClose={() => setConflict(null)}
+            />
           )}
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>

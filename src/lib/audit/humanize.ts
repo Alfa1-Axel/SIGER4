@@ -29,6 +29,10 @@ export const TABLE_LABELS: Record<string, string> = {
   school_departments: 'Departamentos de Escuela (lista anterior, unificada)',
   school_department_members: 'Coordinadores de Avales por departamento (lista anterior, unificada)',
   school_avales_documents: 'Avales regionales (Escuela)',
+  map_reference_points: 'Puntos del Mapa Regional',
+  map_point_sheet_proposals: 'Propuestas de cambio de fichas del mapa',
+  map_point_files: 'Archivos de fichas del mapa',
+  map_point_verifications: 'Verificaciones de puntos de abastecimiento',
 }
 
 export function translateTable(tableName: string): string {
@@ -174,6 +178,24 @@ export const FIELD_LABELS: Record<string, string> = {
   archived_at: 'Fecha de archivado',
   archived_by_profile_id: 'Archivado por',
   member_role: 'Función en el departamento',
+  report_type: 'Tipo de informe',
+  subtype: 'Clase del punto',
+  verified_on: 'Fecha de verificación',
+  verified_by_name: 'Verificó',
+  result: 'Resultado',
+  problems: 'Problemas informados',
+  follow_up: 'Seguimiento',
+  follow_up_status: 'Estado del seguimiento',
+  follow_up_resolution: 'Cómo se resolvió',
+  file_kind: 'Clase de archivo',
+  proposed_by_name: 'Propuesto por',
+  review_note: 'Nota de quien validó',
+  report_date: 'Fecha del informe',
+  latitude: 'Latitud',
+  longitude: 'Longitud',
+  map_notes: 'Notas del mapa',
+  responsible_name: 'Responsable',
+  folder_id: 'Carpeta',
 }
 
 export function translateField(field: string): string {
@@ -298,7 +320,7 @@ export function resolveDisplayValue(field: string, value: unknown, lookup: Entit
   return translateValue(field, value)
 }
 
-const HIDDEN_FIELDS = new Set(['id', 'created_at', 'updated_at'])
+const HIDDEN_FIELDS = new Set(['id', 'created_at', 'updated_at', 'row_version', 'updated_by_profile_id'])
 
 export interface FieldDiff {
   field: string

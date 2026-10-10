@@ -34,7 +34,17 @@ const PRIORITY_ORDER: Record<PendingItemPriority, number> = { alta: 0, media: 1,
 export async function fetchPendingItems(): Promise<PendingItem[]> {
   const { data, error } = await supabase.rpc('get_pending_items')
   if (error) throw error
-  const items = ((data ?? []) as PendingItemApiRow[]).map((row) => ({
+  // Pendientes del Mapa (0115): problemas informados, revisiones vencidas y propuestas por validar.
+  // Se piden aparte para no tocar get_pending_items(); si todavía no se corrió esa migración, el
+  // resto de los pendientes se ve igual. Cada ítem trae una clave única por punto: no se repiten.
+  const mapRows = await supabase.rpc('get_map_pending_items')
+  const seen = new Set<string>()
+  const rows = [...((data ?? []) as PendingItemApiRow[]), ...(mapRows.error ? [] : ((mapRows.data ?? []) as PendingItemApiRow[]))].filter((row) => {
+    if (seen.has(row.item_key)) return false
+    seen.add(row.item_key)
+    return true
+  })
+  const items = rows.map((row) => ({
     itemKey: row.item_key,
     title: row.title,
     description: row.description,

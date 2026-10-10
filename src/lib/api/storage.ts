@@ -1,4 +1,5 @@
 import { supabase, supabaseAnonKey, supabaseUrl } from '../supabaseClient'
+import { assertFileSignature } from '../fileSignature'
 
 // Convención de paths: "<id>/<archivo>" — el primer segmento del path es lo
 // que las políticas de Storage usan (storage.foldername(name)[1]) para
@@ -11,7 +12,9 @@ import { supabase, supabaseAnonKey, supabaseUrl } from '../supabaseClient'
 // única línea de defensa.
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5 MB
 const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024 // 20 MB
-const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'])
+// Sin SVG (v1.14.0, control de archivos): un SVG puede llevar scripts y, abierto directo
+// desde su URL, los ejecuta. Un logo se sube como PNG, JPG o WEBP.
+const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp'])
 // Coincide con el whitelist server-side real del bucket "documents" (ver
 // migración 0055_documents_mime_mobile.sql) — heic/heif son el formato por
 // defecto de fotos en iPhone, webp el de capturas de pantalla en Android
@@ -174,6 +177,7 @@ async function deletePublicFileByUrl(bucket: string, url: string | null | undefi
 
 export async function uploadStationMedia(stationId: string, file: File): Promise<string> {
   const contentType = assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
+  await assertFileSignature(file, contentType)
   const path = buildSafePath(stationId, file)
   const { error } = await supabase.storage.from('station-media').upload(path, file, { upsert: true, contentType })
   if (error) throw error
@@ -187,6 +191,7 @@ export async function deleteStationMedia(previousUrl: string | null | undefined)
 
 export async function uploadAvatar(profileId: string, file: File): Promise<string> {
   const contentType = assertFileAllowed(file, IMAGE_MIME_TYPES, MAX_IMAGE_BYTES)
+  await assertFileSignature(file, contentType)
   const path = buildSafePath(profileId, file)
   const { error } = await supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType })
   if (error) throw error
@@ -203,6 +208,7 @@ export async function deleteAvatar(previousUrl: string | null | undefined): Prom
 // URL publica) — para descargar/ver el archivo hay que pedir una signed URL.
 export async function uploadDocumentFile(documentId: string, file: File): Promise<string> {
   const contentType = assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
+  await assertFileSignature(file, contentType)
   const path = buildSafePath(documentId, file)
   const correctedFile = withCorrectedMimeType(file, contentType)
   const { error } = await supabase.storage.from('documents').upload(path, correctedFile, { upsert: true, contentType })
@@ -250,6 +256,7 @@ export async function uploadSchoolAvalFile(
   file: File,
 ): Promise<{ path: string; contentType: string }> {
   const contentType = assertFileAllowed(file, DOCUMENT_MIME_TYPES, MAX_DOCUMENT_BYTES)
+  await assertFileSignature(file, contentType)
   const path = `${departmentId}/${documentId}/${sanitizeFileName(file.name)}`
   const correctedFile = withCorrectedMimeType(file, contentType)
   const { error } = await supabase.storage.from(SCHOOL_AVALES_BUCKET).upload(path, correctedFile, { upsert: false, contentType })
@@ -303,23 +310,15 @@ export function buildDepartmentReportFilePath(departmentId: string, reportId: st
   return `${departmentId}/${reportId}/${fileId}/${sanitizeFileName(file.name)}`
 }
 
-// Sube un archivo con progreso real (bytes enviados). supabase-js usa fetch,
-// que no informa progreso de subida; esto manda el mismo pedido (POST
-// multipart al endpoint de Storage, con la sesión del usuario) por
-// XMLHttpRequest. Los errores se devuelven con el mismo nombre que los de
-// storage-js para que describeSupabaseError los traduzca igual.
-export async function uploadDepartmentReportObject(
+// Subida con progreso al endpoint de Storage, por XMLHttpRequest. Compartida por los buckets que
+// la usan (informes de departamento y fichas del mapa).
+async function uploadWithProgress(
+  bucket: string,
   path: string,
   file: File,
+  contentType: string,
   onProgress?: (fraction: number) => void,
-): Promise<{ contentType: string }> {
-  const contentType = inferMimeType(file)
-  if (!isDepartmentReportMimeAllowed(contentType)) {
-    throw new Error(`"${file.name}" no es un formato admitido.`)
-  }
-  if (file.size > departmentReportMaxBytes(contentType)) {
-    throw new Error(`"${file.name}" supera el tamaño máximo permitido.`)
-  }
+): Promise<void> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
   if (!token) throw new Error('Tu sesión venció. Volvé a iniciar sesión.')
@@ -330,7 +329,7 @@ export async function uploadDepartmentReportObject(
 
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `${supabaseUrl}/storage/v1/object/${DEPARTMENT_REPORTS_BUCKET}/${path}`)
+    xhr.open('POST', `${supabaseUrl}/storage/v1/object/${bucket}/${path}`)
     xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('apikey', supabaseAnonKey)
     xhr.setRequestHeader('x-upsert', 'false')
@@ -359,6 +358,27 @@ export async function uploadDepartmentReportObject(
     xhr.onabort = () => reject(new Error('Network request failed'))
     xhr.send(body)
   })
+}
+
+// Sube un archivo con progreso real (bytes enviados). supabase-js usa fetch,
+// que no informa progreso de subida; esto manda el mismo pedido (POST
+// multipart al endpoint de Storage, con la sesión del usuario) por
+// XMLHttpRequest. Los errores se devuelven con el mismo nombre que los de
+// storage-js para que describeSupabaseError los traduzca igual.
+export async function uploadDepartmentReportObject(
+  path: string,
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<{ contentType: string }> {
+  const contentType = inferMimeType(file)
+  if (!isDepartmentReportMimeAllowed(contentType)) {
+    throw new Error(`"${file.name}" no es un formato admitido.`)
+  }
+  if (file.size > departmentReportMaxBytes(contentType)) {
+    throw new Error(`"${file.name}" supera el tamaño máximo permitido.`)
+  }
+  await assertFileSignature(file, contentType)
+  await uploadWithProgress(DEPARTMENT_REPORTS_BUCKET, path, file, contentType, onProgress)
   return { contentType }
 }
 
@@ -389,4 +409,57 @@ export async function getDepartmentReportFileUrls(storagePaths: string[]): Promi
     if (item.path && item.signedUrl) urls.set(item.path, item.signedUrl)
   }
   return urls
+}
+
+// ---------------- Fichas del Mapa Regional ----------------
+// Bucket privado "map-point-files" (ver 0114_map_point_sheets.sql). Ruta:
+// "<point_id>/<file_id>-<archivo-sanitizado>". La policy de INSERT exige que el
+// usuario pueda cargar en el cuartel del punto y que el archivo no esté
+// registrado todavía; la de SELECT, que el archivo esté registrado en una ficha
+// y que esta persona lo vea (ver un punto NO da acceso a todos sus archivos).
+const MAP_POINT_BUCKET = 'map-point-files'
+// URL firmada corta: alcanza para abrir el archivo en el momento. Una URL ya
+// emitida sigue sirviendo hasta que vence (no se puede revocar antes).
+const MAP_POINT_SIGNED_URL_SECONDS = 5 * 60
+
+export const MAP_POINT_FILE_MAX_BYTES = 10 * 1024 * 1024
+const MAP_POINT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf'])
+
+export function isMapPointMimeAllowed(mimeType: string): boolean {
+  return MAP_POINT_MIME_TYPES.has(mimeType)
+}
+
+export function buildMapPointFilePath(pointId: string, fileId: string, file: File): string {
+  return `${pointId}/${fileId}-${sanitizeFileName(file.name)}`
+}
+
+export async function uploadMapPointObject(
+  path: string,
+  file: File,
+  onProgress?: (fraction: number) => void,
+): Promise<{ contentType: string }> {
+  const contentType = inferMimeType(file)
+  if (!isMapPointMimeAllowed(contentType)) {
+    throw new Error(`"${file.name}" no es un formato admitido: se aceptan fotos (JPG, PNG, WEBP) y PDF.`)
+  }
+  if (file.size > MAP_POINT_FILE_MAX_BYTES) {
+    throw new Error(`"${file.name}" supera el tamaño máximo permitido (10 MB).`)
+  }
+  await assertFileSignature(file, contentType)
+  await uploadWithProgress(MAP_POINT_BUCKET, path, file, contentType, onProgress)
+  return { contentType }
+}
+
+export async function removeMapPointObjects(paths: string[]): Promise<void> {
+  if (paths.length === 0) return
+  const { error } = await supabase.storage.from(MAP_POINT_BUCKET).remove(paths)
+  if (error) throw new Error('No pudimos borrar el archivo del almacenamiento. Reintentá en unos segundos.')
+}
+
+export async function getMapPointFileUrl(storagePath: string, downloadName?: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(MAP_POINT_BUCKET)
+    .createSignedUrl(storagePath, MAP_POINT_SIGNED_URL_SECONDS, downloadName ? { download: downloadName } : undefined)
+  if (error || !data) throw new Error('El archivo no está disponible o no tenés permiso para verlo.')
+  return data.signedUrl
 }

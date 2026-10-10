@@ -1,18 +1,24 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { Personnel, PersonnelStatus, PersonnelStatusHistory } from '../../types/database'
 
 // Estados que implican que la persona deja de contar como dotacion activa
 // real del cuartel; requieren motivo obligatorio via changePersonnelStatus.
 export const SEPARATION_STATUSES: PersonnelStatus[] = ['renuncia', 'baja', 'pase', 'reserva']
 
+// El listado del cuartel NO trae el DNI ni las observaciones: solo se necesitan al editar a una persona
+// (fetchPersonnelById). Menos datos personales viajando al navegador de quien solo mira la lista.
+const PERSONNEL_LIST_COLUMNS =
+  'id, station_id, first_name, last_name, rank, role_function, status, department, join_date, phone, email, created_at, updated_at, row_version, updated_by_profile_id'
+
 export async function fetchPersonnelByStation(stationId: string): Promise<Personnel[]> {
   const { data, error } = await supabase
     .from('personnel')
-    .select('*')
+    .select(PERSONNEL_LIST_COLUMNS)
     .eq('station_id', stationId)
     .order('last_name', { ascending: true })
   if (error) throw error
-  return (data ?? []) as Personnel[]
+  return (data ?? []) as unknown as Personnel[]
 }
 
 export async function fetchPersonnelById(id: string): Promise<Personnel | null> {
@@ -42,10 +48,8 @@ export async function createPersonnel(input: PersonnelInput): Promise<Personnel>
   return data as Personnel
 }
 
-export async function updatePersonnel(id: string, input: Partial<PersonnelInput>): Promise<Personnel> {
-  const { data, error } = await supabase.from('personnel').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as Personnel
+export async function updatePersonnel(id: string, input: Partial<PersonnelInput>, expectedVersion?: number | null): Promise<Personnel> {
+  return updateVersioned<Personnel>('personnel', id, input, expectedVersion)
 }
 
 export async function deletePersonnel(id: string): Promise<void> {

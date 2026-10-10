@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType } from '../../types/database'
 
 // Tipos de un evento de departamento (0103): sin los que nombran un alcance
@@ -84,10 +85,8 @@ export async function createCalendarEvent(input: CalendarEventInput): Promise<Ca
   return data as CalendarEvent
 }
 
-export async function updateCalendarEvent(id: string, input: Partial<CalendarEventInput>): Promise<CalendarEvent> {
-  const { data, error } = await supabase.from('calendar_events').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as CalendarEvent
+export async function updateCalendarEvent(id: string, input: Partial<CalendarEventInput>, expectedVersion?: number | null): Promise<CalendarEvent> {
+  return updateVersioned<CalendarEvent>('calendar_events', id, input, expectedVersion)
 }
 
 export async function deleteCalendarEvent(id: string): Promise<void> {

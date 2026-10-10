@@ -17,7 +17,15 @@ export interface Subsede {
 
 export type StationStatus = 'operativo' | 'no_operativo'
 
-export interface Station {
+// Control de edición concurrente (migración 0112): la versión del registro la sube
+// sola la base cuando cambia el contenido y la pantalla la manda al guardar.
+// Opcionales: un registro leído antes de correr la migración no las trae.
+export interface Versioned {
+  row_version?: number
+  updated_by_profile_id?: string | null
+}
+
+export interface Station extends Versioned {
   id: string
   region_id: string
   subsede_id: string | null
@@ -142,7 +150,7 @@ export interface Notification {
   link_path: string | null
 }
 
-export interface AttendanceSummary {
+export interface AttendanceSummary extends Versioned {
   id: string
   station_id: string
   period_start: string
@@ -160,7 +168,7 @@ export interface AttendanceSummary {
 
 export type InterventionTimeOfDay = 'diurno' | 'nocturno' | 'mixto'
 
-export interface InterventionSummary {
+export interface InterventionSummary extends Versioned {
   id: string
   station_id: string
   period_start: string
@@ -177,7 +185,7 @@ export interface InterventionSummary {
 
 export type CourseStatus = 'planificado' | 'en_curso' | 'finalizado' | 'cancelado'
 
-export interface Course {
+export interface Course extends Versioned {
   id: string
   region_id: string
   title: string
@@ -198,7 +206,7 @@ export interface Course {
 
 export type VehicleStatus = 'operativo' | 'mantenimiento' | 'fuera_de_servicio' | 'vendido' | 'transferido' | 'baja'
 
-export interface Vehicle {
+export interface Vehicle extends Versioned {
   id: string
   station_id: string
   internal_code: string
@@ -267,7 +275,7 @@ export interface StationStaffingHistory {
   recorded_at: string
 }
 
-export interface Personnel {
+export interface Personnel extends Versioned {
   id: string
   station_id: string
   first_name: string
@@ -301,7 +309,7 @@ export interface PersonnelStatusHistory {
 // cargó y quienes administran ese alcance).
 export type DocumentVisibility = 'alcance' | 'todos' | 'restringido'
 
-export interface DocumentRecord {
+export interface DocumentRecord extends Versioned {
   id: string
   region_id: string | null
   subsede_id: string | null
@@ -326,7 +334,7 @@ export interface DocumentRecord {
   updated_at: string
 }
 
-export interface DocumentFolder {
+export interface DocumentFolder extends Versioned {
   id: string
   name: string
   description: string | null
@@ -352,7 +360,7 @@ export interface DocumentVersion {
 export type InventoryCategory = 'herramienta_manual' | 'mecanica' | 'equipo' | 'elementos_practica' | 'otros'
 export type InventoryStatus = 'disponible' | 'no_disponible' | 'mantenimiento' | 'baja'
 
-export interface InventoryItem {
+export interface InventoryItem extends Versioned {
   id: string
   name: string
   category: InventoryCategory
@@ -415,7 +423,7 @@ export interface InventoryLoanRequest {
   updated_at: string
 }
 
-export interface Department {
+export interface Department extends Versioned {
   id: string
   name: string
   description: string | null
@@ -452,7 +460,7 @@ export interface DepartmentManualMember {
 
 export type DepartmentActivityType = 'reunion' | 'capacitacion' | 'practica' | 'mantenimiento' | 'gestion' | 'informe' | 'otro'
 
-export interface DepartmentActivityReport {
+export interface DepartmentActivityReport extends Versioned {
   id: string
   department_id: string
   title: string
@@ -494,7 +502,7 @@ export interface DepartmentReportFile {
   created_at: string
 }
 
-export interface DepartmentReport {
+export interface DepartmentReport extends Versioned {
   id: string
   department_id: string
   report_type: DepartmentReportType
@@ -526,7 +534,7 @@ export type StationHistoryCategory =
   | 'autoridad'
   | 'otro'
 
-export interface StationHistoryEvent {
+export interface StationHistoryEvent extends Versioned {
   id: string
   station_id: string
   title: string
@@ -553,7 +561,7 @@ export type CalendarEventType =
 
 export type CalendarEventStatus = 'programado' | 'cancelado' | 'finalizado'
 
-export interface CalendarEvent {
+export interface CalendarEvent extends Versioned {
   id: string
   title: string
   description: string | null
@@ -596,9 +604,17 @@ export interface StationCompliance {
   compliance_status: ComplianceStatus
 }
 
-export type MapReferencePointType = 'ruta' | 'parque_industrial' | 'rio' | 'zona_riesgo' | 'punto_estrategico' | 'otro'
+export type MapReferencePointType =
+  | 'ruta'
+  | 'parque_industrial'
+  | 'rio'
+  | 'zona_riesgo'
+  | 'punto_estrategico'
+  | 'otro'
+  | 'lugar_relevante'
+  | 'abastecimiento'
 
-export interface MapReferencePoint {
+export interface MapReferencePoint extends Versioned {
   id: string
   name: string
   type: MapReferencePointType
@@ -612,6 +628,150 @@ export interface MapReferencePoint {
   created_by_profile_id: string | null
   created_at: string
   updated_at: string
+  // Clase de lugar (industria, escuela...) o de punto de abastecimiento (hidrante...). Migración 0114.
+  subtype?: MapPointSubtype | null
+}
+
+export type MapPointSubtype =
+  | 'industria'
+  | 'escuela'
+  | 'deposito'
+  | 'local'
+  | 'hidrante'
+  | 'reserva'
+  | 'cisterna'
+  | 'otro'
+
+export interface MapCharacteristic {
+  label: string
+  value: string
+  unit?: string | null
+  source?: string | null
+}
+
+// Ficha de un punto del mapa (0114): lo que consta en el relevamiento.
+export interface MapPointSheet extends Versioned {
+  point_id: string
+  address: string | null
+  locality: string | null
+  responsible_entity: string | null
+  institutional_contact: string | null
+  access_notes: string | null
+  observations: string | null
+  documented_risks: string | null
+  characteristics: MapCharacteristic[]
+  review_every_days: number | null
+  surveyed_on: string | null
+  surveyed_by_name: string | null
+  surveyed_by_profile_id: string | null
+  last_reviewed_at: string | null
+  last_reviewed_by_profile_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface MapPointSheetPrivate extends Versioned {
+  point_id: string
+  personal_contacts: string | null
+  sensitive_notes: string | null
+  updated_at: string
+}
+
+export type MapPointSheetPayload = Partial<
+  Pick<
+    MapPointSheet,
+    | 'address'
+    | 'locality'
+    | 'responsible_entity'
+    | 'institutional_contact'
+    | 'access_notes'
+    | 'observations'
+    | 'documented_risks'
+    | 'characteristics'
+    | 'review_every_days'
+    | 'surveyed_on'
+    | 'surveyed_by_name'
+  >
+>
+
+export interface MapPointSheetHistoryRow {
+  id: number
+  point_id: string
+  version: number
+  change_kind: 'alta' | 'edicion' | 'propuesta_aceptada' | 'revision'
+  changed_by_profile_id: string | null
+  changed_at: string
+  snapshot: MapPointSheetPayload & { last_reviewed_at?: string | null }
+}
+
+export type MapProposalStatus = 'pendiente' | 'aceptada' | 'rechazada' | 'reemplazada'
+
+export interface MapPointSheetProposal {
+  id: string
+  point_id: string
+  proposed_by_profile_id: string | null
+  proposed_by_name: string | null
+  proposed_at: string
+  base_version: number | null
+  payload: MapPointSheetPayload
+  note: string | null
+  status: MapProposalStatus
+  reviewed_by_profile_id: string | null
+  reviewed_by_name: string | null
+  reviewed_at: string | null
+  review_note: string | null
+}
+
+export type MapFileKind = 'foto' | 'plano' | 'documento'
+
+export interface MapPointFile {
+  id: string
+  point_id: string
+  verification_id: string | null
+  storage_path: string
+  file_name: string
+  mime_type: string
+  file_size: number
+  file_kind: MapFileKind
+  visibility: 'compartido' | 'reservado'
+  status: 'pendiente' | 'validado'
+  caption: string | null
+  uploaded_by_profile_id: string | null
+  created_at: string
+}
+
+export type MapVerificationResult = 'sin_problemas_informados' | 'problema_informado' | 'no_se_pudo_verificar'
+
+export interface MapPointVerification {
+  id: string
+  point_id: string
+  verified_on: string
+  verified_by_profile_id: string | null
+  verified_by_name: string | null
+  result: MapVerificationResult
+  problems: string | null
+  notes: string | null
+  follow_up: string | null
+  follow_up_status: 'pendiente' | 'resuelto' | null
+  follow_up_resolved_on: string | null
+  follow_up_resolved_by_name: string | null
+  follow_up_resolution: string | null
+  created_at: string
+}
+
+export type MapSupplyStatus = 'pendiente_verificar' | 'problema_informado' | 'pendiente_revision' | 'ultima_sin_problemas'
+
+export interface MapSupplyPointStatus {
+  point_id: string
+  last_verification_id: string | null
+  last_verified_on: string | null
+  last_result: MapVerificationResult | null
+  last_verified_by_name: string | null
+  last_problems: string | null
+  pending_followups: number
+  review_every_days: number | null
+  status: MapSupplyStatus
+  review_due_on: string | null
 }
 
 // Departamento tal como lo ve Avales regionales: la fila de departments
@@ -657,7 +817,7 @@ export interface AvalesDepartment {
   is_my_department: boolean
 }
 
-export interface SchoolAvalDocument {
+export interface SchoolAvalDocument extends Versioned {
   id: string
   department_id: string
   title: string

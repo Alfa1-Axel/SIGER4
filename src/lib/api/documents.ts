@@ -1,5 +1,6 @@
 import { FunctionsHttpError } from '@supabase/functions-js'
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { DocumentRecord, DocumentVersion, DocumentFolder, DocumentVisibility } from '../../types/database'
 
 // Mismo motivo que el helper equivalente en lib/api/users.ts: el cliente de
@@ -167,10 +168,8 @@ export async function createDocumentFolder(input: DocumentFolderInput): Promise<
   return data as DocumentFolder
 }
 
-export async function updateDocumentFolder(id: string, input: Partial<DocumentFolderInput>): Promise<DocumentFolder> {
-  const { data, error } = await supabase.from('document_folders').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as DocumentFolder
+export async function updateDocumentFolder(id: string, input: Partial<DocumentFolderInput>, expectedVersion?: number | null): Promise<DocumentFolder> {
+  return updateVersioned<DocumentFolder>('document_folders', id, input, expectedVersion)
 }
 
 export async function deleteDocumentFolder(id: string): Promise<void> {
@@ -194,7 +193,10 @@ export async function fetchDocumentById(id: string): Promise<DocumentRecord | nu
   return data as DocumentRecord
 }
 
+// id: lo elige la pantalla de antemano (borrador) para que reintentar un alta cuya
+// respuesta se perdió choque con el primer intento (23505) y no lo duplique.
 export interface DocumentInput {
+  id?: string
   title: string
   category: string
   description?: string | null
@@ -222,10 +224,8 @@ export async function createDocument(input: DocumentInput): Promise<DocumentReco
   return data as DocumentRecord
 }
 
-export async function updateDocument(id: string, input: Partial<DocumentInput>): Promise<DocumentRecord> {
-  const { data, error } = await supabase.from('documents').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as DocumentRecord
+export async function updateDocument(id: string, input: Partial<DocumentInput>, expectedVersion?: number | null): Promise<DocumentRecord> {
+  return updateVersioned<DocumentRecord>('documents', id, input, expectedVersion)
 }
 
 export async function updateDocumentStoragePath(id: string, storagePath: string): Promise<DocumentRecord> {

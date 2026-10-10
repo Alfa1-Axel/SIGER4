@@ -7,6 +7,9 @@ import { fetchStationById } from '../lib/api/stations'
 import type { PersonnelStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 // Solo los estados "libres" son editables desde este formulario.
 // Renuncia/baja/pase/reserva requieren un motivo obligatorio y se hacen
@@ -52,11 +55,16 @@ export function PersonalFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     if (!id) return
     let active = true
     fetchPersonnelById(id).then((person) => {
+      setExisting((person ?? null) as unknown as RowSnapshot | null)
       if (!active || !person) return
       setResolvedStationId(person.station_id)
       setFirstName(person.first_name)
@@ -92,6 +100,7 @@ export function PersonalFormPage() {
     event.preventDefault()
     setError(null)
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         station_id: resolvedStationId,
@@ -108,13 +117,18 @@ export function PersonalFormPage() {
         observations: observations || null,
       }
       if (isEditing && id) {
-        await updatePersonnel(id, input)
+        attempted = input
+        await updatePersonnel(id, input, existing?.row_version)
       } else {
         await createPersonnel(input)
       }
       navigate(`/cuarteles/${resolvedStationId}`)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el personal.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el personal.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -222,6 +236,35 @@ export function PersonalFormPage() {
           )}
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="personnel"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updatePersonnel(id, patch as Parameters<typeof updatePersonnel>[1], version)}
+
+              onResolved={async () => {
+
+                navigate(`/cuarteles/${resolvedStationId}`)
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar integrante'}

@@ -43,6 +43,9 @@ import { useAuth } from '../hooks/useAuth'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
   reunion: 'Reunión',
@@ -121,6 +124,8 @@ export function DepartamentoDetallePage() {
   const [contactInfo, setContactInfo] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [savingDetails, setSavingDetails] = useState(false)
+  // Otra persona cambió los datos del departamento mientras se editaban.
+  const [detailsConflict, setDetailsConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   const [newMemberProfileId, setNewMemberProfileId] = useState('')
   const [addingMember, setAddingMember] = useState(false)
@@ -330,17 +335,22 @@ export function DepartamentoDetallePage() {
     setDetailsSaved(false)
     if (!name.trim()) return setError('El departamento necesita un nombre.')
     setSavingDetails(true)
+    const input = {
+      name: name.trim(),
+      description: description || null,
+      coordinator_profile_id: isAdmin ? coordinatorProfileId || null : department?.coordinator_profile_id ?? null,
+      contact_info: contactInfo || null,
+      is_active: isActive,
+    }
     try {
-      await updateDepartment(id, {
-        name: name.trim(),
-        description: description || null,
-        coordinator_profile_id: isAdmin ? coordinatorProfileId || null : department?.coordinator_profile_id ?? null,
-        contact_info: contactInfo || null,
-        is_active: isActive,
-      })
+      await updateDepartment(id, input, department?.row_version)
       await reload()
       setDetailsSaved(true)
     } catch (err) {
+      if (isEditConflict(err)) {
+        setDetailsConflict({ mine: input })
+        return
+      }
       // 23505: índice único de nombre (0097).
       const code = (err as { code?: string } | null)?.code
       setError(
@@ -643,6 +653,25 @@ export function DepartamentoDetallePage() {
               Departamento activo
             </label>
           </div>
+          {detailsConflict && department && id && (
+            <EditConflictPanel
+              table="departments"
+              recordId={id}
+              base={department as unknown as RowSnapshot}
+              mine={detailsConflict.mine}
+              onSave={(patch, version) => updateDepartment(id, patch as Parameters<typeof updateDepartment>[1], version)}
+              onResolved={async () => {
+                setDetailsConflict(null)
+                await reload()
+                setDetailsSaved(true)
+              }}
+              onDiscard={() => {
+                setDetailsConflict(null)
+                void reload()
+              }}
+              onClose={() => setDetailsConflict(null)}
+            />
+          )}
           <button type="submit" className="btn btn-primary btn-block" disabled={savingDetails}>
             {savingDetails ? 'Guardando…' : 'Guardar cambios'}
           </button>

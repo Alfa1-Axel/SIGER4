@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
+import { EditConflictPanel } from '../components/EditConflictPanel'
 import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchRegions } from '../lib/api/regions'
@@ -17,7 +18,12 @@ import {
   deleteMapReferencePoint,
 } from '../lib/api/mapReferencePoints'
 import type { MapReferencePointInput } from '../lib/api/mapReferencePoints'
-import type { MapReferencePoint, MapReferencePointType, Region, Station, Subsede } from '../types/database'
+import { fetchSupplyStatuses, findSimilarPoints } from '../lib/api/mapPoints'
+import type { SimilarPoint } from '../lib/api/mapPoints'
+import { POINT_TYPE_LABEL, SUBTYPES_BY_TYPE, SUBTYPE_LABEL, SUPPLY_STATUS_LABEL, formatDateAr, pointKindLabel } from '../lib/mapPointMeta'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
+import type { MapPointSubtype, MapReferencePoint, MapReferencePointType, MapSupplyPointStatus, Region, Station, Subsede } from '../types/database'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
 
@@ -54,18 +60,11 @@ const REFERENCE_TYPE_COLOR: Record<MapReferencePointType, string> = {
   zona_riesgo: 'var(--map-ref-riesgo)',
   punto_estrategico: 'var(--map-ref-estrategico)',
   otro: 'var(--map-ref-otro)',
+  lugar_relevante: 'var(--map-ref-lugar)',
+  abastecimiento: 'var(--map-ref-abastecimiento)',
 }
 
-const REFERENCE_TYPE_LABEL: Record<MapReferencePointType, string> = {
-  ruta: 'Ruta',
-  parque_industrial: 'Parque industrial',
-  rio: 'Río',
-  zona_riesgo: 'Zona de riesgo',
-  punto_estrategico: 'Punto estratégico',
-  otro: 'Otro',
-}
-
-const REFERENCE_TYPE_OPTIONS = Object.keys(REFERENCE_TYPE_LABEL) as MapReferencePointType[]
+const REFERENCE_TYPE_OPTIONS = Object.keys(POINT_TYPE_LABEL) as MapReferencePointType[]
 
 function referenceDivIcon(type: MapReferencePointType) {
   const color = REFERENCE_TYPE_COLOR[type]
@@ -119,6 +118,7 @@ function StationPopupContent({ station }: { station: StationWithSubsede }) {
 function ReferencePopupContent({
   point,
   scopeLabel,
+  supplyStatus,
   canManage,
   canDelete,
   onEdit,
@@ -127,6 +127,7 @@ function ReferencePopupContent({
 }: {
   point: MapReferencePoint
   scopeLabel: string
+  supplyStatus: MapSupplyPointStatus | null
   canManage: boolean
   canDelete: boolean
   onEdit: () => void
@@ -137,9 +138,20 @@ function ReferencePopupContent({
     <div style={{ minWidth: 200 }}>
       <div style={{ fontWeight: 700, fontSize: 13 }}>{point.name}</div>
       <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 6 }}>
-        {REFERENCE_TYPE_LABEL[point.type]} · {scopeLabel}
+        {pointKindLabel(point.type, point.subtype)} · {scopeLabel}
       </div>
       {point.description && <div style={{ fontSize: 12, marginBottom: 8 }}>{point.description}</div>}
+      {supplyStatus && (
+        <div style={{ fontSize: 12, marginBottom: 8 }}>
+          {SUPPLY_STATUS_LABEL[supplyStatus.status]}
+          {supplyStatus.last_verified_on ? ` (${formatDateAr(supplyStatus.last_verified_on)})` : ''}
+        </div>
+      )}
+      <div style={{ marginBottom: 8 }}>
+        <Link to={`/mapa/puntos/${point.id}`} className="link-muted">
+          Ver ficha →
+        </Link>
+      </div>
       {!point.is_active && (
         <span className="badge badge-warning" style={{ marginBottom: 8, display: 'inline-flex' }}>
           Inactivo
@@ -173,6 +185,7 @@ function ReferencePopupContent({
 const EMPTY_FORM = {
   name: '',
   type: 'otro' as MapReferencePointType,
+  subtype: '' as MapPointSubtype | '',
   description: '',
   latitude: '',
   longitude: '',
@@ -190,6 +203,8 @@ export function MapaRegionalPage() {
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [regions, setRegions] = useState<Region[]>([])
   const [points, setPoints] = useState<MapReferencePoint[]>([])
+  const [supplyStatuses, setSupplyStatuses] = useState<Map<string, MapSupplyPointStatus>>(new Map())
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [subsedeFilter, setSubsedeFilter] = useState('')
@@ -201,6 +216,11 @@ export function MapaRegionalPage() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Edición: el punto tal como se abrió (con su versión) y lo que se intentó guardar si otra persona lo cambió.
+  const [editingPoint, setEditingPoint] = useState<MapReferencePoint | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
+  // Posibles coincidencias antes de crear un punto nuevo.
+  const [duplicates, setDuplicates] = useState<SimilarPoint[] | null>(null)
 
   // Al abrir el formulario (nuevo o edición) la pantalla baja hasta él: queda
   // debajo del mapa y, en el celular, no se veía que se había abierto.
@@ -222,6 +242,12 @@ export function MapaRegionalPage() {
       setSubsedes(subsedesData)
       setRegions(regionsData)
       setPoints(pointsData)
+      // Estado de los puntos de abastecimiento: si todavía no se corrió la migración 0115, el mapa se ve igual.
+      try {
+        setSupplyStatuses(new Map((await fetchSupplyStatuses()).map((st) => [st.point_id, st])))
+      } catch {
+        setSupplyStatuses(new Map())
+      }
     } catch (err) {
       setError(describeSupabaseError(err, 'No pudimos cargar el Mapa Regional.'))
     } finally {
@@ -274,8 +300,13 @@ export function MapaRegionalPage() {
   const withCoordinates = filteredStations.filter((s) => s.latitude != null && s.longitude != null)
   const withoutCoordinates = filteredStations.filter((s) => s.latitude == null || s.longitude == null)
 
-  const mapCenter: [number, number] =
-    withCoordinates.length > 0 ? [withCoordinates[0].latitude as number, withCoordinates[0].longitude as number] : DEFAULT_CENTER
+  // Si se llega desde una ficha o la búsqueda (?punto=<id>), el mapa se centra en ese punto.
+  const focusedPoint = points.find((p) => p.id === searchParams.get('punto')) ?? null
+  const mapCenter: [number, number] = focusedPoint
+    ? [focusedPoint.latitude, focusedPoint.longitude]
+    : withCoordinates.length > 0
+      ? [withCoordinates[0].latitude as number, withCoordinates[0].longitude as number]
+      : DEFAULT_CENTER
 
   function scopeLabelFor(point: MapReferencePoint): string {
     if (point.station_id) return stations.find((s) => s.id === point.station_id)?.name ?? 'Cuartel no disponible'
@@ -286,6 +317,9 @@ export function MapaRegionalPage() {
 
   function openCreateForm() {
     setEditingId(null)
+    setEditingPoint(null)
+    setConflict(null)
+    setDuplicates(null)
     setFormError(null)
     setForm({
       ...EMPTY_FORM,
@@ -302,10 +336,14 @@ export function MapaRegionalPage() {
 
   function openEditForm(point: MapReferencePoint) {
     setEditingId(point.id)
+    setEditingPoint(point)
+    setConflict(null)
+    setDuplicates(null)
     setFormError(null)
     setForm({
       name: point.name,
       type: point.type,
+      subtype: (point.subtype ?? '') as MapPointSubtype | '',
       description: point.description ?? '',
       latitude: String(point.latitude),
       longitude: String(point.longitude),
@@ -319,7 +357,7 @@ export function MapaRegionalPage() {
     setScrollRequest((n) => n + 1)
   }
 
-  async function handleSubmitForm(event: FormEvent) {
+  async function handleSubmitForm(event: FormEvent, skipDuplicateCheck = false) {
     event.preventDefault()
     setFormError(null)
 
@@ -355,6 +393,7 @@ export function MapaRegionalPage() {
     const input: MapReferencePointInput = {
       name: form.name.trim(),
       type: form.type,
+      subtype: SUBTYPES_BY_TYPE[form.type] && form.subtype ? form.subtype : null,
       description: form.description.trim() || null,
       latitude: lat,
       longitude: lng,
@@ -369,12 +408,34 @@ export function MapaRegionalPage() {
 
     setSubmitting(true)
     try {
-      if (editingId) await updateMapReferencePoint(editingId, input)
-      else await createMapReferencePoint(input)
+      if (editingId) {
+        await updateMapReferencePoint(editingId, input, editingPoint?.row_version)
+      } else {
+        // Antes de crear otro punto, se muestran los que podrían ser el mismo (mismo nombre o a 150 m).
+        if (!skipDuplicateCheck) {
+          let similar: SimilarPoint[] = []
+          try {
+            similar = await findSimilarPoints(input.name, lat, lng)
+          } catch {
+            similar = []
+          }
+          if (similar.length > 0) {
+            setDuplicates(similar)
+            setSubmitting(false)
+            return
+          }
+        }
+        await createMapReferencePoint(input)
+      }
       setFormOpen(false)
+      setDuplicates(null)
       await loadAll()
     } catch (err) {
-      setFormError(describeSupabaseError(err, 'No pudimos guardar el punto de referencia.'))
+      if (editingId && isEditConflict(err)) {
+        setConflict({ mine: input as unknown as Record<string, unknown> })
+      } else {
+        setFormError(describeSupabaseError(err, 'No pudimos guardar el punto de referencia.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -382,10 +443,15 @@ export function MapaRegionalPage() {
 
   async function handleToggleActive(point: MapReferencePoint) {
     try {
-      await updateMapReferencePoint(point.id, { is_active: !point.is_active })
+      await updateMapReferencePoint(point.id, { is_active: !point.is_active }, point.row_version)
       await loadAll()
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos actualizar el punto de referencia.'))
+      if (isEditConflict(err)) {
+        setError('Otra persona cambió este punto mientras tanto. Actualizamos el mapa: revisalo y volvé a intentar.')
+        await loadAll()
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos actualizar el punto de referencia.'))
+      }
     }
   }
 
@@ -426,6 +492,15 @@ export function MapaRegionalPage() {
         <div className="alert alert-danger" role="alert">{error}</div>
       )}
 
+      {focusedPoint && (
+        <div className="alert alert-info" role="status">
+          <span className="alert-content">
+            Mostrando <strong>{focusedPoint.name}</strong> ({pointKindLabel(focusedPoint.type, focusedPoint.subtype)}).{' '}
+            <Link to={`/mapa/puntos/${focusedPoint.id}`}>Ver ficha →</Link>
+          </span>
+        </div>
+      )}
+
       {!loading && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12, alignItems: 'flex-end' }}>
           {subsedes.length > 0 && (
@@ -462,7 +537,7 @@ export function MapaRegionalPage() {
             className="card"
             style={{ padding: 0, marginBottom: 16, overflow: 'hidden', height: 'min(70vh, 560px)' }}
           >
-            <MapContainer center={mapCenter} zoom={DEFAULT_ZOOM} style={{ height: '100%', width: '100%' }}>
+            <MapContainer key={focusedPoint?.id ?? 'mapa'} center={mapCenter} zoom={focusedPoint ? 14 : DEFAULT_ZOOM} style={{ height: '100%', width: '100%' }}>
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> colaboradores'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -485,6 +560,7 @@ export function MapaRegionalPage() {
                       <ReferencePopupContent
                         point={point}
                         scopeLabel={scopeLabelFor(point)}
+                        supplyStatus={supplyStatuses.get(point.id) ?? null}
                         canManage={canManagePoints}
                         canDelete={isAdmin}
                         onEdit={() => openEditForm(point)}
@@ -519,15 +595,29 @@ export function MapaRegionalPage() {
                   <select
                     id="pointType"
                     value={form.type}
-                    onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as MapReferencePointType }))}
+                    onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as MapReferencePointType, subtype: '' }))}
                   >
                     {REFERENCE_TYPE_OPTIONS.map((type) => (
                       <option key={type} value={type}>
-                        {REFERENCE_TYPE_LABEL[type]}
+                        {POINT_TYPE_LABEL[type]}
                       </option>
                     ))}
                   </select>
                 </div>
+
+                {SUBTYPES_BY_TYPE[form.type] && (
+                  <div className="field">
+                    <label htmlFor="pointSubtype">Clase (opcional)</label>
+                    <select id="pointSubtype" value={form.subtype} onChange={(e) => setForm((f) => ({ ...f, subtype: e.target.value as MapPointSubtype | '' }))}>
+                      <option value="">Sin indicar</option>
+                      {SUBTYPES_BY_TYPE[form.type]!.map((sub) => (
+                        <option key={sub} value={sub}>
+                          {SUBTYPE_LABEL[sub]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="field">
                   <label htmlFor="pointDescription">Descripción (opcional)</label>
@@ -664,6 +754,51 @@ export function MapaRegionalPage() {
                       ))}
                     </select>
                   </div>
+                )}
+
+                {duplicates && duplicates.length > 0 && (
+                  <div className="alert alert-warning" role="alert">
+                    <div className="alert-content">
+                      <strong>Ya hay puntos parecidos en el mapa.</strong> Fijate si alguno es el mismo antes de crear otro:
+                      <ul className="sheet-list">
+                        {duplicates.map((d) => (
+                          <li key={d.id}>
+                            <Link to={`/mapa/puntos/${d.id}`}>{d.name}</Link> · {pointKindLabel(d.type, d.subtype)} ·{' '}
+                            {d.match_reason === 'mismo_nombre' ? 'mismo nombre' : d.match_reason === 'nombre_parecido' ? 'nombre parecido' : `a ${d.distance_m} m`}
+                          </li>
+                        ))}
+                      </ul>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button type="button" className="btn btn-outlined btn-sm" onClick={(e) => void handleSubmitForm(e as unknown as FormEvent, true)} disabled={submitting}>
+                          No es ninguno: crear de todos modos
+                        </button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDuplicates(null)}>
+                          Revisar los datos
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {conflict && editingPoint && editingId && (
+                  <EditConflictPanel
+                    table="map_reference_points"
+                    recordId={editingId}
+                    base={editingPoint as unknown as RowSnapshot}
+                    mine={conflict.mine}
+                    onSave={(patch, version) => updateMapReferencePoint(editingId, patch as Partial<MapReferencePointInput>, version)}
+                    onResolved={async () => {
+                      setConflict(null)
+                      setFormOpen(false)
+                      await loadAll()
+                    }}
+                    onDiscard={() => {
+                      setConflict(null)
+                      setFormOpen(false)
+                      void loadAll()
+                    }}
+                    onClose={() => setConflict(null)}
+                  />
                 )}
 
                 {formError && <p className="field-error">{formError}</p>}

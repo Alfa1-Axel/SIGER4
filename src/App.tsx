@@ -60,6 +60,9 @@ import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage
 import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
 import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
 import { PendientesPage } from './pages/PendientesPage'
+import { PuntoMapaPage } from './pages/PuntoMapaPage'
+import { PuntoMapaFichaFormPage } from './pages/PuntoMapaFichaFormPage'
+import { PuntoMapaVerificacionFormPage } from './pages/PuntoMapaVerificacionFormPage'
 
 export default function App() {
   return (
@@ -87,6 +90,9 @@ export default function App() {
             </ModuleRoute>
           }
         />
+        <Route path="/mapa/puntos/:id" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaPage /></ModuleRoute>} />
+        <Route path="/mapa/puntos/:id/editar" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaFichaFormPage /></ModuleRoute>} />
+        <Route path="/mapa/puntos/:id/verificaciones/nueva" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaVerificacionFormPage /></ModuleRoute>} />
         <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
         <Route path="/vehiculos/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
         <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ModuleRoute module="cuarteles" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />

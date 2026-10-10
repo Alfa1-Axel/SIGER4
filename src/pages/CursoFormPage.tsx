@@ -15,6 +15,9 @@ import {
 import type { CourseStatus, Profile, Region, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 const STATUS_OPTIONS: { value: CourseStatus; label: string }[] = [
   { value: 'planificado', label: 'Planificado' },
@@ -49,6 +52,10 @@ export function CursoFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   useEffect(() => {
     let active = true
@@ -70,6 +77,7 @@ export function CursoFormPage() {
     if (!id) return
     let active = true
     Promise.all([fetchCourseById(id), fetchParticipatingStations(id)]).then(([course, participating]) => {
+      setExisting((course ?? null) as unknown as RowSnapshot | null)
       if (!active || !course) return
       setRegionId(course.region_id)
       setTitle(course.title)
@@ -100,6 +108,7 @@ export function CursoFormPage() {
     event.preventDefault()
     setError(null)
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         region_id: regionId,
@@ -114,11 +123,16 @@ export function CursoFormPage() {
         attendees_count: attendeesCount ? Number(attendeesCount) : null,
         speakers: speakers || null,
       }
-      const course = isEditing && id ? await updateCourse(id, input) : await createCourse(input)
+      attempted = input
+      const course = isEditing && id ? await updateCourse(id, input, existing?.row_version) : await createCourse(input)
       await setParticipatingStations(course.id, selectedStationIds)
       navigate('/escuela')
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el curso.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el curso.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -251,6 +265,36 @@ export function CursoFormPage() {
           </div>
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="courses"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateCourse(id, patch as Parameters<typeof updateCourse>[1], version)}
+
+              onResolved={async () => {
+
+                await setParticipatingStations(id, selectedStationIds)
+                navigate('/escuela')
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar curso'}

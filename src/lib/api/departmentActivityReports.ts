@@ -1,4 +1,5 @@
 import { supabase } from '../supabaseClient'
+import { updateVersioned } from '../concurrency'
 import type { DepartmentActivityReport, DepartmentActivityType } from '../../types/database'
 
 export async function fetchDepartmentActivityReports(departmentId: string): Promise<DepartmentActivityReport[]> {
@@ -36,19 +37,16 @@ export interface DepartmentActivityReportInput {
   created_by_profile_id?: string | null
 }
 
-export async function createDepartmentActivityReport(input: DepartmentActivityReportInput): Promise<DepartmentActivityReport> {
+// input.id: lo elige la pantalla de antemano (borrador) para que reintentar un alta cuya
+// respuesta se perdió choque con el primer intento (23505) y no lo duplique.
+export async function createDepartmentActivityReport(input: DepartmentActivityReportInput & { id?: string }): Promise<DepartmentActivityReport> {
   const { data, error } = await supabase.from('department_activity_reports').insert(input).select('*').single()
   if (error) throw error
   return data as DepartmentActivityReport
 }
 
-export async function updateDepartmentActivityReport(
-  id: string,
-  input: Partial<DepartmentActivityReportInput>,
-): Promise<DepartmentActivityReport> {
-  const { data, error } = await supabase.from('department_activity_reports').update(input).eq('id', id).select('*').single()
-  if (error) throw error
-  return data as DepartmentActivityReport
+export async function updateDepartmentActivityReport(id: string, input: Partial<DepartmentActivityReportInput>, expectedVersion?: number | null): Promise<DepartmentActivityReport> {
+  return updateVersioned<DepartmentActivityReport>('department_activity_reports', id, input, expectedVersion)
 }
 
 export async function deleteDepartmentActivityReport(id: string): Promise<void> {

@@ -3,13 +3,15 @@ import type { FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { ImagePicker } from '../components/ui/ImagePicker'
+import { EditConflictPanel } from '../components/EditConflictPanel'
 import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { createStation, fetchStationById, updateStation } from '../lib/api/stations'
 import { deleteStationMedia, uploadStationMedia } from '../lib/api/storage'
-import type { Region, StationStatus, Subsede } from '../types/database'
+import type { Region, Station, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { isEditConflict } from '../lib/concurrency'
 import { isValidPhone } from '../lib/contact'
 
 const STATUS_OPTIONS: { value: StationStatus; label: string }[] = [
@@ -57,6 +59,10 @@ export function CuartelFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<Station | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   const subsedesForRegion = subsedes.filter((s) => s.region_id === regionId)
 
@@ -84,6 +90,7 @@ export function CuartelFormPage() {
     let active = true
     fetchStationById(id).then((station) => {
       if (!active || !station) return
+      setExisting(station)
       setName(station.name)
       setCode(station.code)
       setAddress(station.address ?? '')
@@ -109,6 +116,21 @@ export function CuartelFormPage() {
       active = false
     }
   }, [id])
+
+  // Después de guardar los datos: logo y portada (si se cambiaron) y vuelta al detalle.
+  async function finishSave(stationId: string) {
+    if (logoFile) {
+      const logoUrl = await uploadStationMedia(stationId, logoFile)
+      await updateStation(stationId, { logo_url: logoUrl })
+      await deleteStationMedia(existingLogoUrl)
+    }
+    if (coverFile) {
+      const coverUrl = await uploadStationMedia(stationId, coverFile)
+      await updateStation(stationId, { cover_image_url: coverUrl })
+      await deleteStationMedia(existingCoverUrl)
+    }
+    navigate(`/cuarteles/${stationId}`)
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -155,6 +177,7 @@ export function CuartelFormPage() {
     }
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const socialMedia =
         facebook || instagram
@@ -180,25 +203,18 @@ export function CuartelFormPage() {
         subsede_id: subsedeId,
       }
 
+      attempted = input
       const stationId = isEditing && id ? id : (await createStation(input)).id
       if (isEditing && id) {
-        await updateStation(id, input)
+        await updateStation(id, input, existing?.row_version)
       }
-
-      if (logoFile) {
-        const logoUrl = await uploadStationMedia(stationId, logoFile)
-        await updateStation(stationId, { logo_url: logoUrl })
-        await deleteStationMedia(existingLogoUrl)
-      }
-      if (coverFile) {
-        const coverUrl = await uploadStationMedia(stationId, coverFile)
-        await updateStation(stationId, { cover_image_url: coverUrl })
-        await deleteStationMedia(existingCoverUrl)
-      }
-
-      navigate(`/cuarteles/${stationId}`)
+      await finishSave(stationId)
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el cuartel.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el cuartel.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -411,6 +427,19 @@ export function CuartelFormPage() {
               ))}
             </div>
           </div>
+
+          {conflict && existing && id && (
+            <EditConflictPanel
+              table="stations"
+              recordId={id}
+              base={existing as unknown as Record<string, unknown>}
+              mine={conflict.mine}
+              onSave={(patch, version) => updateStation(id, patch, version)}
+              onResolved={() => finishSave(id)}
+              onDiscard={() => window.location.reload()}
+              onClose={() => setConflict(null)}
+            />
+          )}
 
           {error && <p className="field-error">{error}</p>}
 

@@ -11,6 +11,9 @@ import type { CalendarEventType, Region, Station, Subsede, VisibleDepartment } f
 import { EVENT_TYPE_LABEL } from './CalendarioPage'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EditConflictPanel } from '../components/EditConflictPanel'
+import { isEditConflict } from '../lib/concurrency'
+import type { RowSnapshot } from '../lib/concurrency'
 
 type ScopeTarget = 'region' | 'subsede' | 'station' | 'escuela'
 
@@ -77,6 +80,10 @@ export function EventoCalendarioFormPage() {
   const [loading, setLoading] = useState(isEditing)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // La fila tal como se abrió (con su versión) y, si otra persona la cambió
+  // mientras se editaba, lo que se intentó guardar.
+  const [existing, setExisting] = useState<RowSnapshot | null>(null)
+  const [conflict, setConflict] = useState<{ mine: Record<string, unknown> } | null>(null)
 
   const stationLocked = isStationRole && !isAdmin && !isRegionalRole && !isEscuelaRole
   // Un evento de departamento no lleva alcance territorial, aunque sea de
@@ -149,6 +156,7 @@ export function EventoCalendarioFormPage() {
     if (!id) return
     let active = true
     fetchCalendarEventById(id).then((event) => {
+      setExisting((event ?? null) as unknown as RowSnapshot | null)
       if (!active || !event) return
       setTitle(event.title)
       setDescription(event.description ?? '')
@@ -204,6 +212,7 @@ export function EventoCalendarioFormPage() {
     if (!startsAt) return setError('Ingresá la fecha/hora de inicio.')
 
     setSubmitting(true)
+    let attempted: Record<string, unknown> | null = null
     try {
       const input = {
         title,
@@ -220,14 +229,19 @@ export function EventoCalendarioFormPage() {
         notify_before_minutes: notifyBeforeMinutes ? Number(notifyBeforeMinutes) : null,
       }
       if (isEditing && id) {
-        await updateCalendarEvent(id, input)
+        attempted = input
+        await updateCalendarEvent(id, input, existing?.row_version)
         navigate(`/calendario/${id}`)
       } else {
         const created = await createCalendarEvent(input)
         navigate(`/calendario/${created.id}`)
       }
     } catch (err) {
-      setError(describeSupabaseError(err, 'No pudimos guardar el evento.'))
+      if (isEditing && attempted && isEditConflict(err)) {
+        setConflict({ mine: attempted })
+      } else {
+        setError(describeSupabaseError(err, 'No pudimos guardar el evento.'))
+      }
     } finally {
       setSubmitting(false)
     }
@@ -407,6 +421,35 @@ export function EventoCalendarioFormPage() {
           </div>
 
           {error && <p className="field-error">{error}</p>}
+
+          {conflict && existing && id && (
+
+            <EditConflictPanel
+
+              table="calendar_events"
+
+              recordId={id}
+
+              base={existing}
+
+              mine={conflict.mine}
+
+              onSave={(patch, version) => updateCalendarEvent(id, patch as Parameters<typeof updateCalendarEvent>[1], version)}
+
+              onResolved={async () => {
+
+                navigate(`/calendario/${id}`)
+
+              }}
+
+              onDiscard={() => window.location.reload()}
+
+              onClose={() => setConflict(null)}
+
+            />
+
+          )}
+
 
           <button type="submit" className="btn btn-primary btn-block" disabled={submitting}>
             {submitting ? 'Guardando…' : 'Guardar evento'}

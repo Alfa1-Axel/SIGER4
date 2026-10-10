@@ -12,6 +12,8 @@ export function isValidEmail(value: string): boolean {
 
 export function buildMailto(email: string): string | null {
   const trimmed = email.trim()
+  // Una dirección no lleva comillas, signos de HTML ni barras: si las trae, no se arma el enlace.
+  if (/["<>\s]/.test(trimmed)) return null
   return isValidEmail(trimmed) ? `mailto:${trimmed}` : null
 }
 

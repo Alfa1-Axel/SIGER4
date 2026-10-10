@@ -1,14 +1,15 @@
 {
   "name": "siger4",
   "private": true,
-  "version": "1.13.0",
+  "version": "1.14.0",
   "type": "module",
   "description": "SIGER4 - Sistema Integral de Gestion de la Regional 4 de Bomberos Voluntarios",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "security:check": "node scripts/security-check.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

@@ -7,6 +7,9 @@ interface ReasonPromptModalProps {
   title: string
   description?: string
   confirmLabel?: string
+  // Largo mínimo y máximo del motivo (por defecto, cualquier texto no vacío).
+  minLength?: number
+  maxLength?: number
   onConfirm: (reason: string) => Promise<void> | void
   onClose: () => void
 }
@@ -15,7 +18,7 @@ interface ReasonPromptModalProps {
 // confirmarse (ej. dar de baja/vender/transferir un vehículo, cambiar el
 // estado de un integrante a renuncia/baja/pase). No confirma con el motivo
 // vacío; muestra el error de la acción si falla.
-export function ReasonPromptModal({ title, description, confirmLabel = 'Confirmar', onConfirm, onClose }: ReasonPromptModalProps) {
+export function ReasonPromptModal({ title, description, confirmLabel = 'Confirmar', minLength = 1, maxLength, onConfirm, onClose }: ReasonPromptModalProps) {
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,8 +32,8 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
   }, [onClose])
 
   async function handleConfirm() {
-    if (!reason.trim()) {
-      setError('El motivo es obligatorio.')
+    if (reason.trim().length < minLength) {
+      setError(minLength > 1 ? `El motivo es obligatorio: escribí al menos ${minLength} letras.` : 'El motivo es obligatorio.')
       return
     }
     setSubmitting(true)
@@ -64,7 +67,7 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
         )}
         <div className="field">
           <label htmlFor="reason">Motivo</label>
-          <textarea id="reason" required rows={3} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
+          <textarea id="reason" required rows={3} maxLength={maxLength} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
         </div>
         {error && <p className="field-error">{error}</p>}
         <div className="modal-actions">

@@ -101,12 +101,18 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   station_staffing_year_range: 'El año de referencia de los efectivos tiene que estar entre 2000 y 2100.',
 }
 
+// Restricciones UNIQUE con un mensaje que el usuario puede resolver.
+const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
+  idx_school_avales_vigente_unico: 'Ya hay un aval vigente de esa persona en este departamento. Renovalo en lugar de cargar otro.',
+}
+
 // Permiso denegado por la RLS al guardar: mensaje según la sección.
 const RLS_TABLE_MESSAGES: Record<string, string> = {
   attendance_summaries: 'No tenés permiso para cargar asistencia de este cuartel con tu rol actual.',
   intervention_summaries: 'No tenés permiso para cargar intervenciones de este cuartel con tu rol actual.',
   calendar_events: 'No tenés permiso para cargar eventos con ese destino con tu rol actual.',
   station_staffing: 'No tenés permiso para cargar los efectivos de este cuartel con tu rol actual.',
+  school_avales_documents: 'No tenés permiso para cargar avales en este departamento con tu rol actual.',
 }
 
 export function describeSupabaseError(err: unknown, fallback = 'No pudimos completar la acción. Intentá de nuevo; si sigue fallando, consultá a Informática y Estadística.'): string {
@@ -136,7 +142,10 @@ export function describeSupabaseError(err: unknown, fallback = 'No pudimos compl
       return label ? `Falta completar un campo obligatorio: ${label}.` : 'Faltan completar campos obligatorios.'
     }
     if (err.code === '23503') return 'Este registro está vinculado a otros datos y no se puede eliminar, o hace referencia a algo que no existe.'
-    if (err.code === '23505') return 'Ya existe un registro con esos datos.'
+    if (err.code === '23505') {
+      const constraint = err.message.match(/unique constraint "([^"]+)"/)?.[1]
+      return (constraint && UNIQUE_CONSTRAINT_MESSAGES[constraint]) || 'Ya existe un registro con esos datos.'
+    }
     if (err.code === '23514') {
       const constraint = err.message.match(/check constraint "([^"]+)"/)?.[1]
       return (constraint && CHECK_CONSTRAINT_MESSAGES[constraint]) || 'Algún dato no cumple las reglas de carga. Revisá los valores e intentá de nuevo.'

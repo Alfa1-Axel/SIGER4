@@ -98,21 +98,25 @@ export function DepartamentoDetallePage() {
   const [error, setError] = useState<string | null>(null)
   const [detailsSaved, setDetailsSaved] = useState(false)
 
-  // Acceso directo a los avales regionales de este departamento: el
-  // departamento es una sola entidad, la misma que usa Escuela. Se muestra
-  // solo si el usuario lo ve dentro de Avales (Informática, Coordinador o
-  // Secretario de Escuela, o el coordinador de este departamento).
+  // Acceso directo a los avales regionales de este departamento: el departamento es una sola
+  // entidad, la misma que usa Escuela. La autoridad del departamento (Informática R4, el Coordinador
+  // de Escuela o su coordinador) ve los avales; quien es del departamento y puede cargar el suyo
+  // ve "Mi aval". Lo decide list_school_avales_departments() (can_manage / is_my_department).
   const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
-  const [showAvalesLink, setShowAvalesLink] = useState(false)
+  const [avalesLink, setAvalesLink] = useState<'gestion' | 'propio' | null>(null)
   useEffect(() => {
     if (!hasAvalesAccess || !id) {
-      setShowAvalesLink(false)
+      setAvalesLink(null)
       return
     }
     let active = true
     fetchAvalesDepartments()
-      .then((list) => active && setShowAvalesLink(list.some((d) => d.id === id)))
-      .catch(() => active && setShowAvalesLink(false))
+      .then((list) => {
+        if (!active) return
+        const found = list.find((d) => d.id === id)
+        setAvalesLink(found?.can_manage ? 'gestion' : found?.is_my_department ? 'propio' : null)
+      })
+      .catch(() => active && setAvalesLink(null))
     return () => {
       active = false
     }
@@ -569,9 +573,14 @@ export function DepartamentoDetallePage() {
           Documentos del departamento
         </Link>
       )}
-      {showAvalesLink && (
+      {avalesLink === 'gestion' && (
         <Link to={`/escuela/avales?departamento=${department.id}`} className="link-muted" style={{ display: 'inline-block', marginBottom: 16 }}>
           Ver los avales regionales de este departamento (Escuela) →
+        </Link>
+      )}
+      {avalesLink === 'propio' && (
+        <Link to="/escuela/avales" className="link-muted" style={{ display: 'inline-block', marginBottom: 16 }}>
+          Mi aval regional (cargar o renovar) →
         </Link>
       )}
 
@@ -633,8 +642,8 @@ export function DepartamentoDetallePage() {
                 ))}
               </select>
               <p id="coordinator-help" className="field-help">
-                El coordinador ve y sube los avales regionales de este departamento en Escuela. Es la única asignación
-                necesaria: no hace falta darle ningún rol.
+                El coordinador administra los avales regionales de este departamento en Escuela (los ve, edita, renueva,
+                archiva y elimina); cada persona carga el suyo. Es la única asignación necesaria: no hace falta darle ningún rol.
               </p>
             </div>
           )}

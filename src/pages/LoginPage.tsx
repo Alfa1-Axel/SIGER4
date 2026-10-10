@@ -81,7 +81,7 @@ export function LoginPage() {
           <img src="/logos/logo-informatica.png" alt="Dpto. Informática y Estadística R4" />
         </div>
         <h1 className="login-title">SIGER4</h1>
-        <p className="login-subtitle">Sistema Integral de Gestión de la Regional 4</p>
+        <p className="login-subtitle">Sistema Informático de GEstión de la Regional 4</p>
 
         <form onSubmit={handleSubmit} noValidate>
           <div className="field">

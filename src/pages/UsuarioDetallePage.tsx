@@ -595,7 +595,7 @@ export function UsuarioDetallePage() {
             <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 0 }}>
               Elegí si es Coordinador o Miembro en cada departamento: al guardar se le asigna el rol Coordinador o Miembro de
               Departamento, y se le quita si deja de estar en todos (salvo que sea su único rol). Ve solo esos departamentos: miembros,
-              informes, actas, eventos y avisos. El coordinador también ve y sube los avales de su departamento en Escuela.
+              informes, actas, eventos y avisos. El coordinador también administra los avales de su departamento en Escuela; el miembro carga y renueva el suyo.
             </p>
             {allDepartments.length === 0 ? (
               <p style={{ margin: 0 }}>Todavía no hay departamentos cargados.</p>

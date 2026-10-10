@@ -90,7 +90,7 @@ export interface UsePendientesResult {
 export function usePendientes(): UsePendientesResult {
   const { profile, isAdmin, isDepartmentOnly, hasRole } = useAuth()
   const { ownStationIds } = useLoanRequestAccess()
-  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
+  const { hasAccess: hasAvalesAccess, isAuthority: isAvalesAuthority } = useSchoolAvalesAccess()
   const { hasAnyAccess: hasReportsAccess } = useDepartmentReportsAccess()
   const isLoanManager = isAdmin || hasRole('secretario_regional', 'director_escuela')
   const canManageUsers = isAdmin || hasRole('jefe_cuerpo_activo')
@@ -110,7 +110,7 @@ export function usePendientes(): UsePendientesResult {
       // Inventario es un módulo cerrado para quien solo trabaja en departamentos:
       // ni siquiera se consulta.
       isDepartmentOnly ? Promise.resolve<OpenLoan[]>([]) : fetchOpenLoanRequests(),
-      hasAvalesAccess ? countRecentAvales() : Promise.resolve(0),
+      isAvalesAuthority ? countRecentAvales() : Promise.resolve(0),
       hasReportsAccess ? countRecentDepartmentReports(profileId) : Promise.resolve(0),
       fetchLatestUnreadNotifications(30),
       fetchUnreadNotificationCount(),
@@ -160,7 +160,7 @@ export function usePendientes(): UsePendientesResult {
       }
 
       if (avalesRes.status === 'fulfilled' && avalesRes.value > 0) {
-        list.push({ key: 'avales_nuevos', title: avalesRes.value === 1 ? '1 aval nuevo esta semana' : `${avalesRes.value} avales nuevos esta semana`, priority: 'baja', to: '/escuela/avales', module: 'Escuela', actionLabel: 'Ver avales' })
+        list.push({ key: 'avales_nuevos', title: avalesRes.value === 1 ? '1 aval nuevo o renovado esta semana' : `${avalesRes.value} avales nuevos o renovados esta semana`, priority: 'baja', to: '/escuela/avales', module: 'Escuela', actionLabel: 'Ver avales' })
       }
       if (reportsRes.status === 'fulfilled' && reportsRes.value > 0) {
         // Informática ve los informes de todos los departamentos, no solo los suyos.
@@ -200,7 +200,7 @@ export function usePendientes(): UsePendientesResult {
     return () => {
       active = false
     }
-  }, [profileId, ownStationIds, isLoanManager, isAdmin, canManageUsers, isDepartmentOnly, hasAvalesAccess, hasReportsAccess])
+  }, [profileId, ownStationIds, isLoanManager, isAdmin, canManageUsers, isDepartmentOnly, hasAvalesAccess, isAvalesAuthority, hasReportsAccess])
 
   const sorted = useMemo(
     () => [...items].sort((a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]),

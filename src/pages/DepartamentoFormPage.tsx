@@ -134,8 +134,8 @@ export function DepartamentoFormPage() {
             ))}
           </select>
           <p id="coordinator-help" className="field-help">
-            El coordinador ve y sube los avales de este departamento en Escuela. Es la única asignación necesaria: no hace
-            falta darle ningún rol.
+            El coordinador administra los avales de este departamento en Escuela (los ve, edita, renueva, archiva y elimina);
+            cada persona carga el suyo. Es la única asignación necesaria: no hace falta darle ningún rol.
           </p>
         </div>
 

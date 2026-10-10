@@ -27,7 +27,7 @@ function saveSelected(id: string) {
 // en sus pantallas; lo que pide atención está en Pendientes). Si tiene
 // varios, los distingue con un selector.
 export function DepartmentDashboard({ departments }: { departments: VisibleDepartment[] }) {
-  const { hasAccess: hasAvalesAccess } = useSchoolAvalesAccess()
+  const { hasAccess: hasAvalesAccess, canLoad: canLoadAval } = useSchoolAvalesAccess()
   // Primero los que coordina.
   const mine = [...departments.filter((d) => d.my_relation === 'coordinador'), ...departments.filter((d) => d.my_relation === 'integrante')]
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -100,6 +100,12 @@ export function DepartmentDashboard({ departments }: { departments: VisibleDepar
               <Link to={`/escuela/avales?departamento=${selected.id}`} className="btn btn-outlined btn-sm">
                 <Icon name="school" size={14} />
                 Ver avales
+              </Link>
+            )}
+            {!isCoordinator && canLoadAval && (
+              <Link to="/escuela/avales" className="btn btn-outlined btn-sm">
+                <Icon name="school" size={14} />
+                Mi aval
               </Link>
             )}
           </div>

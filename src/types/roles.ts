@@ -116,7 +116,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Su Regional (Escuela Regional)',
-    selfSummary: 'Gestionás la Escuela Regional: cursos, capacitaciones y eventos de Escuela. Consultás los datos de los cuarteles de tu Regional, generás reportes regionales, aprobás préstamos de Inventario y podés dar de alta usuarios.',
+    selfSummary: 'Gestionás la Escuela Regional: cursos, capacitaciones y eventos de Escuela. Consultás los datos de los cuarteles de tu Regional, generás reportes regionales, aprobás préstamos de Inventario y podés dar de alta usuarios. Podés cargar y renovar tu aval en Avales regionales.',
     assignable: true,
   },
   {
@@ -126,27 +126,27 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Su Regional (Escuela Regional)',
-    selfSummary: 'Creás y editás cursos y capacitaciones de la Escuela Regional y sus eventos en el Calendario. Consultás los datos de los cuarteles de tu Regional, sin editarlos.',
+    selfSummary: 'Creás y editás cursos y capacitaciones de la Escuela Regional y sus eventos en el Calendario. Consultás los datos de los cuarteles de tu Regional, sin editarlos. Podés cargar y renovar tu aval en Avales regionales.',
     assignable: true,
   },
   {
     key: 'coordinador_escuela',
     label: 'Coordinador de Escuela',
-    description: 'Coordina la Escuela Regional y sus avales.',
+    description: 'Coordina la Escuela Regional y administra sus avales.',
     category: 'escuela',
     scope: 'escuela',
     scopeLabel: 'Avales: todos los departamentos',
-    selfSummary: 'Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados.',
+    selfSummary: 'Administrás los avales regionales de todos los departamentos: los ves, los editás, los renovás, los archivás y los eliminás (archivar y eliminar piden un motivo, que queda en la auditoría), y revisás sus movimientos. También cargás tu propio aval.',
     assignable: true,
   },
   {
     key: 'secretario_escuela',
     label: 'Secretario de Escuela',
-    description: 'Gestión administrativa de la Escuela Regional y sus avales.',
+    description: 'Gestión administrativa de la Escuela Regional.',
     category: 'escuela',
     scope: 'escuela',
-    scopeLabel: 'Avales: todos los departamentos',
-    selfSummary: 'Consultás los avales regionales de todos los departamentos y cargás avales nuevos. No podés editar, archivar ni eliminar los ya cargados.',
+    scopeLabel: 'Avales: el propio',
+    selfSummary: 'Cargás tu propio aval regional y lo renovás cuando haga falta. No ves los avales de otras personas: los administra el Coordinador de Escuela y el coordinador de cada departamento.',
     assignable: true,
   },
   {
@@ -156,7 +156,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'regional',
     scopeLabel: 'Su Regional',
-    selfSummary: 'Gestionás la información de los cuarteles de tu Regional (datos, efectivos, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales.',
+    selfSummary: 'Gestionás la información de los cuarteles de tu Regional (datos, efectivos, personal, móviles, asistencia, intervenciones e historial), sus documentos y el calendario regional. Ves todos los departamentos, podés avisarles, aprobás préstamos de Inventario y generás reportes regionales. Cargás tu aval regional.',
     assignable: true,
   },
   {
@@ -166,7 +166,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos que coordina',
-    selfSummary: 'Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También ves y cargás los avales de tu departamento. No ves otros departamentos.',
+    selfSummary: 'Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También administrás los avales de tu departamento (los ves, editás, renovás, archivás y eliminás con motivo) y cargás el tuyo. No ves otros departamentos.',
     assignable: true,
   },
   {
@@ -176,7 +176,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos de los que es miembro',
-    selfSummary: 'Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. No ves otros departamentos.',
+    selfSummary: 'Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. Podés cargar y renovar tu aval; no ves los de otras personas. No ves otros departamentos.',
     assignable: true,
   },
   {
@@ -196,7 +196,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    selfSummary: 'Podés gestionar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel.',
+    selfSummary: 'Podés gestionar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. También das de alta y administrás a los usuarios de tu cuartel. Podés cargar y renovar tu aval en Avales regionales.',
     assignable: true,
   },
   {
@@ -206,7 +206,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'cuartel',
     scope: 'cuartel',
     scopeLabel: 'Su propio cuartel',
-    selfSummary: 'Podés cargar y editar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel.',
+    selfSummary: 'Podés cargar y editar la información operativa de tu cuartel (efectivos, personal, móviles, asistencia e intervenciones), sus documentos, su historial y su calendario, y generar reportes del cuartel. Podés cargar y renovar tu aval en Avales regionales.',
     assignable: true,
   },
   {
@@ -293,10 +293,32 @@ export function groupRolesByCategory(roles: RoleDefinition[]): RoleGroup[] {
 // admin del frontend (isAdmin en useAuth) coincida con lo que RLS ya permite.
 export const ADMIN_ROLES: RoleKey[] = ['informatica_r4', 'integrante_informatica']
 
-// Roles que dan acceso a TODOS los departamentos de Avales regionales
-// (además de Informática). El Coordinador de Departamento también entra, pero
-// solo a los departamentos que coordina (0097, 0106).
+// Roles propios de Escuela en Avales regionales. Solo el Coordinador de Escuela
+// administra los avales de todos los departamentos (junto con Informática R4); el
+// Secretario de Escuela carga y renueva el suyo como cualquier otra persona (0117).
+// El coordinador de cada departamento administra solo los del suyo.
 export const SCHOOL_AVALES_ROLES: RoleKey[] = ['coordinador_escuela', 'secretario_escuela']
+
+// Autoridad sobre los avales de TODOS los departamentos (espejo de can_manage_school_avales(), 0117):
+// ve, edita, renueva por otra persona, archiva y elimina, y revisa sus movimientos.
+export const SCHOOL_AVALES_AUTHORITY_ROLES: RoleKey[] = ['informatica_r4', 'coordinador_escuela']
+
+// Roles que pueden cargar SU aval (espejo de can_load_school_avales(), 0117). No cargan:
+// Invitado, Presidente de CD (presidente_cuartel), Secretario de CD (secretario_comision) ni los
+// roles retirados. La lista es explícita: un rol nuevo no entra solo.
+export const SCHOOL_AVALES_UPLOAD_ROLES: RoleKey[] = [
+  'informatica_r4',
+  'integrante_informatica',
+  'director_escuela',
+  'instructor',
+  'coordinador_escuela',
+  'secretario_escuela',
+  'secretario_regional',
+  'coordinador_departamento',
+  'miembro_departamento',
+  'jefe_cuerpo_activo',
+  'usuario_carga_cuartel',
+]
 
 // ---------------------------------------------------------------------------
 // División: dónde aplica cada rol.

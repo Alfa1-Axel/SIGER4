@@ -100,6 +100,8 @@ export interface AuditLog {
   old_value: Record<string, unknown> | null
   new_value: Record<string, unknown> | null
   reason: string | null
+  // Departamento del movimiento (hoy, los avales; 0117).
+  department_id?: string | null
   created_at: string
 }
 
@@ -813,8 +815,12 @@ export interface AvalesDepartment {
   is_active: boolean
   coordinator_profile_id: string | null
   coordinator_name: string | null
-  // true si el usuario actual es el coordinador de este departamento.
+  // true si el usuario actual es miembro o coordinador de este departamento.
   is_my_department: boolean
+  // true si el usuario es la autoridad de este departamento en Avales (Informática R4,
+  // Coordinador de Escuela o el coordinador del departamento): edita, renueva por otra
+  // persona, archiva y elimina. Quien solo carga su aval recibe false.
+  can_manage: boolean
 }
 
 export interface SchoolAvalDocument extends Versioned {
@@ -830,9 +836,39 @@ export interface SchoolAvalDocument extends Versioned {
   file_size: number
   uploaded_by_profile_id: string | null
   uploaded_by_name: string | null
+  // De quién es el aval (0117). Vacíos en los avales anteriores.
+  person_profile_id: string | null
+  person_name: string | null
+  // Año de referencia; vacío en los avales anteriores (se muestra el año de carga).
+  reference_year: number | null
+  // Última renovación del archivo (0117).
+  renewed_at: string | null
+  renewed_by_profile_id: string | null
+  renewed_by_name: string | null
+  renewal_count: number
   is_archived: boolean
   archived_at: string | null
   archived_by_profile_id: string | null
+  archive_reason: string | null
   created_at: string
   updated_at: string
+}
+
+// Movimiento de Avales (list_school_aval_movements, 0117): la auditoría del área,
+// ya legible. action: insert, update, renew, archive, unarchive o delete.
+export interface SchoolAvalMovement {
+  id: string
+  created_at: string
+  action: string
+  department_id: string | null
+  department_name: string | null
+  record_id: string | null
+  aval_title: string | null
+  person_name: string | null
+  file_name: string | null
+  previous_file_name: string | null
+  reference_year: number | null
+  changed_fields: string[] | null
+  reason: string | null
+  actor_name: string | null
 }

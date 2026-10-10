@@ -47,7 +47,11 @@ export function buildHomeActions(ctx: HomeActionContext): HomeAction[] {
   const school: HomeAction = { to: '/escuela', label: 'Escuela', description: 'Cursos y capacitaciones', icon: 'school' }
   // Los avales son del trabajo de la Escuela; quien los ve por coordinar un
   // departamento los tiene en la tarjeta de su departamento.
-  const avales: HomeAction | null = ctx.hasAvalesAccess && hasRole('coordinador_escuela', 'secretario_escuela') ? { to: '/escuela/avales', label: 'Avales regionales', description: 'Ver y subir avales', icon: 'school' } : null
+  const avales: HomeAction | null = ctx.hasAvalesAccess && hasRole('coordinador_escuela', 'secretario_escuela')
+    ? hasRole('coordinador_escuela')
+      ? { to: '/escuela/avales', label: 'Avales regionales', description: 'Ver, renovar y revisar', icon: 'school' }
+      : { to: '/escuela/avales', label: 'Mi aval', description: 'Cargar o renovar', icon: 'school' }
+    : null
   const departments: HomeAction = { to: '/departamentos', label: 'Departamentos', description: 'Informes, actas y eventos', icon: 'clipboardList' }
   const documents: HomeAction = ctx.canUploadDocuments
     ? { to: '/documentos/nuevo', label: 'Subir documento', description: 'Circulares y archivos', icon: 'download' }

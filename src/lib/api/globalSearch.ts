@@ -300,7 +300,7 @@ async function searchAvales(like: string, ctx: SearchContext, limit: number, dep
   const { data, error } = await supabase
     .from('school_avales_documents')
     .select('id, title, department_id, created_at, is_archived')
-    .or(`title.ilike.${like},description.ilike.${like}`)
+    .or(`title.ilike.${like},description.ilike.${like},person_name.ilike.${like}`)
     .eq('is_archived', false)
     .order('created_at', { ascending: false })
     .limit(limit)

@@ -227,10 +227,10 @@ export async function getDocumentSignedUrl(storagePath: string): Promise<string>
 // ---------------- Avales regionales (Escuela) ----------------
 // Bucket privado "school-avales" (ver 0095_school_avales_module.sql). Ruta:
 // "<department_id>/<document_id>/<archivo-sanitizado>". La policy de INSERT
-// de Storage valida que el usuario pueda cargar en ese departamento; la de
-// SELECT exige que la ruta ya tenga un documento registrado, no archivado,
-// de un departamento visible para el usuario. La seguridad NO depende de
-// conocer o no la ruta.
+// de Storage valida que el usuario pueda cargar en ese departamento (y limita los
+// archivos sueltos por persona); la de SELECT exige que la ruta ya tenga un aval registrado
+// que la persona pueda ver: la autoridad del área, o el dueño del aval. La seguridad NO
+// depende de conocer o no la ruta.
 const SCHOOL_AVALES_BUCKET = 'school-avales'
 // URLs firmadas cortas: alcanzan para abrir o descargar en el momento, y si
 // alguien comparte el link, deja de servir enseguida.
@@ -264,13 +264,15 @@ export async function uploadSchoolAvalFile(
   return { path, contentType }
 }
 
-// Borra un archivo del bucket. Para un documento registrado solo lo permite
-// el admin supremo; para un archivo propio sin documento (carga
-// interrumpida) también quien lo subió. Si el archivo ya no existe, no es
-// error (deja reintentar una eliminación que quedó a medias).
-export async function removeSchoolAvalFile(path: string): Promise<void> {
-  const { error } = await supabase.storage.from(SCHOOL_AVALES_BUCKET).remove([path])
+// Borra un archivo del bucket. Desde 0117 solo se puede borrar un archivo que YA NO está
+// registrado en un aval (carga interrumpida, aval eliminado o archivo reemplazado al renovar):
+// lo borra quien lo subió o la autoridad del departamento de su ruta. Devuelve true si se
+// quitó algo; false si no había nada que quitar o la base no lo permitió (Storage no avisa
+// error cuando una policy oculta el archivo).
+export async function removeSchoolAvalFile(path: string): Promise<boolean> {
+  const { data, error } = await supabase.storage.from(SCHOOL_AVALES_BUCKET).remove([path])
   if (error) throw new Error('No pudimos borrar el archivo del almacenamiento. Reintentá en unos segundos.')
+  return (data?.length ?? 0) > 0
 }
 
 // downloadName: si viene, la URL fuerza la descarga con ese nombre de

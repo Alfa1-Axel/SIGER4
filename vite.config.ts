@@ -72,7 +72,7 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'SIGER4 - Sistema Integral de Gestion de la Regional 4',
+        name: 'Sistema Informático de GEstión de la Regional 4',
         short_name: 'SIGER4',
         description: 'Plataforma institucional para la Regional 4 de Bomberos Voluntarios',
         theme_color: '#284f86',

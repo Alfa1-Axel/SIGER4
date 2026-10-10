@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from '../ui/Icon'
 import { GlobalSearch } from '../GlobalSearch'
@@ -18,6 +18,28 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   const [unreadCount, setUnreadCount] = useState(0)
   const { pathname } = useLocation()
   const profileId = profile?.id ?? null
+  const headerRef = useRef<HTMLElement>(null)
+  const titleRef = useRef<HTMLElement>(null)
+
+  // El título cabe en la fila de arriba cuando hay lugar; si no (un nombre largo como "Informática y
+  // Estadística" en un celular, con los íconos a la derecha), pasa a una segunda fila de ancho
+  // completo y se lee entero. Se mide con el título en una sola línea: si se está recortando con
+  // puntos suspensivos, se apila. Corre antes de pintar, así que no hay saltos visibles.
+  useLayoutEffect(() => {
+    const header = headerRef.current
+    const el = titleRef.current
+    if (!header || !el) return
+    const measure = () => {
+      header.classList.remove('app-header--stacked')
+      if (el.scrollWidth > el.clientWidth + 1) header.classList.add('app-header--stacked')
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    if (typeof document !== 'undefined' && document.fonts?.ready) {
+      document.fonts.ready.then(measure).catch(() => undefined)
+    }
+    return () => window.removeEventListener('resize', measure)
+  }, [title])
 
   // El contador sale de la misma bandeja que /notificaciones (my_notifications,
   // 0102) y se recalcula al marcar leídas, al cambiar de pantalla y al volver
@@ -45,7 +67,7 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
   }, [profileId, pathname])
 
   return (
-    <header className="app-header">
+    <header className="app-header" ref={headerRef}>
       <div className="app-header-lead">
         <button type="button" className="btn btn-icon btn-ghost hamburger-button" aria-label="Abrir menú" onClick={onOpenMenu}>
           <Icon name="menu" size={18} />
@@ -53,7 +75,9 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
         <Link to="/panel" className="app-header-home" aria-label="Ir al inicio" title="Ir al inicio">
           <img src="/logos/logo-informatica.png" alt="" className="app-header-logo" />
         </Link>
-        <span className="app-header-title">{title}</span>
+        <span className="app-header-title" ref={titleRef}>
+          {title}
+        </span>
       </div>
       <div className="app-header-actions">
         <GlobalSearch />

@@ -28,6 +28,8 @@ import { EscuelaPage } from './pages/EscuelaPage'
 import { CursoFormPage } from './pages/CursoFormPage'
 import { AvalesPage } from './pages/AvalesPage'
 import { AvalFormPage } from './pages/AvalFormPage'
+import { AvalRenovarPage } from './pages/AvalRenovarPage'
+import { AvalMovimientosPage } from './pages/AvalMovimientosPage'
 import { ReportesPage } from './pages/ReportesPage'
 import { AjustesPage } from './pages/AjustesPage'
 import { UsuariosPage } from './pages/UsuariosPage'
@@ -104,11 +106,13 @@ export default function App() {
         <Route path="/escuela/:id/editar" element={<ModuleRoute module="escuela" title="Escuela"><CursoFormPage /></ModuleRoute>} />
         <Route path="/escuela/avales" element={<SchoolAvalesRoute><AvalesPage /></SchoolAvalesRoute>} />
         <Route path="/escuela/avales/nuevo" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/movimientos" element={<SchoolAvalesRoute authorityOnly><AvalMovimientosPage /></SchoolAvalesRoute>} />
         {/* Rutas viejas de administración de departamentos/coordinadores de
             Escuela: ahora se administran solo en la sección Departamentos. */}
         <Route path="/escuela/avales/coordinadores" element={<Navigate to="/escuela/avales" replace />} />
         <Route path="/escuela/avales/departamentos" element={<Navigate to="/escuela/avales" replace />} />
         <Route path="/escuela/avales/:id/editar" element={<SchoolAvalesRoute><AvalFormPage /></SchoolAvalesRoute>} />
+        <Route path="/escuela/avales/:id/renovar" element={<SchoolAvalesRoute><AvalRenovarPage /></SchoolAvalesRoute>} />
         <Route path="/reportes" element={<ReportsRoute><ReportesPage /></ReportsRoute>} />
         <Route path="/ajustes" element={<ProtectedRoute><AjustesPage /></ProtectedRoute>} />
         <Route path="/usuarios" element={<UserManagerRoute><UsuariosPage /></UserManagerRoute>} />

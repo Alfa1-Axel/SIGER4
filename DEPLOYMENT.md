@@ -12,6 +12,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 70):** los formularios largos guardan borradores en el servidor (reemplazan al borrador de `sessionStorage` de la sección 56), las ediciones llevan versión para que dos personas no se pisen, el Mapa suma fichas de lugares y verificaciones de abastecimiento (migraciones 0111 a 0115) y la sección 70.7 audita 20 controles de seguridad con su corrección (migración 0116). **Antes de nada, leer 70.9: hay un secreto que revisar y posiblemente rotar.**
 
+> **Nota (sección 71):** Avales cambia de modelo de permisos (migración 0117): cualquier persona con un rol operativo carga su aval y ve solo el suyo, y lo administra únicamente la autoridad del área (Informática R4, Coordinador de Escuela y el coordinador de cada departamento en el suyo). Un solo aval vigente por persona y departamento, renovación manual, motivo obligatorio al archivar o eliminar y auditoría por áreas (pantalla Movimientos). Además, el encabezado del celular muestra los nombres largos en una segunda fila y el sistema se llama ahora **Sistema Informático de GEstión de la Regional 4**. Correr 0117 apenas se despliega el frontend (71.11).
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -10281,7 +10283,7 @@ Nada en la base. Desplegar el frontend (con Vercel, el push a `main`).
 ### 68.6 Notas y decisiones
 
 - **El manual de usuario vive fuera del repositorio.** No se versiona ni se despliega.
-- **Nombre del sistema.** La pantalla de ingreso, el nombre de la app instalada (`manifest`), `index.html` y la descripción de `package.json` dicen "Sistema Integral de Gestión de la Regional 4". La sigla se desarrolla institucionalmente como "Sistema Informático de GEstión Regional 4". No se unificó para no cambiar sin pedido el nombre visible de la app instalada; son cuatro textos si se decide hacerlo (`LoginPage.tsx`, `vite.config.ts`, `index.html`, `package.json`).
+- **Nombre del sistema.** La pantalla de ingreso, el nombre de la app instalada (`manifest`), `index.html` y la descripción de `package.json` dicen "Sistema Integral de Gestión de la Regional 4". La sigla se desarrolla institucionalmente como "Sistema Informático de GEstión Regional 4". No se unificó para no cambiar sin pedido el nombre visible de la app instalada; son cuatro textos si se decide hacerlo (`LoginPage.tsx`, `vite.config.ts`, `index.html`, `package.json`). **Actualización (sección 71, 1.15.0):** se decidió y se unificó en "Sistema Informático de GEstión de la Regional 4" en esos cuatro textos.
 - **Mapa Regional como vista compartida.** Hoy los roles de cuartel ven en el mapa su propio cuartel (y los de su subsede si tienen ese alcance asignado), y los puntos con alcance de Regional solo si tienen la Regional asignada; los puntos sin alcance los ve cualquiera. El globo del cuartel muestra contacto y ubicación; las autoridades y el año de fundación están en la ficha. Para que el mapa sea una vista institucional de todos los cuarteles de la Regional hace falta una decisión de permisos (lectura de datos institucionales de todos los cuarteles, sin abrir su información interna) y una migración: **no se hizo**.
 - **"Vehículo" y "móvil".** La pantalla de carga de un móvil conserva los títulos "Nuevo Vehículo" y "Tipo de vehículo". Es una diferencia de lenguaje con el resto del sistema que no se tocó en esta ronda.
 
@@ -10636,3 +10638,191 @@ Si `anon` o `authenticated` dan `true`, `cron_shared_secret` (y cualquier otro v
 - **Volver atrás la 0116 en una emergencia** (no recomendado: reabre la fuga): `grant execute on function public.get_system_setting(text) to authenticated;` y, para anon, `grant usage … ` sobre lo que haga falta. Es preferible arreglar el caso puntual.
 - **Un borrador no se recupera:** está en `form_drafts` hasta 30 días; Informática no lo puede leer por la API (la RLS es del dueño), solo desde el SQL Editor.
 - **Un punto del mapa no deja crearse por "subtype":** la clase tiene que corresponder al tipo (un hidrante no puede ser "escuela"); dejarla en "Sin indicar" siempre es válido.
+
+## 71. Avales: carga amplia, gestión solo de la autoridad del área, renovación manual, motivo obligatorio y auditoría por áreas; encabezados en el celular y nombre del sistema (2026-10-10) — versión 1.15.0, migración 0117
+
+Una migración y el frontend. Sin Edge Functions, sin push y sin tocar el ingreso (login, claves de acceso) más que el texto del nombre del sistema. Ninguna política se relajó para quien no tenía permiso: lo que se **abre** es la carga del propio aval (una persona solo ve el suyo) y lo que se **cierra** es quién administra, quién ve los avales ajenos y cómo se borra.
+
+### 71.1 Qué cambia, en lenguaje de todos los días
+
+- **Cualquier persona con un rol operativo o institucional carga su aval.** Antes solo podían entrar a Avales Informática, el Coordinador y el Secretario de Escuela y el coordinador de cada departamento. Ahora también cargan el Miembro de Departamento, el Jefe de Cuerpo Activo, el Usuario de carga, el Director e Instructor de Escuela y el Secretario Regional. **No cargan** el Invitado, el Presidente de CD ni el Secretario de CD.
+- **Cada quien ve solo el suyo.** Los avales ya no son "de todos": ve todos los de un área únicamente su autoridad.
+- **La autoridad del área administra:** Informática R4 y el Coordinador de Escuela, todos los avales; el coordinador de cada departamento, los de **su** departamento y de ningún otro. Edita los datos, renueva por otra persona, archiva y elimina.
+- **Se renueva a mano y no se duplica.** Hay **un solo aval vigente por persona y departamento**. Si ya tenés uno, el sistema propone **renovarlo** (se reemplaza el archivo del mismo aval) en vez de cargar otro. Nada se borra por antigüedad ni al cambiar de año: el aval sigue hasta que se renueve, o lo archive o elimine una autoridad.
+- **Archivar y eliminar piden un motivo obligatorio** (de 3 a 500 letras). Queda guardado con quién lo hizo, cuándo, de qué aval y de qué área.
+- **Auditoría por áreas.** Nuevo botón **Movimientos**: cada autoridad ve las cargas, renovaciones, ediciones, archivados y eliminaciones de su área, y nada de las demás.
+- **Celular:** el encabezado ya no corta los nombres largos ("Informática y Estadística"): el título baja a una segunda fila y se lee entero; los títulos de las listas bajan de línea en vez de terminar en puntos suspensivos.
+- **Nombre del sistema:** la app instalada (PWA), la pantalla de ingreso y la ficha del sitio dicen ahora **Sistema Informático de GEstión de la Regional 4** (71.10).
+
+### 71.2 Relevamiento: cómo estaba antes (medido en la base, migraciones 0001 a 0116)
+
+Se armó una base nueva, con tres avales (Fuego, Forestal y FASME) y una persona de cada rol, y se midió qué podía hacer cada una **a través de la RLS real** (no por lo que muestra la pantalla). Resultado de "antes":
+
+| Persona | Avales que ve | Sube un archivo a Fuego | Edita o borra |
+| --- | --- | --- | --- |
+| Informática R4 | 3 de 3 | sí | sí (era la única) |
+| Integrante de Informática, Coordinador de Escuela, Secretario de Escuela | 3 de 3 | sí | no |
+| Coordinador de Fuego | solo los de Fuego | sí | no |
+| Coordinador de Forestal | solo los de Forestal | no | no |
+| Director, Instructor, Secretario Regional, Miembro de Departamento, Jefe de Cuerpo Activo, Usuario de carga, Presidente de CD, Secretario de CD, Invitado, sin rol, rol retirado | 0 | no (42501) | no |
+
+Otros hallazgos del relevamiento:
+- Quien carga no podía ver su propio aval si no era de los roles de arriba; **un miembro de departamento ni siquiera entraba** a Avales.
+- Cualquier cuenta con permiso de borrar (Informática R4) borraba o archivaba **sin dejar motivo**, por la API directa también.
+- La auditoría de Avales guardaba la **ruta interna del archivo** dentro de cada fila, y solo la veía Informática R4.
+- No había forma de saber "de quién" era un aval: solo quién lo había subido. No existía una regla contra tener dos vigentes de la misma persona.
+- Dato de naming: el texto del rol Director de Escuela dice "máxima autoridad de la Escuela Regional" (cursos, capacitaciones e instructores), pero la autoridad de los **avales** que el sistema ya reconocía es el **Coordinador de Escuela** (`coordinador_escuela`, "Coordina la Escuela Regional y administra sus avales"). Se usó este último (71.15).
+
+### 71.3 Quién puede qué (fuente: los helpers de la base; la pantalla solo los refleja)
+
+| Rol | Carga su aval | Ve | Edita, renueva por otra persona, archiva y elimina | Ve Movimientos |
+| --- | --- | --- | --- | --- |
+| Informática R4 (`informatica_r4`) | sí | todos, con archivados | **sí, todos** | **sí, todos** |
+| Integrante de Informática | sí | todos los vigentes | no (como antes) | no (como antes) |
+| Coordinador de Escuela | sí | todos, con archivados | **sí, todos** | **sí, todos** |
+| Secretario de Escuela | sí | solo el suyo | no | no |
+| Coordinador de Departamento | sí | todos los de **su** departamento, con archivados | **sí, solo su departamento** | **sí, solo el suyo** |
+| Miembro de Departamento, Jefe de Cuerpo Activo, Usuario de carga, Director, Instructor, Secretario Regional | sí | solo el suyo | no | no |
+| Presidente de CD, Secretario de CD (`secretario_comision`), Invitado, roles retirados, sin rol | **no** | nada | no | no |
+
+- Cargar es **en cualquier departamento activo** (quien quiere pasar a un área carga su aval ahí). El coordinador de Fuego no ve ni toca nada de Forestal ni de FASME; un miembro de Fuego no lista los avales de Forestal.
+- Solo Informática **R4** administra: el integrante de Informática conserva lo que ya tenía (ver y cargar). Si se quisiera que también administre, es cambiar `is_super_admin()` por `is_informatica_r4()` en `can_manage_school_avales()` y `can_audit_school_avales()`.
+- Quien tiene dos roles manda el más amplio (por ejemplo, un Presidente de CD que además es Miembro de Departamento sí carga).
+
+### 71.4 Renovación manual y un solo aval vigente
+
+- Cada aval tiene **persona** (`person_profile_id`, o `person_name` si una autoridad lo cargó a nombre de otra persona), **departamento**, **año de referencia** (`reference_year`) y una **clave de renovación** que calcula la base. Un índice único parcial (`idx_school_avales_vigente_unico`: departamento + clave, solo avales no archivados) impide dos vigentes de la misma persona en el mismo departamento, **aunque alguien llame a la API a mano**.
+- **Renovar** (`renew_school_aval()`) reemplaza el archivo del **mismo** registro: no se crea otro aval ni se acumulan archivos. Quedan quién cargó originalmente, quién renovó (`renewed_by_*`), cuándo y cuántas veces. Lo hace la persona dueña del aval o la autoridad del área. El archivo nuevo se sube a una carpeta nueva del departamento, la función valida permiso, versión y archivo, y recién después la pantalla quita el archivo anterior (que ya no está registrado).
+- Si dos personas tocan el mismo aval a la vez, la renovación usa la versión de la sección 70: la segunda recibe "se modificó mientras renovabas" y el archivo recién subido se quita.
+- **Nada vence ni se borra solo.** La pantalla lo dice en cada lugar: "Este aval se mantiene vigente hasta que sea actualizado o eliminado por una autoridad habilitada".
+- **Avales anteriores a 0117:** quedan **exactamente como estaban** (se comprobó con una huella de los datos antes y después, aplicando la migración dos veces). No tienen persona, clave ni año (la pantalla muestra el año de carga); no bloquean que su autor cargue el suyo; la autoridad del área puede verlos, editarlos, archivarlos o eliminarlos con motivo.
+- Si hay dos personas con el mismo nombre en un departamento (aval cargado "a nombre de otra persona"), la segunda se distingue sumando el cuartel al nombre: "Juan Pérez (Villa del Rosario)".
+
+### 71.5 Motivo obligatorio al archivar o eliminar
+
+- **No hay borrado ni archivado por la API directa:** se quitó la policy de `delete`, se revocó el privilegio de `delete` de la tabla a `authenticated` y un disparador rechaza cambiar `is_archived`, el archivo o los datos de renovación fuera de las funciones.
+- `archive_school_aval(id, motivo)`, `restore_school_aval(id, motivo opcional)` y `delete_school_aval(id, motivo)`: validan permiso (la autoridad **de ese** departamento; a cualquier otra persona le responden lo mismo exista o no el aval), exigen el motivo (de 3 a 500 caracteres, sin contar espacios de los extremos) y comprueban la versión. Un aval archivado deja de verlo y de descargarlo su dueño; lo ve quien lo administra.
+- **Volver a activar** falla si ya hay otro vigente de la misma persona en el departamento.
+- **Eliminar:** la función borra la fila (con el motivo en la auditoría) y devuelve la ruta; la pantalla quita después el archivo del almacenamiento. Si esa última parte fallara, el aval ya no existe y el archivo queda **suelto** (no lo ve nadie salvo quien lo subió y la autoridad de su departamento); se detecta con el bloque 17 de `security_audit.sql`.
+- La pantalla pide el motivo en una ventana: no deja confirmar vacío ni de menos de 3 letras, limita a 500 y se cierra con Escape sin hacer nada.
+
+### 71.6 Auditoría por áreas
+
+- `audit_logs` gana `department_id` (contexto de área, como `region_id` o `station_id`). Las filas anteriores de Avales se completan con su departamento y **se les quita la ruta interna** del archivo (`storage_path`, `storage_bucket`); no se pierde ninguna.
+- Disparador propio `audit_school_aval_change()` (reemplaza al genérico solo en esta tabla): registra `insert`, `update`, `renew`, `archive`, `unarchive` y `delete`, con el departamento y el motivo, sin rutas.
+- Policy nueva `audit_logs_select_avales_scope`: solo filas de `school_avales_documents` y solo de las áreas que la persona audita (`can_audit_school_avales()`: Informática R4, Coordinador de Escuela, o el coordinador de ese departamento). **No se abrió ninguna otra tabla de la auditoría:** el integrante de Informática sigue sin ver Auditoría y la regla "Auditoría solo `informatica_r4`" sigue igual para todo lo demás.
+- La pantalla **Movimientos** (`/escuela/avales/movimientos`) usa `list_school_aval_movements()`: devuelve el movimiento ya legible (quién, qué, cuándo, aval, persona, archivo anterior y nuevo, campos que cambiaron, motivo), hasta 500 filas, sin JSON crudo ni rutas.
+
+### 71.7 Seguridad: RLS, helpers, funciones y Storage
+
+- **Helpers nuevos o redefinidos** (todos `security definer`, `search_path` fijo, sin `execute` para `anon`): `can_load_school_avales()` (lista **explícita** de roles: un rol nuevo no entra solo), `can_view_all_school_avales()` (Informática y Coordinador de Escuela; ya no el Secretario), `can_manage_school_avales()`, `can_view_school_avales_department()`, `can_manage_school_avales_department()`, `can_upload_school_avales_department()` (rol que carga + departamento activo), `can_audit_school_avales()`.
+- **Tabla:** `select` = autoridad del área (con archivados), los vigentes para quien ve todo, o el propio; `insert` = rol que carga, departamento activo, a su nombre, ruta atada al departamento y al aval; `update` = autoridad del área (y de destino si lo mueve); sin `delete`. El disparador de alta fija quién cargó y **de quién es el aval** (quien no es autoridad carga siempre el suyo, diga lo que diga el cliente; la autoridad puede cargar a nombre de otra persona escribiendo su nombre, nunca con el usuario de otra).
+- **Storage (bucket privado `school-avales`):** lectura solo de archivos de avales registrados que la persona puede ver (el suyo o los de su área); subida solo con la ruta `departamento/carpeta nueva/archivo`, permiso de carga y **menos de 10 archivos propios sin registrar** (tope contra llenar el bucket); borrado **solo de archivos sueltos** (sin aval registrado) por quien los subió o la autoridad del departamento de su ruta. Un archivo registrado no se borra por la API: primero se elimina o renueva el aval, con motivo y auditoría. La lectura y el borrado de archivos sueltos comparten una función porque Postgres exige poder leer una fila para borrarla con `where`.
+- **Departamentos dentro de Avales** (`list_school_avales_departments()`): quien solo carga recibe los activos con nombre y estado (sin coordinador ni descripción de los que no son suyos); la autoridad recibe además el coordinador y `can_manage`.
+- **Búsqueda global:** consulta la tabla con la RLS de quien busca (encuentra el propio aval y los de su área) y ahora también por la persona. **Inicio y Pendientes:** "avales nuevos o renovados de la semana" solo para la autoridad (a quien solo carga la base le devuelve nada más el suyo); la tarjeta de su departamento ofrece "Mi aval" a los miembros.
+- **Todo lo anterior se probó contra la base, no solo en la pantalla** (71.13). El frontend repite estas reglas únicamente para decidir qué mostrar.
+
+### 71.8 Pantallas
+
+- **Avales regionales:** para quien solo carga, "Mi aval" (su lista, "Subir mi aval" o "Renovar mi aval"); para la autoridad, la lista del área con los botones Ver, Descargar, Renovar, Editar datos, Archivar (o Volver a activar) y Eliminar, el filtro por departamento, "Mostrar archivados" y **Movimientos**. Si piden un departamento que no ven: "No tenés permiso para ver estos avales."
+- **Subir aval:** departamento (se ofrece el propio), "¿De quién es el aval?" (solo la autoridad: mío / de otra persona con su nombre), año, archivo o foto, título que se completa solo, descripción y observaciones. Si ya hay un vigente de esa persona en el departamento, aparece el aviso con **"Renovar el aval vigente"** y el botón de subir queda bloqueado. Dice: "Podés cargar tu aval, pero la revisión queda a cargo de la autoridad del área."
+- **Renovar aval** (`/escuela/avales/:id/renovar`): muestra el aval actual, pide el archivo nuevo y el año, y avisa que reemplaza al anterior.
+- **Editar datos:** solo la autoridad del área; a cualquier otra persona le dice que lo edita la autoridad y le ofrece renovarlo si es el suyo.
+- **Movimientos:** lista legible con el motivo; filtro por departamento para quien audita más de uno.
+- Los roles y sus textos de "Tu rol en SIGER4" se actualizaron; no se agregaron novedades visibles ni pantallas de ayuda.
+
+### 71.9 Celular: encabezados y textos largos
+
+- **Causa:** el título del encabezado tenía `white-space: nowrap` y puntos suspensivos; en un celular quedan unos 60 px entre el logo y los cuatro íconos, así que "Informática y Estadística" se veía como "Infor…". En 320 px ni "Inicio" entraba.
+- **Arreglo (sin achicar la letra):** `AppHeader` mide el título; si se está recortando, el encabezado pasa a **dos filas**: íconos arriba y el título completo, con salto de línea, debajo (clase `app-header--stacked`). Si entra, queda en una sola fila como antes (celular de 360 px y escritorio, con títulos cortos). La medición corre antes de pintar y al girar o redimensionar.
+- **Listas:** en el celular, los títulos y subtítulos de las tarjetas bajan de línea en vez de recortarse a dos líneas; los chips de filtro con nombres largos bajan de línea; los botones de cada aval llevan su texto y miden 44 px.
+- Se revisaron Departamentos, Escuela, Avales (y sus formularios y Movimientos), Documentos, Mapa Regional e Inicio con nombres largos reales ("Informática y Estadística", "Coordinación Regional de Escuela", "Departamento de Comunicaciones" y un aval de 141 caracteres).
+
+### 71.10 Nombre del sistema
+
+Se unificó en **Sistema Informático de GEstión de la Regional 4** (SIGER4 = SI-GE-R4): nombre de la app instalada (`manifest.name` en `vite.config.ts`: exactamente "Sistema Informático de GEstión de la Regional 4"), subtítulo de la pantalla de ingreso, descripción de `index.html` y de `package.json`. El nombre corto de la app instalada sigue siendo **SIGER4**. Quien ya la tiene instalada puede seguir viendo el nombre anterior hasta que el navegador actualice la app o la reinstale (depende del dispositivo).
+
+### 71.11 Qué correr y en qué orden
+
+1. **Subir el frontend** (push a `main`; Vercel lo despliega).
+2. **Supabase → SQL Editor:** correr `supabase/migrations/0117_avales_permissions_renewal_audit.sql` **sola, en una ejecución**. Requiere 0112, 0114 y 0116 ya aplicadas (si falta alguna, avisa con un mensaje claro y no hace nada). Es idempotente y no modifica ni borra avales.
+3. Correr `supabase/security_audit.sql` (solo lectura) y comparar con 71.12.
+4. Verificar el sitio publicado: `npm run security:check -- --url https://<sitio>`.
+5. Si aparecen archivos sueltos viejos en el bloque 17, borrarlos desde Storage (bucket `school-avales`).
+
+Entre el paso 1 y el 2, una pantalla vieja puede intentar archivar o eliminar por la API directa: la base ya no lo permite después del paso 2 (la persona ve un error de permiso y recarga). **Conviene hacer los pasos 1 y 2 seguidos.**
+
+### 71.12 Consultas de verificación
+
+`supabase/security_audit.sql` suma siete bloques (13 a 18) y el 12 pasa a siete `aplicada`:
+
+| Bloque | Qué comprueba | Resultado esperado |
+| --- | --- | --- |
+| 12 | migraciones 0111 a 0117 | siete filas `aplicada` |
+| 13 | nadie borra por la API directa | `delete_directo_authenticated = false` y ninguna policy de `delete` |
+| 14 | funciones de Avales ejecutables por `anon` | ninguna fila |
+| 15 | policies de la tabla y de Storage | `select_scoped`, `insert_scoped`, `update_manage` y `school_avales_storage_select/insert/delete` |
+| 16 | auditoría con ruta interna | 0 |
+| 17 | archivos del bucket sin aval registrado | pocos y recientes (una carga en curso) |
+| 18 | dos vigentes de la misma persona en un departamento | ninguna fila |
+
+### 71.13 Verificación
+
+- **Base de datos** (PostgreSQL 16 local con los permisos por defecto de Supabase emulados; armada de cero con las migraciones 0001 a 0117 sin errores; 0117 aplicada dos veces sin errores): **293 pruebas nuevas, 0 fallas**, con una persona de cada rol y la RLS real (no simulada), y **las de las secciones anteriores repetidas con 0117 aplicada: 360, 0 fallas** (0110: 103, 0112: 35, 0113: 34, 0114 y 0115: 158, 0116: 30).
+  - **Quién carga** (archivo en Storage y fila en la tabla, cada paso por separado): Informática R4, integrante de Informática, Coordinador de Escuela, Secretario de Escuela, Director, Instructor, Secretario Regional, coordinadores y miembros de departamento, Jefe de Cuerpo Activo y Usuario de carga **suben su aval**; el Presidente de CD, el Secretario de CD, los Invitados, quien no tiene rol, el rol retirado y quien no inició sesión reciben `42501` en Storage **y** en la tabla. Un departamento inactivo no admite cargas.
+  - **Quién ve** (19 avales en tres departamentos): Informática R4, integrante de Informática y Coordinador de Escuela, 19; coordinador de Fuego, 15 (todos los de Fuego y ninguno de Forestal ni FASME); coordinador de Forestal, 3 (los 2 de Forestal y el suyo); el Secretario de Escuela, los miembros, el Jefe de Cuerpo Activo y los demás, solo el suyo (1 a 3 según en cuántos departamentos cargaron); Presidente de CD, Secretario de CD, Invitados, sin rol y rol retirado, 0. Lo mismo para los archivos del bucket. Un miembro de Fuego no lista los avales de Forestal ni el de otro miembro de su **mismo** departamento.
+  - **Descarga por dirección directa:** otro miembro no lee el archivo ajeno; el coordinador de Forestal no lee el de Fuego; el coordinador de Fuego, el integrante de Informática y la dueña sí; sin sesión, nada. Rutas dentro de la carpeta de un aval registrado, mal formadas o que se salen de la carpeta se rechazan, y a las 10 cargas sueltas de una persona la siguiente se rechaza.
+  - **Editar:** edita la autoridad del área (Informática R4, Coordinador de Escuela y el coordinador de Fuego en Fuego: 15 avales cada uno); no editan el integrante de Informática, el Secretario de Escuela, el coordinador de Forestal en Fuego ni **la dueña del aval en el suyo**; el coordinador de Fuego no pasa un aval a Forestal (`42501`). Por actualización directa no se puede cambiar el archivo, archivar, quién cargó, la persona, la clave de renovación, el motivo ni la renovación (ni siquiera Informática R4).
+  - **Eliminar y archivar con motivo:** `delete` directo da `42501` a todos (también a Informática R4); `delete_school_aval` y `archive_school_aval` **sin motivo, con solo espacios, con 2 letras, con nulo o con 501 caracteres fallan (`23514`)**; sin permiso dan `42501` (y el mismo error para un aval inexistente, sin revelarlo). La baja y el archivado quedan en la auditoría con el motivo, quién lo hizo, el área y **sin la ruta interna**; el archivado deja de verlo y de descargarlo la dueña, y lo ven la autoridad del área e Informática R4 (el integrante, que solo ve vigentes, no). Volver a activar falla si ya hay otro vigente de la persona.
+  - **Un solo vigente:** el segundo aval de la misma persona en el mismo departamento da `23505`; en otro departamento sí; con otra grafía del mismo nombre (aval de otra persona) también `23505`; un nombre de puros signos, `23514`. Quien no es autoridad no puede cargar a nombre de otra persona (se ignoran el nombre y el usuario que mande); la autoridad no puede cargar a nombre de **otro usuario** (`42501`).
+  - **Renovar:** la dueña renueva el suyo (mismo registro, archivo nuevo, año, contador, quién y cuándo; el aval no se duplica); el archivo anterior queda suelto y lo borra quien lo subió o la autoridad del área; el nuevo, ya registrado, no se puede borrar por la API. No renuevan el de otra persona: otro miembro, el coordinador de otro departamento ni el integrante de Informática (`42501`); sí el coordinador del área e Informática R4. Con una ruta de otro departamento, mal formada, de un archivo que no se subió, subido por otra persona o ya registrado en otro aval: `22023`; con un año fuera de rango, `23514`; en un aval archivado, `22023`; con la versión vieja, `P0409` sin escribir nada.
+  - **Auditoría por áreas:** Informática R4, el Coordinador de Escuela y el coordinador de Fuego ven los movimientos de Fuego; el coordinador de Forestal solo los de Forestal; el integrante de Informática, el Secretario de Escuela, los miembros, el Presidente y el Secretario de CD, los Invitados y quien no tiene rol, ninguno; sin sesión, nada; el coordinador no ve la auditoría de otras tablas. La pantalla (`list_school_aval_movements`) entrega lo mismo, con el nombre de quien actuó, el motivo, el archivo anterior y el nuevo y los campos que cambiaron, y respeta el límite de 500.
+  - **Funciones y datos:** el rol `anon` no ejecuta ninguna función nueva; las funciones de disparador no se llaman desde la API; quien no es autoridad recibe solo los departamentos activos y sin el coordinador de los demás; eliminar a una persona con avales a su nombre no rompe nada: los avales quedan con su nombre y sin usuario asociado.
+  - **Actualización sobre datos reales** (base en 0116 con 6 avales viejos —uno archivado, dos del mismo autor en Fuego— con su archivo y 8 filas de auditoría): **40 comprobaciones, 0 fallas.** Aplicada **dos veces**, la huella de los datos de avales es idéntica antes y después (6 filas, 6 archivos), las 8 filas de auditoría siguen, todas con departamento y sin ruta interna, los viejos quedan sin persona, año ni clave, y no estorban a la carga del aval propio ni a archivar o eliminar con motivo.
+  - **Lo que encontraron las pruebas y se corrigió antes de entregar:** una autoridad que cargaba sin decir de quién era el aval lo dejaba sin persona ni clave (no se evitaban duplicados) → ahora, sin indicarlo, es de quien carga; un `delete` con RLS exige poder leer la fila, así que la autoridad no podía borrar archivos sueltos ajenos → la lectura y el borrado de archivos sueltos comparten función; el casteo a uuid dentro de un `and` no tiene orden garantizado → se pasó a `case`; los `on delete set null` de `archived_by` y `renewed_by` no deben ser revertidos por el disparador (borrar un usuario habría fallado).
+- **Navegador** (Chrome; backend simulado, solo prueba la pantalla, **no** la RLS; escritorio y Android emulado, 320, 360 y 1366 px, claro y oscuro): **273 pruebas nuevas, 0 fallas.**
+  - **Quién entra y qué ve:** 13 perfiles que cargan entran y ven el botón de subir o renovar; el Presidente de CD, el Secretario de CD, el Invitado y el rol retirado ven "No tenés permiso para ver Avales regionales", no tienen botón ni pestaña y la dirección directa de carga también está cerrada; cada rol ve exactamente los avales de la matriz de 71.3; los botones de administrar y **Movimientos** aparecen solo a la autoridad; el coordinador de Fuego que pide Forestal lee "No tenés permiso para ver estos avales." y no ve nada ni editando por dirección directa; los archivados, con su motivo, solo a quien administra.
+  - **Cargar:** el miembro con un aval vigente en Fuego ve el aviso con **"Renovar el aval vigente"** y el botón de subir bloqueado; en otro departamento sube su aval (queda a su nombre, con el año); la autoridad ve "¿De quién es el aval?", detecta a "Juan Pérez" por nombre y carga el de "María Gómez"; sin nombre o sin archivo no se envía nada.
+  - **Renovar:** el aval actual, el archivo nuevo y el año; llama a la función con la versión leída y una carpeta nueva del departamento, quita el archivo anterior y la lista dice "Renovado por … el …" sin duplicar; otro miembro no encuentra el aval ajeno; el integrante de Informática no puede renovar el de otra persona; el coordinador sí; si el aval cambió mientras tanto avisa y quita el archivo recién subido.
+  - **Archivar y eliminar:** ventana con el título del aval que pide el motivo, no deja confirmar vacío ni con 2 letras, admite hasta 500, se cierra con Escape sin hacer nada y, al confirmar, llama a la función con motivo y versión (no usa el `DELETE` de la tabla); volver a activar; **Movimientos** muestra a cada autoridad solo su área, con el motivo.
+  - **Búsqueda, Pendientes e Inicio:** el miembro encuentra solo su aval y no ve avales ajenos; el coordinador, los de su departamento; "avales nuevos o renovados de la semana" solo para la autoridad; "Mi aval" en el Inicio del Secretario de Escuela y en la tarjeta del departamento del miembro.
+  - **Celular:** el encabezado con "Informática y Estadística", "Coordinación Regional de Escuela" y "Departamento de Comunicaciones" se ve completo, **sin tapar la campana, la búsqueda ni la foto y sin scroll horizontal**, en 320 y 360 px, claro y oscuro; en 320 px baja a la segunda fila hasta "Inicio", en 360 px y en escritorio los títulos cortos quedan en una fila y "Informática y Estadística" entra en escritorio; se recorrieron Avales (título de 141 caracteres), sus formularios y Movimientos, Departamentos, Escuela, Inicio, Documentos y Mapa Regional sin scroll horizontal ni textos recortados; los botones de cada aval miden 44 px o más. Se revisaron a ojo las capturas del encabezado, de la lista de Avales, del aviso de duplicado y del ingreso.
+- **Regresión en navegador:** se repitieron las secciones 57 a 70 y el menú con el código final: 33, 21, 39, 4, 64, 33, 42, 120, 59, 210, 268, 69, 141, 249 y 8 (**1.360 pruebas, 0 fallas**). Se actualizó solo lo que cambia a propósito: la versión técnica (1.15.0); que el Miembro de Departamento entra a Avales y tiene "Mi aval" entre sus acciones; el texto del rol del Coordinador de Escuela; y que el aviso de un aval nuevo se abre para un miembro. Corridas intermedias fallaron por causas de la prueba y no del código (un servidor de desarrollo que seguía mostrando la 1.14.0 y unos archivos de prueba pesados que se habían borrado y se regeneraron con un tamaño insuficiente); se corrigieron y se repitieron completas.
+- **Build, lint, audit y `npm run security:check`:** el build compila (el manifiesto generado dice "Sistema Informático de GEstión de la Regional 4" y el nombre corto "SIGER4"); lint sin errores y con las mismas 8 advertencias de antes; `npm audit --audit-level=high` sin vulnerabilidades; `security:check` con **40 comprobaciones, 0 fallas** (la parte "respuesta real del sitio" se omitió: no hay URL para consultar). Se corrió además `supabase/security_audit.sql` con los bloques nuevos sobre la base de prueba actualizada: siete `aplicada`, sin borrado directo, sin funciones para `anon`, sin rutas internas en la auditoría y sin dos vigentes de la misma persona.
+- **No se probó** en un celular real (Android), con la migración sobre la base de producción, ni con el servicio real de Supabase Storage (las policies se probaron sobre una réplica en la base de prueba), ni los encabezados y la redirección a HTTPS de Vercel (falta `npm run security:check -- --url https://<sitio>`).
+
+### 71.14 Checklist en producción
+
+- [ ] Correr 0117 y `supabase/security_audit.sql`: bloque 12 con siete `aplicada`; bloques 14, 16 y 18 sin filas (o en 0); bloque 13 con `false`; bloque 15 con las seis policies.
+- [ ] Un **Miembro de Departamento** (por ejemplo de Fuego): entra a Avales, ve solo el suyo, sube su aval en su departamento y en otro; al subir un segundo en el mismo departamento ve el aviso y **Renovar el aval vigente**.
+- [ ] Renovar: elegir otro archivo y el año; la lista dice "Renovado por … el …"; sigue siendo **un** aval y el archivo anterior ya no se puede abrir.
+- [ ] Un **Presidente de CD**, un **Secretario de CD** y un **Invitado**: Avales dice "No tenés permiso para ver Avales regionales" y no hay botón para cargar (tampoco con la dirección `/escuela/avales/nuevo`).
+- [ ] El **Coordinador de Fuego**: ve y administra los avales de Fuego y **no** los de Forestal ni FASME; archiva uno (pide motivo: no deja confirmar vacío ni con 2 letras) y lo ve en **Movimientos** con su motivo.
+- [ ] El **Coordinador de Escuela** y **Informática R4**: ven y administran todos; **Movimientos** muestra todas las áreas. El **Integrante de Informática** ve todos los vigentes pero no tiene botones de administrar ni Movimientos.
+- [ ] Un miembro intenta abrir por dirección el aval de otra persona (`/escuela/avales/<id>/editar`): "No encontramos ese aval".
+- [ ] Búsqueda global: un miembro encuentra solo su aval; el coordinador, los de su departamento.
+- [ ] En el celular (Android): Departamentos > "Informática y Estadística" muestra el título completo en la segunda fila del encabezado, sin tapar la campana, la búsqueda ni la foto, y sin scroll horizontal; en claro y oscuro.
+- [ ] La pantalla de ingreso y la app instalada dicen **Sistema Informático de GEstión de la Regional 4** (reinstalar la app si todavía muestra el nombre anterior).
+- [ ] `npm run security:check -- --url https://<sitio>`: sin fallas.
+
+### 71.15 Riesgos y decisiones
+
+- **El Secretario de Escuela deja de ver los avales ajenos** (antes veía todos y cargaba). Es lo pedido ("solo la máxima autoridad ve"); carga y renueva el suyo.
+- **Integrante de Informática:** conserva ver todos los vigentes y cargar, y **no** administra ni audita (como antes). Es un cambio de una línea si se prefiere otra cosa (71.3).
+- **Autoridad de Escuela = Coordinador de Escuela**, no el Director: es el rol que el sistema ya llamaba autoridad de los avales. El Director de Escuela carga el suyo. Cambiarlo es agregar `has_role('director_escuela')` en `can_manage_school_avales()`, en `can_audit_school_avales()`, en `can_view_all_school_avales()` y en `SCHOOL_AVALES_AUTHORITY_ROLES`.
+- **Carga en cualquier departamento activo** (no solo el propio): permite que una persona pida pasar a otra área. Los topes son: un vigente por persona y departamento, 20 MB por archivo y 10 archivos sueltos por persona.
+- **Renovar borra el archivo anterior:** no se guarda un historial de archivos. Queda en Movimientos el nombre del archivo anterior, quién renovó y cuándo. Si hiciera falta recuperar versiones viejas, habría que conservarlas (más almacenamiento y una regla de lectura propia).
+- **Eliminar es definitivo** (registro y archivo), con el motivo en la auditoría. Archivar es reversible.
+- **La autoridad del departamento ve archivos sueltos** de su departamento (los de una carga en curso o que quedaron sin quitar): es lo que le permite limpiarlos.
+- **Los avales anteriores no tienen persona ni año:** conviene que la autoridad los revise y los archive o elimine con motivo, o que cada persona cargue el suyo.
+- **Dos personas con el mismo nombre** en avales cargados a nombre de otra persona se distinguen a mano (71.4).
+- **Las pruebas de Storage son sobre las policies** (Storage simulado en la base de prueba), no sobre el servicio real de Supabase Storage; el paso 4 del checklist lo confirma en producción.
+- **No se probó en un celular real** ni con la migración sobre la base de producción.
+
+### 71.16 Si algo sale mal
+
+- **La migración falla a mitad de camino:** corre en una transacción: si da error, no queda nada a medias. Se corrige lo que dice el mensaje (falta 0112, 0114 o 0116) y se vuelve a correr.
+- **Una persona con un rol que carga dice "no tenés permiso":** revisar sus roles en Usuarios; `select can_load_school_avales()` (en el SQL Editor no hay sesión: usar una prueba desde la app) depende de que el rol esté en la lista de 71.3.
+- **"Se modificó mientras renovabas":** otra persona cambió el aval; recargar y volver a intentar. El archivo recién subido se quita solo.
+- **Un archivo quedó suelto** (bloque 17): borrarlo desde Storage o con `delete from storage.objects` solo si se acompaña de la limpieza del archivo real desde el panel de Storage (borrar solo la fila no libera el espacio).
+- **Volver atrás** (no recomendado): reponer la policy de `delete` y su privilegio solo reabre el borrado sin motivo. Es preferible corregir el caso puntual con `archive_school_aval()`.

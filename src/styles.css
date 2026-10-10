@@ -403,6 +403,43 @@ h3 {
   flex-shrink: 0;
 }
 
+/* Título que no entra en una línea (AppHeader lo detecta midiéndolo): íconos arriba, título completo
+   abajo en una segunda fila de ancho completo, con salto de línea. Sin achicar la letra. */
+.app-header--stacked {
+  height: auto;
+  min-height: var(--header-height);
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
+  padding-top: 6px;
+  padding-bottom: 8px;
+}
+
+.app-header--stacked .app-header-lead {
+  display: contents;
+}
+
+.app-header--stacked .hamburger-button,
+.app-header--stacked .app-header-home {
+  order: 1;
+}
+
+.app-header--stacked .app-header-actions {
+  order: 2;
+  margin-left: auto;
+}
+
+.app-header--stacked .app-header-title {
+  order: 3;
+  flex: 0 0 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
+  padding: 2px 2px 0;
+  overflow-wrap: anywhere;
+}
+
 .header-badge {
   position: absolute;
   top: 3px;
@@ -1208,7 +1245,11 @@ a.row-item:focus-visible {
   align-items: center;
   gap: 6px;
   min-height: var(--control-height-sm);
-  padding: 0 12px;
+  max-width: 100%;
+  padding: 4px 12px;
+  text-align: left;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -3196,6 +3237,13 @@ kbd {
   .list-item-actions .btn span.btn-label-full {
     display: none;
   }
+  /* En el celular un nombre largo baja de línea en vez de cortarse con puntos suspensivos. */
+  .list-item-title,
+  .list-item-subtitle {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
 }
 
 /* ============================================================
@@ -4460,4 +4508,83 @@ kbd {
 .verification-results legend {
   font-weight: 600;
   margin-bottom: 6px;
+}
+
+/* ---------- Avales regionales ---------- */
+
+.aval-keep-note {
+  margin: 0 0 12px;
+}
+
+.avales-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.avales-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.avales-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Un título o una descripción larga de un aval se leen enteros (en el resto de las listas se recortan a 2 líneas). */
+.avales-list .list-item-title,
+.avales-list .list-item-subtitle {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.aval-file-name {
+  max-width: 220px;
+}
+
+@media (max-width: 599px) {
+  .aval-file-name {
+    max-width: 100%;
+  }
+}
+
+.aval-owner-choice {
+  border: 0;
+  padding: 0;
+  margin: 0 0 16px;
+}
+
+.aval-owner-choice legend {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.aval-duplicate {
+  margin-bottom: 16px;
+}
+
+.aval-movement-title {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* En el celular los botones de cada aval llevan su texto (Ver, Descargar, Renovar) y se tocan cómodos (44 px). */
+@media (max-width: 599px) {
+  .avales-list .list-item-actions {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .avales-list .list-item-actions .btn,
+  .avales-list .list-item-actions .btn-icon-sm {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .avales-list .list-item-actions .btn span.btn-label-full {
+    display: inline;
+  }
 }

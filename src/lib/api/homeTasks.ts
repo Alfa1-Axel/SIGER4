@@ -35,12 +35,15 @@ function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 86400000).toISOString()
 }
 
+// Avales nuevos o renovados en los últimos días, entre los que la persona puede ver. Solo se muestra
+// a la autoridad de un área (para quien carga su aval la RLS devuelve únicamente el suyo).
 export async function countRecentAvales(days = 7): Promise<number> {
+  const since = daysAgoIso(days)
   const { count, error } = await supabase
     .from('school_avales_documents')
     .select('id', { count: 'exact', head: true })
     .eq('is_archived', false)
-    .gte('created_at', daysAgoIso(days))
+    .or(`created_at.gte.${since},renewed_at.gte.${since}`)
   if (error) throw error
   return count ?? 0
 }

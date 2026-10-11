@@ -14,6 +14,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 71):** Avales cambia de modelo de permisos (migración 0117): cualquier persona con un rol operativo carga su aval y ve solo el suyo, y lo administra únicamente la autoridad del área (Informática R4, Coordinador de Escuela y el coordinador de cada departamento en el suyo). Un solo aval vigente por persona y departamento, renovación manual, motivo obligatorio al archivar o eliminar y auditoría por áreas (pantalla Movimientos). Además, el encabezado del celular muestra los nombres largos en una segunda fila y el sistema se llama ahora **Sistema Informático de GEstión de la Regional 4**. Correr 0117 apenas se despliega el frontend (71.11).
 
+> **Nota (sección 72):** el "Total de efectivos" ya **no suma a los Bomberos Nivel 4** (migración 0118): la categoría se sigue cargando y viendo, pero se informa aparte. Las secciones 65 y 67, que describen el total como la suma de las ocho categorías, quedan como historial. La sección 72 trae además el barrido de revisión de SIGER4 (permisos, notificaciones, celular, formularios y limpieza), con sus recomendaciones por prioridad.
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -10826,3 +10828,144 @@ Entre el paso 1 y el 2, una pantalla vieja puede intentar archivar o eliminar po
 - **"Se modificó mientras renovabas":** otra persona cambió el aval; recargar y volver a intentar. El archivo recién subido se quita solo.
 - **Un archivo quedó suelto** (bloque 17): borrarlo desde Storage o con `delete from storage.objects` solo si se acompaña de la limpieza del archivo real desde el panel de Storage (borrar solo la fila no libera el espacio).
 - **Volver atrás** (no recomendado): reponer la policy de `delete` y su privilegio solo reabre el borrado sin motivo. Es preferible corregir el caso puntual con `archive_school_aval()`.
+
+## 72. Efectivos: Bomberos Nivel 4 se informa aparte y no suma al total; barrido de revisión de SIGER4 (2026-10-11) — versión 1.16.0, migración 0118
+
+Una migración, el frontend y dos arreglos chicos de pantalla en el celular. Sin Edge Functions, sin push, sin cambios de permisos: **no se tocó ninguna política de RLS ni ningún helper**. Las categorías, las cantidades cargadas y el historial no se borran ni se modifican; solo cambia **cómo se calcula el total**.
+
+### 72.1 Qué cambia, en lenguaje de todos los días
+
+- **Bomberos Nivel 4 ya no suma al "Total de efectivos".** Sigue existiendo, se sigue cargando y se sigue viendo (tarjeta, historial y reportes); simplemente no integra el total.
+- **Suman:** aspirantes menores, aspirantes mayores, Bomberos Nivel 1, 2 y 3, reserva y cuerpo auxiliar. **No suma:** Bomberos Nivel 4. El criterio de reserva y cuerpo auxiliar no cambia.
+- **La pantalla lo dice:** bajo el total aparece "No incluye Bomberos Nivel 4. Bomberos Nivel 4 cargados: N."; el campo de Nivel 4 lleva el aviso "Se informa aparte: no suma al total."; en la tarjeta de lectura figura "(no suma al total)"; en el historial, cada carga con Nivel 4 dice "· Nivel 4: N (no suma)".
+- **Dónde se aplica** (todo sale de la misma regla): ficha del cuartel, listado de cuarteles, Inicio (resumen del cuartel y de la Regional), Pendientes ("Falta cargar los efectivos"), "Efectivos de referencia" de Asistencia, estado de carga, historial de efectivos y los reportes PDF (de cuartel, Regional, de asistencia, comparativo y totales por categoría).
+- **Cuartel que carga solo Nivel 4:** su total queda en 0 y la pantalla avisa "Solo hay Bomberos Nivel 4: cargá las demás categorías para que el total refleje los efectivos". La **primera** carga no deja guardar solo Nivel 4 ("Cargá al menos una categoría que sume al total…"); con efectivos ya guardados se puede dejar el total en 0 (por ejemplo, si un cuartel baja todas las categorías que suman).
+
+### 72.2 Causa exacta
+
+`station_staffing.total` (migración 0108) era una **columna calculada que sumaba las ocho categorías**, Nivel 4 incluido. De ahí salían, copiados, todos los demás totales; las pantallas y los reportes leen esos campos y no suman por su cuenta:
+
+| Dónde se guardaba o se calculaba | Origen | Quién lo leía |
+| --- | --- | --- |
+| `station_staffing.total` | suma de las ocho categorías (0108) | tarjeta de Efectivos, reporte de cuartel, reporte Regional |
+| `stations.personnel_count` ("dotación") | `station_dotation_total()` copia `station_staffing.total` | tarjeta y listado de cuarteles, Inicio, estado de carga (`has_personnel`), Pendientes |
+| `station_staffing_history.total` | número copiado por el disparador al guardar cada foto (0109) | historial de la tarjeta, "Efectivos al…" del reporte de un período |
+| `attendance_summaries.total_members` | el total vigente al dar de alta cada resumen (0109) | "Efectivos de referencia" en Asistencia y en el reporte de asistencia |
+
+En el frontend, `src/lib/staffing.ts` repetía la regla ("todas las categorías suman") para el total en vivo del formulario.
+
+### 72.3 Cómo se calcula ahora
+
+- **Base (fuente de verdad):** `station_staffing.total = aspirantes_menores + aspirantes_mayores + bomberos_nivel_1 + bomberos_nivel_2 + bomberos_nivel_3 + personal_reserva + cuerpo_auxiliar` (columna calculada, nadie la carga).
+- **Historial:** `station_staffing_history.total` pasó de "número copiado por el disparador" a **columna calculada con la misma expresión** a partir de las categorías de cada foto. Así el historial **conserva el Nivel 4 de cada momento** y su total siempre responde a la regla vigente. El disparador que escribe la foto (`station_staffing_record_history()`) dejó de enviar el total.
+- **Frontend:** `STAFFING_TOTAL_CATEGORIES` y `countsInTotal` (`src/lib/staffing.ts`) son la única definición de qué suma; el total en vivo del formulario, la ficha y los PDF la usan. Los textos ("No incluye Bomberos Nivel 4", etc.) están en el mismo archivo.
+
+### 72.4 Qué pasó con los datos existentes
+
+| Dato | Qué hace la migración 0118 | Se pierde algo |
+| --- | --- | --- |
+| Cantidades por categoría (incluido Nivel 4) y fila actual | nada: se conservan tal cual | no |
+| `station_staffing.total` y `station_staffing_history.total` | se redefinen como columnas calculadas (se recalculan solas con la regla nueva) | no: son derivadas de las categorías, que quedan intactas |
+| `stations.personnel_count` | se vuelve a calcular **solo en cuarteles que cargaron efectivos**; el resto sigue con el personal activo del registro nominal, como antes | no |
+| `attendance_summaries.total_members` | se recalcula **únicamente** en los resúmenes cuyo valor coincide exactamente con el total que tenía el cuartel en la foto vigente al darlos de alta (total anterior = total nuevo + Nivel 4 de esa foto, con Nivel 4 > 0). El resto (cargas manuales, del registro de personal o anteriores a 0109) **no se toca** | no |
+| Reportes ya generados (PDF descargados) | no cambian: son archivos | — |
+
+- La actualización de Asistencia **no cuenta como edición**: no sube la versión del registro ni cambia la fecha de actualización; la auditoría registra cada cambio.
+- **Decisión sobre Asistencia:** los resúmenes viejos que se armaron con el total que incluía Nivel 4 pasan a mostrar el total sin Nivel 4 (es el mismo dato "con la regla institucional vigente"); los que no se pueden demostrar derivados de efectivos quedan como estaban. La migración avisa cuántos recalculó ("0118: N resumen(es) de asistencia recalculados…").
+- La migración es **idempotente**: si se vuelve a correr, no cambia nada (las columnas ya calculadas con la regla nueva no se tocan y los resúmenes ya recalculados dejan de coincidir).
+
+### 72.5 Reportes PDF
+
+- **Reporte de cuartel:** las filas de categorías que suman, "Total de efectivos (no incluye Bomberos Nivel 4)" y, aparte, "Nivel 4 (se informa aparte, no suma)". El indicador dice "Efectivos (sin Nivel 4)" y el resumen aclara cuántos Bomberos Nivel 4 no se cuentan.
+- **Reporte Regional:** el comparativo dice "Efectivos (sin Nivel 4)"; la tabla por categorías trae las columnas "Total (sin Nivel 4)" y "Nivel 4 (aparte)", con la fila "Total de la Regional".
+- **Reporte de asistencia:** "Efectivos de referencia" es el total del cuartel **sin Nivel 4**, y la nota lo aclara.
+- Los reportes de un período anterior siguen usando la foto del historial vigente a esa fecha; ahora su total sale de la regla actual y el Nivel 4 de ese momento figura aparte.
+
+### 72.6 Qué correr y en qué orden
+
+1. **Supabase → SQL Editor:** correr `supabase/migrations/0118_staffing_total_excludes_nivel_4.sql` **sola**, después de 0117. Debe terminar sin error y mostrar el aviso con la cantidad de resúmenes recalculados.
+2. **Publicar el frontend (v1.16.0)** en Vercel. No hace falta reinstalar la app en los celulares: se actualiza sola.
+3. **Verificar** con `supabase/security_audit.sql` (solo lectura): el bloque 12 muestra ocho filas "aplicada" y los bloques 19 y 20 no devuelven filas.
+
+### 72.7 Consultas de verificación (solo lectura)
+
+```sql
+-- El total de la fila actual no incluye Nivel 4 (esperado: 0 filas)
+select station_id, total, bomberos_nivel_4
+from station_staffing
+where total <> aspirantes_menores + aspirantes_mayores + bomberos_nivel_1 + bomberos_nivel_2 + bomberos_nivel_3 + personal_reserva + cuerpo_auxiliar;
+
+-- La dotación que muestran las tarjetas coincide con lo cargado (esperado: 0 filas)
+select s.name, s.personnel_count, station_dotation_total(s.id)
+from stations s
+where exists (select 1 from station_staffing f where f.station_id = s.id)
+  and s.personnel_count is distinct from station_dotation_total(s.id);
+
+-- Cuarteles con Nivel 4 cargado: el total NO lo incluye
+select s.name, f.bomberos_nivel_4, f.total
+from station_staffing f join stations s on s.id = f.station_id
+where f.bomberos_nivel_4 > 0 order by s.name;
+```
+
+### 72.8 Barrido de revisión (2026-10-11)
+
+Se revisó todo SIGER4 buscando errores, inconsistencias y riesgos; se corrigió solo lo que era un error claro y chico. Lo grande queda como recomendación.
+
+**Permisos y datos (contra la base real, con las migraciones 0001 a 0118 y los permisos por defecto de Supabase):**
+- Matriz de lectura por persona: 19 personas × 11 tablas de cuartel, 7 de departamento y 10 transversales (perfiles, roles, alcances, auditoría, ajustes, notificaciones, suscripciones push, borradores, inventario y cursos), con los 14 roles. **No apareció ningún acceso fuera de alcance:** los roles de cuartel (Presidente de CD, Jefe de Cuerpo Activo, Usuario de carga, Secretario de CD e Invitado) ven solo su cuartel; el Secretario Regional, los cuarteles de su Regional; el Director y el Instructor, solo lo básico de cada cuartel (datos, asistencia, intervenciones, historial y calendario: no personal, móviles, efectivos ni documentos); los roles de departamento, los de Escuela sin cuartel, las cuentas sin rol y los roles retirados, ningún cuartel; la auditoría, solo Informática R4 (el Integrante de Informática no la ve); los ajustes del sistema, solo Informática R4; los borradores, solo los propios (se probó con borradores ajenos cargados a propósito). Un Invitado con alcance de Regional (que la pantalla de Usuarios no permite armar) no ve cuarteles: es el resultado seguro.
+- **Notificaciones:** cada cuartel recibe sus avisos por alcance y nadie ve los de otro; los de Regional, dirección y departamento no ven los de cuartel; editar un resumen **no** genera otro aviso (solo uno nuevo cuando se carga uno nuevo); la lectura es por persona (`notification_reads`). No se tocó push. Las suscripciones push son privadas de cada persona, salvo que el equipo de Informática (Informática R4 e Integrante de Informática) las puede leer para el diagnóstico (ver recomendaciones).
+- Conjuntos de pruebas de base (todos en verde): documentos y departamentos (0110, 103), versión por registro (0112, 35), borradores (0113, 34), mapa y verificaciones (0114 y 0115, 158), refuerzo de seguridad (0116, 30), Avales (0117, 293) y efectivos (0118, 41, más 25 de actualización sobre datos de antes).
+
+**Celulares (320 × 568, 360 × 640, claro y oscuro, Android emulado):** 174 pantallas recorridas con 7 perfiles (Informática R4, Presidente de CD, Jefe de Cuerpo Activo, Coordinador y Miembro de Departamento, Secretario de Escuela y Usuario de carga): formularios largos, listas, fichas, Reportes, Avales, Documentos, Mapa, Notificaciones, Pendientes y Ajustes. Sin desborde horizontal ni errores de página.
+
+**Corregido en esta tanda:**
+
+| Hallazgo | Dónde | Arreglo |
+| --- | --- | --- |
+| Los títulos largos de las secciones de Informática en Ajustes ("Versión / actualización de la app (informática)") se salían de la pantalla de 320 px (hasta 348 px): la regla `.section-header > *:last-child { flex-shrink: 0 }` también alcanzaba al título cuando era el único hijo y no le dejaba bajar de línea | `src/styles.css` | `:not(:first-child)`: el título solo se achica y baja de línea; el botón de la derecha sigue fijo |
+| "Generar automáticamente" (contraseña temporal del alta de usuarios) medía 15 px de alto para tocar | `src/styles.css` | en pantallas táctiles, área de toque de 32 px |
+
+**Recomendaciones, por prioridad (nada de esto se cambió):**
+
+| Prioridad | Recomendación |
+| --- | --- |
+| Media | Probar en un **Android real** la carga de archivos y fotos desde el celular en todos los módulos (sigue pendiente; la base y el emulador no la reemplazan). |
+| Media | Revisar cada tanto, en Usuarios, quién conserva roles retirados o sin alcance (la base los trata como sin acceso, pero conviene limpiarlos). |
+| Media-baja | Suscripciones push: `is_informatica_r4()` incluye al Integrante de Informática, que por eso puede leer las suscripciones de otras personas (dirección y claves del dispositivo; sin la clave privada VAPID, que solo está en el servidor, no puede enviar nada). Está pensado para el diagnóstico de push. Si se quiere el mínimo necesario, limitar esa lectura a Informática R4 (`is_super_admin()`) o exponer solo conteos. No se cambió: no es un error probado y push no se toca sin un problema real. |
+| Baja | Auditoría en el celular: la tabla mide 760 px y se desplaza dentro de su caja (funciona, pero conviene pasarla a tarjetas si se usa seguido desde el teléfono). |
+| Baja | 16 campos numéricos usan `type="number"` sin `inputMode`: en Android abren el teclado numérico, en iPhone conviene agregar `inputMode="numeric"` o `"decimal"`. |
+| Baja | 8 avisos de lint (`react-refresh/only-export-components`) en `useAuth.tsx`, `CalendarioPage.tsx`, `DepartamentoDetallePage.tsx`, `InventarioPage.tsx` y `SolicitudesPrestamoPage.tsx`: no afectan al funcionamiento. |
+| Baja | Hay una `git stash` antigua en el repositorio de trabajo (de una tarea anterior): revisarla y descartarla si ya no sirve. |
+
+**Limpieza del repositorio:** no hay archivos temporales, pesados ni de prueba versionados (lo más grande son los íconos de 232 KB y `DEPLOYMENT.md`); `.gitignore` ya cubre `dist`, `*.tsbuildinfo`, `.env`, claves, copias de logos, PDF y logs. No se borró nada.
+
+### 72.9 Verificación
+
+- `npm run build`, `npm run lint` (0 errores; los 8 avisos de arriba) y `npm audit --audit-level=high` (0 vulnerabilidades) sin problemas; `npm run security:check`: 40 PASS, 0 FAIL.
+- Base: instalación desde cero de las migraciones 0001 a 0118 y actualización sobre datos de antes (con Nivel 4 cargado): el total deja de sumar Nivel 4, las cantidades y el historial se conservan, Asistencia se recalcula solo donde corresponde y la migración se puede correr dos veces sin cambios.
+- Pantallas (navegador con datos simulados: evidencia de pantalla, no de seguridad): recorridos completos de las tandas anteriores (57 a 71) y los nuevos de esta (30 comprobaciones: la ficha, el editor, Asistencia y el listado con Nivel 4, la primera carga y el cuartel con solo Nivel 4, y el barrido de 174 pantallas en celulares de 320 y 360 px, claro y oscuro): **1665 comprobaciones, 0 fallas**.
+
+### 72.10 Checklist en producción
+
+- [ ] 0118 corrida sola, sin error, con el aviso de resúmenes recalculados.
+- [ ] `supabase/security_audit.sql`: bloque 12 con ocho "aplicada"; bloques 19 y 20 sin filas.
+- [ ] Un cuartel con Bomberos Nivel 4 cargado: la ficha muestra el Nivel 4 y el total **sin** Nivel 4, con el texto "No incluye Bomberos Nivel 4".
+- [ ] El Inicio, el listado de cuarteles y "Efectivos de referencia" de Asistencia muestran ese mismo total.
+- [ ] Un reporte de cuartel y uno Regional muestran el Nivel 4 aparte y el total sin Nivel 4.
+- [ ] El historial de efectivos de un cuartel conserva sus cargas anteriores, con su Nivel 4 aparte.
+- [ ] En el celular: Ajustes de Informática muestra los títulos completos y "Generar automáticamente" se toca sin errar.
+
+### 72.11 Riesgos y decisiones
+
+- **El total de los cuarteles baja** en la cantidad de Bomberos Nivel 4 que tengan cargados (es lo pedido). Los totales de la Regional y los comparativos también.
+- **Cuartel con solo Nivel 4:** total 0, `has_personnel` falso y el pendiente "Falta cargar los efectivos del cuartel" sigue apareciendo hasta que cargue una categoría que sume. Es coherente con la regla; la pantalla lo explica.
+- **`station_staffing_history.total` ya no es un número guardado:** si en el futuro se quiere cambiar de nuevo el criterio, alcanza con redefinir las dos columnas calculadas (se recalculan solas); no hace falta tocar datos.
+- **Los resúmenes de asistencia que no coinciden exactamente con una foto de efectivos conservan su valor**, aunque hayan incluido Nivel 4 por otra vía. Es la opción segura: no se altera un dato que no se puede demostrar derivado.
+- **Reportes viejos ya descargados** siguen mostrando el total de entonces.
+- **No se probó en un celular real** ni con la migración sobre la base de producción.
+
+### 72.12 Si algo sale mal
+
+- **La migración falla a mitad de camino:** corre en una transacción; si da error, no queda nada a medias. Falta 0108/0109 o 0117: correrlas en orden y repetir.
+- **Un total no coincide en una pantalla:** correr las consultas de 72.7; si la dotación no coincide, volver a correr la 0118 (es idempotente) y revisar que se haya publicado el frontend 1.16.0.
+- **Volver atrás (no recomendado):** redefinir `station_staffing.total` y `station_staffing_history.total` sumando también `bomberos_nivel_4` y volver a calcular `stations.personnel_count`; los resúmenes de asistencia recalculados no se pueden "des-recalcular" sin una copia previa (se sugiere guardar una copia de `attendance_summaries` antes de correr la 0118 si se quiere conservar el valor anterior).

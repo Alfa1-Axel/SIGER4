@@ -236,7 +236,8 @@ export interface VehicleStatusHistory {
 
 export type PersonnelStatus = 'activo' | 'licencia' | 'baja' | 'reserva' | 'aspirante' | 'renuncia' | 'pase'
 
-// Dotación actual del cuartel por categorías (0108). `total` lo calcula la base.
+// Dotación actual del cuartel por categorías (0108). `total` lo calcula la base: suma todas las
+// categorías MENOS bomberos_nivel_4, que se carga y se ve pero no integra el total (0118).
 export interface StationStaffing {
   station_id: string
   aspirantes_menores: number
@@ -258,7 +259,8 @@ export interface StationStaffing {
 
 // Foto de los efectivos de un cuartel cada vez que cambian (0109). La escribe
 // solo la base; sirve para saber con cuántos contaba el cuartel en un período
-// anterior.
+// anterior. `total` se calcula con la regla vigente (sin bomberos_nivel_4, 0118)
+// a partir de las categorías de la foto, que conserva el Nivel 4 de ese momento.
 export interface StationStaffingHistory {
   id: string
   station_id: string

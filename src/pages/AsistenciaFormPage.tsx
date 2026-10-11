@@ -339,12 +339,17 @@ export function AsistenciaFormPage() {
             {members ? (
               <>
                 {members} {members === 1 ? 'efectivo' : 'efectivos'}
-                {existing ? ' al cargar este resumen' : staffing ? ` (año ${staffing.reference_year})` : ''}. Salen de los efectivos del cuartel: no hace falta cargarlos acá.
+                {existing ? ' al cargar este resumen' : staffing ? ` (año ${staffing.reference_year})` : ''}. Salen de los efectivos del cuartel y no incluyen a los Bomberos Nivel 4: no hace falta cargarlos acá.
               </>
             ) : existing ? (
               <>este resumen se cargó cuando el cuartel todavía no tenía efectivos cargados.</>
             ) : staffing === undefined ? (
               <>cargando…</>
+            ) : staffing && staffing.bomberos_nivel_4 > 0 ? (
+              <>
+                Los efectivos cargados todavía no suman al total: Bomberos Nivel 4 se informa aparte. Completá las demás categorías para usar este dato en asistencia.{' '}
+                <Link to={`/cuarteles/${resolvedStationId}#efectivos`}>Cargar efectivos</Link>
+              </>
             ) : (
               <>
                 Cargá primero los efectivos del cuartel para usar este dato en asistencia.{' '}

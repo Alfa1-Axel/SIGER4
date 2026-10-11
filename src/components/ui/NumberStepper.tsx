@@ -9,6 +9,8 @@ interface NumberStepperProps {
   min?: number
   max?: number
   disabled?: boolean
+  // Aclaración corta debajo del campo (por ejemplo, "no suma al total").
+  hint?: string
 }
 
 // Cantidad entera con botones − y +, para cargar números rápido (dotación,
@@ -19,7 +21,7 @@ interface NumberStepperProps {
 //   - con el teclado: flecha arriba/abajo suman o restan 1, y RePág/AvPág 10.
 // El valor siempre es un entero válido: el que escribe nunca queda con un
 // campo vacío o inválido que después haya que corregir.
-export function NumberStepper({ label, value, onChange, min = 0, max = 9999, disabled = false }: NumberStepperProps) {
+export function NumberStepper({ label, value, onChange, min = 0, max = 9999, disabled = false, hint }: NumberStepperProps) {
   const id = useId()
   const [warning, setWarning] = useState<string | null>(null)
 
@@ -76,7 +78,7 @@ export function NumberStepper({ label, value, onChange, min = 0, max = 9999, dis
           aria-valuemax={max}
           aria-valuenow={value}
           aria-invalid={warning ? true : undefined}
-          aria-describedby={warning ? `${id}-warning` : undefined}
+          aria-describedby={[warning ? `${id}-warning` : null, hint ? `${id}-hint` : null].filter(Boolean).join(' ') || undefined}
           value={String(value)}
           disabled={disabled}
           onChange={handleChange}
@@ -88,6 +90,11 @@ export function NumberStepper({ label, value, onChange, min = 0, max = 9999, dis
           <Icon name="plus" size={16} />
         </button>
       </div>
+      {hint && (
+        <p id={`${id}-hint`} className="stepper-hint">
+          {hint}
+        </p>
+      )}
       {warning && (
         <p id={`${id}-warning`} className="field-error" role="alert">
           {warning}

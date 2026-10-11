@@ -50,7 +50,9 @@ function StationResumen({ stationId }: { stationId: string }) {
             <span className="home-strip-value">{staffing.total}</span>
             <span className="home-strip-label">efectivos del cuartel · año {staffing.reference_year}</span>
           </div>
-          <span className="home-strip-meta">Actualizados el {formatDay(staffing.updated_at)}</span>
+          <span className="home-strip-meta">
+            Actualizados el {formatDay(staffing.updated_at)} · No incluye Bomberos Nivel 4
+          </span>
         </>
       ) : (
         <span className="home-strip-meta">Todavía no están cargados los efectivos del cuartel.</span>

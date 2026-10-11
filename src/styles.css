@@ -737,7 +737,7 @@ h3 {
   margin-top: 0;
 }
 
-.section-header > *:last-child {
+.section-header > *:last-child:not(:first-child) {
   flex-shrink: 0;
 }
 
@@ -785,6 +785,15 @@ button.link-muted {
   padding: 0;
   cursor: pointer;
   font-family: inherit;
+}
+
+/* En pantallas táctiles, el texto-botón (p. ej. "Generar automáticamente") tiene un área de toque cómoda. */
+@media (pointer: coarse) {
+  button.link-muted {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+  }
 }
 
 .link-muted:hover {
@@ -2422,6 +2431,13 @@ kbd {
   color: var(--color-text-primary);
 }
 
+.stepper-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
 .stepper {
   display: flex;
   align-items: stretch;
@@ -2606,6 +2622,11 @@ kbd {
 .staffing-total-before {
   font-size: 12px;
   font-weight: 400;
+}
+
+.staffing-separate {
+  font-weight: 400;
+  color: var(--color-text-secondary);
 }
 
 .staffing-actions {

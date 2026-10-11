@@ -161,7 +161,7 @@ export function CuartelesPage() {
                 textAlign: 'center',
               }}
             >
-              <div>
+              <div title="Total de efectivos: no incluye Bomberos Nivel 4">
                 <div style={{ fontWeight: 700 }}>{String(station.personnel_count).padStart(2, '0')}</div>
                 <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>EFECTIVOS</div>
               </div>

@@ -83,7 +83,7 @@ from pg_trigger t join pg_class c on c.oid = t.tgrelid
 where t.tgname = 'trg_protect_author' and not t.tgisinternal
 order by 1;
 
--- 12. Migraciones 0111 a 0117 aplicadas.                        ESPERADO: siete filas "aplicada"
+-- 12. Migraciones 0111 a 0118 aplicadas.                        ESPERADO: ocho filas "aplicada"
 select nombre, case when aplicada then 'aplicada' else 'FALTA' end as estado
 from (values
   ('0111 tipos del mapa: lugar relevante y abastecimiento', exists (select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'map_reference_point_type' and e.enumlabel = 'abastecimiento')),
@@ -92,7 +92,8 @@ from (values
   ('0114 fichas de lugares del mapa',                      to_regclass('public.map_point_sheets') is not null and exists (select 1 from pg_proc where proname = 'save_map_point_sheet')),
   ('0115 verificaciones de abastecimiento',                to_regclass('public.map_point_verifications') is not null and exists (select 1 from pg_proc where proname = 'get_map_pending_items')),
   ('0116 refuerzo de seguridad',                           exists (select 1 from pg_proc where proname = 'protect_author_column')),
-  ('0117 Avales: permisos, renovación y auditoría por áreas', exists (select 1 from pg_proc where proname = 'renew_school_aval') and exists (select 1 from pg_indexes where indexname = 'idx_school_avales_vigente_unico'))
+  ('0117 Avales: permisos, renovación y auditoría por áreas', exists (select 1 from pg_proc where proname = 'renew_school_aval') and exists (select 1 from pg_indexes where indexname = 'idx_school_avales_vigente_unico')),
+  ('0118 efectivos: Bomberos Nivel 4 no suma al total',   exists (select 1 from pg_attribute a join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum where a.attrelid = 'public.station_staffing'::regclass and a.attname = 'total' and a.attgenerated <> '' and position('bomberos_nivel_4' in pg_get_expr(d.adbin, d.adrelid)) = 0))
 ) as m(nombre, aplicada)
 order by nombre;
 
@@ -137,3 +138,21 @@ select department_id, renewal_key, count(*) as vigentes
 from school_avales_documents
 where is_archived = false and renewal_key is not null
 group by 1, 2 having count(*) > 1;
+
+-- 19. Efectivos (0118): el total no incluye a los Bomberos Nivel 4, ni en la fila actual ni en el historial.
+--     ESPERADO: ninguna fila
+select c.relname as tabla_cuyo_total_aun_suma_nivel_4
+from pg_attribute a
+join pg_class c on c.oid = a.attrelid
+join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum
+where c.relname in ('station_staffing', 'station_staffing_history')
+  and a.attname = 'total'
+  and position('bomberos_nivel_4' in pg_get_expr(d.adbin, d.adrelid)) > 0;
+
+-- 20. Efectivos (0118): el número que muestran las tarjetas y el listado (stations.personnel_count)
+--     coincide con el total de efectivos cargado. ESPERADO: ninguna fila
+select s.name as cuartel, s.personnel_count as mostrado, station_dotation_total(s.id) as esperado
+from stations s
+where exists (select 1 from station_staffing f where f.station_id = s.id)
+  and s.personnel_count is distinct from station_dotation_total(s.id)
+order by s.name;

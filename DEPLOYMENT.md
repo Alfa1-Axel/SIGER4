@@ -16,6 +16,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 72):** el "Total de efectivos" ya **no suma a los Bomberos Nivel 4** (migración 0118): la categoría se sigue cargando y viendo, pero se informa aparte. Las secciones 65 y 67, que describen el total como la suma de las ocho categorías, quedan como historial. La sección 72 trae además el barrido de revisión de SIGER4 (permisos, notificaciones, celular, formularios y limpieza), con sus recomendaciones por prioridad.
 
+> **Nota (sección 73):** todos los usuarios activos ven la **ficha institucional básica** de cada cuartel y de cada departamento (y los cuarteles en el Mapa), sin acceso a nada interno ni a ninguna edición (migración 0119, sin cambios de RLS); y el **Coordinador de Departamento da de alta a sus miembros** (siempre como Miembro de Departamento y solo de su departamento: migración 0120 y Edge Function `admin-create-user`). El modo departamento (secciones 63 y 64) ahora ve la ficha de los cuarteles y de los demás departamentos; lo interno sigue cerrado. Hay que **correr 0119 y 0120, desplegar la función y publicar el frontend**, en ese orden (sección 73.7).
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -10969,3 +10971,163 @@ Se revisó todo SIGER4 buscando errores, inconsistencias y riesgos; se corrigió
 - **La migración falla a mitad de camino:** corre en una transacción; si da error, no queda nada a medias. Falta 0108/0109 o 0117: correrlas en orden y repetir.
 - **Un total no coincide en una pantalla:** correr las consultas de 72.7; si la dotación no coincide, volver a correr la 0118 (es idempotente) y revisar que se haya publicado el frontend 1.16.0.
 - **Volver atrás (no recomendado):** redefinir `station_staffing.total` y `station_staffing_history.total` sumando también `bomberos_nivel_4` y volver a calcular `stations.personnel_count`; los resúmenes de asistencia recalculados no se pueden "des-recalcular" sin una copia previa (se sugiere guardar una copia de `attendance_summaries` antes de correr la 0118 si se quiere conservar el valor anterior).
+
+## 73. Ficha institucional básica de Cuarteles y Departamentos para todos los usuarios activos, y alta de Miembros de Departamento por su coordinador (2026-10-12) — versión 1.17.0, migraciones 0119 y 0120
+
+Dos migraciones, la Edge Function `admin-create-user` y el frontend. Sin push y sin tocar ninguna política de RLS: **la matriz de lectura por persona (19 personas × 28 tablas) dio idéntica antes y después de las dos migraciones**. El pedido de Bomberos Nivel 4 de esta misma tanda ya estaba hecho y publicado en la sección 72 (v1.16.0, migración 0118): se lo volvió a verificar (pruebas de base y recorridos de pantalla) y no necesitó cambios.
+
+### 73.1 Qué cambia, en lenguaje de todos los días
+
+- **Todos los usuarios activos ven la ficha institucional de cada cuartel y de cada departamento**, aunque no tengan nada que ver con ellos: es información básica de la Regional, de solo lectura y sin botones de edición. El Mapa Regional también muestra los cuarteles a todos.
+- **Lo interno sigue siendo de quien corresponde.** Efectivos, móviles, personal, asistencia, intervenciones, estado de carga, tiempo de respuesta, documentos y calendario de un cuartel; miembros, informes, actas, documentos, eventos, avisos y avales de un departamento no se ven por esta vía.
+- **El Coordinador de Departamento da de alta a sus miembros.** Desde Departamentos > **Nuevo miembro** crea una cuenta nueva que queda **siempre como Miembro de Departamento** y solo de los departamentos que él coordina. Antes dependía siempre de Informática.
+- Quien trabaja solo en un departamento (modo departamento) ahora ve en su menú **Cuarteles** y **Mapa Regional** (solo la ficha de los cuarteles) y puede ver la ficha de los demás departamentos.
+
+### 73.2 Qué ve cualquier usuario activo y qué sigue restringido
+
+| | Lo ve cualquier usuario activo (ficha básica) | Sigue restringido (no sale en la ficha) |
+| --- | --- | --- |
+| **Cuartel** | nombre, código, Regional, subsede, zona, dirección y ubicación en el mapa, teléfono, WhatsApp, correo y redes institucionales, descripción, año de fundación, logo, portada, estado (operativo / no operativo) y autoridades (Presidente de CD, Jefe de Cuerpo Activo y Secretario de CD: **solo nombre y cargo**) | efectivos y su historial, móviles, personal, asistencia, intervenciones, estado de carga, tiempo de respuesta, notas del mapa, documentos, historial institucional, calendario del cuartel; el **correo y el teléfono personales** de las autoridades; toda edición |
+| **Departamento** | nombre, descripción, contacto institucional, estado (activo / inactivo) y nombre del coordinador | miembros y cantidad de miembros, informes, actas, documentos internos, eventos, avisos, avales, archivos privados; toda edición |
+
+- "Usuario activo" es cualquier cuenta con perfil activo, **tenga o no un rol**. Una cuenta desactivada o sin perfil no recibe nada.
+- Quien ya tenía acceso interno (su cuartel, su Regional, su departamento, Informática…) sigue usando las pantallas de siempre: la ficha básica se muestra **solo** cuando la base no le deja leer el recurso completo.
+- Decisión: la ficha básica incluye **todos los cuarteles del sistema**, de cualquier Regional (hoy hay una sola). Si algún día hubiera varias y se quisiera separarlas, es un filtro en `list_station_directory()`.
+
+### 73.3 Cómo se hizo sin relajar la RLS (migración 0119)
+
+No se tocó ninguna política de `stations` ni de `departments` (ni las restrictivas del modo departamento, 0107). Se agregaron tres funciones de solo lectura (`SECURITY DEFINER`, con `search_path` fijo) que devuelven **únicamente columnas institucionales**:
+
+- `list_station_directory()` — la ficha de todos los cuarteles.
+- `station_directory_authorities(p_station_id)` — autoridades de un cuartel (nombre y cargo, solo cuentas activas).
+- `list_department_directory()` — la ficha de todos los departamentos.
+
+Las tres devuelven filas **solo si hay una cuenta activa** (`current_profile_id()` no nulo) y no son ejecutables por `anon`. La pantalla decide qué mostrar así: pide el recurso por la tabla (RLS); si la base se lo devuelve, abre la pantalla de siempre; si no, abre la ficha básica. No decide por rol en el navegador.
+
+### 73.4 Pantallas
+
+- **Cuarteles (lista):** todos los cuarteles con su estado, subsede y dirección; de los que la persona puede leer completos, además efectivos, móviles, respuesta y estado de carga. El buscador suma la dirección.
+- **Ficha de un cuartel:** si no tiene acceso interno, la ficha institucional (portada y logo, ubicación, fundación, subsede, estado, autoridades, contacto, descripción) y una aclaración al pie de que lo interno es de quienes trabajan en el cuartel o en la Regional.
+- **Departamentos (lista):** el departamento propio y, debajo, "Otros departamentos de la Regional" como fichas. Quien trabaja en un solo departamento sigue entrando directo al suyo; con "← Volver a Departamentos" (o `/departamentos?todos=1`) ve la lista completa.
+- **Ficha de un departamento:** nombre, estado, descripción, coordinador y contacto, sin ninguna sección interna y sin acciones.
+- **Mapa Regional:** los cuarteles se marcan para todos con su ficha básica (la ficha completa solo para quien tiene acceso). Los **puntos de referencia siguen exactamente como antes**: en modo departamento no se ven (política restrictiva de 0107), y sus fichas, archivos y verificaciones tienen sus propias reglas, sin cambios.
+- **Búsqueda global:** cualquier usuario encuentra cuarteles y departamentos como ficha institucional; el resto (informes, documentos, eventos, avales, usuarios…) sigue saliendo solo si tiene permiso.
+- **Menú:** "Departamentos" ya no se oculta a nadie; en modo departamento se suman "Cuarteles" y "Mapa Regional".
+
+### 73.5 Modo departamento (qué cambió respecto de 0107)
+
+0107 cerraba Cuarteles y el Mapa a quien solo tiene roles de departamento. Ahora se abren **solo en lo básico**. Lo que sigue cerrado, en la pantalla y en la base:
+
+- La gestión dentro de un cuartel (altas y ediciones de móviles, personal, asistencia, intervenciones e historial, y `/cuarteles/nuevo` y `/cuarteles/:id/editar`): módulo propio `cuarteles_gestion` en `src/lib/moduleAccess.ts`.
+- Los puntos de referencia del mapa y sus fichas: módulo propio `mapa_puntos`.
+- Todas las tablas internas de cuarteles, Documentos de cuartel, Escuela, Inventario, Reportes, Usuarios y Auditoría (las políticas restrictivas de 0107 no se tocaron).
+- Los avisos generales con enlace a Cuarteles o al Mapa siguen sin mostrarse en modo departamento (política de 0107): serían un aviso con salida a una pantalla casi vacía.
+
+### 73.6 Alta de miembros por el Coordinador de Departamento (migración 0120 y `admin-create-user`)
+
+**Qué puede y qué no:**
+
+| Quién | Qué puede crear |
+| --- | --- |
+| Coordinador de Departamento | usuarios nuevos **solo con el rol Miembro de Departamento**, **solo** de departamentos que él coordina (activos), con alcance Regional (el de su perfil) y sin cuartel. Hasta 30 altas por día |
+| Miembro de Departamento, Presidente de CD, Secretario de CD, Invitado, Instructor, Secretario Regional… | nadie (403) |
+| Informática, Director de Escuela, Jefe de Cuerpo Activo | lo de siempre, sin cambios (el Director y el Jefe siguen sin poder asignar roles de departamento) |
+
+Un coordinador **no puede**: crear otro coordinador, roles de cuartel, de Escuela, de avales, Secretario Regional ni Informática; asignar departamentos que no coordina; crear un usuario sin departamento ni sin rol; ponerle cuartel o subsede; crear en otra Regional. El pedido que traiga cualquiera de esas cosas **se rechaza** (no se "corrige" en silencio).
+
+**Quién lo valida (tres capas independientes, ninguna depende de las otras):**
+
+1. **Edge Function** `admin-create-user` + `supabase/functions/_shared/delegatedMemberCreation.ts` (validación pura, probada aparte). Resuelve los roles **reales** del que invoca (nunca los que mande el pedido), sus departamentos (`departments.coordinator_profile_id`) y su Regional; decide el rol, el alcance y la Regional; aplica el tope diario; crea la cuenta, el perfil, el rol y el alcance; y revierte todo si algo falla.
+2. **RLS de `department_members`** (sin cambios): la pertenencia al departamento se inserta **con la sesión del propio coordinador**, así que la política `coordinates_department()` impide sumar a un departamento ajeno aunque la función tuviera un error. Esto además deja al coordinador como actor en la Auditoría y evita que reciba un aviso de su propia acción.
+3. **Base** — `record_delegated_member_creation(actor, perfil_nuevo, departamentos)` (0120, solo `service_role`): una vez creado todo comprueba que el actor es coordinador activo de cada departamento y que la cuenta quedó con **un solo rol (Miembro de Departamento), un solo alcance (Regional), sin cuartel y miembro exactamente de esos departamentos**; aplica el tope (30 por día); y registra la Auditoría. Si algo no cumple, falla y la función revierte (no queda ni la cuenta ni el perfil).
+
+**Trazabilidad y avisos (sin duplicados):**
+- Auditoría: una fila por departamento con acción `delegated_create` (quién dio de alta a quién y para qué departamento), más la fila de `department_members` con el coordinador como actor. Solo la ve Informática R4, como el resto de la Auditoría.
+- Informática recibe los avisos de siempre ("Usuario creado", cambio de rol y de alcance); no se agrega uno nuevo.
+- El nuevo miembro recibe un aviso "Te sumaron a <departamento>". El coordinador no recibe ninguno por su propia acción.
+
+**Después del alta:** el coordinador puede **quitar** a un miembro de su departamento (no borra la cuenta). **No** puede modificar datos de usuario ni la contraseña: la pantalla lo dice ("Para modificar datos de usuario o contraseña, consultá a Informática y Estadística"). Un email que ya tiene usuario se rechaza con un mensaje claro (409) y el coordinador debe pedirle a Informática que sume a esa persona.
+
+### 73.7 Qué correr y en qué orden
+
+1. **Supabase → SQL Editor:** `supabase/migrations/0119_institutional_directory.sql`, **sola**. Después, `supabase/migrations/0120_delegated_department_member_creation.sql`, **sola**. Las dos se pueden repetir sin efecto (no modifican datos).
+2. **Desplegar la Edge Function:** `supabase functions deploy admin-create-user` (incluye `_shared/delegatedMemberCreation.ts`). Sin este paso, el botón "Nuevo miembro" aparece pero el servidor responde "No tenés permiso para crear usuarios" a los coordinadores (no pasa nada grave).
+3. **Publicar el frontend (v1.17.0)** en Vercel. **Después de la 0119**: sin ella, la lista de Cuarteles no carga.
+4. **Verificar** con `supabase/security_audit.sql` (solo lectura): el bloque 12 muestra diez filas "aplicada" y los bloques 21, 22, 23 y 25 no devuelven filas (el 24 es informativo).
+
+### 73.8 Consultas de verificación (solo lectura)
+
+```sql
+-- Las tres funciones existen y ninguna es ejecutable por anon (esperado: 3 filas y ninguna con anon = true)
+select p.proname, has_function_privilege('anon', p.oid, 'execute') as anon
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public' and p.proname in ('list_station_directory', 'list_department_directory', 'station_directory_authorities');
+
+-- Altas por coordinadores y su trazabilidad
+select l.created_at, a.full_name as coordinador, l.new_value ->> 'full_name' as cuenta, l.new_value ->> 'department_name' as departamento
+from audit_logs l left join profiles a on a.id = l.actor_profile_id
+where l.action = 'delegated_create' order by l.created_at desc;
+```
+
+### 73.9 Barrido de revisión (2026-10-12)
+
+**Permisos y datos (contra la base real, migraciones 0001 a 0120):**
+- Matriz de lectura por persona (19 personas × 11 tablas de cuartel, 7 de departamento y 10 transversales): **idéntica antes y después** de 0119 y 0120. Ninguna política cambió.
+- Ficha básica: las 21 cuentas de prueba (los 14 roles, más una sin rol y una con rol retirado) ven los 3 cuarteles y todos los departamentos; sin sesión o con la cuenta desactivada, nada; ninguna columna interna sale en las funciones. A la vez, quien solo tiene un departamento sigue viendo **0** cuarteles internos, **0** informes, documentos y miembros de otro departamento, y quien tiene un cuartel sigue sin ver el personal, los móviles ni los efectivos de otro. Ver no es editar: ninguno de los intentos de modificar un cuartel o un departamento ajeno cambió una fila.
+- Alta delegada: el coordinador de Fuego crea un Miembro de Fuego; un coordinador de dos departamentos da de alta en los dos; todos los casos manipulados (otro departamento, otro rol, sin departamento, con cuartel, con otra Regional, departamento inactivo, miembro que pretende crear, el Jefe y el Director pidiendo un rol de departamento, 30 altas en el día) se rechazan sin dejar ni cuenta, ni perfil, ni rol, ni alcance, ni pertenencia. El nuevo miembro ve solo su departamento y no puede asignarse roles ni alcances.
+- **Notificaciones:** una sola por evento. El nuevo miembro recibe "Te sumaron…"; el coordinador no recibe ninguna por su propia acción (insertar la pertenencia con la clave de servicio le habría mandado un aviso de su propia acción: por eso se inserta con su sesión). Informática recibe los avisos de siempre.
+- **Búsqueda:** cuarteles y departamentos como ficha para cualquiera; los informes y avales de otro departamento no aparecen; un documento sí, solo si el departamento lo **publicó para todos** (es el diseño de 0110).
+
+**Celulares (320 × 568 y 360 × 640, claro y oscuro):** el formulario de alta, la pantalla "Miembro creado", la lista y la ficha de cuarteles, la lista y la ficha de departamentos y el mapa en modo departamento, sin scroll horizontal ni errores de página.
+
+**Corregido en esta tanda:** nada del sistema anterior; sí un error de mi propio primer borrador del alta delegada, que la simulación de la función encontró **antes** de publicar (un chequeo previo de "falta el alcance" cortaba el pedido del coordinador, que por diseño no manda alcance).
+
+**Recomendaciones, por prioridad (nada de esto se cambió):**
+
+| Prioridad | Recomendación |
+| --- | --- |
+| Media | Los roles de Escuela (Director, Instructor, Coordinador y Secretario de Escuela) leen la fila completa de `stations` de su Regional, que incluye `personnel_count`, `vehicles_count` y `response_time_minutes`: ven esos tres números en la lista de cuarteles aunque no vean el detalle (efectivos, móviles, personal). Es anterior a esta tanda. Si se quiere que sean reservados, hay que sacarlos de la tabla (vista para los roles con acceso interno) en una tanda propia. |
+| Media | Probar en un Android real la carga de archivos y fotos desde el celular (sigue pendiente) y el alta de un miembro de punta a punta contra Supabase real (la función se probó contra una simulación en memoria, la base contra PostgreSQL, y la pantalla contra un servidor simulado). |
+| Media-baja | Suscripciones push: el Integrante de Informática puede leer las de otras personas (`is_informatica_r4()` incluye a ambos roles). Ver sección 72. |
+| Baja | Un coordinador puede sumar a su departamento a **cualquier perfil visible** (no solo a los que crea): la política `department_members_write_coordinator_or_admin` es anterior y es lo esperado; queda anotado por si se quisiera limitarlo a perfiles sin otros roles. |
+| Baja | El mensaje de "ya existe un usuario con ese email" le confirma a un coordinador que ese email tiene cuenta. Es un dato que ya conoce Informática y bajo riesgo entre usuarios de confianza; si molesta, el mensaje puede pasar a "no se pudo dar de alta". |
+| Baja | Auditoría en el celular: tabla de 760 px con scroll interno; 16 campos numéricos sin `inputMode`; avisos de lint antiguos; una `git stash` vieja del repositorio. Ver sección 72. |
+
+**Limpieza del repositorio:** sin cambios; no hay archivos temporales ni pesados versionados.
+
+### 73.10 Verificación
+
+- `npm run build`, `npm run lint` (0 errores; avisos antiguos) y `npm audit --audit-level=high` (0 vulnerabilidades) sin problemas; `npm run security:check`: sin fallas. Chequeo de tipos de la Edge Function con Deno simulado: sin errores.
+- Base (PostgreSQL 16 armado desde cero con 0001 a 0120): todas las pruebas en verde: documentos y departamentos (0110, 103), versión por registro (0112, 35), borradores (0113, 34), mapa y verificaciones (0114 y 0115, 158), refuerzo de seguridad (0116, 30), Avales (0117, 293), efectivos (0118, 41, más 25 de actualización sobre datos de antes), **ficha básica (0119, 90)** y **alta delegada (0120, 59)**. Las dos migraciones nuevas se corrieron dos veces seguidas sin error ni cambios.
+- **Edge Function real en simulación** (el archivo `admin-create-user/index.ts` ejecutado en Node contra un Supabase en memoria que reproduce la RLS de `department_members` y el registro de la 0120): **64 comprobaciones**, 0 fallas: los permitidos, los 23 pedidos manipulados, el camino de siempre de Informática, Director y Jefe, la reversión al fallar cada paso, el tope de 30 por día y los errores de pedido.
+- Validación pura del alta delegada: **51 comprobaciones**, 0 fallas.
+- Pantallas (navegador con datos simulados: evidencia de pantalla, no de seguridad): recorridos completos de todas las tandas anteriores (57 a 72) y los nuevos de esta (127 comprobaciones: fichas básicas de cuarteles y departamentos con distintos roles, modo departamento, usuario sin rol, búsqueda, mapa, alta de miembros con uno y dos departamentos, errores del servidor y 320 y 360 px en claro y oscuro): **1792 comprobaciones, 0 fallas**. Veintisiete comprobaciones de seis suites anteriores (modo departamento y permisos de departamentos) se reescribieron a propósito porque describían el criterio viejo ("un departamento ajeno no se puede ver", "el modo departamento no tiene Cuarteles ni Mapa").
+- **No se probó contra Supabase real** ni en un celular real: es lo primero que conviene hacer al publicar (checklist de abajo).
+
+### 73.11 Checklist en producción
+
+- [ ] 0119 y 0120 corridas, cada una sola y sin error; `security_audit.sql`: bloque 12 con diez "aplicada"; bloques 21, 22, 23 y 25 sin filas.
+- [ ] Edge Function `admin-create-user` desplegada y frontend v1.17.0 publicado.
+- [ ] Con una cuenta **sin rol** o de **otro departamento**: Cuarteles muestra la lista completa sin efectivos ni móviles; abrir un cuartel ajeno muestra la ficha institucional; Departamentos muestra todos; abrir un departamento ajeno muestra la ficha sin miembros ni informes.
+- [ ] Con un **Miembro de Departamento** (solo ese rol): el menú trae Cuarteles, Mapa Regional y su departamento; el mapa muestra los cuarteles pero no los puntos de referencia; la gestión de un cuartel (`/cuarteles/<id>/asistencia/nueva`) dice que no forma parte de su rol.
+- [ ] Con un **Coordinador de Departamento**: Departamentos > Nuevo miembro crea una cuenta; esa cuenta, al ingresar, debe cambiar la contraseña y ve solo su departamento; en Informática > Auditoría figura el alta con el coordinador y el departamento.
+- [ ] Un coordinador **no** puede crear a nadie en un departamento de otro coordinador (probar con un departamento ajeno desde la pantalla: no se ofrece; el servidor lo rechazaría igual).
+- [ ] La búsqueda de "Fuego" desde una cuenta de otro departamento encuentra el departamento y ningún informe interno.
+
+### 73.12 Riesgos y decisiones
+
+- **La ficha de un cuartel muestra el nombre y el cargo de sus autoridades a todos los usuarios**, no sus datos personales. Es lo que pide "autoridades visibles"; si se prefiriera no mostrar ni el nombre, se quita `station_directory_authorities()`.
+- **"Estado" (operativo / no operativo) es público** dentro del sistema. El **tiempo de respuesta** y los **números** (efectivos, móviles) no.
+- **Modo departamento:** sigue sin ver nada interno, pero ya no tiene "Cuarteles" ni "Mapa" cerrados por completo. Volver al criterio anterior es quitar `cuarteles` y `mapa` de `DEPARTMENT_ONLY_MODULES` (`src/lib/moduleAccess.ts`).
+- **Un coordinador puede crear hasta 30 usuarios por día.** El tope protege de una cuenta de coordinador comprometida; Informática no tiene tope. Se cambia en `record_delegated_member_creation()` y en `_shared/delegatedMemberCreation.ts` (las dos constantes deben coincidir).
+- **La contraseña temporal la define quien da de alta** y no queda guardada; la persona debe cambiarla en el primer ingreso (como en el alta de Informática).
+- **Si el despliegue de la función se hace antes que la 0120**, el alta falla en el último paso, revierte y no deja nada: es seguro, solo no funciona hasta correr la migración.
+- **Un perfil ya existente** no se "adopta": el alta delegada solo crea cuentas nuevas. Sumar a alguien que ya usa SIGER4 sigue siendo el selector "Seleccionar usuario…" de la sección Miembros (si el coordinador lo ve) o Informática.
+
+### 73.13 Si algo sale mal
+
+- **La lista de Cuarteles o Departamentos dice "No pudimos cargar":** falta correr la 0119 (el frontend nuevo ya la usa). Correrla y recargar.
+- **Un coordinador ve el botón pero el alta dice "No tenés permiso para crear usuarios":** falta desplegar la nueva versión de `admin-create-user`. Desplegarla.
+- **El alta falla con "No se pudo registrar el alta":** falta la 0120 o hay algo inesperado en la cuenta nueva; la función revierte (no quedó ninguna cuenta). Los detalles están en los logs de la función (Supabase → Edge Functions → `admin-create-user`).
+- **Una persona sin rol no ve los cuarteles:** su perfil está desactivado; las funciones solo responden a cuentas activas.
+- **Volver atrás (no recomendado):** el frontend viejo sigue funcionando con las funciones nuevas (no las usa). Quitar la ficha básica es publicar el frontend anterior; las funciones de la 0119 pueden quedar sin uso. El alta delegada se quita volviendo a desplegar la función anterior (el botón mostrará el aviso de falta de permiso).

@@ -2,6 +2,7 @@ import { supabase } from '../supabaseClient'
 import { updateVersioned } from '../concurrency'
 import type {
   Department,
+  DepartmentBasic,
   DepartmentDirectoryEntry,
   DepartmentManualMember,
   DepartmentMember,
@@ -28,6 +29,15 @@ export async function fetchVisibleDepartments(): Promise<VisibleDepartment[]> {
   const { data, error } = await supabase.rpc('list_visible_departments')
   if (error) throw error
   return (data ?? []) as VisibleDepartment[]
+}
+
+// Ficha institucional básica de TODOS los departamentos, para cualquier usuario activo (0119):
+// nombre, descripción, contacto, estado y coordinador. El contenido interno (miembros, informes,
+// documentos, eventos, avisos) sigue limitado por rol y departamento.
+export async function fetchDepartmentBasicDirectory(): Promise<DepartmentBasic[]> {
+  const { data, error } = await supabase.rpc('list_department_directory')
+  if (error) throw error
+  return (data ?? []) as DepartmentBasic[]
 }
 
 // Integrantes con cuenta, con nombre, cuartel y contacto, aunque sean de otro

@@ -166,7 +166,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos que coordina',
-    selfSummary: 'Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros y avisar a todo el departamento. También administrás los avales de tu departamento (los ves, editás, renovás, archivás y eliminás con motivo) y cargás el tuyo. No ves otros departamentos.',
+    selfSummary: 'Podés cargar y consultar informes, actas, eventos y avisos de tu departamento, sumar o quitar miembros, dar de alta miembros nuevos (Departamentos > Nuevo miembro) y avisar a todo el departamento. También administrás sus avales y cargás el tuyo. De los demás departamentos y de los cuarteles ves solo su ficha institucional.',
     assignable: true,
   },
   {
@@ -176,7 +176,7 @@ export const ROLE_DEFINITIONS: RoleDefinition[] = [
     category: 'region',
     scope: 'departamento',
     scopeLabel: 'Solo los departamentos de los que es miembro',
-    selfSummary: 'Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. Podés cargar y renovar tu aval; no ves los de otras personas. No ves otros departamentos.',
+    selfSummary: 'Podés consultar y cargar informes, actas, actividad y eventos de tu departamento, y recibís sus avisos. Podés cargar y renovar tu aval; no ves los de otras personas. Del resto de los departamentos, y de los cuarteles, ves solo su ficha institucional.',
     assignable: true,
   },
   {

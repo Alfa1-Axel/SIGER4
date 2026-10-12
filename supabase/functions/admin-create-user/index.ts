@@ -27,6 +27,13 @@
 //     presidente_cuartel, usuario_carga_cuartel, secretario_comision,
 //     administrativo, invitado (nunca jefe_cuerpo_activo ni ningún rol
 //     regional/escuela/informática).
+//   - coordinador_departamento (v1.17.0): puede dar de alta usuarios nuevos SOLO con el rol
+//     miembro_departamento y SOLO en departamentos que él coordina (activos). La cuenta queda con
+//     alcance Regional (el de su propio perfil) y sin cuartel; el pedido no puede traer otro rol,
+//     otro alcance ni otro departamento (se rechaza, no se corrige). Tope: 30 altas por día. Lo
+//     comprueba _shared/delegatedMemberCreation.ts acá y de nuevo la base
+//     (record_delegated_member_creation(), migración 0120), y la RLS de department_members impide
+//     sumar a un departamento ajeno (la pertenencia se inserta con la sesión del propio coordinador).
 //   - Cualquier otro rol: sin permiso, 403.
 //
 // Flujo:
@@ -52,6 +59,13 @@
 // Despliegue: `supabase functions deploy admin-create-user`.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4'
+import {
+  COORDINATOR_ROLE,
+  DELEGATED_DAILY_LIMIT,
+  DELEGATED_ROLE,
+  checkDelegatedMemberRequest,
+} from '../_shared/delegatedMemberCreation.ts'
+import type { CoordinatedDepartment } from '../_shared/delegatedMemberCreation.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
@@ -134,6 +148,8 @@ interface CreateUserBody {
   region_id?: string | null
   station_id?: string | null
   roles: RoleKey[]
+  // Solo para el alta de un Miembro de Departamento por su coordinador (v1.17.0).
+  department_ids?: string[]
   scope: {
     scope_type: ScopeType
     region_id?: string | null
@@ -195,7 +211,7 @@ Deno.serve(async (req: Request) => {
     // frontend sobre quién es el actor).
     const { data: actorProfile, error: actorProfileError } = await supabaseAdmin
       .from('profiles')
-      .select('id, station_id, is_active')
+      .select('id, station_id, region_id, is_active')
       .eq('auth_user_id', userData.user.id)
       .maybeSingle()
     if (actorProfileError) return logAndRespond('resolver perfil del actor', actorProfileError, 'No pudimos verificar tu perfil. Reintentá en unos segundos.')
@@ -211,8 +227,10 @@ Deno.serve(async (req: Request) => {
     const isInformatica = actorRoles.has('informatica_r4') || actorRoles.has('integrante_informatica')
     const isDirectorEscuela = actorRoles.has('director_escuela')
     const isJefeCuerpoActivo = actorRoles.has('jefe_cuerpo_activo')
+    const isDepartmentCoordinator = actorRoles.has(COORDINATOR_ROLE)
+    const canCreateGeneral = isInformatica || isDirectorEscuela || isJefeCuerpoActivo
 
-    if (!isInformatica && !isDirectorEscuela && !isJefeCuerpoActivo) {
+    if (!canCreateGeneral && !isDepartmentCoordinator) {
       return jsonResponse({ error: 'No tenés permiso para crear usuarios.' }, 403)
     }
 
@@ -236,14 +254,66 @@ Deno.serve(async (req: Request) => {
     if (requestedRoles.some((r) => !ALL_ROLES.includes(r))) {
       return jsonResponse({ error: 'Rol inválido.' }, 400)
     }
-    if (!body.scope?.scope_type) {
+    // Alta de un Miembro de Departamento por su coordinador: un camino aparte y
+    // más estricto. Aplica a quien no es Informática, es coordinador y pide el rol
+    // Miembro de Departamento (o no puede crear usuarios de otra forma). El alcance
+    // lo decide el servidor: el pedido del coordinador no lo trae.
+    const useDelegatedPath = !isInformatica && isDepartmentCoordinator && (requestedRoles.includes(DELEGATED_ROLE) || !canCreateGeneral)
+    if (!useDelegatedPath && !body.scope?.scope_type) {
       return jsonResponse({ error: 'Falta el alcance del usuario.' }, 400)
+    }
+
+    let delegated: { departmentIds: string[]; departmentNames: string[]; regionId: string } | null = null
+    if (useDelegatedPath) {
+      const { data: coordinatedRows, error: coordinatedError } = await supabaseAdmin
+        .from('departments')
+        .select('id, name, is_active')
+        .eq('coordinator_profile_id', actorProfile.id)
+      if (coordinatedError) return logAndRespond('resolver departamentos del coordinador', coordinatedError, 'No pudimos verificar tus departamentos. Reintentá en unos segundos.')
+
+      // Regional del coordinador: la de su perfil o, si no la tiene, la de su alcance Regional.
+      let actorRegionId: string | null = actorProfile.region_id ?? null
+      if (!actorRegionId) {
+        const { data: regionScope } = await supabaseAdmin
+          .from('user_scopes')
+          .select('region_id')
+          .eq('profile_id', actorProfile.id)
+          .eq('scope_type', 'region')
+          .not('region_id', 'is', null)
+          .limit(1)
+          .maybeSingle()
+        actorRegionId = regionScope?.region_id ?? null
+      }
+
+      const check = checkDelegatedMemberRequest({
+        actorIsActive: actorProfile.is_active,
+        actorRoles: [...actorRoles],
+        actorRegionId,
+        coordinated: (coordinatedRows ?? []) as CoordinatedDepartment[],
+        body,
+      })
+      if (!check.ok) return jsonResponse({ error: check.error }, check.status)
+      delegated = { departmentIds: check.departmentIds, departmentNames: check.departmentNames, regionId: check.regionId }
+
+      // Tope diario de altas por coordinador (la base lo repite).
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { data: recent, error: recentError } = await supabaseAdmin
+        .from('audit_logs')
+        .select('record_id')
+        .eq('actor_profile_id', actorProfile.id)
+        .eq('action', 'delegated_create')
+        .eq('table_name', 'profiles')
+        .gt('created_at', since)
+      if (recentError) return logAndRespond('contar altas del día', recentError, 'No pudimos verificar el límite de altas. Reintentá en unos segundos.')
+      if (new Set((recent ?? []).map((r: { record_id: string }) => r.record_id)).size >= DELEGATED_DAILY_LIMIT) {
+        return jsonResponse({ error: `Llegaste al tope de ${DELEGATED_DAILY_LIMIT} altas por día. Para dar de alta a más personas, pedile a Informática y Estadística.` }, 429)
+      }
     }
 
     // Validacion de la matriz de permisos, server-side (la unica que importa —
     // la UI solo oculta opciones por comodidad, esto es lo que realmente
     // protege el sistema).
-    if (!isInformatica) {
+    if (!useDelegatedPath && !isInformatica) {
       if (requestedRoles.some((r) => INFORMATICA_ROLES.includes(r))) {
         return jsonResponse({ error: 'No tenés permiso para asignar roles de Informática.' }, 403)
       }
@@ -251,11 +321,11 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ error: 'Los roles de Avales regionales (Coordinador/Secretario de Escuela, Coordinador de departamento interno) los asigna solo Informática.' }, 403)
       }
       if (requestedRoles.some((r) => DEPARTMENT_ROLES.includes(r))) {
-        return jsonResponse({ error: 'Los roles Coordinador y Miembro de Departamento los asigna solo Informática, junto con sus departamentos.' }, 403)
+        return jsonResponse({ error: 'Los roles Coordinador y Miembro de Departamento los asigna Informática, junto con sus departamentos. Cada coordinador también puede dar de alta miembros de su propio departamento.' }, 403)
       }
     }
 
-    if (!isInformatica && !isDirectorEscuela && isJefeCuerpoActivo) {
+    if (!useDelegatedPath && !isInformatica && !isDirectorEscuela && isJefeCuerpoActivo) {
       if (requestedRoles.some((r) => !JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES.includes(r))) {
         return jsonResponse({ error: 'Como Jefe de Cuerpo Activo solo podés asignar roles de cuartel (no jefe_cuerpo_activo, ni roles regionales/escuela/informática).' }, 403)
       }
@@ -279,7 +349,14 @@ Deno.serve(async (req: Request) => {
       .maybeSingle()
     if (existingProfileError) return logAndRespond('verificar email existente', existingProfileError, 'No pudimos verificar el email. Reintentá en unos segundos.')
     if (existingProfile) {
-      return jsonResponse({ error: 'Ya existe un perfil con ese email.' }, 409)
+      return jsonResponse(
+        {
+          error: delegated
+            ? 'Ya existe un usuario con ese email. Si es una persona que ya usa SIGER4, pedile a Informática y Estadística que la sume a tu departamento.'
+            : 'Ya existe un perfil con ese email.',
+        },
+        409,
+      )
     }
 
     const { data: created, error: createError } = await supabaseAdmin.auth.admin.createUser({
@@ -303,9 +380,10 @@ Deno.serve(async (req: Request) => {
         auth_user_id: created.user.id,
         full_name: body.full_name,
         email,
-        rank: body.rank ?? null,
-        region_id: body.region_id ?? null,
-        station_id: body.station_id ?? null,
+        rank: delegated ? (typeof body.rank === 'string' ? body.rank.trim().slice(0, 100) || null : null) : (body.rank ?? null),
+        // Alta delegada: la Regional del coordinador y ningún cuartel, decididos acá.
+        region_id: delegated ? delegated.regionId : (body.region_id ?? null),
+        station_id: delegated ? null : (body.station_id ?? null),
         // La contraseña la definió (o generó) quien crea el usuario, no la
         // persona dueña de la cuenta — se fuerza que la cambie antes de poder
         // usar el resto de la app (ver migración 0034_must_change_password.sql
@@ -324,25 +402,68 @@ Deno.serve(async (req: Request) => {
 
     const { error: rolesError } = await supabaseAdmin
       .from('user_roles')
-      .insert(requestedRoles.map((role) => ({ profile_id: profile.id, role })))
+      .insert((delegated ? [DELEGATED_ROLE as RoleKey] : requestedRoles).map((role) => ({ profile_id: profile.id, role })))
     if (rolesError) {
       await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(created.user.id)
       return logAndRespond('insertar user_roles', rolesError, 'No se pudieron asignar los roles. No se creó ninguna cuenta.')
     }
 
-    const { error: scopeError } = await supabaseAdmin.from('user_scopes').insert({
-      profile_id: profile.id,
-      scope_type: body.scope.scope_type,
-      region_id: body.scope.region_id ?? null,
-      subsede_id: body.scope.subsede_id ?? null,
-      station_id: body.scope.station_id ?? null,
-    })
+    const { error: scopeError } = await supabaseAdmin.from('user_scopes').insert(
+      delegated
+        ? { profile_id: profile.id, scope_type: 'region', region_id: delegated.regionId, subsede_id: null, station_id: null }
+        : {
+            profile_id: profile.id,
+            scope_type: body.scope.scope_type,
+            region_id: body.scope.region_id ?? null,
+            subsede_id: body.scope.subsede_id ?? null,
+            station_id: body.scope.station_id ?? null,
+          },
+    )
     if (scopeError) {
       await supabaseAdmin.from('user_roles').delete().eq('profile_id', profile.id)
       await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
       await supabaseAdmin.auth.admin.deleteUser(created.user.id)
       return logAndRespond('insertar user_scopes', scopeError, 'No se pudo asignar el alcance. No se creó ninguna cuenta.')
+    }
+
+    if (delegated) {
+      // Rollback de todo lo creado (la baja del perfil arrastra roles, alcance, pertenencias y avisos).
+      const rollbackAccount = async () => {
+        await supabaseAdmin.from('department_members').delete().eq('profile_id', profile.id)
+        await supabaseAdmin.from('user_scopes').delete().eq('profile_id', profile.id)
+        await supabaseAdmin.from('user_roles').delete().eq('profile_id', profile.id)
+        await supabaseAdmin.from('profiles').delete().eq('id', profile.id)
+        await supabaseAdmin.auth.admin.deleteUser(created.user.id)
+      }
+
+      // La pertenencia se inserta con la sesión del propio coordinador: la RLS de department_members
+      // (coordinates_department) le impide sumar a un departamento que no coordina, y la base deja el
+      // actor correcto en la Auditoría y en los avisos (no se avisa a sí mismo de su propia acción).
+      const { error: memberError } = await supabaseAsUser
+        .from('department_members')
+        .insert(delegated.departmentIds.map((department_id) => ({ department_id, profile_id: profile.id })))
+      if (memberError) {
+        await rollbackAccount()
+        return logAndRespond('insertar department_members', memberError, 'No se pudo sumar al nuevo miembro al departamento. No se creó ninguna cuenta.', 403)
+      }
+
+      // Comprobación y trazabilidad en la base (falla si la cuenta no quedó exactamente como la regla manda).
+      const { error: recordError } = await supabaseAdmin.rpc('record_delegated_member_creation', {
+        p_actor_profile_id: actorProfile.id,
+        p_new_profile_id: profile.id,
+        p_department_ids: delegated.departmentIds,
+      })
+      if (recordError) {
+        await rollbackAccount()
+        const limitReached = recordError.code === '54000'
+        return logAndRespond(
+          'record_delegated_member_creation',
+          recordError,
+          limitReached ? recordError.message : 'No se pudo registrar el alta. No se creó ninguna cuenta.',
+          limitReached ? 429 : 500,
+        )
+      }
     }
 
     return jsonResponse({ profile })

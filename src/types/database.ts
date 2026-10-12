@@ -780,6 +780,48 @@ export interface MapSupplyPointStatus {
 
 // Departamento tal como lo ve Avales regionales: la fila de departments
 // (sección Departamentos) más el nombre de su coordinador.
+// Ficha institucional básica de un cuartel (list_station_directory(), 0119): la ve cualquier usuario
+// activo. Solo datos institucionales: sin efectivos, móviles, tiempo de respuesta ni notas del mapa.
+export interface StationBasic {
+  id: string
+  region_id: string
+  region_name: string
+  subsede_id: string | null
+  subsede_name: string | null
+  name: string
+  code: string
+  address: string | null
+  zone: string | null
+  phone: string | null
+  whatsapp_phone: string | null
+  email: string | null
+  social_media: Record<string, string> | null
+  description: string | null
+  status: StationStatus
+  founded_year: number | null
+  logo_url: string | null
+  cover_image_url: string | null
+  latitude: number | null
+  longitude: number | null
+}
+
+// station_directory_authorities() (0119): autoridad del cuartel, solo nombre y cargo.
+export interface StationAuthorityBasic {
+  full_name: string
+  role: string
+}
+
+// Ficha institucional básica de un departamento (list_department_directory(), 0119): la ve cualquier
+// usuario activo. Sin miembros, cantidades ni contenido interno.
+export interface DepartmentBasic {
+  id: string
+  name: string
+  description: string | null
+  contact_info: string | null
+  is_active: boolean
+  coordinator_name: string | null
+}
+
 // list_visible_departments() (0103): departamentos que el usuario puede ver.
 export type DepartmentRelation = 'coordinador' | 'integrante'
 

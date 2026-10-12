@@ -156,6 +156,11 @@ export function DepartamentoDetallePage() {
   const [deletingReportId, setDeletingReportId] = useState<string | null>(null)
 
   const canManage = isAdmin || (department?.coordinator_profile_id && department.coordinator_profile_id === currentProfile?.id)
+  // Alta de usuarios nuevos como Miembros de este departamento: lo hace su coordinador (0120). Informática
+  // usa Usuarios > Nuevo usuario, que además asigna otros roles.
+  const canCreateMembers = Boolean(
+    department?.is_active && department.coordinator_profile_id && department.coordinator_profile_id === currentProfile?.id && hasRole('coordinador_departamento'),
+  )
   const isMember = Boolean(currentProfile?.id) && members.some((m) => m.profile_id === currentProfile?.id)
   // Cualquier miembro puede cargar/editar informes de actividad de su
   // departamento (department_members no distingue roles internos, ver
@@ -549,7 +554,7 @@ export function DepartamentoDetallePage() {
 
   return (
     <AppShell title={department.name}>
-      <Link to="/departamentos" className="back-link">
+      <Link to="/departamentos?todos=1" className="back-link">
         ← Volver a Departamentos
       </Link>
 
@@ -714,6 +719,12 @@ export function DepartamentoDetallePage() {
 
       <div className="section-header anchor-target" id="miembros">
         <h2 className="section-title">Miembros</h2>
+        {canCreateMembers && (
+          <Link to={`/departamentos/miembros/nuevo?departamento=${department.id}`} className="btn btn-primary btn-sm">
+            <Icon name="plus" size={14} />
+            Nuevo miembro
+          </Link>
+        )}
       </div>
       <div className="card" style={{ marginBottom: 20 }}>
         {members.length === 0 && <div className="empty-state">Sin miembros cargados todavía.</div>}
@@ -765,6 +776,11 @@ export function DepartamentoDetallePage() {
               {addingMember ? 'Agregando…' : 'Agregar'}
             </button>
           </div>
+        )}
+        {canManage && !isAdmin && (
+          <p className="field-help" style={{ marginTop: 12, marginBottom: 0 }}>
+            Para modificar datos de usuario o contraseña, consultá a Informática y Estadística.
+          </p>
         )}
       </div>
 

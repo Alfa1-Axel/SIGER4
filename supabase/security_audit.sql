@@ -83,7 +83,7 @@ from pg_trigger t join pg_class c on c.oid = t.tgrelid
 where t.tgname = 'trg_protect_author' and not t.tgisinternal
 order by 1;
 
--- 12. Migraciones 0111 a 0118 aplicadas.                        ESPERADO: ocho filas "aplicada"
+-- 12. Migraciones 0111 a 0120 aplicadas.                        ESPERADO: diez filas "aplicada"
 select nombre, case when aplicada then 'aplicada' else 'FALTA' end as estado
 from (values
   ('0111 tipos del mapa: lugar relevante y abastecimiento', exists (select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid where t.typname = 'map_reference_point_type' and e.enumlabel = 'abastecimiento')),
@@ -93,7 +93,9 @@ from (values
   ('0115 verificaciones de abastecimiento',                to_regclass('public.map_point_verifications') is not null and exists (select 1 from pg_proc where proname = 'get_map_pending_items')),
   ('0116 refuerzo de seguridad',                           exists (select 1 from pg_proc where proname = 'protect_author_column')),
   ('0117 Avales: permisos, renovación y auditoría por áreas', exists (select 1 from pg_proc where proname = 'renew_school_aval') and exists (select 1 from pg_indexes where indexname = 'idx_school_avales_vigente_unico')),
-  ('0118 efectivos: Bomberos Nivel 4 no suma al total',   exists (select 1 from pg_attribute a join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum where a.attrelid = 'public.station_staffing'::regclass and a.attname = 'total' and a.attgenerated <> '' and position('bomberos_nivel_4' in pg_get_expr(d.adbin, d.adrelid)) = 0))
+  ('0118 efectivos: Bomberos Nivel 4 no suma al total',   exists (select 1 from pg_attribute a join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum where a.attrelid = 'public.station_staffing'::regclass and a.attname = 'total' and a.attgenerated <> '' and position('bomberos_nivel_4' in pg_get_expr(d.adbin, d.adrelid)) = 0)),
+  ('0119 ficha básica de cuarteles y departamentos',       exists (select 1 from pg_proc where proname = 'list_station_directory') and exists (select 1 from pg_proc where proname = 'list_department_directory') and exists (select 1 from pg_proc where proname = 'station_directory_authorities')),
+  ('0120 alta de miembros de departamento por su coordinador', exists (select 1 from pg_proc where proname = 'record_delegated_member_creation'))
 ) as m(nombre, aplicada)
 order by nombre;
 
@@ -156,3 +158,45 @@ from stations s
 where exists (select 1 from station_staffing f where f.station_id = s.id)
   and s.personnel_count is distinct from station_dotation_total(s.id)
 order by s.name;
+
+-- 21. Ficha básica (0119): ninguna de las tres funciones es ejecutable por quien no inició sesión.
+--     ESPERADO: ninguna fila
+select p.proname as funcion_de_ficha_basica_ejecutable_por_anon
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('list_station_directory', 'list_department_directory', 'station_directory_authorities')
+  and has_function_privilege('anon', p.oid, 'execute');
+
+-- 22. Ficha básica (0119): no devuelve nada interno. Ninguna de las columnas de estas funciones es un dato reservado.
+--     ESPERADO: ninguna fila
+select p.proname as funcion, a as columna_reservada
+from pg_proc p, unnest(p.proargnames) as a
+where p.proname in ('list_station_directory', 'list_department_directory', 'station_directory_authorities')
+  and a in ('personnel_count', 'vehicles_count', 'response_time_minutes', 'map_notes', 'member_count', 'coordinator_profile_id', 'row_version', 'email_personal', 'phone_personal');
+
+-- 23. Alta delegada (0120): solo la clave de servicio puede registrar un alta; ni authenticated ni anon.
+--     ESPERADO: ninguna fila
+select r.rolname as rol_que_no_deberia_poder
+from pg_roles r
+where r.rolname in ('anon', 'authenticated')
+  and has_function_privilege(r.rolname, 'public.record_delegated_member_creation(uuid, uuid, uuid[])', 'execute');
+
+-- 24. Alta delegada (0120): altas por coordinador en las últimas 24 horas y quién las hizo (informativo).
+--     ESPERADO: ningún coordinador por encima de 30 (el tope diario).
+select a.full_name as coordinador, count(distinct l.record_id) as altas_ultimas_24_hs
+from audit_logs l
+join profiles a on a.id = l.actor_profile_id
+where l.action = 'delegated_create' and l.table_name = 'profiles' and l.created_at > now() - interval '1 day'
+group by a.full_name
+order by 2 desc;
+
+-- 25. Alta delegada (0120): toda cuenta dada de alta por un coordinador sigue siendo SOLO Miembro de Departamento
+--     (con el alcance Regional y sin cuartel). ESPERADO: ninguna fila
+select p.full_name as cuenta, array_agg(distinct ur.role::text) as roles
+from audit_logs l
+join profiles p on p.id::text = l.record_id
+left join user_roles ur on ur.profile_id = p.id
+where l.action = 'delegated_create' and l.table_name = 'profiles'
+group by p.id, p.full_name, p.station_id
+having p.station_id is not null
+    or array_agg(distinct ur.role::text) <> array['miembro_departamento'];

@@ -33,10 +33,6 @@ export interface NavItem {
 
 const canManageUsers = (ctx: NavContext) => ctx.isAdmin || ctx.hasRole('jefe_cuerpo_activo')
 
-// Mismo criterio que can_view_department() (0103): sus departamentos, o todos
-// para Informática, Secretario Regional y Director de Escuela.
-const canSeeDepartments = (ctx: NavContext) => ctx.hasDepartments || ctx.isAdmin || ctx.hasRole('secretario_regional', 'director_escuela')
-
 export const NAV_ITEMS: NavItem[] = [
   { to: '/panel', label: 'Inicio', icon: 'home', section: 'Gestión', module: 'inicio' },
   { to: '/cuarteles', label: 'Cuarteles', icon: 'building', section: 'Gestión', module: 'cuarteles' },
@@ -51,8 +47,9 @@ export const NAV_ITEMS: NavItem[] = [
     labelFor: (ctx) => (ctx.departmentOnly ? (ctx.departmentCount === 1 ? 'Mi departamento' : 'Mis departamentos') : 'Departamentos'),
     icon: 'building',
     section: 'Gestión',
+    // Desde 0119 todos los usuarios activos ven la ficha básica de los departamentos (el contenido interno
+    // sigue siendo de su coordinador y sus miembros).
     module: 'departamentos',
-    visible: canSeeDepartments,
   },
   { to: '/inventario', label: 'Inventario', icon: 'tag', section: 'Gestión', module: 'inventario' },
   // Misma regla que ReportsRoute.

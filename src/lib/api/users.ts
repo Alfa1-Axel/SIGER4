@@ -80,7 +80,11 @@ export interface ProfileInput {
 export interface CreateUserAccountInput extends ProfileInput {
   password: string
   roles: RoleKey[]
-  scope: ScopeInput
+  // Informática, Director de Escuela y Jefe de Cuerpo Activo mandan el alcance. El Coordinador de
+  // Departamento no: da de alta Miembros de Departamento con department_ids y el servidor decide la
+  // Regional y el alcance (un pedido que traiga otro rol, cuartel o alcance se rechaza).
+  scope?: ScopeInput
+  department_ids?: string[]
 }
 
 export async function createUserAccount(input: CreateUserAccountInput): Promise<Profile> {

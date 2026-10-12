@@ -1,5 +1,6 @@
 import { supabase } from '../supabaseClient'
-import { fetchCoordinatingProfileIds } from './departments'
+import { fetchCoordinatingProfileIds, fetchDepartmentBasicDirectory } from './departments'
+import { fetchStationBasicDirectory } from './stations'
 import { DEPARTMENT_REPORT_TYPE_LABEL } from './departmentReports'
 import { HIDDEN_NOTIFICATION_TYPE, NOTIFICATION_TYPE_LABEL } from '../notificationMeta'
 import { canUseModule } from '../moduleAccess'
@@ -10,7 +11,7 @@ import type { RoleKey } from '../../types/roles'
 import type {
   CalendarEvent,
   Course,
-  Department,
+  DepartmentBasic,
   DepartmentReport,
   DocumentRecord,
   InventoryItem,
@@ -18,7 +19,7 @@ import type {
   Notification,
   Profile,
   SchoolAvalDocument,
-  Station,
+  StationBasic,
 } from '../../types/database'
 
 // Búsqueda global (barra "Buscar en SIGER4"). Una consulta liviana por
@@ -106,7 +107,8 @@ const APP_MODULE_OF: Record<SearchModule, AppModule> = {
   solicitudes: 'inventario',
   cursos: 'escuela',
   calendario: 'calendario',
-  mapa: 'mapa',
+  // Los lugares del mapa son los puntos de referencia: cerrados en modo departamento.
+  mapa: 'mapa_puntos',
   notificaciones: 'notificaciones',
 }
 
@@ -192,15 +194,31 @@ async function searchUsers(like: string, ctx: SearchContext, limit: number): Pro
   }))
 }
 
-async function searchStations(like: string, limit: number): Promise<SearchResult[]> {
-  const { data, error } = await supabase
-    .from('stations')
-    .select('id, name, code, address')
-    .or(`name.ilike.${like},code.ilike.${like},address.ilike.${like}`)
-    .order('name')
-    .limit(limit)
-  if (error) throw error
-  return ((data ?? []) as Pick<Station, 'id' | 'name' | 'code' | 'address'>[]).map((s) => ({
+// Cuarteles y departamentos se buscan por su ficha institucional (0119), que ve cualquier usuario activo: la
+// búsqueda los encuentra como entidades básicas, no su contenido interno (eso lo siguen decidiendo la RLS y
+// los permisos de cada módulo). Son pocos: se traen una vez por sesión y se filtran en el navegador.
+let stationDirectoryCache: Promise<StationBasic[]> | null = null
+let departmentDirectoryCache: Promise<DepartmentBasic[]> | null = null
+function stationDirectory() {
+  stationDirectoryCache ??= fetchStationBasicDirectory().catch((err) => {
+    stationDirectoryCache = null
+    throw err
+  })
+  return stationDirectoryCache
+}
+function departmentDirectory() {
+  departmentDirectoryCache ??= fetchDepartmentBasicDirectory().catch((err) => {
+    departmentDirectoryCache = null
+    throw err
+  })
+  return departmentDirectoryCache
+}
+const includesTerm = (value: string | null | undefined, term: string) => (value ?? '').toLowerCase().includes(term)
+
+async function searchStations(term: string, limit: number): Promise<SearchResult[]> {
+  const q = term.toLowerCase()
+  const data = (await stationDirectory()).filter((s) => includesTerm(s.name, q) || includesTerm(s.code, q) || includesTerm(s.address, q) || includesTerm(s.zone, q)).slice(0, limit)
+  return (data as Pick<StationBasic, 'id' | 'name' | 'code' | 'address'>[]).map((s) => ({
     id: s.id,
     module: 'cuarteles',
     title: s.name,
@@ -209,15 +227,10 @@ async function searchStations(like: string, limit: number): Promise<SearchResult
   }))
 }
 
-async function searchDepartments(like: string, limit: number): Promise<SearchResult[]> {
-  const { data, error } = await supabase
-    .from('departments')
-    .select('id, name, description, is_active')
-    .or(`name.ilike.${like},description.ilike.${like}`)
-    .order('name')
-    .limit(limit)
-  if (error) throw error
-  return ((data ?? []) as Pick<Department, 'id' | 'name' | 'description' | 'is_active'>[]).map((d) => ({
+async function searchDepartments(term: string, limit: number): Promise<SearchResult[]> {
+  const q = term.toLowerCase()
+  const data = (await departmentDirectory()).filter((d) => includesTerm(d.name, q) || includesTerm(d.description, q)).slice(0, limit)
+  return (data as Pick<DepartmentBasic, 'id' | 'name' | 'description' | 'is_active'>[]).map((d) => ({
     id: d.id,
     module: 'departamentos',
     title: d.name,
@@ -439,8 +452,8 @@ export async function searchEverything(rawQuery: string, ctx: SearchContext, loo
     if (modules.some(wants)) tasks.push([modules, fn])
   }
   add(['usuarios'], async () => ({ usuarios: await searchUsers(like, ctx, limit) }))
-  add(['cuarteles'], async () => ({ cuarteles: await searchStations(like, limit) }))
-  add(['departamentos'], async () => ({ departamentos: await searchDepartments(like, limit) }))
+  add(['cuarteles'], async () => ({ cuarteles: await searchStations(term, limit) }))
+  add(['departamentos'], async () => ({ departamentos: await searchDepartments(term, limit) }))
   add(['informes'], async () => ({ informes: await searchReports(like, ctx, limit, lookups.departmentName) }))
   add(['documentos'], async () => ({ documentos: await searchDocuments(like, limit, lookups.departmentName) }))
   add(['avales'], async () => ({ avales: await searchAvales(like, ctx, limit, lookups.departmentName) }))

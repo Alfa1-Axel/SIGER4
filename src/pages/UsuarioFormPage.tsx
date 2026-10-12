@@ -244,7 +244,7 @@ export function UsuarioFormPage() {
       <AppShell title="Nuevo usuario">
         <AccessDenied
           title="No podés crear usuarios"
-          message="Crean usuarios Informática, el Director de Escuela y el Jefe de Cuerpo Activo (solo para su cuartel). Si necesitás una cuenta nueva, pedísela a alguno de ellos."
+          message="Crean usuarios Informática, el Director de Escuela y el Jefe de Cuerpo Activo (solo para su cuartel). Si coordinás un departamento, dás de alta a sus miembros desde Departamentos > Nuevo miembro. Si necesitás una cuenta nueva, pedísela a alguno de ellos."
         />
       </AppShell>
     )

@@ -14,7 +14,7 @@ import {
 import type { SearchModule, SearchOutcome, SearchResult } from '../lib/api/globalSearch'
 import { fetchDepartments } from '../lib/api/departments'
 import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
-import { fetchStations } from '../lib/api/stations'
+import { fetchStationBasicDirectory } from '../lib/api/stations'
 import { useAccessContext } from '../hooks/useAccessContext'
 import { OPEN_SEARCH_EVENT } from '../lib/searchControl'
 
@@ -28,13 +28,14 @@ const DEBOUNCE_MS = 300
 // inicia sesión en la misma pestaña, se vuelven a pedir.
 type Lookups = { departments: Map<string, string>; stations: Map<string, string> }
 let lookupsCache: { key: string; promise: Promise<Lookups> } | null = null
-function loadLookups(profileId: string | null, withAvales: boolean, withStations: boolean) {
-  const key = `${profileId ?? ''}:${withAvales}:${withStations}`
+function loadLookups(profileId: string | null, withAvales: boolean) {
+  const key = `${profileId ?? ''}:${withAvales}`
   if (!lookupsCache || lookupsCache.key !== key) {
     const promise = Promise.all([
       fetchDepartments().catch(() => []),
       withAvales ? fetchAvalesDepartments().catch(() => []) : Promise.resolve([]),
-      withStations ? fetchStations().catch(() => []) : Promise.resolve([]),
+      // Los nombres de cuarteles salen de la ficha institucional, que ve cualquier usuario activo.
+      fetchStationBasicDirectory().catch(() => []),
     ]).then(([deps, avalesDeps, sts]) => ({
       departments: new Map([...avalesDeps, ...deps].map((d) => [d.id, d.name])),
       stations: new Map(sts.map((s) => [s.id, s.name])),
@@ -119,7 +120,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
     const id = ++requestId.current
     setLoading(true)
     setError(null)
-    loadLookups(ctx.profileId, ctx.hasAvalesAccess, !ctx.departmentOnly)
+    loadLookups(ctx.profileId, ctx.hasAvalesAccess)
       .then((lookups) =>
         searchEverything(
           term,
@@ -198,7 +199,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
             ref={inputRef}
             type="search"
             className="search-input"
-            placeholder={ctx.departmentOnly ? 'Buscar tu departamento, informes, eventos, avisos…' : 'Buscar usuarios, documentos, informes, elementos…'}
+            placeholder={ctx.departmentOnly ? 'Buscar departamentos, cuarteles, informes, eventos, avisos…' : 'Buscar usuarios, documentos, informes, elementos…'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             role="combobox"
@@ -234,7 +235,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
               <p>
                 Escribí al menos {MIN_SEARCH_LENGTH} letras para buscar en los módulos a los que tenés acceso:{' '}
                 {ctx.departmentOnly
-                  ? 'tu departamento, informes y actas, eventos de tu departamento, avales y notificaciones.'
+                  ? 'cuarteles y departamentos (su ficha institucional), informes y actas, eventos de tu departamento, avales y notificaciones.'
                   : 'usuarios, cuarteles, departamentos, informes, documentos, avales, inventario, cursos, calendario y notificaciones.'}
               </p>
               <p>Buscá por nombre o por título, por ejemplo "{ctx.departmentOnly ? 'acta de octubre' : 'motobomba'}".</p>

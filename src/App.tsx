@@ -14,7 +14,7 @@ import { LoginPage } from './pages/LoginPage'
 import { CambiarPasswordPage } from './pages/CambiarPasswordPage'
 import { PanelPage } from './pages/PanelPage'
 import { CuartelesPage } from './pages/CuartelesPage'
-import { CuartelDetallePage } from './pages/CuartelDetallePage'
+import { CuartelDetalleEntrada } from './pages/CuartelDetalleEntrada'
 import { CuartelFormPage } from './pages/CuartelFormPage'
 // Lazy: Leaflet (mapa) es una librería pesada usada solo en esta pantalla --
 // cargarla en el bundle principal infla el chunk inicial para todos los
@@ -57,7 +57,8 @@ import { SolicitudPrestamoFormPage } from './pages/SolicitudPrestamoFormPage'
 import { SolicitudPrestamoDetallePage } from './pages/SolicitudPrestamoDetallePage'
 import { DepartamentosPage } from './pages/DepartamentosPage'
 import { DepartamentoFormPage } from './pages/DepartamentoFormPage'
-import { DepartamentoDetallePage } from './pages/DepartamentoDetallePage'
+import { DepartamentoDetalleEntrada } from './pages/DepartamentoDetalleEntrada'
+import { DepartamentoMiembroFormPage } from './pages/DepartamentoMiembroFormPage'
 import { InformeDepartamentoFormPage } from './pages/InformeDepartamentoFormPage'
 import { DepartamentoInformeFormPage } from './pages/DepartamentoInformeFormPage'
 import { DepartamentoInformeDetallePage } from './pages/DepartamentoInformeDetallePage'
@@ -79,9 +80,9 @@ export default function App() {
         {/* Pendientes: se llega desde el Inicio ("Ver todos"); no está en el menú. */}
         <Route path="/pendientes" element={<ProtectedRoute><PendientesPage /></ProtectedRoute>} />
         <Route path="/cuarteles" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelesPage /></ModuleRoute>} />
-        <Route path="/cuarteles/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:id" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelDetallePage /></ModuleRoute>} />
+        <Route path="/cuarteles/nuevo" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><CuartelFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:id" element={<ModuleRoute module="cuarteles" title="Cuarteles"><CuartelDetalleEntrada /></ModuleRoute>} />
         <Route
           path="/mapa"
           element={
@@ -92,15 +93,15 @@ export default function App() {
             </ModuleRoute>
           }
         />
-        <Route path="/mapa/puntos/:id" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaPage /></ModuleRoute>} />
-        <Route path="/mapa/puntos/:id/editar" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaFichaFormPage /></ModuleRoute>} />
-        <Route path="/mapa/puntos/:id/verificaciones/nueva" element={<ModuleRoute module="mapa" title="Mapa Regional"><PuntoMapaVerificacionFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
-        <Route path="/vehiculos/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ModuleRoute module="cuarteles" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
-        <Route path="/asistencia/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:stationId/intervenciones/nueva" element={<ModuleRoute module="cuarteles" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
-        <Route path="/intervenciones/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
+        <Route path="/mapa/puntos/:id" element={<ModuleRoute module="mapa_puntos" title="Mapa Regional"><PuntoMapaPage /></ModuleRoute>} />
+        <Route path="/mapa/puntos/:id/editar" element={<ModuleRoute module="mapa_puntos" title="Mapa Regional"><PuntoMapaFichaFormPage /></ModuleRoute>} />
+        <Route path="/mapa/puntos/:id/verificaciones/nueva" element={<ModuleRoute module="mapa_puntos" title="Mapa Regional"><PuntoMapaVerificacionFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/vehiculos/nuevo" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
+        <Route path="/vehiculos/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><VehiculoFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/asistencia/nueva" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
+        <Route path="/asistencia/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><AsistenciaFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/intervenciones/nueva" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
+        <Route path="/intervenciones/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><IntervencionFormPage /></ModuleRoute>} />
         <Route path="/escuela" element={<ModuleRoute module="escuela" title="Escuela"><EscuelaPage /></ModuleRoute>} />
         <Route path="/escuela/nuevo" element={<ModuleRoute module="escuela" title="Escuela"><CursoFormPage /></ModuleRoute>} />
         <Route path="/escuela/:id/editar" element={<ModuleRoute module="escuela" title="Escuela"><CursoFormPage /></ModuleRoute>} />
@@ -128,10 +129,10 @@ export default function App() {
         <Route path="/documentos/carpetas/:id" element={<ModuleRoute module="documentos" title="Documentos"><CarpetaDetallePage /></ModuleRoute>} />
         <Route path="/documentos/departamentos/:id" element={<ModuleRoute module="documentos" title="Documentos"><DocumentosDepartamentoPage /></ModuleRoute>} />
         <Route path="/auditoria" element={<SuperAdminRoute title="Auditoría"><AuditoriaPage /></SuperAdminRoute>} />
-        <Route path="/cuarteles/:stationId/personal/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
-        <Route path="/personal/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
-        <Route path="/cuarteles/:stationId/historial/nuevo" element={<ModuleRoute module="cuarteles" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
-        <Route path="/historial/:id/editar" element={<ModuleRoute module="cuarteles" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/personal/nuevo" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
+        <Route path="/personal/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><PersonalFormPage /></ModuleRoute>} />
+        <Route path="/cuarteles/:stationId/historial/nuevo" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
+        <Route path="/historial/:id/editar" element={<ModuleRoute module="cuarteles_gestion" title="Cuarteles"><EventoHistoricoFormPage /></ModuleRoute>} />
         <Route path="/calendario" element={<ProtectedRoute><CalendarioPage /></ProtectedRoute>} />
         <Route path="/calendario/nuevo" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
         <Route path="/calendario/:id/editar" element={<ProtectedRoute><EventoCalendarioFormPage /></ProtectedRoute>} />
@@ -151,7 +152,9 @@ export default function App() {
         <Route path="/departamentos/informes/:reportId/editar" element={<ProtectedRoute><DepartamentoInformeFormPage /></ProtectedRoute>} />
         <Route path="/departamentos/:departmentId/informes/nuevo" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
         <Route path="/informes/:id/editar" element={<ProtectedRoute><InformeDepartamentoFormPage /></ProtectedRoute>} />
-        <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetallePage /></ProtectedRoute>} />
+        <Route path="/departamentos/:id" element={<ProtectedRoute><DepartamentoDetalleEntrada /></ProtectedRoute>} />
+        {/* Alta de Miembros de Departamento por el coordinador de su departamento (0120). */}
+        <Route path="/departamentos/miembros/nuevo" element={<ProtectedRoute><DepartamentoMiembroFormPage /></ProtectedRoute>} />
         {/* Pantallas retiradas: Ayuda, Novedades y la guía de Roles y permisos
             ya no existen. Si alguien entra por un enlace viejo, va al Inicio. */}
         <Route path="/ayuda/*" element={<Navigate to="/panel" replace />} />

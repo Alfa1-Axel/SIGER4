@@ -8,7 +8,7 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { ContactLink } from '../components/ui/ContactLink'
 import { EditConflictPanel } from '../components/EditConflictPanel'
-import { fetchStations } from '../lib/api/stations'
+import { fetchStationBasicDirectory, fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchRegions } from '../lib/api/regions'
 import {
@@ -23,7 +23,7 @@ import type { SimilarPoint } from '../lib/api/mapPoints'
 import { POINT_TYPE_LABEL, SUBTYPES_BY_TYPE, SUBTYPE_LABEL, SUPPLY_STATUS_LABEL, formatDateAr, pointKindLabel } from '../lib/mapPointMeta'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
-import type { MapPointSubtype, MapReferencePoint, MapReferencePointType, MapSupplyPointStatus, Region, Station, Subsede } from '../types/database'
+import type { MapPointSubtype, MapReferencePoint, MapReferencePointType, MapSupplyPointStatus, Region, Station, StationBasic, Subsede } from '../types/database'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
 
@@ -77,15 +77,18 @@ function referenceDivIcon(type: MapReferencePointType) {
   })
 }
 
-interface StationWithSubsede extends Station {
-  subsede: Subsede | null
+// Cuartel en el mapa: ficha institucional básica (la ve cualquier usuario activo, 0119). Las notas del mapa son
+// internas: solo las trae quien lee el cuartel completo (RLS de stations).
+interface MapStation extends StationBasic {
+  map_notes: string | null
+  subsede: { name: string } | null
 }
 
-function shortLabel(station: Station): string {
+function shortLabel(station: Pick<StationBasic, 'code' | 'name'>): string {
   return station.code ? `${station.code} · ${station.name}` : station.name
 }
 
-function StationPopupContent({ station }: { station: StationWithSubsede }) {
+function StationPopupContent({ station }: { station: MapStation }) {
   return (
     <div style={{ minWidth: 200 }}>
       <div style={{ fontWeight: 700, fontSize: 13 }}>{station.name}</div>
@@ -199,7 +202,9 @@ export function MapaRegionalPage() {
   const { isAdmin, hasRole, profile } = useAuth()
   const canManagePoints = isAdmin || hasRole('secretario_regional')
 
-  const [stations, setStations] = useState<StationWithSubsede[]>([])
+  const [stations, setStations] = useState<MapStation[]>([])
+  // Cuarteles que esta persona puede leer completos: los que ofrece el formulario de puntos (la base los limita a su alcance).
+  const [accessibleStations, setAccessibleStations] = useState<Station[]>([])
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [regions, setRegions] = useState<Region[]>([])
   const [points, setPoints] = useState<MapReferencePoint[]>([])
@@ -231,14 +236,16 @@ export function MapaRegionalPage() {
   async function loadAll() {
     setError(null)
     try {
-      const [stationsData, subsedesData, regionsData, pointsData] = await Promise.all([
-        fetchStations(),
+      const [directoryData, accessibleData, subsedesData, regionsData, pointsData] = await Promise.all([
+        fetchStationBasicDirectory(),
+        fetchStations().catch(() => [] as Station[]),
         fetchSubsedes(),
         fetchRegions(),
         fetchMapReferencePoints(),
       ])
-      const subsedeById = new Map(subsedesData.map((s) => [s.id, s]))
-      setStations(stationsData.map((s) => ({ ...s, subsede: s.subsede_id ? subsedeById.get(s.subsede_id) ?? null : null })))
+      const notesById = new Map(accessibleData.map((s) => [s.id, s.map_notes]))
+      setAccessibleStations(accessibleData)
+      setStations(directoryData.map((s) => ({ ...s, map_notes: notesById.get(s.id) ?? null, subsede: s.subsede_id ? { name: s.subsede_name ?? 'Subsede' } : null })))
       setSubsedes(subsedesData)
       setRegions(regionsData)
       setPoints(pointsData)
@@ -470,7 +477,7 @@ export function MapaRegionalPage() {
   }
 
   const subsedesForRegion = subsedes.filter((s) => !form.regionId || s.region_id === form.regionId)
-  const stationsForSubsede = stations.filter((s) => !form.subsedeId || s.subsede_id === form.subsedeId)
+  const stationsForSubsede = accessibleStations.filter((s) => !form.subsedeId || s.subsede_id === form.subsedeId)
 
   return (
     <AppShell title="Mapa Regional">

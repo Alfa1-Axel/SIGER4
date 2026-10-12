@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
-import { fetchStations } from '../lib/api/stations'
+import { fetchStationBasicDirectory, fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStationCompliance, COMPLIANCE_STATUS_BADGE, COMPLIANCE_STATUS_LABEL } from '../lib/api/compliance'
-import type { Station, StationCompliance, StationStatus, Subsede } from '../types/database'
+import type { Station, StationBasic, StationCompliance, StationStatus, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 
@@ -21,7 +21,10 @@ const STATUS_BADGE: Record<StationStatus, string> = {
 
 export function CuartelesPage() {
   const { isAdmin } = useAuth()
-  const [stations, setStations] = useState<Station[]>([])
+  // Ficha institucional de TODOS los cuarteles (la ve cualquier usuario activo, 0119) y, aparte, los
+  // cuarteles que esta persona puede leer completos (RLS): de esos se suman efectivos, móviles y estado de carga.
+  const [directory, setDirectory] = useState<StationBasic[]>([])
+  const [accessible, setAccessible] = useState<Map<string, Station>>(new Map())
   const [subsedes, setSubsedes] = useState<Subsede[]>([])
   const [compliance, setCompliance] = useState<StationCompliance[]>([])
   const [query, setQuery] = useState('')
@@ -32,10 +35,16 @@ export function CuartelesPage() {
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchStations(), fetchSubsedes(), fetchStationCompliance()])
-      .then(([stationsData, subsedesData, complianceData]) => {
+    Promise.all([
+      fetchStationBasicDirectory(),
+      fetchStations().catch(() => [] as Station[]),
+      fetchSubsedes(),
+      fetchStationCompliance().catch(() => [] as StationCompliance[]),
+    ])
+      .then(([directoryData, stationsData, subsedesData, complianceData]) => {
         if (!active) return
-        setStations(stationsData)
+        setDirectory(directoryData)
+        setAccessible(new Map(stationsData.map((s) => [s.id, s])))
         setSubsedes(subsedesData)
         setCompliance(complianceData)
       })
@@ -46,30 +55,33 @@ export function CuartelesPage() {
     }
   }, [])
 
-  const subsedeById = useMemo(() => new Map(subsedes.map((s) => [s.id, s])), [subsedes])
   const complianceByStationId = useMemo(() => new Map(compliance.map((c) => [c.station_id, c])), [compliance])
 
   const filtered = useMemo(() => {
-    return stations.filter((s) => {
-      const matchesQuery =
-        !query ||
-        s.name.toLowerCase().includes(query.toLowerCase()) ||
-        (s.zone ?? '').toLowerCase().includes(query.toLowerCase())
+    const q = query.toLowerCase()
+    return directory.filter((s) => {
+      const matchesQuery = !q || s.name.toLowerCase().includes(q) || (s.zone ?? '').toLowerCase().includes(q) || (s.address ?? '').toLowerCase().includes(q)
       const matchesStatus = statusFilter === 'todos' || s.status === statusFilter
       const matchesSubsede = subsedeFilter === 'todas' || s.subsede_id === subsedeFilter
       return matchesQuery && matchesStatus && matchesSubsede
     })
-  }, [stations, query, statusFilter, subsedeFilter])
+  }, [directory, query, statusFilter, subsedeFilter])
+
+  const anyInternal = accessible.size > 0
 
   return (
     <AppShell title="Cuarteles">
       <h1 className="page-title">Cuarteles</h1>
-      <p className="page-subtitle">Los cuarteles de la Regional 4, con sus efectivos, móviles y estado de carga.</p>
+      <p className="page-subtitle">
+        {anyInternal
+          ? 'Los cuarteles de la Regional 4. De los tuyos ves además los efectivos, los móviles y el estado de carga.'
+          : 'Los cuarteles de la Regional 4, con su ficha institucional: ubicación, contacto y autoridades.'}
+      </p>
 
       <div className="search-input" style={{ marginBottom: 12 }}>
         <Icon name="search" size={16} />
         <input
-          placeholder="Buscar cuartel por nombre o zona..."
+          placeholder="Buscar cuartel por nombre, zona o dirección..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
@@ -116,12 +128,13 @@ export function CuartelesPage() {
       )}
 
       {loading && <div className="loading-state" role="status">Cargando cuarteles…</div>}
-      {!loading && filtered.length === 0 && (
+      {!loading && !error && filtered.length === 0 && (
         <div className="empty-state">No encontramos cuarteles con esa búsqueda o filtro.</div>
       )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {filtered.map((station) => {
+          const internal = accessible.get(station.id)
           const stationCompliance = complianceByStationId.get(station.id)
           return (
           <Link
@@ -134,7 +147,7 @@ export function CuartelesPage() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                   <span className={`badge ${STATUS_BADGE[station.status]}`}>{STATUS_LABEL[station.status]}</span>
-                  {stationCompliance && (
+                  {internal && stationCompliance && (
                     <span className={`badge ${COMPLIANCE_STATUS_BADGE[stationCompliance.compliance_status]}`}>
                       {COMPLIANCE_STATUS_LABEL[stationCompliance.compliance_status]}
                     </span>
@@ -145,37 +158,39 @@ export function CuartelesPage() {
                   {station.address ?? station.zone ?? 'Sin dirección registrada'}
                 </p>
                 <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--color-text-muted)' }}>
-                  {station.subsede_id ? subsedeById.get(station.subsede_id)?.name ?? 'Subsede desconocida' : 'Sin subsede'}
+                  {station.subsede_name ?? 'Sin subsede'}
                 </p>
               </div>
               <Icon name="chevronRight" size={18} />
             </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: 8,
-                marginTop: 16,
-                paddingTop: 12,
-                borderTop: '1px solid var(--color-border)',
-                textAlign: 'center',
-              }}
-            >
-              <div title="Total de efectivos: no incluye Bomberos Nivel 4">
-                <div style={{ fontWeight: 700 }}>{String(station.personnel_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>EFECTIVOS</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 700 }}>{String(station.vehicles_count).padStart(2, '0')}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>MÓVILES</div>
-              </div>
-              <div>
-                <div style={{ fontWeight: 700, color: 'var(--color-link)' }}>
-                  {station.response_time_minutes != null ? `${station.response_time_minutes}min` : '—'}
+            {internal && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 8,
+                  marginTop: 16,
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--color-border)',
+                  textAlign: 'center',
+                }}
+              >
+                <div title="Total de efectivos: no incluye Bomberos Nivel 4">
+                  <div style={{ fontWeight: 700 }}>{String(internal.personnel_count).padStart(2, '0')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>EFECTIVOS</div>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>RESPUESTA</div>
+                <div>
+                  <div style={{ fontWeight: 700 }}>{String(internal.vehicles_count).padStart(2, '0')}</div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>MÓVILES</div>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: 'var(--color-link)' }}>
+                    {internal.response_time_minutes != null ? `${internal.response_time_minutes}min` : '—'}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>RESPUESTA</div>
+                </div>
               </div>
-            </div>
+            )}
           </Link>
           )
         })}

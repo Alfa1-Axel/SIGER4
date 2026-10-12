@@ -10,7 +10,7 @@ export function UserCreatorRoute({ children }: { children: ReactNode }) {
     <GuardedRoute
       title="Nuevo usuario"
       allow={({ isAdmin, hasRole }) => isAdmin || hasRole('director_escuela', 'jefe_cuerpo_activo')}
-      deniedMessage="Crear usuarios es de Informática, el Director de Escuela y el Jefe de Cuerpo Activo (para su cuartel). Si alguien necesita una cuenta, pedísela a ellos."
+      deniedMessage="Crear usuarios es de Informática, el Director de Escuela y el Jefe de Cuerpo Activo (para su cuartel). Quien coordina un departamento da de alta a sus miembros desde Departamentos. Si alguien necesita una cuenta, pedísela a ellos."
     >
       {children}
     </GuardedRoute>

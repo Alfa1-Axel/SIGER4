@@ -1,12 +1,28 @@
 import { supabase } from '../supabaseClient'
 import { updateVersioned } from '../concurrency'
-import type { Profile, Station } from '../../types/database'
+import type { Profile, Station, StationAuthorityBasic, StationBasic } from '../../types/database'
 import type { RoleKey } from '../../types/roles'
 
 export async function fetchStations(): Promise<Station[]> {
   const { data, error } = await supabase.from('stations').select('*').order('name', { ascending: true })
   if (error) throw error
   return (data ?? []) as Station[]
+}
+
+// Ficha institucional básica de TODOS los cuarteles, para cualquier usuario activo (0119). No es lo
+// mismo que fetchStations(): esa lee la tabla y la RLS la limita al alcance de cada persona; esta
+// devuelve solo columnas institucionales. Quien tiene acceso interno sigue usando fetchStations().
+export async function fetchStationBasicDirectory(): Promise<StationBasic[]> {
+  const { data, error } = await supabase.rpc('list_station_directory')
+  if (error) throw error
+  return (data ?? []) as StationBasic[]
+}
+
+// Autoridades de un cuartel (nombre y cargo), para la ficha básica.
+export async function fetchStationBasicAuthorities(stationId: string): Promise<StationAuthorityBasic[]> {
+  const { data, error } = await supabase.rpc('station_directory_authorities', { p_station_id: stationId })
+  if (error) throw error
+  return (data ?? []) as StationAuthorityBasic[]
 }
 
 export async function fetchStationById(id: string): Promise<Station | null> {

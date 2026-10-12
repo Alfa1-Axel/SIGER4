@@ -46,6 +46,7 @@ export const ACTION_LABELS: Record<string, string> = {
   renew: 'Renovación',
   archive: 'Archivado',
   unarchive: 'Reactivación',
+  delegated_create: 'Alta delegada de un miembro de departamento',
   reporte_generado: 'Reporte generado',
   analisis_ia_reporte: 'Análisis con IA',
   solicitud_reporte: 'Solicitud de reporte',
@@ -166,6 +167,9 @@ export const FIELD_LABELS: Record<string, string> = {
   delivery_condition: 'Estado al retirar',
   return_condition: 'Estado al devolver',
   department_id: 'Departamento',
+  department_name: 'Nombre del departamento',
+  created_by: 'Dado de alta por',
+  created_by_role: 'Rol de quien dio de alta',
   coordinator_profile_id: 'Coordinador',
   contact_info: 'Contacto',
   activity_date: 'Fecha de la actividad',
@@ -381,6 +385,9 @@ export function buildEventSummary(
 ): string {
   const who = actorName ?? 'El sistema'
   const tableLabel = translateTable(tableName)
+  if (action === 'delegated_create') {
+    return entityName ? `${who} dio de alta a ${entityName} como miembro de departamento` : `${who} dio de alta a un miembro de departamento`
+  }
   const verb = action === 'insert' ? 'creó' : action === 'delete' ? 'eliminó' : action === 'update' ? 'modificó' : null
 
   if (verb) {

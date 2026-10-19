@@ -89,7 +89,9 @@ export function AvalFormPage() {
     formKey: 'aval-escuela',
     contextKey: 'nuevo',
     value: draftValue,
-    enabled: !isEditing && !loading && !loadError,
+    // Con un departamento elegido de entrada, el título sugerido se completa recién después del primer dibujo: el
+    // borrador espera a que esté puesto para tomar como base lo que la persona vio al abrir.
+    enabled: !isEditing && !loading && !loadError && (titleTouched || title !== '' || !departments.some((d) => d.id === departmentId)),
   })
 
   function applyDraft(d: AvalDraft) {

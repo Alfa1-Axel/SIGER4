@@ -139,6 +139,7 @@ export function FilePicker({
               <input
                 id={`${id}-camera`}
                 type="file"
+                aria-label="Sacar foto"
                 className="sr-only-file-input"
                 accept="image/*"
                 capture="environment"

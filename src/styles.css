@@ -507,6 +507,11 @@ h3 {
   margin: 0 auto;
 }
 
+.app-content:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
 /* Con el botón flotante "+" en pantalla, el final de la lista queda libre para que no lo tape. */
 .app-content:has(.fab) {
   padding-bottom: 88px;
@@ -1637,6 +1642,10 @@ input[type='file']::file-selector-button:hover {
   .file-picker-camera {
     display: none;
   }
+  /* Y su input también: no queda un control invisible al que llegar con el Tab. */
+  .sr-only-file-input:has(+ .file-picker-camera) {
+    display: none;
+  }
 }
 
 @media (max-width: 599px) {
@@ -1702,7 +1711,8 @@ input[type='file']::file-selector-button:hover {
    de archivo real usa el mismo patrón, distinto de display:none a
    propósito. */
 .sr-only,
-.sr-only-file-input {
+.sr-only-file-input,
+.page-title--same-as-header {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1732,6 +1742,7 @@ input[type='file']::file-selector-button:hover {
   font-weight: 600;
   line-height: 1.5;
   max-width: 100%;
+  flex-shrink: 0;
   overflow-wrap: anywhere;
 }
 
@@ -3359,6 +3370,67 @@ kbd {
 
 .data-table .col-nowrap {
   white-space: nowrap;
+}
+
+/* Tabla de muchas columnas: ancho mínimo en pantalla grande y, en el celular, una tarjeta por fila con la etiqueta
+   de cada dato (data-label), en lugar de obligar a desplazarse hacia los costados. */
+.data-table--stacked {
+  min-width: 760px;
+}
+
+@media (max-width: 599px) {
+  .data-table--stacked {
+    min-width: 0;
+  }
+  .data-table--stacked thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .data-table--stacked,
+  .data-table--stacked tbody,
+  .data-table--stacked tr,
+  .data-table--stacked td {
+    display: block;
+    width: 100%;
+  }
+  .data-table--stacked tbody tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .data-table--stacked tbody tr:last-child {
+    border-bottom: none;
+  }
+  .data-table--stacked td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 12px;
+    border-bottom: none;
+    max-width: none !important;
+    text-align: right;
+    white-space: normal;
+  }
+  .data-table--stacked td::before {
+    content: attr(data-label);
+    flex: 0 0 84px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+  .data-table--stacked td:not([data-label])::before {
+    display: none;
+  }
+  .data-table--stacked td.col-actions {
+    justify-content: flex-end;
+  }
+  .data-table--stacked tbody tr:hover td {
+    background: transparent;
+  }
 }
 
 /* ============================================================

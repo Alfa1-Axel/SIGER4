@@ -27,6 +27,7 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { EditConflictPanel } from '../components/EditConflictPanel'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Una carpeta, o uno de los dos espacios que no son carpeta:
 //   "general"      lo publicado para todos (visibilidad "Visible para todos").
@@ -124,8 +125,15 @@ export function CarpetaDetallePage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleTrash(doc: DocumentRecord) {
-    if (!window.confirm(`¿Enviar "${doc.title}" a la papelera? Va a poder restaurarse durante 30 días.`)) return
+    const confirmed = await confirm({
+      title: `¿Enviar "${doc.title}" a la papelera?`,
+      message: 'Va a poder restaurarse durante 30 días.',
+      confirmLabel: 'Enviar a la papelera',
+    })
+    if (!confirmed) return
     setError(null)
     setTrashingId(doc.id)
     try {
@@ -161,7 +169,13 @@ export function CarpetaDetallePage() {
 
   async function handleDeleteFolder() {
     if (!id || isSpace) return
-    if (!window.confirm('¿Eliminar esta carpeta? Los documentos que contiene NO se borran, quedan como "Sin carpeta".')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar esta carpeta?',
+      message: 'Los documentos que contiene NO se borran, quedan como "Sin carpeta".',
+      confirmLabel: 'Eliminar carpeta',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     try {
       await deleteDocumentFolder(id)

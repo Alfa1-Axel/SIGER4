@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from './ui/Icon'
 import { deletePasskey, describePasskeyError, listPasskeys, registerPasskey } from '../lib/auth/loginHelpers'
 import type { PasskeyItem } from '../lib/auth/loginHelpers'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Alta y baja de passkeys del usuario (huella, rostro o PIN del
 // dispositivo). Solo se muestra si están habilitadas (passkeysAvailable()).
@@ -41,8 +42,16 @@ export function PasskeysSection() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleDelete(item: PasskeyItem) {
-    if (!window.confirm('¿Quitar este dispositivo? Ya no va a poder ingresar con passkey.')) return
+    const confirmed = await confirm({
+      title: '¿Quitar este dispositivo?',
+      message: 'Ya no va a poder ingresar con passkey.',
+      confirmLabel: 'Quitar dispositivo',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     setNotice(null)
     setBusy(item.id)

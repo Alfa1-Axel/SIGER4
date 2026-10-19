@@ -26,6 +26,7 @@ import type { RowSnapshot } from '../lib/concurrency'
 import type { MapPointSubtype, MapReferencePoint, MapReferencePointType, MapSupplyPointStatus, Region, Station, StationBasic, Subsede } from '../types/database'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Centro aproximado de la Regional 4 (Córdoba) -- solo se usa como vista
 // inicial del mapa cuando no hay ningún cuartel con coordenadas todavía;
@@ -466,8 +467,16 @@ export function MapaRegionalPage() {
   // solo para no ofrecer una acción que el backend va a rechazar) -- el
   // resto de los roles con permiso de gestión usa "Desactivar" (soft-delete)
   // para sacar un punto de circulación sin perder el historial.
+  const confirm = useConfirm()
+
   async function handleDelete(point: MapReferencePoint) {
-    if (!window.confirm(`¿Eliminar definitivamente "${point.name}"? Esta acción no se puede deshacer.`)) return
+    const confirmed = await confirm({
+      title: `¿Eliminar definitivamente "${point.name}"?`,
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar punto',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     try {
       await deleteMapReferencePoint(point.id)
       await loadAll()

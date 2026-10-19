@@ -21,6 +21,7 @@ import { formatBytes } from '../lib/format'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import type { AvalesDepartment, SchoolAvalDocument } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useConfirm } from '../hooks/useConfirm'
 
 type BusyAction = 'open' | 'download' | 'restore'
 type ReasonModal = { kind: 'archive' | 'delete'; doc: SchoolAvalDocument } | null
@@ -172,8 +173,15 @@ export function AvalesPage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleRestore(doc: SchoolAvalDocument) {
-    if (!window.confirm(`¿Volver a activar "${doc.title}"? Vuelve a verse para su dueño y para la autoridad del área.`)) return
+    const confirmed = await confirm({
+      title: `¿Volver a activar "${doc.title}"?`,
+      message: 'Vuelve a verse para su dueño y para la autoridad del área.',
+      confirmLabel: 'Volver a activar',
+    })
+    if (!confirmed) return
     setActionError(null)
     setBusy({ id: doc.id, action: 'restore' })
     try {

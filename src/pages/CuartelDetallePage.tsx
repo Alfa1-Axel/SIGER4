@@ -46,6 +46,7 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { useConfirm } from '../hooks/useConfirm'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
   operativo: 'Operativo',
@@ -229,9 +230,17 @@ export function CuartelDetallePage() {
     setHistoryEvents(data)
   }
 
+  const confirm = useConfirm()
+
   async function handleDeleteHistoryEvent(eventId: string) {
     if (!id) return
-    if (!window.confirm('¿Eliminar este evento del historial institucional? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este evento del historial institucional?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar evento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     await deleteStationHistoryEvent(eventId)
     if (expandedHistoryEventId === eventId) setExpandedHistoryEventId(null)
     await reloadHistoryEvents(id)
@@ -385,7 +394,13 @@ export function CuartelDetallePage() {
 
   async function handlePersonnelDelete(personId: string) {
     if (!id) return
-    if (!window.confirm('¿Eliminar a esta persona del registro de personal? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar a esta persona del registro de personal?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar persona',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     await deletePersonnel(personId)
     await reloadPersonnel(id)
   }

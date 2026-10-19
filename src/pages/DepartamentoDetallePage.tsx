@@ -46,6 +46,7 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { EditConflictPanel } from '../components/EditConflictPanel'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
+import { useConfirm } from '../hooks/useConfirm'
 
 export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
   reunion: 'Reunión',
@@ -323,8 +324,16 @@ export function DepartamentoDetallePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredReports, stations, subsedes])
 
+  const confirm = useConfirm()
+
   async function handleDeleteReport(report: DepartmentActivityReport) {
-    if (!window.confirm(`¿Eliminar el informe "${report.title}"? Esta acción no se puede deshacer.`)) return
+    const confirmed = await confirm({
+      title: `¿Eliminar el informe "${report.title}"?`,
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar informe',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     setDeletingReportId(report.id)
     try {
@@ -374,7 +383,13 @@ export function DepartamentoDetallePage() {
 
   async function handleDelete() {
     if (!id) return
-    if (!window.confirm('¿Eliminar este departamento? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este departamento?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar departamento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     try {
       await deleteDepartment(id)

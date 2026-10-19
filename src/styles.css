@@ -258,6 +258,15 @@ h3 {
   color: var(--color-primary-soft-text);
 }
 
+/* Pantallas táctiles: los controles suben a 44px (campos, botones) y 40px (los chicos y los chips) para
+   que sean cómodos de tocar. El encabezado conserva 40px para no perder lugar en el celular. */
+@media (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+    --control-height-sm: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -265,6 +274,13 @@ h3 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Un indicador de carga que no gira parece colgado: sigue girando, más despacio. */
+  .spinner,
+  .loading-state::before {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -376,6 +392,23 @@ h3 {
 .sidebar-user:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
+}
+
+/* El logo (24px) y la foto (32px) llevan un área de toque de 40px que no cambia el diseño. */
+@media (pointer: coarse) {
+  .app-header-home,
+  .app-header-avatar-link {
+    position: relative;
+  }
+  .app-header-home::after,
+  .app-header-avatar-link::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .app-header-avatar-link::after {
+    inset: -4px;
+  }
 }
 
 .app-header-logo {
@@ -792,7 +825,7 @@ button.link-muted {
   button.link-muted {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
+    min-height: 40px;
   }
 }
 
@@ -1170,20 +1203,13 @@ a.row-item:focus-visible {
 }
 
 @media (pointer: coarse) {
+  /* Un botón solo de ícono (sin padding de texto) no baja de 40px de ancho. */
   .btn {
-    min-height: 40px;
+    min-width: var(--control-height-sm);
   }
-  .btn-sm {
-    min-height: 36px;
-  }
-  .btn-icon {
+  .app-header .btn-icon {
     width: 40px;
     height: 40px;
-  }
-  .btn-icon.btn-sm,
-  .btn-icon-sm {
-    width: 36px;
-    height: 36px;
   }
 }
 
@@ -1290,12 +1316,6 @@ a.row-item:focus-visible {
 .chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-@media (pointer: coarse) {
-  .chip {
-    min-height: 36px;
-  }
 }
 
 .filter-chips {
@@ -2084,7 +2104,7 @@ input[type='file']::file-selector-button:hover {
   color: inherit;
   font-family: var(--font-mono);
   font-size: 11px;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 
 @media (max-width: 899px) {
@@ -2101,6 +2121,13 @@ input[type='file']::file-selector-button:hover {
   .header-search-label,
   .header-search-kbd {
     display: none;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 899px) {
+  .header-search {
+    width: 40px;
+    height: 40px;
   }
 }
 
@@ -3252,8 +3279,8 @@ kbd {
   }
   .list-item-actions .btn,
   .list-item-actions .btn-icon-sm {
-    min-height: 36px;
-    min-width: 36px;
+    min-height: var(--control-height-sm);
+    min-width: var(--control-height-sm);
   }
   .list-item-actions .btn span.btn-label-full {
     display: none;
@@ -3367,6 +3394,10 @@ kbd {
 .modal-body {
   font-size: 14px;
   color: var(--color-text-secondary);
+}
+
+.confirm-message {
+  margin: 0;
 }
 
 .modal-actions {
@@ -3574,6 +3605,12 @@ kbd {
   text-decoration: none;
   font-size: 14px;
   border-radius: var(--radius-sm);
+}
+
+@media (pointer: coarse) {
+  .contact-link {
+    min-height: 40px;
+  }
 }
 
 .contact-link:hover,
@@ -4088,6 +4125,24 @@ kbd {
   border: none;
 }
 
+/* Controles de zoom de Leaflet: 30px de fábrica, 40px al tacto. */
+@media (pointer: coarse) {
+  .leaflet-container.leaflet-touch .leaflet-bar a {
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+  }
+}
+
+@media (pointer: coarse) {
+  .map-station-marker::after,
+  .map-reference-marker::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
 /* Inicio del modo departamento sin departamento asignado. */
 .dept-home-empty {
   display: flex;
@@ -4325,7 +4380,7 @@ kbd {
 }
 
 .draft-status .btn {
-  min-height: 36px;
+  min-height: var(--control-height-sm);
 }
 
 /* ---------------------------------------------------------------

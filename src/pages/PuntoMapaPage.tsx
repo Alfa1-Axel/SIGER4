@@ -28,6 +28,7 @@ import {
 import type { PointPermissions } from '../lib/api/mapPoints'
 import { describeSupabaseError } from '../lib/api/errors'
 import { fetchStationById } from '../lib/api/stations'
+import { useConfirm } from '../hooks/useConfirm'
 import { getMapPointFileUrl, isMapPointMimeAllowed, MAP_POINT_FILE_MAX_BYTES } from '../lib/api/storage'
 import { isEditConflict } from '../lib/concurrency'
 import { formatBytes } from '../lib/format'
@@ -89,6 +90,7 @@ function formatValue(field: keyof MapPointSheetPayload, value: unknown): string 
 // lo decide la base (RLS): esta pantalla solo muestra lo que la base entrega.
 export function PuntoMapaPage() {
   const { id } = useParams<{ id: string }>()
+  const confirm = useConfirm()
   const [notice, setNotice, noticeTone] = useNavigationNotice()
 
   const [loading, setLoading] = useState(true)
@@ -347,10 +349,14 @@ export function PuntoMapaPage() {
                 busy={busy === `file-${f.id}`}
                 onOpen={() => void openFile(f)}
                 onValidate={() => void run(`file-${f.id}`, () => validatePointFile(f.id), 'El archivo quedó validado.', 'No pudimos validar el archivo.')}
-                onRemove={() => {
-                  if (window.confirm(`¿Quitar "${f.file_name}" de la ficha? El archivo se borra.`)) {
-                    void run(`file-${f.id}`, () => removePointFile(f), 'Se quitó el archivo.', 'No pudimos quitar el archivo.')
-                  }
+                onRemove={async () => {
+                  const confirmed = await confirm({
+                    title: `¿Quitar "${f.file_name}" de la ficha?`,
+                    message: 'El archivo se borra.',
+                    confirmLabel: 'Quitar archivo',
+                    tone: 'danger',
+                  })
+                  if (confirmed) void run(`file-${f.id}`, () => removePointFile(f), 'Se quitó el archivo.', 'No pudimos quitar el archivo.')
                 }}
               />
             ))}

@@ -215,7 +215,7 @@ export function CalendarioPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <button
               type="button"
-              className="btn btn-outlined btn-sm"
+              className="btn btn-outlined btn-icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
               aria-label="Mes anterior"
             >
@@ -226,7 +226,7 @@ export function CalendarioPage() {
             </strong>
             <button
               type="button"
-              className="btn btn-outlined btn-sm"
+              className="btn btn-outlined btn-icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
               aria-label="Mes siguiente"
             >
@@ -259,7 +259,6 @@ export function CalendarioPage() {
                       borderRadius: 'var(--radius-lg)',
                       border: isSelected ? '2px solid var(--color-primary)' : isToday ? '1px solid var(--color-primary)' : '1px solid transparent',
                       background: isSelected ? 'var(--color-primary-soft)' : 'transparent',
-                      opacity: inMonth ? 1 : 0.35,
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
@@ -267,9 +266,9 @@ export function CalendarioPage() {
                       gap: 2,
                     }}
                   >
-                    <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day.getDate()}</span>
+                    <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: inMonth ? undefined : 'var(--color-text-muted)' }}>{day.getDate()}</span>
                     {dayEvents.length > 0 && (
-                      <span style={{ display: 'flex', gap: 2 }}>
+                      <span style={{ display: 'flex', gap: 2, opacity: inMonth ? 1 : 0.6 }}>
                         {dayEvents.slice(0, 3).map((e) => (
                           <span
                             key={e.id}

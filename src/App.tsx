@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { SwUpdateBanner } from './components/SwUpdateBanner'
+import { ConfirmProvider } from './components/ui/ConfirmDialog'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
@@ -72,6 +73,7 @@ export default function App() {
     <>
       <SwUpdateBanner />
       <AuthProvider>
+        <ConfirmProvider>
         <NotificationPushBridge />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -163,6 +165,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/panel" replace />} />
         <Route path="*" element={<Navigate to="/panel" replace />} />
       </Routes>
+        </ConfirmProvider>
       </AuthProvider>
     </>
   )

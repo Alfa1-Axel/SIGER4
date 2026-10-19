@@ -19,6 +19,7 @@ import type { InventoryItem, InventoryLoanRequest, Profile, Station } from '../t
 import { useAuth } from '../hooks/useAuth'
 import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { useConfirm } from '../hooks/useConfirm'
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—'
@@ -175,9 +176,17 @@ export function SolicitudPrestamoDetallePage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleCancel() {
     if (!request) return
-    if (!window.confirm('¿Cancelar esta solicitud? Queda en el historial marcada como cancelada.')) return
+    const confirmed = await confirm({
+      title: '¿Cancelar esta solicitud?',
+      message: 'Queda en el historial marcada como cancelada.',
+      confirmLabel: 'Cancelar la solicitud',
+      cancelLabel: 'Volver',
+    })
+    if (!confirmed) return
     setError(null)
     setUpdating(true)
     try {

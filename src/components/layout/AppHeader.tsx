@@ -35,10 +35,15 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
     }
     measure()
     window.addEventListener('resize', measure)
-    if (typeof document !== 'undefined' && document.fonts?.ready) {
-      document.fonts.ready.then(measure).catch(() => undefined)
+    // Una tipografía que termina de cargar después del primer cálculo (p. ej. el peso en negrita del
+    // título) cambia el ancho del texto: se vuelve a medir cada vez que se carga una.
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined
+    if (fonts?.ready) fonts.ready.then(measure).catch(() => undefined)
+    fonts?.addEventListener?.('loadingdone', measure)
+    return () => {
+      window.removeEventListener('resize', measure)
+      fonts?.removeEventListener?.('loadingdone', measure)
     }
-    return () => window.removeEventListener('resize', measure)
   }, [title])
 
   // El contador sale de la misma bandeja que /notificaciones (my_notifications,

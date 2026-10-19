@@ -67,7 +67,9 @@ export function DepartmentHome() {
 
       <button type="button" className="home-search" onClick={openGlobalSearch}>
         <Icon name="search" size={18} />
-        <span>Buscar en SIGER4: tu departamento, informes, eventos, avisos…</span>
+        <span>
+          Buscar en SIGER4<span className="home-search-hint">: tu departamento, informes, eventos, avisos…</span>
+        </span>
       </button>
 
       {departments === null && (

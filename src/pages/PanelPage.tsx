@@ -89,7 +89,9 @@ function GeneralHome() {
 
       <button type="button" className="home-search" onClick={openGlobalSearch}>
         <Icon name="search" size={18} />
-        <span>Buscar en SIGER4: usuarios, documentos, informes, elementos…</span>
+        <span>
+          Buscar en SIGER4<span className="home-search-hint">: usuarios, documentos, informes, elementos…</span>
+        </span>
       </button>
 
       <nav className="quick-actions" aria-label="Accesos rápidos">

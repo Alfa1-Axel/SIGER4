@@ -46,14 +46,20 @@ export function LoginPage() {
     if (!cleanEmail) return setError('Escribí tu email institucional.')
     if (!password) return setError('Escribí tu contraseña.')
     setSubmitting(true)
-    const result = await signIn(cleanEmail, password)
-    if (result.error) {
+    try {
+      const result = await signIn(cleanEmail, password)
+      if (result.error) {
+        setSubmitting(false)
+        setError(describeSignInError(result))
+        return
+      }
+      saveRememberedEmail(rememberEmail ? cleanEmail : null)
+      void offerToSaveCredential(cleanEmail, password)
+    } catch (err) {
+      // Un fallo que no llega como {error} (red cortada a mitad de pedido) no debe dejar el formulario trabado.
       setSubmitting(false)
-      setError(describeSignInError(result))
-      return
+      setError(describeSignInError({ error: err instanceof Error ? err.message : null }))
     }
-    saveRememberedEmail(rememberEmail ? cleanEmail : null)
-    void offerToSaveCredential(cleanEmail, password)
   }
 
   async function handlePasskey() {

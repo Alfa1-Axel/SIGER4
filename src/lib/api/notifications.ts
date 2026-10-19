@@ -40,7 +40,7 @@ export async function fetchNotificationsForProfile(_profileId: string, limit = 1
 // trae filas) -- reemplaza el filter(!is_read).length sobre una página
 // limitada que usaba el header antes, que subestimaba el conteo si había
 // más no leídas que el límite de esa página.
-export async function fetchUnreadNotificationCount(): Promise<number> {
+async function loadUnreadNotificationCount(): Promise<number> {
   const { count, error } = await supabase
     .from('my_notifications')
     .select('id', { count: 'exact', head: true })
@@ -48,6 +48,27 @@ export async function fetchUnreadNotificationCount(): Promise<number> {
     .eq('is_read', false)
   if (error) throw error
   return count ?? 0
+}
+
+// El encabezado y el resumen de pendientes del Inicio lo piden al mismo tiempo: mientras hay un pedido en
+// vuelo se comparte su resultado en lugar de repetirlo. Cualquier cambio en las notificaciones lo descarta,
+// así nadie recibe un número viejo.
+let unreadCountInFlight: Promise<number> | null = null
+
+export function fetchUnreadNotificationCount(): Promise<number> {
+  if (!unreadCountInFlight) {
+    const request = loadUnreadNotificationCount().finally(() => {
+      if (unreadCountInFlight === request) unreadCountInFlight = null
+    })
+    unreadCountInFlight = request
+  }
+  return unreadCountInFlight
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, () => {
+    unreadCountInFlight = null
+  })
 }
 
 // Últimas no leídas, para el Inicio.

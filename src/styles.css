@@ -2355,10 +2355,17 @@ kbd {
   outline-offset: 2px;
 }
 
-.home-search span {
+.home-search > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* En pantallas angostas queda solo "Buscar en SIGER4": la lista de lo que se puede buscar no entra y se cortaba. */
+@media (max-width: 480px) {
+  .home-search-hint {
+    display: none;
+  }
 }
 
 /* Contacto directo con Informática y Estadística (components/SupportContact.tsx). */

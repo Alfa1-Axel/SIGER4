@@ -98,7 +98,7 @@ export function SolicitudesPrestamoPage() {
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={statusFilter} aria-label="Filtrar por estado" onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los estados</option>
           {STATUS_FILTERS.map((status) => (
             <option key={status} value={status}>
@@ -109,7 +109,7 @@ export function SolicitudesPrestamoPage() {
         <button type="button" className="chip" aria-pressed={onlyMine} onClick={() => setOnlyMine((v) => !v)}>
           Mis solicitudes
         </button>
-        <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={stationFilter} aria-label="Filtrar por cuartel" onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los cuarteles</option>
           {stations.map((station) => (
             <option key={station.id} value={station.id}>

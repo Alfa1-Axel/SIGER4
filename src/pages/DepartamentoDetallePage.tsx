@@ -779,7 +779,7 @@ export function DepartamentoDetallePage() {
 
         {canManage && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            <select value={newMemberProfileId} onChange={(e) => setNewMemberProfileId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+            <select value={newMemberProfileId} aria-label="Usuario a agregar como miembro" onChange={(e) => setNewMemberProfileId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
               <option value="">Seleccionar usuario…</option>
               {availableProfiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -895,7 +895,7 @@ export function DepartamentoDetallePage() {
             )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn btn-primary" disabled={savingManualMember}>
-                {savingManualMember ? 'Guardando…' : 'Guardar'}
+                {savingManualMember ? 'Guardando…' : manualMemberForm.id ? 'Guardar cambios' : 'Agregar integrante'}
               </button>
               <button type="button" className="btn btn-outlined" onClick={() => setManualMemberForm(null)}>
                 Cancelar
@@ -1052,7 +1052,7 @@ export function DepartamentoDetallePage() {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: reports.length > 0 ? 16 : 0 }}>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={typeFilter} aria-label="Filtrar por tipo de actividad" onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todos los tipos</option>
             {(Object.entries(DEPARTMENT_ACTIVITY_TYPE_LABEL) as [DepartmentActivityType, string][]).map(([value, label]) => (
               <option key={value} value={value}>
@@ -1060,7 +1060,7 @@ export function DepartamentoDetallePage() {
               </option>
             ))}
           </select>
-          <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={stationFilter} aria-label="Filtrar por cuartel" onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todos los cuarteles</option>
             {stations.map((s) => (
               <option key={s.id} value={s.id}>
@@ -1068,7 +1068,7 @@ export function DepartamentoDetallePage() {
               </option>
             ))}
           </select>
-          <select value={subsedeFilter} onChange={(e) => setSubsedeFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={subsedeFilter} aria-label="Filtrar por subsede" onChange={(e) => setSubsedeFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todas las subsedes</option>
             {subsedes.map((s) => (
               <option key={s.id} value={s.id}>

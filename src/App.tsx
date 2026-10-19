@@ -1,9 +1,11 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { Suspense, lazy } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Suspense, lazy, type ReactNode } from 'react'
 import { AuthProvider } from './hooks/useAuth'
 import { NotificationPushBridge } from './components/NotificationPushBridge'
 import { SwUpdateBanner } from './components/SwUpdateBanner'
 import { ConfirmProvider } from './components/ui/ConfirmDialog'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { NotFoundPage } from './pages/NotFoundPage'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { UserManagerRoute } from './components/layout/UserManagerRoute'
 import { ReportsRoute } from './components/layout/ReportsRoute'
@@ -68,6 +70,12 @@ import { PuntoMapaPage } from './pages/PuntoMapaPage'
 import { PuntoMapaFichaFormPage } from './pages/PuntoMapaFichaFormPage'
 import { PuntoMapaVerificacionFormPage } from './pages/PuntoMapaVerificacionFormPage'
 
+// Un error de una pantalla no tira abajo toda la app, e ir a otra pantalla vuelve a intentar.
+function RoutedErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+}
+
 export default function App() {
   return (
     <>
@@ -75,6 +83,7 @@ export default function App() {
       <AuthProvider>
         <ConfirmProvider>
         <NotificationPushBridge />
+      <RoutedErrorBoundary>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cambiar-password" element={<CambiarPasswordPage />} />
@@ -163,8 +172,9 @@ export default function App() {
         <Route path="/novedades/*" element={<Navigate to="/panel" replace />} />
         <Route path="/roles/*" element={<Navigate to="/panel" replace />} />
         <Route path="/" element={<Navigate to="/panel" replace />} />
-        <Route path="*" element={<Navigate to="/panel" replace />} />
+        <Route path="*" element={<ProtectedRoute><NotFoundPage /></ProtectedRoute>} />
       </Routes>
+      </RoutedErrorBoundary>
         </ConfirmProvider>
       </AuthProvider>
     </>

@@ -41,7 +41,7 @@ export function AppShell({ title, children }: AppShellProps) {
 
   const sidebarAndBackdrop = (
     <>
-      <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} modal={isMobile} />
       <div
         className={`sidebar-drawer-backdrop${drawerOpen ? ' open' : ''}`}
         onClick={() => setDrawerOpen(false)}

@@ -17,6 +17,7 @@ import { fetchAvalesDepartments } from '../lib/api/schoolAvales'
 import { fetchStationBasicDirectory } from '../lib/api/stations'
 import { useAccessContext } from '../hooks/useAccessContext'
 import { OPEN_SEARCH_EVENT } from '../lib/searchControl'
+import { useDialogFocus } from '../hooks/useDialogFocus'
 
 const PER_MODULE = 4
 const PER_MODULE_FILTERED = 20
@@ -84,6 +85,8 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
   const titleId = useId()
   const listId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialogRef, onClose, inputRef)
   const [query, setQuery] = useState('')
   const [debounced, setDebounced] = useState('')
   const [filter, setFilter] = useState<SearchModule | 'todos'>('todos')
@@ -189,7 +192,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
 
   return createPortal(
     <div className="search-overlay" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="search-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={handleKeyDown}>
+      <div ref={dialogRef} className="search-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={handleKeyDown}>
         <h2 id={titleId} className="sr-only">
           Buscar en SIGER4
         </h2>

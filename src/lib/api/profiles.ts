@@ -21,16 +21,26 @@ export async function fetchCurrentUserContext(authUserId: string): Promise<Curre
     .eq('auth_user_id', authUserId)
     .single()
 
-  if (profileError || !profile) {
-    return null
+  // Sin fila (PGRST116) la persona no tiene perfil: devuelve null. Cualquier otro error (red, 5xx) se
+  // propaga: confundirlo con "sin perfil" le mostraría a quien sí tiene permisos una app sin ninguno.
+  if (profileError) {
+    if (profileError.code === 'PGRST116') return null
+    throw profileError
   }
+  if (!profile) return null
 
-  const [{ data: roles }, { data: scopes }, { data: coordinated }, { data: memberships }] = await Promise.all([
+  const [rolesRes, scopesRes, coordinatedRes, membershipsRes] = await Promise.all([
     supabase.from('user_roles').select('*').eq('profile_id', profile.id),
     supabase.from('user_scopes').select('*').eq('profile_id', profile.id),
     supabase.from('departments').select('id').eq('coordinator_profile_id', profile.id),
     supabase.from('department_members').select('department_id').eq('profile_id', profile.id),
   ])
+  const failed = [rolesRes, scopesRes, coordinatedRes, membershipsRes].find((res) => res.error)
+  if (failed?.error) throw failed.error
+  const { data: roles } = rolesRes
+  const { data: scopes } = scopesRes
+  const { data: coordinated } = coordinatedRes
+  const { data: memberships } = membershipsRes
 
   // Rol + departamento (0106): figurar en un departamento sin el rol
   // Coordinador/Miembro de Departamento no da acceso. Informática no lo necesita.

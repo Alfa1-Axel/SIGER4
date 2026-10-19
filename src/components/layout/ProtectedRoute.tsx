@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
+import { FallbackScreen } from '../ui/FallbackScreen'
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { session, loading, deactivated, profile } = useAuth()
+  const { session, loading, deactivated, profile, profileError, retryProfile, signOut } = useAuth()
 
   if (loading) {
     return (
@@ -25,6 +26,21 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (!session) {
     return <Navigate to="/login" replace />
+  }
+
+  // Hay sesión pero el perfil no cargó (red caída, servidor ocupado): se avisa y se deja reintentar, en vez de
+  // mostrar la app como si la persona no tuviera ningún permiso.
+  if (profileError && !profile) {
+    return (
+      <FallbackScreen title="No pudimos cargar tu perfil" message={profileError}>
+        <button type="button" className="btn btn-primary btn-block" onClick={retryProfile}>
+          Reintentar
+        </button>
+        <button type="button" className="btn btn-outlined btn-block" onClick={() => void signOut()}>
+          Cerrar sesión
+        </button>
+      </FallbackScreen>
+    )
   }
 
   // Contraseña temporal definida por un admin al crear la cuenta: bloquea

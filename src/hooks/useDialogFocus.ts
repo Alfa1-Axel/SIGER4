@@ -21,13 +21,15 @@ export function useDialogFocus(
   containerRef: RefObject<HTMLElement | null>,
   onClose: () => void,
   initialFocus?: RefObject<HTMLElement | null>,
+  // false: el diálogo existe pero no está en uso (p. ej. el menú lateral en escritorio o cerrado).
+  enabled = true,
 ) {
   const closeRef = useRef(onClose)
   closeRef.current = onClose
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container) return
+    if (!enabled || !container) return
     const id = Symbol('dialog')
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
     stack.push(id)
@@ -74,7 +76,7 @@ export function useDialogFocus(
       if (stack.length === 0) setPageInert(false)
       if (previous && document.contains(previous)) previous.focus({ preventScroll: true })
     }
-    // El contenedor y el foco inicial se fijan al montar el diálogo.
+    // El contenedor y el foco inicial se fijan al activar el diálogo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [enabled])
 }

@@ -4,6 +4,7 @@ import { NAV_ITEMS, NAV_SECTIONS, isNavItemVisible, navItemLabel } from './navig
 import type { NavContext } from './navigation'
 import { Icon } from '../ui/Icon'
 import { useAuth } from '../../hooks/useAuth'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 function UserAvatar({ avatarUrl }: { avatarUrl: string | null | undefined }) {
   if (avatarUrl) return <img src={avatarUrl} alt="" className="avatar" style={{ width: 28, height: 28 }} />
@@ -17,6 +18,8 @@ function UserAvatar({ avatarUrl }: { avatarUrl: string | null | undefined }) {
 interface SidebarProps {
   open: boolean
   onClose: () => void
+  // true cuando es el menú desplegable del celular (no la columna fija de escritorio).
+  modal?: boolean
 }
 
 // En desktop (≥900px) el sidebar es una columna fija de la grilla, siempre
@@ -24,13 +27,28 @@ interface SidebarProps {
 // breakpoint). En mobile/tablet es un drawer off-canvas que se desliza según
 // la clase "open"; se cierra solo al elegir una opción, tocar el botón de
 // cierre, o el backdrop (manejado por AppShell).
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, modal = false }: SidebarProps) {
   const { profile, signOut, isAdmin, isSuperAdmin, isDepartmentOnly, hasRole, coordinatedDepartmentIds, memberDepartmentIds } = useAuth()
   const departmentCount = new Set([...coordinatedDepartmentIds, ...memberDepartmentIds]).size
   const navContext: NavContext = { isAdmin, isSuperAdmin, hasRole, hasDepartments: departmentCount > 0, departmentCount, departmentOnly: isDepartmentOnly }
   const visibleItems = NAV_ITEMS.filter((item) => isNavItemVisible(item, navContext))
   const navRef = useRef<HTMLElement>(null)
+  const asideRef = useRef<HTMLElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
   const { pathname } = useLocation()
+
+  // Menú del celular cerrado: queda fuera de la pantalla y también fuera del alcance del teclado y del
+  // lector de pantalla (antes el Tab entraba a enlaces que no se veían).
+  useEffect(() => {
+    const aside = asideRef.current
+    if (!aside) return
+    if (modal && !open) aside.setAttribute('inert', '')
+    else aside.removeAttribute('inert')
+  }, [modal, open])
+
+  // Va después del efecto de arriba: al abrir, primero se le quita el inert y recién ahí se le da el foco.
+  // Menú del celular abierto: Escape lo cierra, el foco queda adentro y vuelve al botón que lo abrió.
+  useDialogFocus(asideRef, onClose, closeRef, modal && open)
 
   // Con muchos ítems (Informática) el menú scrollea: si el ítem activo quedó
   // fuera de vista, se lo centra moviendo solo el menú, no la página.
@@ -46,13 +64,17 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   }, [pathname, open])
 
   return (
-    <aside className={`app-sidebar${open ? ' open' : ''}`}>
+    <aside
+      ref={asideRef}
+      className={`app-sidebar${open ? ' open' : ''}`}
+      {...(modal && open ? { role: 'dialog', 'aria-modal': true, 'aria-label': 'Menú' } : {})}
+    >
       <div className="sidebar-brand-row">
         <Link to="/panel" className="sidebar-brand" aria-label="SIGER4: ir al inicio" onClick={onClose}>
           <img src="/logos/logo-escuela.png" alt="" />
           <span>SIGER4</span>
         </Link>
-        <button type="button" className="btn btn-icon btn-ghost sidebar-close-button" onClick={onClose} aria-label="Cerrar menú">
+        <button ref={closeRef} type="button" className="btn btn-icon btn-ghost sidebar-close-button" onClick={onClose} aria-label="Cerrar menú">
           <Icon name="close" size={18} />
         </button>
       </div>

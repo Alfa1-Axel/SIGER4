@@ -5,6 +5,10 @@ import { registerSW } from 'virtual:pwa-register'
 import App from './App'
 import './styles.css'
 import { reportSwUpdateAvailable } from './lib/swUpdate'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { installGlobalErrorHandlers } from './lib/clientErrors'
+
+installGlobalErrorHandlers()
 
 // Registro manual del service worker (ver vite.config.ts, injectRegister:
 // false) — a diferencia del <script> que el plugin inyectaría solo, esto
@@ -31,8 +35,10 @@ const updateServiceWorker = registerSW({
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </ErrorBoundary>
   </StrictMode>,
 )

@@ -507,6 +507,11 @@ h3 {
   margin: 0 auto;
 }
 
+/* Con el botón flotante "+" en pantalla, el final de la lista queda libre para que no lo tape. */
+.app-content:has(.fab) {
+  padding-bottom: 88px;
+}
+
 .sidebar-drawer-backdrop {
   display: none;
 }
@@ -3458,6 +3463,27 @@ kbd {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: 28px 24px;
+}
+
+/* Pantalla de aviso a página completa (error de pantalla, perfil que no cargó): comparte el marco del ingreso. */
+.fallback-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.fallback-message {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.fallback-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .login-logos {

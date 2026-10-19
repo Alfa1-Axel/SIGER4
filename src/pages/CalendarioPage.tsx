@@ -173,7 +173,7 @@ export function CalendarioPage() {
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={typeFilter} aria-label="Filtrar por tipo" onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los tipos</option>
           {Object.entries(EVENT_TYPE_LABEL)
             .filter(([value]) => !isDepartmentOnly || DEPARTMENT_EVENT_TYPES.includes(value as CalendarEventType))
@@ -183,7 +183,7 @@ export function CalendarioPage() {
               </option>
             ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={statusFilter} aria-label="Filtrar por estado" onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los estados</option>
           {Object.entries(EVENT_STATUS_LABEL).map(([value, label]) => (
             <option key={value} value={value}>

@@ -500,7 +500,7 @@ function PrivateSection({ pointId, data, onSaved }: { pointId: string; data: Map
           </div>
           {error && <div className="alert alert-danger" role="alert">{error}</div>}
           <div className="sheet-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>{saving ? 'Guardando…' : 'Guardar'}</button>
+            <button type="button" className="btn btn-primary" onClick={() => void handleSave()} disabled={saving}>{saving ? 'Guardando…' : 'Guardar datos reservados'}</button>
             <button type="button" className="btn btn-outlined" onClick={() => setEditing(false)} disabled={saving}>Cancelar</button>
           </div>
         </div>

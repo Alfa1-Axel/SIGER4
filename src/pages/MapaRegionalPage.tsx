@@ -563,6 +563,7 @@ export function MapaRegionalPage() {
                   key={station.id}
                   position={[station.latitude as number, station.longitude as number]}
                   icon={stationDivIcon}
+                  title={station.name}
                 >
                   <Popup>
                     <StationPopupContent station={station} />
@@ -571,7 +572,7 @@ export function MapaRegionalPage() {
               ))}
               {showReferenceLayer &&
                 filteredPoints.map((point) => (
-                  <Marker key={point.id} position={[point.latitude, point.longitude]} icon={referenceDivIcon(point.type)}>
+                  <Marker key={point.id} position={[point.latitude, point.longitude]} icon={referenceDivIcon(point.type)} title={point.name}>
                     <Popup>
                       <ReferencePopupContent
                         point={point}
@@ -821,7 +822,7 @@ export function MapaRegionalPage() {
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? 'Guardando…' : 'Guardar'}
+                    {submitting ? 'Guardando…' : 'Guardar punto'}
                   </button>
                   <button type="button" className="btn btn-outlined" onClick={() => setFormOpen(false)} disabled={submitting}>
                     Cancelar

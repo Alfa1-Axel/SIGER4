@@ -133,11 +133,11 @@ export function VehiculoFormPage() {
     setError(null)
 
     if (!vehicleTypeSelect) {
-      setError('Seleccioná el tipo de vehículo.')
+      setError('Seleccioná el tipo de móvil.')
       return
     }
     if (vehicleTypeSelect === OTHER_VEHICLE_TYPE && !vehicleTypeOther.trim()) {
-      setError('Especificá el tipo de vehículo.')
+      setError('Especificá el tipo de móvil.')
       return
     }
     const resolvedVehicleType = vehicleTypeSelect === OTHER_VEHICLE_TYPE ? vehicleTypeOther.trim() : vehicleTypeSelect
@@ -167,7 +167,7 @@ export function VehiculoFormPage() {
       if (isEditing && attempted && isEditConflict(err)) {
         setConflict({ mine: attempted })
       } else {
-        setError(describeSupabaseError(err, 'No pudimos guardar el vehículo.'))
+        setError(describeSupabaseError(err, 'No pudimos guardar el móvil.'))
       }
     } finally {
       setSubmitting(false)
@@ -183,21 +183,21 @@ export function VehiculoFormPage() {
   }
 
   return (
-    <AppShell title={isEditing ? 'Editar Vehículo' : 'Nuevo Vehículo'}>
-      <h1 className="page-title">{isEditing ? 'Editar Vehículo' : 'Nuevo Vehículo'}</h1>
-      <p className="page-subtitle">Datos del móvil / vehículo del cuartel.</p>
+    <AppShell title={isEditing ? 'Editar Móvil' : 'Nuevo Móvil'}>
+      <h1 className="page-title">{isEditing ? 'Editar Móvil' : 'Nuevo Móvil'}</h1>
+      <p className="page-subtitle">Datos del móvil del cuartel.</p>
 
       {!loading && (status === 'vendido' || status === 'transferido' || status === 'baja') && (
         <div className="card" style={{ marginBottom: 16 }}>
           <p style={{ fontSize: 13 }}>
-            Este vehículo está dado de baja de la flota ({STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}).
+            Este móvil está dado de baja de la flota ({STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status}).
             Podés seguir editando sus datos, pero el estado solo se cambia desde el detalle del cuartel.
           </p>
         </div>
       )}
 
       {loading ? (
-        <div className="loading-state" role="status">Cargando datos del vehículo…</div>
+        <div className="loading-state" role="status">Cargando datos del móvil…</div>
       ) : (
         <form onSubmit={handleSubmit} className="card-solid">
           <div className="field">
@@ -206,7 +206,7 @@ export function VehiculoFormPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="vehicleType">Tipo de vehículo</label>
+            <label htmlFor="vehicleType">Tipo de móvil</label>
             <select
               id="vehicleType"
               required
@@ -228,7 +228,7 @@ export function VehiculoFormPage() {
 
           {vehicleTypeSelect === OTHER_VEHICLE_TYPE && (
             <div className="field">
-              <label htmlFor="vehicleTypeOther">Especificar tipo de vehículo</label>
+              <label htmlFor="vehicleTypeOther">Especificar tipo de móvil</label>
               <input
                 id="vehicleTypeOther"
                 required

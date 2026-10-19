@@ -227,6 +227,7 @@ export function PapeleraDocumentosPage() {
                       className="btn btn-danger-outline"
                       disabled={busyId === doc.id}
                       onClick={() => handlePurgeOne(doc)}
+                      aria-label={`Borrar definitivamente ${doc.title}`}
                     >
                       <Icon name="trash" size={14} />
                       <span className="btn-label-full">Borrar ya</span>

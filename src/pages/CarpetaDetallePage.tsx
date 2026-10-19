@@ -258,10 +258,10 @@ export function CarpetaDetallePage() {
           </div>
           {canManageFolders && folder && (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" className="btn btn-outlined btn-sm" onClick={() => setEditingFolder(true)}>
+              <button type="button" className="btn btn-outlined btn-sm" onClick={() => setEditingFolder(true)} aria-label="Editar carpeta">
                 <Icon name="edit" size={14} />
               </button>
-              <button type="button" className="btn btn-danger-outline btn-sm" onClick={handleDeleteFolder}>
+              <button type="button" className="btn btn-danger-outline btn-sm" onClick={handleDeleteFolder} aria-label="Eliminar carpeta">
                 <Icon name="trash" size={14} />
               </button>
             </div>

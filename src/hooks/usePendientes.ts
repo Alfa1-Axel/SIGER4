@@ -5,7 +5,7 @@ import { countRecentAvales, countRecentDepartmentReports, fetchOpenLoanRequests 
 import type { OpenLoan } from '../lib/api/homeTasks'
 import { fetchLatestUnreadNotifications, fetchUnreadNotificationCount } from '../lib/api/notifications'
 import { canOpenPath } from '../lib/moduleAccess'
-import { isImportantNotification, openableNotificationLink, timeAgo } from '../lib/notificationMeta'
+import { RELEASE_NOTIFICATION_TYPE, isImportantNotification, openableNotificationLink, timeAgo } from '../lib/notificationMeta'
 import { useAuth } from './useAuth'
 import { useLoanRequestAccess } from './useLoanRequestAccess'
 import { useSchoolAvalesAccess } from './useSchoolAvalesAccess'
@@ -169,16 +169,20 @@ export function usePendientes(): UsePendientesResult {
       }
 
       // Avisos sin leer: entran como pendientes los importantes (piden hacer
-      // algo) y los de un departamento. El resto solo se cuenta.
+      // algo), los de un departamento y el aviso de "Nueva actualización" (de
+      // baja prioridad, solo mientras no se lee). El resto solo se cuenta.
       let shown = 0
       if (unreadRes.status === 'fulfilled') {
         for (const n of unreadRes.value) {
           const asksForAction = isImportantNotification(n)
-          if (!asksForAction && !n.department_id) continue
+          const isReleaseNotice = n.type === RELEASE_NOTIFICATION_TYPE
+          if (!asksForAction && !n.department_id && !isReleaseNotice) continue
           shown += 1
           list.push({
             key: `notif_${n.id}`,
-            title: n.title,
+            // El título del aviso de actualización es siempre el mismo; lo que informa es
+            // qué módulos cambiaron.
+            title: isReleaseNotice ? (n.body ?? n.title) : n.title,
             description: timeAgo(n.created_at),
             priority: asksForAction ? 'media' : 'baja',
             to: openableNotificationLink(n, canManageUsers, isDepartmentOnly, hasAvalesAccess) ?? '/notificaciones',

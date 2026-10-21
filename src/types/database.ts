@@ -128,6 +128,10 @@ export type NotificationType =
   // Avisos del sistema para un departamento (0105): te sumaron, ahora
   // coordinás, aval nuevo, actividad registrada.
   | 'aviso_departamento'
+  // "Nueva actualización" (0121/0122): un aviso breve por versión publicada, para
+  // todos los perfiles activos. Lo crea solo el comando de publicación, nunca la
+  // aplicación.
+  | 'actualizacion_publicada'
 
 export interface Notification {
   id: string
@@ -140,9 +144,11 @@ export interface Notification {
   body: string | null
   is_read: boolean
   created_at: string
-  // Solo para type='actualizacion_sistema': notificaciones de novedades que
-  // generaban las versiones anteriores. Ya no se crean ni se muestran (ver
-  // HIDDEN_NOTIFICATION_TYPE); la columna sigue en la base. Null en el resto.
+  // Identificador de una actualización. Con type='actualizacion_sistema' son las
+  // novedades que generaban las versiones anteriores: ya no se crean ni se
+  // muestran (ver HIDDEN_NOTIFICATION_TYPE). Con type='actualizacion_publicada'
+  // es 'release:<versión>' y evita avisar dos veces la misma versión. Null en el
+  // resto.
   app_update_id: string | null
   // Departamento de origen (0106): solo informativo, para mostrar
   // "Departamento Fuego" y filtrar. Null en el resto.

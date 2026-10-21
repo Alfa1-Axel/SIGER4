@@ -303,6 +303,29 @@ export function buildTables() {
     { ...notif(7, 'prestamo_vencido', 'Préstamo vencido: Motobomba portátil', 'La devolución estaba prevista para ayer.', false, 1.5), profile_id: PROF.comun, region_id: null },
     { ...notif(8, 'circular_nueva', 'Guardia del sábado', 'Nos juntamos a las 9 en Las Varillas.', false, 0.1), profile_id: PROF.mfuego, region_id: null, link_path: `/departamentos/${DEP.fuego}`, department_id: DEP.fuego },
     { ...notif(9, 'aviso_departamento', 'Nuevo aval de Fuego: Aval curso Incendios Estructurales Nivel I', 'Lo cargó María Fernanda López.', false, 0.05), profile_id: PROF.fuego, region_id: null, link_path: `/escuela/avales?departamento=${DEP.fuego}`, department_id: DEP.fuego },
+    // "Nueva actualización" (0122): un aviso personal por perfil activo y por versión. Con un solo módulo lleva
+    // enlace (para quien trabaja solo en departamentos, el de Inventario, que no puede abrir); con varios, no.
+    ...[
+      ['admin', 'a01', 'Hay nuevas actualizaciones en Usuarios y roles, Mapa Regional y Documentos.', null],
+      ['comun', 'a02', 'Hay una nueva actualización en Documentos.', '/documentos'],
+      ['jefe', 'a03', 'Hay una nueva actualización en Documentos.', '/documentos'],
+      ['fuego', 'a04', 'Hay una nueva actualización en Documentos.', '/documentos'],
+      ['mfuego', 'a05', 'Hay una nueva actualización en Inventario.', '/inventario'],
+    ].map(([who, suffix, body, link]) => ({
+      id: `60000000-0000-4000-8000-000000000${suffix}`,
+      profile_id: PROF[who],
+      region_id: null,
+      subsede_id: null,
+      station_id: null,
+      type: 'actualizacion_publicada',
+      title: 'Nueva actualización',
+      body,
+      is_read: false,
+      created_at: iso(-0.02),
+      app_update_id: 'release:1.18.0',
+      link_path: link,
+      department_id: null,
+    })),
   ]
 
   const inventory_items = [

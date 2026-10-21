@@ -1,7 +1,7 @@
 {
   "name": "SIGER4",
   "private": true,
-  "version": "1.18.0",
+  "version": "1.19.0",
   "type": "module",
   "description": "SIGER4 - Sistema Informático de GEstión de la Regional 4",
   "scripts": {
@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "security:check": "node scripts/security-check.mjs",
-    "test:ui": "node tests/ui/check.mjs"
+    "test:ui": "node tests/ui/check.mjs",
+    "test:release": "node tests/release/check.mjs",
+    "release:announce": "node scripts/announce-release.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

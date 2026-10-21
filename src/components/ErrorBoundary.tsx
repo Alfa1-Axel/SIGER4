@@ -48,7 +48,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     return (
-      <FallbackScreen title="Algo salió mal en esta pantalla" message="No es algo que hayas hecho vos. Probá de nuevo; si sigue pasando, volvé al inicio y avisale a Informática y Estadística.">
+      <FallbackScreen title="Algo falló al cargar esta pantalla" message="Reintentá o volvé al inicio. Si sigue pasando, avisale a Informática y Estadística.">
         <button type="button" className="btn btn-primary btn-block" onClick={() => this.setState({ error: null })}>
           Reintentar
         </button>

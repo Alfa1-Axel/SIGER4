@@ -10,24 +10,9 @@ import { fetchVisibleDepartments } from '../lib/api/departments'
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EVENT_TYPE_LABEL, EVENT_STATUS_LABEL } from '../lib/labels'
 
-export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
-  regional: 'Regional',
-  cuartel: 'Cuartel',
-  escuela: 'Escuela',
-  capacitacion: 'Capacitación',
-  vencimiento: 'Vencimiento',
-  guardia: 'Guardia',
-  reunion: 'Reunión',
-  mantenimiento: 'Mantenimiento',
-  otro: 'Otro',
-}
 
-export const EVENT_STATUS_LABEL: Record<CalendarEventStatus, string> = {
-  programado: 'Programado',
-  cancelado: 'Cancelado',
-  finalizado: 'Finalizado',
-}
 
 const EVENT_STATUS_BADGE: Record<CalendarEventStatus, string> = {
   programado: 'badge-success',

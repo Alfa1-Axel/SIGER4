@@ -11,7 +11,7 @@ import {
 import { fetchDepartmentById, fetchDepartmentMembers } from '../lib/api/departments'
 import { fetchStations } from '../lib/api/stations'
 import { fetchSubsedes } from '../lib/api/subsedes'
-import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from './DepartamentoDetallePage'
+import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from '../lib/labels'
 import type { Department, DepartmentActivityType, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError, postgrestCode } from '../lib/api/errors'

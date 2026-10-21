@@ -12,7 +12,7 @@ import {
   fetchInventoryItemById,
   fetchInventoryItemHistory,
 } from '../lib/api/inventory'
-import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPage'
+import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from '../lib/labels'
 import type { InventoryCategory, InventoryItemHistory, InventoryStatus, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'

@@ -47,16 +47,8 @@ import { EditConflictPanel } from '../components/EditConflictPanel'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
 import { useConfirm } from '../hooks/useConfirm'
+import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from '../lib/labels'
 
-export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
-  reunion: 'Reunión',
-  capacitacion: 'Capacitación',
-  practica: 'Práctica',
-  mantenimiento: 'Mantenimiento',
-  gestion: 'Gestión',
-  informe: 'Informe',
-  otro: 'Otro',
-}
 
 const MONTH_LABEL_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 

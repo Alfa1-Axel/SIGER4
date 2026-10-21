@@ -17,10 +17,13 @@ import {
 } from '../api/reports'
 import { COMPLIANCE_STATUS_LABEL, complianceReasons } from '../api/compliance'
 import { DEPARTMENT_REPORT_TYPE_LABEL } from '../api/departmentReports'
-import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from '../../pages/DepartamentoDetallePage'
-import { EVENT_TYPE_LABEL } from '../../pages/CalendarioPage'
-import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from '../../pages/InventarioPage'
-import { LOAN_REQUEST_STATUS_LABEL } from '../../pages/SolicitudesPrestamoPage'
+import {
+  DEPARTMENT_ACTIVITY_TYPE_LABEL,
+  EVENT_TYPE_LABEL,
+  INVENTORY_CATEGORY_LABEL,
+  INVENTORY_STATUS_LABEL,
+  LOAN_REQUEST_STATUS_LABEL,
+} from '../labels'
 import { fetchStations } from '../api/stations'
 import type { AttendanceSummary, DepartmentActivityType, DepartmentReportFileKind } from '../../types/database'
 

@@ -175,6 +175,9 @@ try {
         views++
         try {
           await page.goto(BASE + path, { timeout: 30000 })
+          // Cada pantalla es su propio archivo: la primera vez puede tardar en bajar. Se espera a que tenga contenido (hasta 8 s);
+          // una pantalla que de verdad queda en blanco sigue contando como falla.
+          await page.waitForFunction(() => (document.querySelector('main')?.innerText ?? '').trim().length > 20, undefined, { timeout: 8000 }).catch(() => undefined)
           await page.waitForTimeout(700)
           const m = await measure(page, width)
           if (m.textLen < 20 && !m.denied) failures.push(`${where}: pantalla en blanco`)

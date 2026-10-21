@@ -11131,3 +11131,164 @@ where l.action = 'delegated_create' order by l.created_at desc;
 - **El alta falla con "No se pudo registrar el alta":** falta la 0120 o hay algo inesperado en la cuenta nueva; la función revierte (no quedó ninguna cuenta). Los detalles están en los logs de la función (Supabase → Edge Functions → `admin-create-user`).
 - **Una persona sin rol no ve los cuarteles:** su perfil está desactivado; las funciones solo responden a cuentas activas.
 - **Volver atrás (no recomendado):** el frontend viejo sigue funcionando con las funciones nuevas (no las usa). Quitar la ficha básica es publicar el frontend anterior; las funciones de la 0119 pueden quedar sin uso. El alta delegada se quita volviendo a desplegar la función anterior (el botón mostrará el aviso de falta de permiso).
+
+## 74. Rediseño y revisión integral de SIGER4 (2026-10-19 al 2026-10-21) — versión 1.18.0, sin migraciones
+
+Una revisión de toda la interfaz y de la solidez del frontend, hecha por fases en la rama `rediseno-ui` (un commit por fase). **No hay migraciones, no se tocó ninguna política de RLS, ninguna función SQL, ninguna Edge Function, el push ni el service worker.** El permiso lo sigue decidiendo la base; la pantalla solo lo refleja. Se vuelve atrás publicando el frontend anterior (74.13).
+
+### 74.1 Qué cambia, en lenguaje de todos los días
+
+- **Las pantallas cargan bastante más rápido** en el celular: lo que se descarga para ver el ingreso o el Inicio bajó de 414 a 160 KiB comprimidos. Cada pantalla se baja la primera vez que se entra; la generación de PDF de los reportes se baja recién al generar uno.
+- **Todo lo que se toca en el celular es más cómodo**: campos y botones de 44 px, botones chicos y chips de 40 px (antes 36), el buscador y los íconos del encabezado de 40 px. El teclado numérico aparece en los campos de cantidades.
+- **Confirmaciones propias del sistema** en lugar de las del navegador (20 lugares): dicen qué va a pasar con un verbo concreto ("Eliminar informe", "Quitar archivo"), lo irreversible empieza con el foco en "Cancelar" y se cierran con Escape.
+- **Si algo falla, la pantalla no queda en blanco**: "Algo falló al cargar esta pantalla" con **Reintentar** e **Ir al inicio**; si la causa es una versión nueva del sistema, la página se recarga sola una vez. Si el perfil no carga por la conexión, dice "No pudimos cargar tu perfil" con **Reintentar** (antes la app se mostraba como si la persona no tuviera permisos). Una dirección que no existe muestra "No encontramos esa página" (antes volvía al Inicio sin avisar).
+- **Un pedido que no responde corta a los 30 segundos** y muestra el error en lugar de quedar cargando para siempre; una subida de archivo que no avanza en 90 segundos se corta con un mensaje claro.
+- **Menú del celular**: se cierra con Escape, el foco queda adentro y vuelve al botón que lo abrió; cerrado, el teclado ya no entra a enlaces que no se ven.
+- **Un solo título por pantalla**: si el título de la pantalla repetía el del encabezado ("Pendientes" arriba y "Pendientes" abajo), queda solo el del encabezado. Las pantallas sin título propio (los formularios) lo tienen para el lector de pantalla.
+- **Auditoría en el celular**: una tarjeta por evento, sin desplazarse hacia los costados (la tabla de 760 px queda igual en pantalla grande).
+- **"Móvil" en lugar de "Vehículo"**, "Guardar punto", "Agregar integrante", "Guardar datos reservados" en lugar de "Guardar", "Ver todos los resultados en…" en lugar de "Ver más en…".
+- **Corrección**: abrir "Subir aval" sin escribir nada (con un solo departamento) guardaba un borrador en el servidor y pedía confirmar al salir; ya no.
+
+### 74.2 Lo que NO cambia
+
+Permisos, base de datos, Storage, funciones y Edge Functions, push, autenticación, service worker (`src/sw.ts`), la política de seguridad (CSP) y el resto de los encabezados de `vercel.json`, el caché de tiles del mapa, el portal del menú del celular y la escala de z-index (sección 46). El único agregado de `vercel.json` es el caché de los archivos con huella (74.9). Sigue sin haber Ayuda, Novedades ni guía de Roles y permisos (sección 66).
+
+### 74.3 Dirección visual, tokens y componentes
+
+- **Criterio:** institucional y de trabajo, sin aspecto de producto comercial. Se mantuvo el azul como color de acción y navegación, el rojo solo para peligro y acentos, verde y ámbar para éxito y advertencia, radios por token, sin degradados ni emojis. No se rehízo lo que ya cumplía el sistema de la sección 54: la auditoría de las 64 pantallas contra el sistema encontró pocas cosas que corregir y solo se corrigieron esas.
+- **Referencias (conceptuales, no copiadas):** de Gestión Bomberos se tomó la identidad institucional con los logos presentes y el ingreso simple (ya estaban en el Ingreso); se descartó su estética. De los dashboards de Figma se tomó el menú lateral ordenado, el encabezado compacto, las tablas claras y los filtros a mano; se descartaron las métricas comerciales y los gráficos decorativos. **No se pudieron abrir esas direcciones desde la sesión**: se trabajó con las listas del pedido, sin inventar su contenido.
+- **Tokens nuevos o cambiados** (`src/styles.css`): con puntero táctil `--control-height` 44 px y `--control-height-sm` 40 px (los componentes los usan por token, ya no hay alturas fijas de 36 px); `--color-input-border` del tema claro de `#8c96a3` a `#818b99` (de 2,7:1 a 3,2:1 sobre el fondo de la aplicación, criterio 1.4.11).
+- **Componentes y utilidades nuevos:** `useConfirm` + `ConfirmProvider` (confirmación, reemplaza los 20 `window.confirm`), `useDialogFocus` (foco, Escape y fondo inert de cualquier diálogo; lo usan los modales existentes, la búsqueda global, el menú del celular y la confirmación), `FallbackScreen` (pantalla de aviso a página completa), `ErrorBoundary`, `NotFoundPage`, `fetchWithTimeout`, `clientErrors` (manejadores globales sin datos personales), `lib/labels.ts` (las etiquetas de estados que las pantallas exportaban). Se reutilizaron `FilePicker`, `AttachmentsPicker`, `EditConflictPanel`, `AccessDenied`, `SuccessNotice`, `ReasonPromptModal` y el patrón de modal con portal; no se duplicó ninguno.
+- **Sin dependencias nuevas en el sitio publicado.** Dos de desarrollo, para las pruebas de pantalla (74.8): `playwright-core` (maneja el Chrome instalado; no descarga navegadores) y `axe-core` (el verificador de accesibilidad estándar, el mismo motor de Lighthouse). `vite` 7.3.6 → 7.3.7 por un aviso de `npm audit` (74.7).
+
+### 74.4 Fases y commits
+
+| Fase | Contenido | Commit |
+|---|---|---|
+| 0 y 1 | Línea base y auditoría, sin tocar código (tag `pre-rediseno` = a78928f) | — |
+| 2 | Confirmación propia, controles táctiles 44/40 px, contraste, movimiento reducido | `c425023` |
+| 3 | Tolerancia a fallos, menú del celular y diálogos accesibles, 404 | `1bcff3f` |
+| 4 | Ingreso e Inicio | `67ebc76` |
+| 5 | Módulos por grupos (5a transversal, 5b Cuarteles, 5c Calendario y Mapa, 5d Documentos, 5e Avales, 5f Departamentos e Inventario, 5g Administración, 5h textos) | `6f48775` a `2870d53` |
+| 6 | Tiempos de espera, subidas, teclado numérico | `95af91d` |
+| 7 | Pruebas de pantalla en el repositorio, borde de campos a 3:1 | `63d52ee` |
+| 8 | Rendimiento | `52c544e` |
+| 9 | Etiquetas de estados fuera de las pantallas (avisos de lint de 8 a 1), menú flotante de Documentos (Escape, tocar afuera, nombre), texto del error de pantalla, esta sección y la versión 1.18.0 | ver el PR |
+
+### 74.5 Accesibilidad
+
+Medida con axe-core (WCAG 2.0 y 2.1, A y AA) sobre **4.800 vistas** antes (16 variantes de rol × 64 pantallas × anchos y temas) y sobre 512 vistas por corrida después (`npm run test:ui`, 4 variantes de rol, celular claro y escritorio oscuro, más barridos puntuales):
+
+| | Antes | Después |
+|---|---|---|
+| Fallas de contraste | 1.195 elementos en 64 pantallas (la pista "Ctrl K" del encabezado, 4,23:1; los días de otros meses del calendario, 2,43:1) | 0 |
+| Selectores sin nombre | 711 en 9 pantallas | 0 |
+| Botones y enlaces solo de ícono sin nombre | 178 | 0 |
+| Marcadores del mapa sin nombre | 684 | 0 |
+| Campos de cámara sin etiqueta | 65 | 0 |
+| Pantallas sin `<h1>` / con título repetido a la vista | 24 / 51 | 0 / 0 |
+| Controles táctiles de menos de 40 px en celular | 112 patrones (miles de apariciones) | 0 (los marcadores del mapa y el logo y la foto del encabezado agrandan su área de toque sin cambiar el diseño) |
+| Desborde horizontal | 0 | 0 |
+
+Además: el menú del celular y todos los diálogos tienen Escape, foco atrapado y foco devuelto, y dejan la página de fondo inert; una pantalla que scrollea y no tiene nada enfocable se puede recorrer con las flechas; con "reducir movimiento" el indicador de carga sigue girando, más despacio. Contraste de los tokens (calculado): texto y enlaces 4,5:1 o más en claro y oscuro; borde de campos 3:1 o más; anillo de foco 4,6:1 o más. Los bordes de chips y botones con borde (`--color-border-strong`, 1,65:1 en claro) **se dejaron**: tienen su texto adentro y no son el único indicador del componente.
+
+### 74.6 Confiabilidad y seguridad: qué se revisó y qué se corrigió
+
+| Qué se revisó | Resultado |
+|---|---|
+| Límite de errores raíz y por ruta | No existía: **agregado** (`ErrorBoundary`), con mensaje en voseo y Reintentar / Ir al inicio |
+| Archivo de pantalla que no se descarga tras un deploy | Sin recuperación: **agregada** una recarga controlada con guarda anti-bucle en `sessionStorage`; si falla otra vez, aviso para recargar |
+| Errores sin manejar | Sin manejadores globales: **agregados** (`error`, `unhandledrejection`, `vite:preloadError`); una línea en consola con emails, teléfonos e ids enmascarados; nada se envía afuera |
+| Sesión y perfil | `getSession` sin catch y un fallo de red al leer el perfil se mostraba como "sin permisos": **corregido** (error explícito con reintento; `refreshProfile` ya no desarma la sesión) |
+| Estados de carga que no se cierran | Barrido de todos los `set…(true)` sin su cierre: sin casos; **corregido** el formulario de Ingreso ante un fallo inesperado |
+| Tiempos de espera | Ninguno: **30 s en REST y Auth** (Storage, Realtime y funciones quedan afuera), **90 s sin avance en las subidas**, con `AbortSignal` para cancelar. El cliente de base no reintenta lo cortado por tiempo |
+| Efectos y suscripciones | `NotificationPushBridge` creaba un `AudioContext` por aviso y re-suscribía el canal en cada refresco del perfil: **corregido**. Único acceso a almacenamiento fuera de `try/catch`: `sw.ts` (no se toca) |
+| Doble envío | Todos los botones de envío se bloquean mientras se guarda (verificado por código) |
+| Mensajes crudos | Ninguno llega a la pantalla sin pasar por `describeSupabaseError` o texto propio |
+| Borradores | **Corregido** el borrador que se guardaba al abrir "Subir aval" con un solo departamento (74.1) |
+| Secretos | Ninguno en el árbol ni en el historial (313 commits); el bundle compilado no contiene `service_role` |
+| Frontend | Sin `innerHTML`, `dangerouslySetInnerHTML` ni `eval`; enlaces con `rel="noopener noreferrer"`; URLs firmadas pedidas en el momento |
+| Dependencias | `npm audit`: 0 vulnerabilidades. El 2026-10-20 apareció un aviso alto en `vite` 7.0.0 a 7.3.6 (`launch-editor`, solo servidor de desarrollo): **actualizado a 7.3.7** dentro del rango ya declarado |
+| `security:check` | 39 de 39 (el chequeo del sitio publicado se hace con `--url`, ver el PR) |
+| Base (PostgreSQL 16 local, línea base a78928f) | Suites 0110 a 0120 y `security_audit.sql` en verde. No se corrieron de nuevo al final: el backend no cambió |
+
+### 74.7 Rendimiento: números antes y después
+
+Medidos con Lighthouse en el **build de producción servido con compresión** y el backend simulado (Moto G Power emulado, 4G lenta, CPU x4; mediana de 3 corridas). El laboratorio no sale a internet: **no incluye el costo de las tipografías de Google**.
+
+| | Antes | Después |
+|---|---|---|
+| JS inicial (bruto / comprimido) | 1.458 / 414 KiB | **545 / 160 KiB** |
+| Archivo principal (`index`) | 667 / 170 KiB | 162 / 48 KiB |
+| jsPDF en la descarga inicial | 133 KiB comprimidos | 0 (solo al generar un reporte) |
+| Ingreso: LCP / FCP / puntaje | 4,4 s / 3,7 s / 76 | **3,2 s / 2,1 s / 91** |
+| Inicio (Presidente de CD): LCP / INP / puntaje | 5,1 s / 520 ms / 72 | **3,0 s / 83 ms / 93** |
+| Inicio (Informática): LCP / INP / puntaje | 5,7 s / 349 ms / 70 | **3,4 s / 99 ms / 89** |
+| Cuarteles (listado): LCP / INP / puntaje | 4,7 s / 218 ms / 74 | **3,8 s / 76 ms / 85** |
+| CLS (cuatro pantallas) | 0,001 a 0,009 | 0,002 a 0,043 |
+| Pedidos de datos al cargar el Inicio (Presidente de CD) | 31 | 29 (el aviso sin leer se pide una vez) |
+| Peso de la primera carga | 632 a 650 KiB | 377 a 395 KiB |
+
+**Objetivos:** CLS ≤ 0,1 y INP ≤ 200 ms: **cumplidos**. LCP ≤ 2,5 s: **no se alcanzó** (3,0 a 3,8 s en el laboratorio); el JS inicial bajó 61 %. Lo que falta: los logos pesan 108 KiB para mostrarse a 52 px (reemplazar los archivos de marca es una decisión de la persona dueña del repositorio); el perfil se pide en dos viajes seguidos (perfil y luego roles), que se arreglaría con una consulta o una función única en la base; y las tipografías siguen viniendo de Google.
+
+**Cómo se hizo:** cada pantalla es su propio archivo (`React.lazy`, 50 pantallas); se sacó el grupo manual `pdf` de `vite.config.ts` porque se llevaba el ayudante de carga de Vite y el archivo principal descargaba jsPDF en cada visita; las tipografías se piden después de dibujar (un `<link>` agregado desde `main.tsx`, mismo origen, misma política) en lugar de un `@import` que frenaba el primer dibujo; los archivos de `assets/` (con huella en el nombre) se guardan un año (`Cache-Control: public, max-age=31536000, immutable`). El service worker precachea las 106 piezas (2,9 MiB, el mismo peso que antes), así que las pantallas siguen funcionando sin conexión.
+
+### 74.8 Pruebas
+
+- **`npm run test:ui`** (nuevo, en `tests/ui/`, ver su README): recorre cada variante de rol por cada pantalla, ancho y tema contra un backend simulado con datos ficticios (no toca ningún servidor real) y falla si hay una pantalla en blanco, desborde horizontal, una falla seria o crítica de axe, una pantalla sin título o con más de uno, o un control táctil de menos de 40 px. Corto por defecto (4 variantes, 512 vistas, unos 20 minutos); `--full` hace las 16 variantes en 6 anchos. Se comprobó que **falla** cuando se le inyecta un desborde y un botón de 30 px.
+- **Recorridos de las tandas anteriores (57 a 73)** con el backend simulado: **14 guiones de las secciones 57 a 73 vueltos a correr contra el rediseño: 1.352 comprobaciones, 0 fallas** (informes de departamentos con archivos y fotos, solicitudes de préstamo, búsqueda y notificaciones, roles por división, efectivos y pendientes, modo departamento, contacto con Informática, retiro de Ayuda y Novedades, reportes, mapa, Avales, Bomberos Nivel 4, fichas básicas y alta de miembros). Se actualizaron a propósito cuatro guiones por cambios de texto o de componente de esta tanda (no se borró ninguna comprobación): el botón de email de Mi perfil ya no es el primario, "Guardar" del punto del mapa pasó a "Guardar punto", "Volver a activar" un aval ahora usa la confirmación propia y los títulos repetidos que quedan solo para el lector de pantalla no cuentan como texto recortado. **No se pudieron volver a correr** los guiones de las secciones 62, 69 y 70 (guía de roles ya retirada, visibilidad de documentos, versión por registro y mapa): no estaban disponibles; esas pantallas quedan cubiertas por `npm run test:ui` y por los guiones 63, 66, 67 y 71.
+- **Estado verificado de esta tanda, por tipo de evidencia:**
+  - *Revisión de código:* rutas lazy, límites de error, tiempos de espera, doble envío, cierre de estados, sin `innerHTML` ni `eval`.
+  - *Backend simulado en navegador (Chrome de escritorio, emulación de celular y de pantalla táctil):* confirmaciones, foco y Escape de cada diálogo, menú del celular, error de dibujo, archivo de pantalla que no baja (una sola recarga), perfil que no carga, 404, pedido colgado a 30 s, subida sin avance a 90 s y cancelación, borrador del aval, mapa, tablas, 320/360/390/768/1366/1920, claro y oscuro.
+  - *Base local:* sin cambios desde la línea base (sin migraciones).
+  - *Lighthouse emulado:* los números de 74.7.
+  - ***No verificado:*** dispositivo físico, Safari e iOS, lectores de pantalla reales (solo axe), producción, el flujo de actualización del service worker con el nuevo precache de 106 piezas, y el costo real de las tipografías de Google.
+
+### 74.9 Archivos tocados que conviene conocer
+
+- `vercel.json`: **solo** se agregó el bloque de caché de `/assets/(.*)`. La política de seguridad y los demás encabezados no cambiaron. Si el hosting ya servía esos archivos con otro caché, el nuevo manda.
+- `vite.config.ts`: se sacó el grupo manual `pdf` (74.7).
+- `index.html`: dos `<link rel="preconnect">` (Google Fonts y su dominio de archivos). `src/main.tsx`: pide las tipografías después de dibujar.
+- `package.json` y `package-lock.json`: la versión 1.18.0, `vite` 7.3.7, las dos dependencias de desarrollo y el script `test:ui`.
+
+### 74.10 Hallazgos no corregidos, con severidad
+
+| Severidad | Hallazgo | Propuesta |
+|---|---|---|
+| Media | **LCP de 3,0 a 3,8 s** (objetivo 2,5 s) | Logos más chicos (108 KiB para 52 px), tipografías autoalojadas (requiere cambiar la política de seguridad: lo decide la persona dueña), perfil y roles en una sola consulta (backend) |
+| Media | **`select('*')` en 125 consultas** de la capa de datos, entre ellas `profiles` (lista de usuarios) y `personnel` | Columnas explícitas en la lista de usuarios y en los selectores; la RLS ya limita las filas, es defensa en profundidad. No se hizo para no romper pantallas que usan un campo que hoy llega sin pedirlo |
+| Media | **Pendientes de backend ya documentados** (72.8 y 73.9): los roles de Escuela leen conteos de `stations`; un Integrante de Informática lee suscripciones push ajenas | Sin cambios: requieren una migración que decide la persona dueña |
+| Media | **`cron_shared_secret` (70.9)** sin verificar ni rotar | Verificar y rotar |
+| Baja | Varios botones primarios en pantallas de administración (Usuario, Departamento): son formularios independientes dentro de una misma pantalla | Se dejó; si se quiere un solo primario por vista, pasar los de sección a `btn-secondary` |
+| Baja | 763 estilos en línea en 69 archivos; archivos de más de 1.000 líneas (`CuartelDetallePage`, `DepartamentoDetallePage`, `AjustesPage`, `styles.css`); 21 exportaciones y 41 tipos sin uso (6 generadores de PDF); 11 `eslint-disable` de hooks; 1 aviso de lint (`useAuth`: exporta proveedor y hook) | Limpieza gradual |
+| Baja | 406 en consola por `.single()` sobre registros que no existen o no se ven (60 `.single()` contra 10 `.maybeSingle()`); la pantalla lo maneja | Cambiar a `.maybeSingle()` donde corresponda |
+| Baja | El Inicio hace 29 pedidos de datos al cargar | Unificar consultas con una función de Inicio en la base |
+| Baja | El plan de ejecución de las consultas lentas y los índices **no se revisaron** | Medir en la base local y proponer índices como migración nueva |
+| Informativa | No hay subida cancelable en pantalla: la capa de subida acepta un `AbortSignal`, pero ninguna pantalla muestra el botón | Agregarlo en las pantallas de carga de archivos |
+
+### 74.11 Qué correr y en qué orden
+
+1. **Sin migraciones y sin funciones que desplegar.** Publicar el frontend v1.18.0 (el preview del PR ya lo tiene).
+2. Después de publicar: `npm run security:check -- --url https://<sitio>` (solo lectura) y confirmar que `/assets/…` responde `Cache-Control: public, max-age=31536000, immutable` y que el resto de los encabezados siguen igual.
+
+### 74.12 Checklist en producción y en Android real
+
+- [ ] Ingreso, Inicio y un listado: se ven bien, las tipografías (Inter) aparecen después de un instante y no mueven el contenido de forma molesta.
+- [ ] En el celular: botones, chips y campos cómodos de tocar; el buscador y los íconos del encabezado se tocan sin errar.
+- [ ] Menú del celular: abre, cierra con el botón, con el fondo y con "atrás"; sin quedar detrás del encabezado; con el teclado virtual abierto en un formulario.
+- [ ] Confirmaciones: eliminar un informe de prueba, quitar un archivo, enviar un documento a la papelera (en un dato de prueba, no en uno real): el mensaje es claro y cancelar no hace nada.
+- [ ] Cortar la conexión (modo avión) en una pantalla y recargar: la aplicación abre desde el service worker; volver a conectar y tocar Reintentar.
+- [ ] Publicar una versión nueva con la aplicación abierta: aparece el aviso de actualización y, al aceptar, la aplicación recarga sin quedar en blanco (es el punto sin verificar de 74.8: el precache ahora tiene 106 piezas).
+- [ ] Subir un archivo grande con señal débil: avanza, o se corta con un mensaje claro a los 90 segundos sin avance.
+- [ ] Mapa: marcadores y controles de zoom se tocan bien; el menú del celular queda por encima del mapa.
+- [ ] Reportes: generar un PDF (la primera vez baja el generador; puede tardar un instante más).
+- [ ] Una dirección que no existe muestra "No encontramos esa página".
+- [ ] Con TalkBack: el menú del celular se anuncia como diálogo, los íconos tienen nombre, los títulos se leen una vez.
+
+### 74.13 Si algo sale mal
+
+- **Volver atrás:** publicar el commit `a78928f` (tag `pre-rediseno`, el `main` anterior al rediseño). No hay migraciones que revertir ni datos que cambien con esta versión.
+- **Una pantalla queda en blanco o dice "Hay una versión nueva del sistema" en bucle:** recargar con Ctrl+F5; si sigue, borrar los datos del sitio (Ajustes del navegador). La recarga automática se hace una sola vez por minuto.
+- **El Reintentar de "No pudimos cargar tu perfil" no resuelve:** revisar la conexión; si el servidor no responde en 30 segundos vuelve a mostrar el aviso.
+- **Una confirmación no aparece (vuelve a verse la del navegador):** quiere decir que esa pantalla se abrió fuera del proveedor de confirmaciones (`ConfirmProvider`, en `App.tsx`); no debería pasar.
+- **Un reporte no genera:** puede ser que el archivo del generador no se haya descargado (conexión); reintentar.

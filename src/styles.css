@@ -511,7 +511,7 @@ h3 {
 }
 
 /* Con el botón flotante "+" en pantalla, el final de la lista queda libre para que no lo tape. */
-.app-content:has(.fab) {
+.app-content:has(.fab, .fab-menu) {
   padding-bottom: 88px;
 }
 

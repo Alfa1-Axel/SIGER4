@@ -8,24 +8,9 @@ import { describeSupabaseError } from '../lib/api/errors'
 import type { InventoryItem, InventoryLoanRequest, LoanRequestStatus, Station } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { useLoanRequestAccess } from '../hooks/useLoanRequestAccess'
+import { LOAN_REQUEST_STATUS_LABEL, LOAN_REQUEST_STATUS_BADGE } from '../lib/labels'
 
-export const LOAN_REQUEST_STATUS_LABEL: Record<LoanRequestStatus, string> = {
-  pendiente: 'Pendiente',
-  aprobada: 'Aprobada',
-  rechazada: 'Rechazada',
-  retirada: 'Retirada',
-  devuelta: 'Devuelta',
-  cancelada: 'Cancelada',
-}
 
-export const LOAN_REQUEST_STATUS_BADGE: Record<LoanRequestStatus, string> = {
-  pendiente: 'badge-warning',
-  aprobada: 'badge-info',
-  rechazada: 'badge-danger',
-  retirada: 'badge-info',
-  devuelta: 'badge-success',
-  cancelada: 'badge-danger',
-}
 
 const STATUS_FILTERS: LoanRequestStatus[] = ['pendiente', 'aprobada', 'retirada', 'devuelta', 'rechazada', 'cancelada']
 

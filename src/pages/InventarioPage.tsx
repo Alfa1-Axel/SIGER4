@@ -4,24 +4,12 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchInventoryItems } from '../lib/api/inventory'
 import { fetchActiveLoans } from '../lib/api/inventoryLoanRequests'
-import type { InventoryCategory, InventoryItem, InventoryLoanRequest, InventoryStatus } from '../types/database'
+import type { InventoryItem, InventoryLoanRequest, InventoryStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from '../lib/labels'
 
-export const INVENTORY_CATEGORY_LABEL: Record<InventoryCategory, string> = {
-  herramienta_manual: 'Herramienta Manual',
-  mecanica: 'Mecánica',
-  equipo: 'Equipo',
-  elementos_practica: 'Elementos de Práctica',
-  otros: 'Otros',
-}
 
-export const INVENTORY_STATUS_LABEL: Record<InventoryStatus, string> = {
-  disponible: 'Disponible',
-  no_disponible: 'No disponible',
-  mantenimiento: 'Mantenimiento',
-  baja: 'Baja',
-}
 
 const INVENTORY_STATUS_BADGE: Record<InventoryStatus, string> = {
   disponible: 'badge-success',

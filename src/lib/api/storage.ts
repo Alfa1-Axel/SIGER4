@@ -312,14 +312,20 @@ export function buildDepartmentReportFilePath(departmentId: string, reportId: st
   return `${departmentId}/${reportId}/${fileId}/${sanitizeFileName(file.name)}`
 }
 
+// Una subida que no avanza ni un byte en este tiempo se da por cortada (señal débil, pérdida de conexión a mitad de
+// camino): sin esto el botón queda en "Subiendo…" para siempre. Es tiempo SIN avance, no tiempo total: un video
+// grande en una red lenta puede tardar, mientras siga avanzando.
+const UPLOAD_STALL_MS = 90_000
+
 // Subida con progreso al endpoint de Storage, por XMLHttpRequest. Compartida por los buckets que
-// la usan (informes de departamento y fichas del mapa).
+// la usan (informes de departamento y fichas del mapa). `signal` permite cancelarla desde la pantalla.
 async function uploadWithProgress(
   bucket: string,
   path: string,
   file: File,
   contentType: string,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -329,16 +335,38 @@ async function uploadWithProgress(
   body.append('cacheControl', '3600')
   body.append('', withCorrectedMimeType(file, contentType))
 
+  if (signal?.aborted) throw new Error('Se canceló la subida.')
+
   await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${supabaseUrl}/storage/v1/object/${bucket}/${path}`)
     xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('apikey', supabaseAnonKey)
     xhr.setRequestHeader('x-upsert', 'false')
+
+    let stallTimer: ReturnType<typeof setTimeout> | undefined
+    let stalled = false
+    const onSignalAbort = () => xhr.abort()
+    const armStallTimer = () => {
+      if (stallTimer) clearTimeout(stallTimer)
+      stallTimer = setTimeout(() => {
+        stalled = true
+        xhr.abort()
+      }, UPLOAD_STALL_MS)
+    }
+    const settle = () => {
+      if (stallTimer) clearTimeout(stallTimer)
+      signal?.removeEventListener('abort', onSignalAbort)
+    }
+    signal?.addEventListener('abort', onSignalAbort, { once: true })
+    armStallTimer()
+
     xhr.upload.onprogress = (event) => {
+      armStallTimer()
       if (event.lengthComputable && onProgress) onProgress(event.loaded / event.total)
     }
     xhr.onload = () => {
+      settle()
       if (xhr.status >= 200 && xhr.status < 300) {
         onProgress?.(1)
         resolve()
@@ -356,8 +384,16 @@ async function uploadWithProgress(
       err.name = 'StorageApiError'
       reject(err)
     }
-    xhr.onerror = () => reject(new Error('Network request failed'))
-    xhr.onabort = () => reject(new Error('Network request failed'))
+    xhr.onerror = () => {
+      settle()
+      reject(new Error('Network request failed'))
+    }
+    xhr.onabort = () => {
+      settle()
+      if (stalled) reject(new Error('La subida se quedó sin avance. Revisá tu conexión y volvé a intentar.'))
+      else if (signal?.aborted) reject(new Error('Se canceló la subida.'))
+      else reject(new Error('Network request failed'))
+    }
     xhr.send(body)
   })
 }
@@ -371,6 +407,7 @@ export async function uploadDepartmentReportObject(
   path: string,
   file: File,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ contentType: string }> {
   const contentType = inferMimeType(file)
   if (!isDepartmentReportMimeAllowed(contentType)) {
@@ -380,7 +417,7 @@ export async function uploadDepartmentReportObject(
     throw new Error(`"${file.name}" supera el tamaño máximo permitido.`)
   }
   await assertFileSignature(file, contentType)
-  await uploadWithProgress(DEPARTMENT_REPORTS_BUCKET, path, file, contentType, onProgress)
+  await uploadWithProgress(DEPARTMENT_REPORTS_BUCKET, path, file, contentType, onProgress, signal)
   return { contentType }
 }
 
@@ -439,6 +476,7 @@ export async function uploadMapPointObject(
   path: string,
   file: File,
   onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
 ): Promise<{ contentType: string }> {
   const contentType = inferMimeType(file)
   if (!isMapPointMimeAllowed(contentType)) {
@@ -448,7 +486,7 @@ export async function uploadMapPointObject(
     throw new Error(`"${file.name}" supera el tamaño máximo permitido (10 MB).`)
   }
   await assertFileSignature(file, contentType)
-  await uploadWithProgress(MAP_POINT_BUCKET, path, file, contentType, onProgress)
+  await uploadWithProgress(MAP_POINT_BUCKET, path, file, contentType, onProgress, signal)
   return { contentType }
 }
 

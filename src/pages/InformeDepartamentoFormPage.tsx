@@ -272,6 +272,7 @@ export function InformeDepartamentoFormPage() {
             <input
               id="attendeesCount"
               type="number"
+              inputMode="numeric"
               min="0"
               value={attendeesCount}
               onChange={(e) => setAttendeesCount(e.target.value)}

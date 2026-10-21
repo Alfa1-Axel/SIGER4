@@ -190,6 +190,7 @@ export function IntervencionFormPage() {
               <input
                 id="totalCount"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 required
                 value={totalCount}
@@ -202,6 +203,7 @@ export function IntervencionFormPage() {
               <input
                 id="personnelCount"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 value={personnelCount}
                 onChange={(e) => setPersonnelCount(e.target.value)}
@@ -216,6 +218,7 @@ export function IntervencionFormPage() {
               <input
                 id="vehiclesCount"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 value={vehiclesCount}
                 onChange={(e) => setVehiclesCount(e.target.value)}

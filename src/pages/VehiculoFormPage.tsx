@@ -249,6 +249,7 @@ export function VehiculoFormPage() {
             <input
               id="waterCapacityLiters"
               type="number"
+              inputMode="numeric"
               min="0"
               value={waterCapacityLiters}
               onChange={(e) => setWaterCapacityLiters(e.target.value)}
@@ -261,6 +262,7 @@ export function VehiculoFormPage() {
             <input
               id="crewCapacity"
               type="number"
+              inputMode="numeric"
               min="0"
               value={crewCapacity}
               onChange={(e) => setCrewCapacity(e.target.value)}

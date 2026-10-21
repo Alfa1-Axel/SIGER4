@@ -413,6 +413,7 @@ export function EventoCalendarioFormPage() {
             <input
               id="notifyBefore"
               type="number"
+              inputMode="numeric"
               min={1}
               value={notifyBeforeMinutes}
               onChange={(e) => setNotifyBeforeMinutes(e.target.value)}

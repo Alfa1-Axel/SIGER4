@@ -7,7 +7,7 @@ import { fetchRegions } from '../lib/api/regions'
 import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchDepartments } from '../lib/api/departments'
-import { REPORT_GENERATORS, type ReportKey } from '../lib/pdf/reportGenerators'
+import type { ReportKey } from '../lib/pdf/reportGenerators'
 import { REPORT_SECTION_OPTIONS, allSections } from '../lib/pdf/reportSections'
 import type { ReportSection } from '../lib/pdf/reportSections'
 import type { Department, Region, Station, Subsede } from '../types/database'
@@ -225,6 +225,8 @@ export function ReportesPage() {
 
     setGenerating(true)
     try {
+      // El armado de PDF (jsPDF y los generadores) se baja recién ahora: casi nadie genera reportes en cada visita.
+      const { REPORT_GENERATORS } = await import('../lib/pdf/reportGenerators')
       const generator = REPORT_GENERATORS[reportKey]
       const doc = await generator({
         filters: {

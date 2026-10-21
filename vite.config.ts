@@ -129,7 +129,9 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
-          pdf: ['jspdf', 'jspdf-autotable'],
+          // jsPDF NO va en un grupo aparte: ese grupo se llevaba también el ayudante de carga de archivos de Vite
+          // (__vitePreload), que el archivo principal necesita, y así el principal bajaba ~140 KiB de jsPDF en cada
+          // visita. Sin grupo, jsPDF queda dentro del archivo de los reportes, que se baja recién al generar uno.
         },
       },
     },

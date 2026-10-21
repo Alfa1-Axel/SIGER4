@@ -33,6 +33,18 @@ const updateServiceWorker = registerSW({
   },
 })
 
+// Tipografías (Inter y JetBrains Mono): se piden DESPUÉS de dibujar la primera pantalla, con un <link> agregado desde acá. Un
+// <link rel="stylesheet"> en el HTML (o un @import en el CSS) frena el primer dibujo hasta que Google responde (varias idas y
+// vueltas a otro servidor); así la pantalla aparece enseguida con la letra del sistema y se cambia a Inter al llegar
+// (display=swap). Mismo origen que ya permite la política de seguridad: no cambia nada ahí.
+const WEB_FONTS_URL = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap'
+function loadWebFonts() {
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = WEB_FONTS_URL
+  document.head.appendChild(link)
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
@@ -42,3 +54,4 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 )
+window.requestAnimationFrame(loadWebFonts)

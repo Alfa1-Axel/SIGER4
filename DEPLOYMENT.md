@@ -11293,3 +11293,150 @@ Medidos con Lighthouse en el **build de producción servido con compresión** y 
 - **El Reintentar de "No pudimos cargar tu perfil" no resuelve:** revisar la conexión; si el servidor no responde en 30 segundos vuelve a mostrar el aviso.
 - **Una confirmación no aparece (vuelve a verse la del navegador):** quiere decir que esa pantalla se abrió fuera del proveedor de confirmaciones (`ConfirmProvider`, en `App.tsx`); no debería pasar.
 - **Un reporte no genera:** puede ser que el archivo del generador no se haya descargado (conexión); reintentar.
+
+## 75. Aviso breve de "Nueva actualización" por cada versión publicada (2026-10-21) — versión 1.19.0, migraciones 0121 y 0122
+
+Dos migraciones, una Edge Function nueva (`announce-release`), un comando de publicación (`npm run release:announce`) y cambios mínimos en el frontend. **No hay página de Novedades, changelog, ventana emergente ni versión visible para las personas usuarias** (sigue vigente el retiro de la sección 66): el aviso es una notificación interna de una línea, como cualquier otra.
+
+### 75.1 Qué cambia, en lenguaje de todos los días
+
+- Cuando una versión nueva **de verdad** llega a producción, **cada persona con cuenta activa recibe un único aviso** en Notificaciones: *"Hay una nueva actualización en Documentos."* o, si cambiaron varios módulos, *"Hay nuevas actualizaciones en Usuarios y roles, Mapa Regional y Documentos."* El título es siempre **Nueva actualización**.
+- **Un solo aviso por versión y por persona**, nunca dos: aunque se repita el comando o se vuelva a desplegar el sitio, la misma versión no genera nada nuevo.
+- Cada persona lo lee **por su cuenta**: que uno lo marque como leído no lo marca para los demás.
+- Aparece en la campana (suma al contador), en la bandeja, en el filtro **Sistema**, en la búsqueda y, mientras no se lee, en **Pendientes** como "Para revisar" (prioridad baja: no desplaza a nada urgente; con muchos pendientes queda detrás de "Ver todos"). Llega también como notificación push **por el mismo camino de siempre** (sección 47, migración 0085), sin sistema nuevo y sin duplicar.
+- Con un solo módulo, el botón **Abrir** lleva a ese módulo **solo si la persona puede entrar**; con varios módulos no hay botón. Nunca aparece un botón que termine en "No tenés permiso".
+- Las personas que se dan de alta después de un anuncio no reciben los anteriores.
+
+### 75.2 Módulos que se pueden nombrar
+
+Una lista cerrada, en lenguaje común, que vive en un único lugar del código (`supabase/functions/_shared/releaseAnnouncement.ts`) y se repite en la base (`release_modules()`, 0122); `npm run test:release` falla si las dos dejan de coincidir:
+
+Inicio, Usuarios y roles, Cuarteles, Efectivos, Asistencia, Móviles, Departamentos, Informes y actas, Escuela, Avales, Documentos, Inventario, Calendario, Mapa Regional, Reportes, Notificaciones, Mi perfil, Seguridad, Asistente SIGER4.
+
+De 1 a 6 módulos por aviso. Si se agrega un módulo nuevo, se agrega en las dos listas y se corre `npm run test:release`. El botón **Abrir** (un solo módulo) usa estas rutas: Inicio `/panel`, Usuarios y roles `/usuarios`, Cuarteles `/cuarteles`, Departamentos `/departamentos`, Escuela `/escuela`, Avales `/escuela/avales`, Documentos `/documentos`, Inventario `/inventario`, Calendario `/calendario`, Mapa Regional `/mapa`, Reportes `/reportes`, Notificaciones `/notificaciones`, Mi perfil `/ajustes`. Los demás módulos no llevan enlace.
+
+### 75.3 Cómo funciona (una sola vía de publicación)
+
+```
+npm run release:announce  →  (verifica producción)  →  Edge Function announce-release  →  announce_release() en la base
+        tu terminal               /version.json            secreto propio + misma verificación      crea el registro y 1 aviso por perfil activo
+                                                                                                   → trigger de push de siempre (0085)
+```
+
+1. **Migración 0121** (`notification_type` suma `actualizacion_publicada`). Tiene que correr **sola, en su propia ejecución**, antes que la 0122 (un valor nuevo de enum no se puede usar en la misma transacción).
+2. **Migración 0122:**
+   - Tabla `app_releases`: una fila por versión anunciada (versión **única**, formato `1.19.0`, 1 a 6 módulos, commit opcional, cantidad de destinatarios). RLS: solo lectura para Informática (`informatica_r4`); nadie escribe desde la aplicación.
+   - Función `announce_release(versión, módulos, commit)`: valida todo, registra la versión y crea **una notificación personal por cada perfil activo con cuenta** (`app_update_id = 'release:<versión>'`, con el índice único parcial de la 0077 como segunda red), todo en una sola transacción. Devuelve `already_announced: true` si la versión ya estaba. **Solo la ejecuta `service_role`** (o quien corre SQL como dueño de la base): ni `anon`, ni `authenticated`, ni Informática desde la aplicación.
+   - Candados: una política **restrictiva** que impide insertar este tipo de aviso desde la aplicación (incluso a Informática) y un trigger que impide editar el título, el texto, el destino o el dueño de uno ya creado (solo se puede marcar como leído).
+   - Se retira para el usuario autenticado el RPC viejo `ensure_app_update_notification` (0079), que ya no usa ninguna pantalla.
+   - No cambia ninguna notificación existente, ni sus lecturas (0102), ni el push (0085). Es idempotente.
+3. **Edge Function `announce-release`**: no la llama la aplicación ni el navegador. Valida (en este orden y cortando en la primera falla): método `POST`; **secreto propio** (`x-release-token`, comparación en tiempo constante); pedido con esquema cerrado (versión, módulos de la lista, commit); y que **producción esté sirviendo exactamente esa versión y esté armada contra este mismo proyecto de Supabase** (lee `/version.json` del sitio publicado). Recién entonces llama a `announce_release()` con la clave de servicio, que vive solo en el entorno de la función.
+4. **`/version.json`** (nuevo, lo genera cada compilación): `{ version, commit, builtAt, supabaseHost }`. No contiene secretos (el servidor de datos ya viaja en el código de la aplicación). No se precachea en el service worker (el precache sigue en 107 piezas) y el comando lo pide con un parámetro que evita el caché.
+5. **`npm run release:announce`** (`scripts/announce-release.mjs`): el comando documentado en 75.5.
+
+### 75.4 Configuración (una sola vez)
+
+Los secretos **nunca van en el repositorio, ni en una variable `VITE_*`, ni en un archivo versionado**.
+
+1. **Elegir el secreto del anuncio:** una cadena aleatoria de 32 caracteres o más, distinta de `CRON_SHARED_SECRET`, de la clave de servicio y de las claves de Supabase. Guardarla en el gestor de contraseñas.
+2. **Cargarlo en Supabase** (Edge Functions → Secrets, o por CLI sin dejarlo escrito en el historial):
+   ```powershell
+   supabase secrets set RELEASE_ANNOUNCE_TOKEN=<el secreto> SIGER4_PUBLIC_URL=https://<sitio-de-produccion>
+   ```
+   `SIGER4_PUBLIC_URL` es la dirección pública de producción, **sin barra final** y por `https`. `SUPABASE_URL` y `SUPABASE_SERVICE_ROLE_KEY` los inyecta Supabase.
+3. **Desplegar la función:** `supabase functions deploy announce-release --no-verify-jwt` (la autenticación es el secreto propio, no un JWT de usuario; mismo criterio que `send-push-system`).
+4. **En tu terminal, al momento de anunciar** (variables de la sesión; no se guardan en ningún archivo):
+   ```powershell
+   $env:RELEASE_ANNOUNCE_TOKEN = (Get-Clipboard)     # copiado del gestor de contraseñas: no queda en el historial
+   $env:SIGER4_PUBLIC_URL      = 'https://<sitio-de-produccion>'
+   $env:SIGER4_FUNCTIONS_URL   = 'https://<proyecto>.supabase.co/functions/v1'
+   ```
+   Al terminar: `Remove-Item Env:RELEASE_ANNOUNCE_TOKEN`.
+5. **Rotar el secreto:** repetir el paso 2 con un valor nuevo (la función lo toma en el próximo arranque). **Apagar el anuncio:** `supabase secrets unset RELEASE_ANNOUNCE_TOKEN` (la función queda respondiendo "no está configurada") o borrar la función. En ningún caso se afecta a la aplicación ni a las notificaciones existentes.
+
+### 75.5 El comando
+
+Se corre **a mano, después de que la versión quedó publicada en producción** y desde un commit cuyo `package.json` tenga esa versión:
+
+```powershell
+npm run release:announce -- --version 1.19.0 --modules "Notificaciones"
+npm run release:announce -- --version 1.19.0 --modules "Documentos,Mapa Regional" --commit a34f0a3
+npm run release:announce -- --version 1.19.0 --modules "Documentos" --dry-run     # muestra el aviso y no envía nada
+```
+
+Falla **sin enviar nada** y con un mensaje claro si:
+
+| Situación | Salida |
+| --- | --- |
+| Faltan la versión o los módulos, o hay una opción desconocida | 1 |
+| La versión o algún módulo no son válidos (fuera de la lista, más de 6, formato) | 1 |
+| La versión pedida no coincide con la de `package.json` del repositorio | 1 |
+| Faltan credenciales o direcciones (`RELEASE_ANNOUNCE_TOKEN` de 32 o más caracteres, `SIGER4_PUBLIC_URL`, `SIGER4_FUNCTIONS_URL`), o la dirección de funciones no es de Supabase | 1 |
+| Producción no responde, no tiene `/version.json` válido o **sirve otra versión** (despliegue sin terminar) | 1 |
+| `SIGER4_FUNCTIONS_URL` apunta a **otro proyecto** de Supabase que el de producción | 1 |
+| **La versión ya fue anunciada** (no se crea nada nuevo) | 2 |
+| La función rechazó o falló (secreto equivocado, función apagada, error de la base) | 3 |
+| Anunciada | 0 |
+
+La salida nunca imprime el secreto. Necesita Node 22.18 o más nuevo (lee el contrato compartido en TypeScript).
+
+### 75.6 Cómo se anuncia una versión (checklist de publicación)
+
+- [ ] La versión nueva está publicada **y** `https://<sitio>/version.json` muestra el número esperado (el comando lo verifica, pero conviene mirarlo).
+- [ ] Elegir los módulos que de verdad cambiaron, en lenguaje común (los de 75.2). Si fueron más de seis, nombrar los principales.
+- [ ] `npm run release:announce -- … --dry-run` y revisar el texto.
+- [ ] Correr el comando sin `--dry-run`. Debe decir "anunciada a N personas".
+- [ ] En una cuenta de prueba: el aviso aparece **una sola vez**, la campana suma uno y llega el push (si la persona tiene el aviso activado).
+- [ ] Si el comando se corre dos veces: la segunda sale con código 2 y no pasa nada más.
+
+### 75.7 Orden de ejecución
+
+1. **0121** — solo, en su propia ejecución (SQL Editor de Supabase).
+2. **0122** — después, sola. (Si se corre antes la 0122, frena con un mensaje que lo explica.)
+3. Desplegar la función `announce-release` y cargar sus dos secretos (75.4).
+4. Publicar el frontend 1.19.0.
+5. `npm run release:announce -- --version 1.19.0 --modules "Notificaciones" --dry-run` y, si está bien, sin `--dry-run`.
+
+### 75.8 Pruebas, por tipo de evidencia
+
+- **Base local (PostgreSQL 16, `tests/db/test_0122_release_announcements.sql`, reconstruida con todas las migraciones, 72 comprobaciones, 0 fallas):** un módulo y varios módulos; la misma versión dos veces no duplica; versión vacía o inválida y módulos inválidos, repetidos, vacíos, de más o de menos; texto larguísimo; perfiles inactivos y sin cuenta no reciben; **sin sesión, usuario común, Integrante de Informática, `informatica_r4` y `anon` por la API no pueden anunciar una versión; nadie puede insertar ni editar un aviso de actualización (ni cambiarle el texto, el tipo o el dueño) ni insertar, modificar o borrar registros de versión desde la aplicación**; cada persona marca el suyo sin afectar a las demás; el RPC viejo quedó cerrado; las notificaciones de siempre no cambian. Las suites de las tandas 0110 a 0120 dieron los mismos resultados que antes (103, 35, 34, 158, 30, 293, 41, 90 y 59) y la auditoría de seguridad no tuvo errores. El retiro manual de una versión mal anunciada (75.10) se probó en la misma base.
+- **`npm run test:release` (sin red ni base: 122 comprobaciones, 0 fallas):** el contrato compartido; que el contrato y la migración 0122 coincidan (módulos, rutas, textos, formatos); la **Edge Function real** contra una base y una producción simuladas (sin secreto o con uno equivocado, cortado, más largo, vacío, con una sesión de usuario o con la clave de servicio en lugar del secreto: 401 sin tocar nada; función mal configurada: 503; cuerpo inválido o de más de 4 KB; pedidos inválidos; producción caída, con otra versión, con 404/500 o armada contra otro proyecto; error de base sin filtrar detalles; los logs no llevan secretos ni textos); y el **comando real de punta a punta** (comando → producción simulada → función → base simulada): caso feliz, `--dry-run`, versión ya anunciada, versión que no coincide, faltan credenciales, producción no disponible, otra versión o otro proyecto, y la función rechazando.
+- **`npm run security:check`:** siete comprobaciones nuevas (la aplicación no llama a `announce_release` ni toca `app_releases`, solo `service_role` ejecuta la función, las políticas y el trigger de candado existen, la función compara el secreto en tiempo constante y verifica producción, el formulario de notificaciones no ofrece el tipo).
+- **Backend simulado en navegador (Chrome de escritorio y emulación de celular, 30 comprobaciones, 0 fallas):** Informática con aviso de varios módulos (sin botón Abrir, no importante, filtro Sistema, origen "Sistema", leer lo baja de la campana y lo saca de Pendientes); Presidente de CD con aviso de un módulo (Abrir lleva a Documentos y lo deja leído); Miembro de Departamento con un módulo que su modo no abre (sin botón Abrir, ni en la bandeja ni en el detalle); "Marcar todas como leídas"; 320, 360 y 1366 px, claro y oscuro, sin desborde.
+- **No verificado:** el push real (el trigger y `send-push-system` no se tocaron; no se probó con una suscripción real), la **búsqueda global** con el aviso (se cubre por revisión de código: usa las mismas etiquetas que el resto), la **sincronización entre pestañas** (el aviso se actualiza al navegar o recargar, como el resto de las notificaciones), el service worker con el aviso en una PWA instalada, un dispositivo físico y **producción** (nada de esto se corrió contra la base ni el sitio reales).
+
+### 75.9 Archivos tocados que conviene conocer
+
+- `supabase/migrations/0121_release_announcement_type.sql`, `0122_release_announcements.sql`.
+- `supabase/functions/announce-release/index.ts`, `supabase/functions/_shared/releaseAnnouncement.ts` (el contrato, también usado por el comando).
+- `scripts/announce-release.mjs`, `scripts/security-check.mjs` (sección nueva).
+- `vite.config.ts`: un plugin chico que emite `version.json` en cada compilación. No cambia nada más del armado.
+- `src/types/database.ts`, `src/lib/notificationMeta.ts`, `src/lib/audit/humanize.ts`, `src/hooks/usePendientes.ts`, `src/pages/NotificacionesPage.tsx`: el tipo nuevo, su etiqueta ("Actualización"), su categoría (Sistema), su lugar en Pendientes y el origen "Sistema" en la bandeja.
+- `tests/release/` (pruebas sin red), `tests/db/` (base local: armado, datos de prueba y la suite de la 0122), `tests/ui/backend/fixtures.mjs` (avisos de ejemplo).
+- `eslint.config.js`: `tests/**` pasa a la lista de excluidos, igual que `scripts/**` (son programas de Node y de Playwright que no corren en la aplicación; `npm run lint` fallaba con 76 errores en `tests/ui` (globales de navegador y una variable sin uso) desde la sección 74).
+- `package.json` y `package-lock.json`: versión 1.19.0 y los scripts `release:announce` y `test:release`.
+
+### 75.10 Si algo sale mal
+
+- **"Ya fue anunciada" (código 2):** es lo esperado si se repite el comando; no pasó nada.
+- **"Producción sirve otra versión" / "no se pudo consultar producción":** el despliegue todavía no terminó, o el sitio está caído. Esperar y reintentar; no se crea nada.
+- **"Otro proyecto de Supabase":** revisar `SIGER4_FUNCTIONS_URL`: tiene que ser el proyecto con el que está armado el sitio publicado.
+- **"La función no está configurada" (503) o "No autorizado" (401):** falta o está mal el secreto de la función (`supabase secrets list` muestra los nombres, no los valores); volver a cargarlo (75.4, paso 2) y desplegar de nuevo.
+- **Se anunció una versión con módulos equivocados:** como el aviso no se puede editar a propósito (candado de 0122), se retira y se vuelve a anunciar, **como dueño de la base** en el editor SQL de Supabase, revisando antes el resultado del primer `select`:
+  ```sql
+  select count(*) from notifications where app_update_id = 'release:1.19.0';
+  delete from notifications where app_update_id = 'release:1.19.0';
+  delete from app_releases where version = '1.19.0';
+  ```
+  Las personas que ya lo hubieran recibido por push no se pueden "des-notificar". Después se vuelve a correr el comando con los módulos correctos.
+- **El push no llegó pero el aviso está en la campana:** es el mismo caso de siempre (`project_url` o `cron_shared_secret` sin configurar en `system_settings`, o la persona sin suscripción); no es un problema del anuncio. Diagnóstico en Ajustes (secciones 20 y 47).
+- **Volver atrás:** publicar el commit anterior. Las migraciones son aditivas y no hace falta deshacerlas: sin el comando ejecutándose, la tabla y la función quedan inertes.
+
+### 75.11 Hallazgos y decisiones
+
+| Severidad | Hallazgo | Decisión |
+| --- | --- | --- |
+| Media | **`npm run lint` fallaba** (76 errores) desde que `tests/ui` entró al repositorio: ESLint los analizaba como código del navegador | Se excluyó `tests/**` como ya estaba `scripts/**`; el aviso de `useAuth.tsx` (1) sigue |
+| Media | Un anuncio es **irreversible hacia las personas** (se notifica y puede salir un push): por eso el comando es manual, verifica producción y tiene `--dry-run` | Decisión de diseño: no se anuncia desde un despliegue automático |
+| Baja | El aviso de baja prioridad queda detrás de "Ver todos" cuando hay cuatro o más pendientes más urgentes | Por diseño: no desplaza lo urgente; sigue en la campana y la bandeja |
+| Baja | El push de un aviso por persona dispara un envío individual por cada perfil activo (una sola llamada a la Edge Function por aviso) | Es el mismo mecanismo de todas las notificaciones; con muchos perfiles el envío se reparte en el tiempo. Sin cambios |

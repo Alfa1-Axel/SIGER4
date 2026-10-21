@@ -78,7 +78,7 @@ export function InventarioPage() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="search-input" style={{ flex: 1, minWidth: 200 }}>
           <Icon name="search" size={16} />
-          <input placeholder="Buscar por nombre o descripción..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input placeholder="Buscar por nombre o descripción…" aria-label="Buscar en el inventario por nombre o descripción" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <select value={categoryFilter} aria-label="Filtrar por categoría" onChange={(e) => setCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todas las categorías</option>

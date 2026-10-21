@@ -81,7 +81,8 @@ export function CuartelesPage() {
       <div className="search-input" style={{ marginBottom: 12 }}>
         <Icon name="search" size={16} />
         <input
-          placeholder="Buscar cuartel por nombre, zona o dirección..."
+          placeholder="Nombre, zona o dirección…"
+          aria-label="Buscar cuartel por nombre, zona o dirección"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

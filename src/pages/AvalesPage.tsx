@@ -356,10 +356,10 @@ export function AvalesPage() {
             <div className="search-input avales-search">
               <Icon name="search" size={16} />
               <input
-                placeholder="Buscar por título, persona, archivo o quién lo cargó…"
+                placeholder="Título, persona o archivo…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="Buscar avales"
+                aria-label="Buscar avales por título, persona, archivo o quién lo cargó"
               />
             </div>
             {archivedCount > 0 && (

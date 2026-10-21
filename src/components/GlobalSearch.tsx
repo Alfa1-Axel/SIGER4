@@ -303,7 +303,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
                   </ul>
                   {filter === 'todos' && g.results.length >= PER_MODULE && (
                     <button type="button" className="link-muted search-more" onClick={() => setFilter(g.module)}>
-                      Ver más en {SEARCH_MODULE_LABEL[g.module]} →
+                      Ver todos los resultados en {SEARCH_MODULE_LABEL[g.module]} →
                     </button>
                   )}
                 </li>

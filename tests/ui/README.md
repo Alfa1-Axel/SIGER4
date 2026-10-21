@@ -13,6 +13,7 @@ Por cada variante de rol, pantalla, ancho y tema:
 |---|---|
 | La pantalla abre | no carga, o queda en blanco |
 | Sin desplazamiento horizontal | la página o el contenido principal son más anchos que la ventana (una tabla puede ser más ancha dentro de su propio contenedor) |
+| Textos dentro de su lugar | un texto se sale del borde de su botón, etiqueta o insignia, o el título del encabezado se corta con puntos suspensivos |
 | Accesibilidad (axe-core, WCAG 2.0 y 2.1 A y AA) | hay una falla de gravedad seria o crítica, contraste incluido |
 | Título | la pantalla no tiene `<h1>` o tiene más de uno |
 | Tamaño táctil (celular y tablet, hasta 768 px) | un control mide menos de 40 px de alto o de ancho (se exceptúan los que agrandan su área de toque sin cambiar el diseño: marcadores del mapa, logo y foto del encabezado) |

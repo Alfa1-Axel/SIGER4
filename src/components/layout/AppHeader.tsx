@@ -29,12 +29,19 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
     const header = headerRef.current
     const el = titleRef.current
     if (!header || !el) return
+    const range = document.createRange()
     const measure = () => {
       header.classList.remove('app-header--stacked')
-      if (el.scrollWidth > el.clientWidth + 1) header.classList.add('app-header--stacked')
+      // Ancho real del texto (con decimales) contra el del lugar que tiene: scrollWidth y clientWidth redondean y dejaban
+      // pasar un título que se pasa por menos de un píxel, que igual se cortaba con puntos suspensivos.
+      range.selectNodeContents(el)
+      if (range.getBoundingClientRect().width > el.getBoundingClientRect().width + 0.1) header.classList.add('app-header--stacked')
     }
     measure()
     window.addEventListener('resize', measure)
+    // El primer cálculo puede ser anterior a que termine de acomodarse el encabezado (íconos, tipografía): se repite unas
+    // veces durante el primer par de segundos.
+    const timers = [120, 450, 1100, 2500].map((ms) => window.setTimeout(measure, ms))
     // Una tipografía que termina de cargar después del primer cálculo (p. ej. el peso en negrita del
     // título) cambia el ancho del texto: se vuelve a medir cada vez que se carga una.
     const fonts = typeof document !== 'undefined' ? document.fonts : undefined
@@ -43,6 +50,7 @@ export function AppHeader({ title, onOpenMenu }: AppHeaderProps) {
     return () => {
       window.removeEventListener('resize', measure)
       fonts?.removeEventListener?.('loadingdone', measure)
+      timers.forEach((timer) => window.clearTimeout(timer))
     }
   }, [title])
 

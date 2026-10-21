@@ -490,7 +490,7 @@ export function MapaRegionalPage() {
 
   return (
     <AppShell title="Mapa Regional">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
           <h1 className="page-title">Mapa Regional</h1>
           <p className="page-subtitle">

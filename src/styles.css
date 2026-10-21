@@ -1211,9 +1211,12 @@ a.row-item:focus-visible {
 }
 
 @media (pointer: coarse) {
-  /* Un botón solo de ícono (sin padding de texto) no baja de 40px de ancho. */
-  .btn {
+  /* Un botón solo de ícono (siempre lleva aria-label) no baja de 40px de ancho. No se aplica a todos los botones: fijar un
+     ancho mínimo en un botón con texto dentro de una fila flexible lo deja achicarse por debajo de su contenido y el texto
+     se sale del borde. */
+  .btn[aria-label] {
     min-width: var(--control-height-sm);
+    flex-shrink: 0;
   }
   .app-header .btn-icon {
     width: 40px;

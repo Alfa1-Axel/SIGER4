@@ -1,7 +1,7 @@
 // Pruebas de pantalla de SIGER4. Recorre cada persona (variante de rol) por cada pantalla, ancho y tema contra un backend de
 // Supabase simulado (tests/ui/backend) y falla si encuentra:
 //   - una pantalla que no abre o queda en blanco;
-//   - desborde horizontal (la página o el contenido principal más anchos que la ventana);
+//   - desborde horizontal (la página o el contenido principal más anchos que la ventana) o texto que se sale de su botón;
 //   - fallas de accesibilidad de gravedad seria o crítica (axe-core, WCAG 2.0/2.1 A y AA), contraste incluido;
 //   - una pantalla sin título (<h1>) o con más de uno;
 //   - controles táctiles de menos de 40 px en celular y tablet.
@@ -127,8 +127,24 @@ function measure(page, width) {
         const wide = (el.textContent || '').trim().length > 0 ? 999 : r.width
         if (r.height < 40 || wide < 40) small.push(`${label(el)} ${Math.round(r.width)}x${Math.round(r.height)}`)
       }
+      // Texto que se sale del borde de su botón, etiqueta o insignia (un botón que se achica por debajo de su contenido).
+      const spill = []
+      for (const el of document.querySelectorAll('.btn, .chip, .badge')) {
+        if (!visible(el) || el.closest('.sr-only')) continue
+        const cs = getComputedStyle(el)
+        if (cs.textOverflow === 'ellipsis' || cs.overflow === 'hidden') continue
+        if (el.scrollWidth > el.clientWidth + 1) spill.push(label(el))
+      }
+      // Título del encabezado cortado con puntos suspensivos (tiene que pasar a la segunda fila).
+      const headerTitle = document.querySelector('.app-header-title')
+      let titleCut = false
+      if (headerTitle) {
+        const range = document.createRange()
+        range.selectNodeContents(headerTitle)
+        titleCut = range.getBoundingClientRect().width > headerTitle.getBoundingClientRect().width + 0.5
+      }
       const text = (main?.innerText || '').trim()
-      return { overflow, docOverflow, mainOverflow, small, textLen: text.length, h1Count: document.querySelectorAll('main h1').length, denied: document.querySelectorAll('.access-denied').length > 0 }
+      return { overflow, docOverflow, mainOverflow, small, spill, titleCut, textLen: text.length, h1Count: document.querySelectorAll('main h1').length, denied: document.querySelectorAll('.access-denied').length > 0 }
     },
     { W: width, ignore: HIT_AREA_EXTENDED },
   )
@@ -182,6 +198,8 @@ try {
           const m = await measure(page, width)
           if (m.textLen < 20 && !m.denied) failures.push(`${where}: pantalla en blanco`)
           if (m.docOverflow > 1 || m.mainOverflow > 1 || m.overflow.length) failures.push(`${where}: desborde horizontal (${m.docOverflow > 1 ? `página +${m.docOverflow}px` : m.mainOverflow > 1 ? `contenido +${m.mainOverflow}px` : m.overflow[0]})`)
+          if (m.spill.length) failures.push(`${where}: texto que se sale de su botón o etiqueta (${m.spill.slice(0, 2).join(' | ')})`)
+          if (m.titleCut) failures.push(`${where}: el título del encabezado se corta con puntos suspensivos`)
           if (m.h1Count !== 1) failures.push(`${where}: ${m.h1Count} títulos <h1> (tiene que haber uno)`)
           if (mobile && m.small.length) failures.push(`${where}: controles táctiles de menos de 40 px (${m.small.slice(0, 2).join(' | ')})`)
           if (!args.noaxe) for (const v of await runAxe(page)) failures.push(`${where}: accesibilidad ${v}`)

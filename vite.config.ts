@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -30,6 +30,33 @@ const BUILD_TIME = new Date().toISOString()
 // hay changelog dentro de la aplicación.
 const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version as string
 
+// Cada despliegue publica /version.json con la versión técnica, el commit y el servidor de datos con el que se armó. Lo usa
+// `npm run release:announce` (y la función announce-release) para confirmar que producción YA sirve la versión que se va a
+// anunciar. No lo lee la aplicación, no se muestra a nadie y no entra en el service worker (el .json no se precachea).
+function versionFilePlugin(): Plugin {
+  let env: Record<string, string> = {}
+  return {
+    name: 'siger4-version-file',
+    apply: 'build',
+    configResolved(config) {
+      env = loadEnv(config.mode, process.cwd(), 'VITE_')
+    },
+    generateBundle() {
+      let supabaseHost: string | null = null
+      try {
+        supabaseHost = new URL(env.VITE_SUPABASE_URL ?? '').host
+      } catch {
+        supabaseHost = null
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: APP_VERSION, commit: BUILD_VERSION, builtAt: BUILD_TIME, supabaseHost }) + String.fromCharCode(10),
+      })
+    },
+  }
+}
+
 export default defineConfig({
   define: {
     __SIGER4_APP_VERSION__: JSON.stringify(APP_VERSION),
@@ -38,6 +65,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    versionFilePlugin(),
     VitePWA({
       // 'prompt' (antes 'autoUpdate'): con autoUpdate, la librería manda
       // skipWaiting() sola apenas detecta un SW nuevo instalado, y sin

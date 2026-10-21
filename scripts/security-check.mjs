@@ -121,6 +121,32 @@ section('Código del navegador (controles 9, 15 y 12)')
 }
 
 // ---------------------------------------------------------------------------
+section('Aviso de "Nueva actualización" (DEPLOYMENT.md, sección 75)')
+{
+  const read = (rel) => readFileSync(join(ROOT, rel), 'utf8')
+  const migration = read('supabase/migrations/0122_release_announcements.sql')
+  const fn = read('supabase/functions/announce-release/index.ts')
+  const srcFiles = []
+  const walkSrc = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name)
+      if (statSync(full).isDirectory()) walkSrc(full)
+      else if (/\.(ts|tsx)$/.test(name)) srcFiles.push(full)
+    }
+  }
+  walkSrc(join(ROOT, 'src'))
+  const callers = srcFiles.filter((f) => /announce[_-]release|release_announcement|app_releases/.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))
+  check('la aplicación no llama a announce_release ni toca app_releases (solo el comando de publicación)', callers.length === 0, callers.join(', '))
+  check('announce_release() se ejecuta solo con la clave de servicio (sin permiso para anon ni authenticated)', /revoke all on function announce_release\([^)]*\) from public, anon, authenticated/i.test(migration) && /grant execute on function announce_release\([^)]*\) to service_role/i.test(migration) && !/grant execute on function announce_release\([^)]*\) to [^;]*authenticated/i.test(migration))
+  check('ninguna persona puede crear ni editar avisos de actualización desde la aplicación (política restrictiva y guarda de cambios)', /create policy "?notifications_no_release_type_from_clients"?[\s\S]*?as restrictive/i.test(migration) && /trg_guard_release_notification/.test(migration))
+  check('la función announce-release compara el secreto en tiempo constante y exige 32 caracteres o más', /constantTimeEqual\(/.test(fn) && /RELEASE_ANNOUNCE_TOKEN\.length < 32/.test(fn))
+  check('la función announce-release no usa el secreto de las tareas programadas ni ninguna clave escrita en el código', !/x-cron-secret|cron_shared_secret/.test(fn) && !/eyJ[A-Za-z0-9_-]{20,}/.test(fn))
+  check('la función announce-release verifica que producción sirva esa versión antes de anunciar', /version\.json/.test(fn) && /served\.build\?\.version !== version/.test(fn))
+  const form = read('src/pages/NotificacionFormPage.tsx')
+  check('el formulario de notificaciones no ofrece el tipo "actualizacion_publicada"', !/actualizacion_publicada/.test(form))
+}
+
+// ---------------------------------------------------------------------------
 section('Funciones puras de seguridad (controles 15 y 16)')
 {
   let ts

@@ -65,7 +65,7 @@ for (const [name, input] of [
   check(`se rechaza: ${name}`, !parse(input).ok)
 }
 check('el mensaje de rechazo por un módulo largo no repite el texto entero', (() => { const x = parse({ version: '1.18.0', modules: ['Documentos'.repeat(1000)] }); return !x.ok && x.message.length < 150 })())
-check('hay 19 módulos permitidos, sin repetidos, con "Mapa Regional" y "Asistente SIGER4" y ninguno con "Región"', shared.RELEASE_MODULES.length === 19 && new Set(shared.RELEASE_MODULES).size === 19 && shared.RELEASE_MODULES.includes('Mapa Regional') && shared.RELEASE_MODULES.includes('Asistente SIGER4') && !shared.RELEASE_MODULES.some((m) => /Región/.test(m)))
+check('hay 18 módulos permitidos, sin repetidos, con "Mapa Regional" y ninguno con "Región"', shared.RELEASE_MODULES.length === 18 && new Set(shared.RELEASE_MODULES).size === 18 && shared.RELEASE_MODULES.includes('Mapa Regional') && !shared.RELEASE_MODULES.some((m) => /Región/.test(m)))
 check('el texto con un módulo es el pedido', shared.releaseAnnouncementBody(['Documentos']) === 'Hay una nueva actualización en Documentos.')
 check('el texto con dos módulos usa "y"', shared.releaseAnnouncementBody(['Mapa Regional', 'Documentos']) === 'Hay nuevas actualizaciones en Mapa Regional y Documentos.')
 check('el texto con tres módulos es el del ejemplo', shared.releaseAnnouncementBody(['Usuarios y roles', 'Mapa Regional', 'Documentos']) === 'Hay nuevas actualizaciones en Usuarios y roles, Mapa Regional y Documentos.')

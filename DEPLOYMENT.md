@@ -11311,7 +11311,7 @@ Dos migraciones, una Edge Function nueva (`announce-release`), un comando de pub
 
 Una lista cerrada, en lenguaje común, que vive en un único lugar del código (`supabase/functions/_shared/releaseAnnouncement.ts`) y se repite en la base (`release_modules()`, 0122); `npm run test:release` falla si las dos dejan de coincidir:
 
-Inicio, Usuarios y roles, Cuarteles, Efectivos, Asistencia, Móviles, Departamentos, Informes y actas, Escuela, Avales, Documentos, Inventario, Calendario, Mapa Regional, Reportes, Notificaciones, Mi perfil, Seguridad, Asistente SIGER4.
+Inicio, Usuarios y roles, Cuarteles, Efectivos, Asistencia, Móviles, Departamentos, Informes y actas, Escuela, Avales, Documentos, Inventario, Calendario, Mapa Regional, Reportes, Notificaciones, Mi perfil, Seguridad.
 
 De 1 a 6 módulos por aviso. Si se agrega un módulo nuevo, se agrega en las dos listas y se corre `npm run test:release`. El botón **Abrir** (un solo módulo) usa estas rutas: Inicio `/panel`, Usuarios y roles `/usuarios`, Cuarteles `/cuarteles`, Departamentos `/departamentos`, Escuela `/escuela`, Avales `/escuela/avales`, Documentos `/documentos`, Inventario `/inventario`, Calendario `/calendario`, Mapa Regional `/mapa`, Reportes `/reportes`, Notificaciones `/notificaciones`, Mi perfil `/ajustes`. Los demás módulos no llevan enlace.
 

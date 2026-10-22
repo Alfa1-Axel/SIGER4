@@ -141,7 +141,7 @@ select t.ok('anon tampoco', not has_function_privilege('anon', 'public.ensure_ap
 
 select '== 10. Estado general';
 select t.ok('los candados no rompieron las notificaciones de siempre: el tipo "prueba" se sigue insertando como dueño de la base', (select count(*) from (select 1 from notifications limit 1) x) = 1);
-select t.ok('la lista de módulos tiene los 19 nombres', cardinality(release_modules()) = 19 and 'Asistente SIGER4' = any (release_modules()) and 'Mapa Regional' = any (release_modules()));
+select t.ok('la lista de módulos tiene los 18 nombres', cardinality(release_modules()) = 18 and 'Mapa Regional' = any (release_modules()));
 select t.ok('ningún módulo usa "Región"', not exists (select 1 from unnest(release_modules()) m where m ilike '%región%' or m ilike '%region %'));
 
 rollback;

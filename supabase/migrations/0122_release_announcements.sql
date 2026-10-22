@@ -53,7 +53,7 @@ as $$
   select array[
     'Inicio', 'Usuarios y roles', 'Cuarteles', 'Efectivos', 'Asistencia', 'Móviles', 'Departamentos', 'Informes y actas',
     'Escuela', 'Avales', 'Documentos', 'Inventario', 'Calendario', 'Mapa Regional', 'Reportes', 'Notificaciones',
-    'Mi perfil', 'Seguridad', 'Asistente SIGER4'
+    'Mi perfil', 'Seguridad'
   ]::text[];
 $$;
 

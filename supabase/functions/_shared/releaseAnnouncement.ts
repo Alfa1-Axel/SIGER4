@@ -28,7 +28,6 @@ export const RELEASE_MODULES = [
   'Notificaciones',
   'Mi perfil',
   'Seguridad',
-  'Asistente SIGER4',
 ] as const
 
 export const MAX_RELEASE_MODULES = 6

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import { describeSupabaseError } from '../../lib/api/errors'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 interface DeleteUserConfirmModalProps {
   fullName: string
@@ -19,13 +20,9 @@ export function DeleteUserConfirmModal({ fullName, onConfirm, onClose }: DeleteU
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
+  useDialogFocus(dialogRef, onClose, nameRef)
 
   const matches = typedName.trim() === fullName.trim()
 
@@ -47,6 +44,7 @@ export function DeleteUserConfirmModal({ fullName, onConfirm, onClose }: DeleteU
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label="Eliminar usuario"
@@ -70,7 +68,7 @@ export function DeleteUserConfirmModal({ fullName, onConfirm, onClose }: DeleteU
         </p>
         <div className="field">
           <label htmlFor="confirmName">Nombre completo</label>
-          <input id="confirmName" required value={typedName} onChange={(e) => setTypedName(e.target.value)} autoFocus autoComplete="off" />
+          <input id="confirmName" required value={typedName} onChange={(e) => setTypedName(e.target.value)} ref={nameRef} autoComplete="off" />
         </div>
         {error && <p className="field-error">{error}</p>}
         <div className="modal-actions">

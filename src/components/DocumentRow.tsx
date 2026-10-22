@@ -32,7 +32,7 @@ export function DocumentRow({ doc, scopeLabel, canManage, opening, trashing, onO
         </div>
       </div>
       <div className="list-item-actions">
-        <button type="button" className="btn btn-outlined" disabled={doc.storage_path === 'pending' || opening} onClick={onOpen}>
+        <button type="button" className="btn btn-outlined" disabled={doc.storage_path === 'pending' || opening} onClick={onOpen} aria-label={`Ver ${doc.title}`}>
           <Icon name="file" size={13} />
           <span className="btn-label-full">{opening ? 'Abriendo…' : 'Ver'}</span>
         </button>

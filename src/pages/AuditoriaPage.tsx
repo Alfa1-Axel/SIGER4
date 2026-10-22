@@ -431,7 +431,7 @@ export function AuditoriaPage() {
 
       {logs.length > 0 && (
         <div className="table-wrap">
-          <table className="data-table" style={{ minWidth: 760 }}>
+          <table className="data-table data-table--stacked">
             <thead>
               <tr>
                 <th>Fecha/hora</th>
@@ -448,15 +448,15 @@ export function AuditoriaPage() {
               {logs.map((log) => (
                 <Fragment key={log.id}>
                   <tr>
-                    <td className="col-nowrap">{formatDateTime(log.created_at)}</td>
-                    <td style={{ maxWidth: 360, overflowWrap: 'anywhere' }}>
+                    <td className="col-nowrap" data-label="Fecha/hora">{formatDateTime(log.created_at)}</td>
+                    <td data-label="Evento" style={{ maxWidth: 360, overflowWrap: 'anywhere' }}>
                       {buildEventSummary(log.actor?.full_name ?? null, log.action, log.table_name, entityDisplayName(log))}
                     </td>
-                    <td>
+                    <td data-label="Acción">
                       <span className={`badge ${actionBadgeClass(log.action)}`}>{translateAction(log.action)}</span>
                     </td>
-                    <td>{translateTable(log.table_name)}</td>
-                    <td className="text-secondary col-nowrap">
+                    <td data-label="Módulo">{translateTable(log.table_name)}</td>
+                    <td className="text-secondary col-nowrap" data-label="Alcance">
                       {log.station?.name ?? log.subsede?.name ?? log.region?.name ?? '—'}
                     </td>
                     <td className="col-actions">

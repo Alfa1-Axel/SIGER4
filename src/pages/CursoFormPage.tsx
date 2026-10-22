@@ -200,12 +200,12 @@ export function CursoFormPage() {
 
           <div className="field">
             <label htmlFor="hours">Horas cátedra (opcional)</label>
-            <input id="hours" type="number" min="0" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="20" />
+            <input id="hours" type="number" inputMode="numeric" min="0" value={hours} onChange={(e) => setHours(e.target.value)} placeholder="20" />
           </div>
 
           <div className="field">
             <label htmlFor="days">Cantidad de días (opcional)</label>
-            <input id="days" type="number" min="0" value={days} onChange={(e) => setDays(e.target.value)} placeholder="3" />
+            <input id="days" type="number" inputMode="numeric" min="0" value={days} onChange={(e) => setDays(e.target.value)} placeholder="3" />
           </div>
 
           <div className="field">
@@ -213,6 +213,7 @@ export function CursoFormPage() {
             <input
               id="attendeesCount"
               type="number"
+              inputMode="numeric"
               min="0"
               value={attendeesCount}
               onChange={(e) => setAttendeesCount(e.target.value)}

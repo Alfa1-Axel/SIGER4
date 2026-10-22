@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState, type ElementRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import { describeSupabaseError } from '../../lib/api/errors'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 interface ReasonPromptModalProps {
   title: string
@@ -23,13 +24,9 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const reasonRef = useRef<ElementRef<'textarea'>>(null)
+  useDialogFocus(dialogRef, onClose, reasonRef)
 
   async function handleConfirm() {
     if (reason.trim().length < minLength) {
@@ -49,6 +46,7 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -67,7 +65,7 @@ export function ReasonPromptModal({ title, description, confirmLabel = 'Confirma
         )}
         <div className="field">
           <label htmlFor="reason">Motivo</label>
-          <textarea id="reason" required rows={3} maxLength={maxLength} value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />
+          <textarea id="reason" required rows={3} maxLength={maxLength} value={reason} onChange={(e) => setReason(e.target.value)} ref={reasonRef} />
         </div>
         {error && <p className="field-error">{error}</p>}
         <div className="modal-actions">

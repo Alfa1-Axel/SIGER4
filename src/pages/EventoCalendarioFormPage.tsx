@@ -8,7 +8,7 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchVisibleDepartments } from '../lib/api/departments'
 import type { CalendarEventType, Region, Station, Subsede, VisibleDepartment } from '../types/database'
-import { EVENT_TYPE_LABEL } from './CalendarioPage'
+import { EVENT_TYPE_LABEL } from '../lib/labels'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 import { EditConflictPanel } from '../components/EditConflictPanel'
@@ -361,7 +361,7 @@ export function EventoCalendarioFormPage() {
                     ))}
                   </div>
                   {scopeTarget === 'region' && (
-                    <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+                    <select value={regionId} aria-label="Regional" onChange={(e) => setRegionId(e.target.value)}>
                       <option value="">Seleccionar Regional</option>
                       {regions.map((r) => (
                         <option key={r.id} value={r.id}>
@@ -371,7 +371,7 @@ export function EventoCalendarioFormPage() {
                     </select>
                   )}
                   {scopeTarget === 'subsede' && (
-                    <select value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
+                    <select value={subsedeId} aria-label="Subsede" onChange={(e) => setSubsedeId(e.target.value)}>
                       <option value="">Seleccionar subsede</option>
                       {subsedes.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -381,7 +381,7 @@ export function EventoCalendarioFormPage() {
                     </select>
                   )}
                   {scopeTarget === 'station' && (
-                    <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+                    <select value={stationId} aria-label="Cuartel" onChange={(e) => setStationId(e.target.value)}>
                       <option value="">Seleccionar cuartel</option>
                       {stations.map((s) => (
                         <option key={s.id} value={s.id}>
@@ -413,6 +413,7 @@ export function EventoCalendarioFormPage() {
             <input
               id="notifyBefore"
               type="number"
+              inputMode="numeric"
               min={1}
               value={notifyBeforeMinutes}
               onChange={(e) => setNotifyBeforeMinutes(e.target.value)}

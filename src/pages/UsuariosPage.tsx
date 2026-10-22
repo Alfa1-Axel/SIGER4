@@ -53,7 +53,8 @@ export function UsuariosPage() {
       <div className="search-input" style={{ marginBottom: 20 }}>
         <Icon name="search" size={16} />
         <input
-          placeholder="Buscar por nombre o email..."
+          placeholder="Buscar por nombre o email…"
+          aria-label="Buscar usuarios por nombre o email"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />

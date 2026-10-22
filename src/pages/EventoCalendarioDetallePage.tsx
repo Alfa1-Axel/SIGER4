@@ -8,9 +8,10 @@ import { fetchSubsedes } from '../lib/api/subsedes'
 import { fetchStations } from '../lib/api/stations'
 import { fetchVisibleDepartments } from '../lib/api/departments'
 import type { CalendarEvent, Region, Station, Subsede, VisibleDepartment } from '../types/database'
-import { EVENT_STATUS_LABEL, EVENT_TYPE_LABEL } from './CalendarioPage'
+import { EVENT_STATUS_LABEL, EVENT_TYPE_LABEL } from '../lib/labels'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { useConfirm } from '../hooks/useConfirm'
 
 export function EventoCalendarioDetallePage() {
   const { id } = useParams<{ id: string }>()
@@ -81,9 +82,17 @@ export function EventoCalendarioDetallePage() {
     return 'Escuela Regional'
   }
 
+  const confirm = useConfirm()
+
   async function handleCancel() {
     if (!id || !event) return
-    if (!window.confirm('¿Cancelar este evento? Sigue visible en el calendario, marcado como cancelado.')) return
+    const confirmed = await confirm({
+      title: '¿Cancelar este evento?',
+      message: 'Sigue visible en el calendario, marcado como cancelado.',
+      confirmLabel: 'Cancelar el evento',
+      cancelLabel: 'Volver',
+    })
+    if (!confirmed) return
     setError(null)
     setUpdating(true)
     try {
@@ -98,7 +107,13 @@ export function EventoCalendarioDetallePage() {
 
   async function handleDelete() {
     if (!id) return
-    if (!window.confirm('¿Eliminar este evento definitivamente? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este evento definitivamente?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar evento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     try {
       await deleteCalendarEvent(id)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
@@ -29,6 +29,28 @@ export function DocumentosPage() {
   const [error, setError] = useState<string | null>(null)
   const [cleaningUp, setCleaningUp] = useState(false)
   const [showAddMenu, setShowAddMenu] = useState(false)
+  const addMenuRef = useRef<HTMLDivElement>(null)
+  const addButtonRef = useRef<HTMLButtonElement>(null)
+
+  // El menú del botón flotante se cierra con Escape (devolviendo el foco al botón) y al tocar afuera.
+  useEffect(() => {
+    if (!showAddMenu) return
+    function onPointer(event: PointerEvent) {
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) setShowAddMenu(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setShowAddMenu(false)
+        addButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [showAddMenu])
   // La carga funciona desde escritorio y celular (DEPLOYMENT.md sección 56).
   // Quien trabaja en un departamento también carga documentos (en el suyo).
   const canUploadFiles = canManageFolders || hasDepartments
@@ -208,7 +230,7 @@ export function DocumentosPage() {
       )}
 
       {canUploadFiles && (
-        <div className="fab-menu">
+        <div className="fab-menu" ref={addMenuRef}>
           {showAddMenu && (
             <div className="fab-menu-panel" role="menu">
               {canManageFolders && (
@@ -224,10 +246,12 @@ export function DocumentosPage() {
             </div>
           )}
           <button
+            ref={addButtonRef}
             type="button"
             className="btn btn-primary btn-icon"
             style={{ borderRadius: 'var(--radius-full)', width: 52, height: 52, boxShadow: 'var(--shadow-md)' }}
-            aria-label="Agregar"
+            aria-label="Agregar documento o carpeta"
+            aria-haspopup="menu"
             aria-expanded={showAddMenu}
             onClick={() => setShowAddMenu((prev) => !prev)}
           >

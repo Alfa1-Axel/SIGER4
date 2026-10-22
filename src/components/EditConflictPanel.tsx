@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './ui/Icon'
+import { useConfirm } from '../hooks/useConfirm'
 import { describeSupabaseError } from '../lib/api/errors'
 import { translateField, translateValue } from '../lib/audit/humanize'
 import {
@@ -55,6 +56,7 @@ export function EditConflictPanel({
   fieldLabel = translateField,
   formatValue = translateValue,
 }: EditConflictPanelProps) {
+  const confirm = useConfirm()
   const [current, setCurrent] = useState<Record<string, unknown> | null | undefined>(undefined)
   const [updaterName, setUpdaterName] = useState<string | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -251,8 +253,15 @@ export function EditConflictPanel({
           <button
             type="button"
             className="btn btn-outlined"
-            onClick={() => {
-              if (window.confirm('Se descartan los cambios que escribiste y se muestra la versión actual. ¿Seguro?')) onDiscard()
+            onClick={async () => {
+              const confirmed = await confirm({
+                title: '¿Descartar lo que escribiste?',
+                message: 'Se pierden tus cambios y se muestra la versión actual.',
+                confirmLabel: 'Descartar lo mío',
+                cancelLabel: 'Volver',
+                tone: 'danger',
+              })
+              if (confirmed) onDiscard()
             }}
             disabled={saving}
           >

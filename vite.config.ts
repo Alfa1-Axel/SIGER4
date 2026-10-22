@@ -72,9 +72,9 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'Sistema Informático de GEstión de la Regional 4',
+        name: 'SIGER4',
         short_name: 'SIGER4',
-        description: 'Plataforma institucional para la Regional 4 de Bomberos Voluntarios',
+        description: 'Sistema para el mejor manejo y conservación de datos de la Regional 4 de bomberos voluntarios',
         theme_color: '#284f86',
         background_color: '#f3f5f7',
         display: 'standalone',
@@ -129,7 +129,9 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           supabase: ['@supabase/supabase-js'],
-          pdf: ['jspdf', 'jspdf-autotable'],
+          // jsPDF NO va en un grupo aparte: ese grupo se llevaba también el ayudante de carga de archivos de Vite
+          // (__vitePreload), que el archivo principal necesita, y así el principal bajaba ~140 KiB de jsPDF en cada
+          // visita. Sin grupo, jsPDF queda dentro del archivo de los reportes, que se baja recién al generar uno.
         },
       },
     },

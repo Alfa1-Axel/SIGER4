@@ -18,14 +18,18 @@ import { useAuth } from '../hooks/useAuth'
 // durante toda la sesion, sin importar en que pantalla este el usuario.
 export function NotificationPushBridge() {
   const { profile } = useAuth()
+  const profileId = profile?.id ?? null
   const playSoundRef = useRef<(() => void) | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   useEffect(() => {
     playSoundRef.current = () => {
       try {
         const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
         if (!AudioContextClass) return
-        const ctx = new AudioContextClass()
+        // Un solo contexto de audio para toda la sesión: crear uno por aviso agota el cupo del navegador.
+        const ctx = audioContextRef.current ?? (audioContextRef.current = new AudioContextClass())
+        if (ctx.state === 'suspended') void ctx.resume().catch(() => undefined)
         const oscillator = ctx.createOscillator()
         const gain = ctx.createGain()
         oscillator.type = 'sine'
@@ -40,10 +44,16 @@ export function NotificationPushBridge() {
         // Sonido interno es una mejora opcional: si falla, no debe romper nada.
       }
     }
+    return () => {
+      playSoundRef.current = null
+      const ctx = audioContextRef.current
+      audioContextRef.current = null
+      if (ctx && ctx.state !== 'closed') void ctx.close().catch(() => undefined)
+    }
   }, [])
 
   useEffect(() => {
-    if (!profile?.id) return
+    if (!profileId) return
 
     // Filtro por profile_id=eq en la propia suscripcion de Realtime (no un
     // "if" adentro del callback): esto es notificaciones self-scope
@@ -56,7 +66,7 @@ export function NotificationPushBridge() {
       .channel('notifications-push-bridge')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `profile_id=eq.${profile.id}` },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `profile_id=eq.${profileId}` },
         () => {
           playSoundRef.current?.()
         },
@@ -66,7 +76,7 @@ export function NotificationPushBridge() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [profile])
+  }, [profileId])
 
   return null
 }

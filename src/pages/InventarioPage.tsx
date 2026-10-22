@@ -4,24 +4,12 @@ import { AppShell } from '../components/layout/AppShell'
 import { Icon } from '../components/ui/Icon'
 import { fetchInventoryItems } from '../lib/api/inventory'
 import { fetchActiveLoans } from '../lib/api/inventoryLoanRequests'
-import type { InventoryCategory, InventoryItem, InventoryLoanRequest, InventoryStatus } from '../types/database'
+import type { InventoryItem, InventoryLoanRequest, InventoryStatus } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from '../lib/labels'
 
-export const INVENTORY_CATEGORY_LABEL: Record<InventoryCategory, string> = {
-  herramienta_manual: 'Herramienta Manual',
-  mecanica: 'Mecánica',
-  equipo: 'Equipo',
-  elementos_practica: 'Elementos de Práctica',
-  otros: 'Otros',
-}
 
-export const INVENTORY_STATUS_LABEL: Record<InventoryStatus, string> = {
-  disponible: 'Disponible',
-  no_disponible: 'No disponible',
-  mantenimiento: 'Mantenimiento',
-  baja: 'Baja',
-}
 
 const INVENTORY_STATUS_BADGE: Record<InventoryStatus, string> = {
   disponible: 'badge-success',
@@ -90,9 +78,9 @@ export function InventarioPage() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         <div className="search-input" style={{ flex: 1, minWidth: 200 }}>
           <Icon name="search" size={16} />
-          <input placeholder="Buscar por nombre o descripción..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input placeholder="Buscar por nombre o descripción…" aria-label="Buscar en el inventario por nombre o descripción" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={categoryFilter} aria-label="Filtrar por categoría" onChange={(e) => setCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todas las categorías</option>
           {Object.entries(INVENTORY_CATEGORY_LABEL).map(([value, label]) => (
             <option key={value} value={value}>
@@ -100,7 +88,7 @@ export function InventarioPage() {
             </option>
           ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={statusFilter} aria-label="Filtrar por estado" onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los estados</option>
           {Object.entries(INVENTORY_STATUS_LABEL).map(([value, label]) => (
             <option key={value} value={value}>

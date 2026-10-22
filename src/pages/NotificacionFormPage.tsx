@@ -258,7 +258,7 @@ export function NotificacionFormPage() {
           </div>
 
           {scopeTarget === 'region' && (
-            <select value={regionId} onChange={(e) => setRegionId(e.target.value)}>
+            <select value={regionId} aria-label="Regional" onChange={(e) => setRegionId(e.target.value)}>
               <option value="">Seleccionar Regional</option>
               {regions.map((region) => (
                 <option key={region.id} value={region.id}>
@@ -269,7 +269,7 @@ export function NotificacionFormPage() {
           )}
 
           {scopeTarget === 'subsede' && (
-            <select value={subsedeId} onChange={(e) => setSubsedeId(e.target.value)}>
+            <select value={subsedeId} aria-label="Subsede" onChange={(e) => setSubsedeId(e.target.value)}>
               <option value="">Seleccionar subsede</option>
               {subsedes.map((subsede) => (
                 <option key={subsede.id} value={subsede.id}>
@@ -280,7 +280,7 @@ export function NotificacionFormPage() {
           )}
 
           {scopeTarget === 'station' && (
-            <select value={stationId} onChange={(e) => setStationId(e.target.value)}>
+            <select value={stationId} aria-label="Cuartel" onChange={(e) => setStationId(e.target.value)}>
               <option value="">Seleccionar cuartel</option>
               {stations.map((station) => (
                 <option key={station.id} value={station.id}>
@@ -305,7 +305,7 @@ export function NotificacionFormPage() {
           )}
 
           {scopeTarget === 'profile' && (
-            <select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+            <select value={profileId} aria-label="Usuario" onChange={(e) => setProfileId(e.target.value)}>
               <option value="">Seleccionar usuario</option>
               {profiles.map((profile) => (
                 <option key={profile.id} value={profile.id}>

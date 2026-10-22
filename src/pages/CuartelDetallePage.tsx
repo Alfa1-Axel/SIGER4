@@ -46,6 +46,7 @@ import { ROLE_DEFINITIONS } from '../types/roles'
 import { useAuth } from '../hooks/useAuth'
 import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import { SuccessNotice } from '../components/ui/SuccessNotice'
+import { useConfirm } from '../hooks/useConfirm'
 
 const VEHICLE_STATUS_LABEL: Record<Vehicle['status'], string> = {
   operativo: 'Operativo',
@@ -229,9 +230,17 @@ export function CuartelDetallePage() {
     setHistoryEvents(data)
   }
 
+  const confirm = useConfirm()
+
   async function handleDeleteHistoryEvent(eventId: string) {
     if (!id) return
-    if (!window.confirm('¿Eliminar este evento del historial institucional? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este evento del historial institucional?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar evento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     await deleteStationHistoryEvent(eventId)
     if (expandedHistoryEventId === eventId) setExpandedHistoryEventId(null)
     await reloadHistoryEvents(id)
@@ -385,7 +394,13 @@ export function CuartelDetallePage() {
 
   async function handlePersonnelDelete(personId: string) {
     if (!id) return
-    if (!window.confirm('¿Eliminar a esta persona del registro de personal? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar a esta persona del registro de personal?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar persona',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     await deletePersonnel(personId)
     await reloadPersonnel(id)
   }
@@ -593,7 +608,7 @@ export function CuartelDetallePage() {
 
             {personnel.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                <select value={personnelStatusFilter} onChange={(e) => setPersonnelStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <select value={personnelStatusFilter} aria-label="Filtrar por estado" onChange={(e) => setPersonnelStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
                   <option value="">Todos los estados</option>
                   {Object.entries(PERSONNEL_STATUS_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -602,7 +617,7 @@ export function CuartelDetallePage() {
                   ))}
                 </select>
                 {personnelRanks.length > 0 && (
-                  <select value={personnelRankFilter} onChange={(e) => setPersonnelRankFilter(e.target.value)} style={{ fontSize: 12 }}>
+                  <select value={personnelRankFilter} aria-label="Filtrar por jerarquía" onChange={(e) => setPersonnelRankFilter(e.target.value)} style={{ fontSize: 12 }}>
                     <option value="">Todas las jerarquías</option>
                     {personnelRanks.map((r) => (
                       <option key={r} value={r}>
@@ -612,7 +627,7 @@ export function CuartelDetallePage() {
                   </select>
                 )}
                 {personnelDepartments.length > 0 && (
-                  <select value={personnelDepartmentFilter} onChange={(e) => setPersonnelDepartmentFilter(e.target.value)} style={{ fontSize: 12 }}>
+                  <select value={personnelDepartmentFilter} aria-label="Filtrar por departamento" onChange={(e) => setPersonnelDepartmentFilter(e.target.value)} style={{ fontSize: 12 }}>
                     <option value="">Todos los departamentos</option>
                     {personnelDepartments.map((d) => (
                       <option key={d} value={d}>
@@ -654,6 +669,7 @@ export function CuartelDetallePage() {
                         {canEdit ? (
                           <select
                             value={person.status}
+                            aria-label={`Estado de ${person.first_name} ${person.last_name}`}
                             onChange={(e) => {
                               const value = e.target.value as PersonnelStatus
                               if (SEPARATION_STATUSES.includes(value)) {
@@ -692,14 +708,14 @@ export function CuartelDetallePage() {
                         </button>
                         {canEdit && (
                           <>
-                            <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined btn-sm">
+                            <Link to={`/personal/${person.id}/editar`} className="btn btn-outlined btn-sm" aria-label={`Editar a ${person.first_name} ${person.last_name}`}>
                               <Icon name="edit" size={14} />
                             </Link>
                             <button
                               type="button"
                               className="btn btn-danger-outline btn-sm"
                               onClick={() => handlePersonnelDelete(person.id)}
-                              aria-label="Eliminar"
+                              aria-label={`Eliminar a ${person.first_name} ${person.last_name} del registro`}
                             >
                               <Icon name="trash" size={14} />
                             </button>
@@ -778,6 +794,7 @@ export function CuartelDetallePage() {
                     {canEdit && !isDecommissioned && (
                       <select
                         value=""
+                        aria-label="Dar de baja, vender o transferir este móvil"
                         onChange={(e) => {
                           const value = e.target.value as VehicleStatus
                           if (value) setDecommissioningVehicle({ vehicle, newStatus: value })
@@ -924,7 +941,7 @@ export function CuartelDetallePage() {
 
             {historyEvents.length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                <select value={historyCategoryFilter} onChange={(e) => setHistoryCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
+                <select value={historyCategoryFilter} aria-label="Filtrar por categoría" onChange={(e) => setHistoryCategoryFilter(e.target.value)} style={{ fontSize: 12 }}>
                   <option value="">Todas las categorías</option>
                   {Object.entries(HISTORY_CATEGORY_LABEL).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -933,7 +950,7 @@ export function CuartelDetallePage() {
                   ))}
                 </select>
                 {historyYears.length > 0 && (
-                  <select value={historyYearFilter} onChange={(e) => setHistoryYearFilter(e.target.value)} style={{ fontSize: 12 }}>
+                  <select value={historyYearFilter} aria-label="Filtrar por año" onChange={(e) => setHistoryYearFilter(e.target.value)} style={{ fontSize: 12 }}>
                     <option value="">Todos los años</option>
                     {historyYears.map((year) => (
                       <option key={year} value={year}>

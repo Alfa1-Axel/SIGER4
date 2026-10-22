@@ -21,6 +21,7 @@ import { formatBytes } from '../lib/format'
 import { useSchoolAvalesAccess } from '../hooks/useSchoolAvalesAccess'
 import type { AvalesDepartment, SchoolAvalDocument } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
+import { useConfirm } from '../hooks/useConfirm'
 
 type BusyAction = 'open' | 'download' | 'restore'
 type ReasonModal = { kind: 'archive' | 'delete'; doc: SchoolAvalDocument } | null
@@ -172,8 +173,15 @@ export function AvalesPage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleRestore(doc: SchoolAvalDocument) {
-    if (!window.confirm(`¿Volver a activar "${doc.title}"? Vuelve a verse para su dueño y para la autoridad del área.`)) return
+    const confirmed = await confirm({
+      title: `¿Volver a activar "${doc.title}"?`,
+      message: 'Vuelve a verse para su dueño y para la autoridad del área.',
+      confirmLabel: 'Volver a activar',
+    })
+    if (!confirmed) return
     setActionError(null)
     setBusy({ id: doc.id, action: 'restore' })
     try {
@@ -348,10 +356,10 @@ export function AvalesPage() {
             <div className="search-input avales-search">
               <Icon name="search" size={16} />
               <input
-                placeholder="Buscar por título, persona, archivo o quién lo cargó…"
+                placeholder="Título, persona o archivo…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                aria-label="Buscar avales"
+                aria-label="Buscar avales por título, persona, archivo o quién lo cargó"
               />
             </div>
             {archivedCount > 0 && (

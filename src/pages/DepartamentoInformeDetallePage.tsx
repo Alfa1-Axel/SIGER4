@@ -17,6 +17,7 @@ import { formatBytes } from '../lib/format'
 import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
 import { useNavigationNotice } from '../hooks/useNavigationNotice'
 import type { Department, DepartmentReportFile, DepartmentReportWithFiles } from '../types/database'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Fotos que el navegador puede mostrar como miniatura (HEIC no, salvo Safari).
 const PREVIEWABLE_IMAGES = new Set(['image/jpeg', 'image/png', 'image/webp'])
@@ -105,10 +106,18 @@ export function DepartamentoInformeDetallePage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleDelete() {
     if (!report) return
     const filesNote = report.files.length ? ` y sus ${report.files.length} archivo(s)` : ''
-    if (!window.confirm(`¿Eliminar "${report.title}"${filesNote}? No se puede deshacer.`)) return
+    const confirmed = await confirm({
+      title: `¿Eliminar "${report.title}"${filesNote}?`,
+      message: 'No se puede deshacer.',
+      confirmLabel: 'Eliminar informe',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setActionError(null)
     setBusy('delete')
     try {

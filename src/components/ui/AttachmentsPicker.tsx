@@ -173,6 +173,7 @@ export function AttachmentsPicker({
             <input
               id={`${id}-camera`}
               type="file"
+              aria-label="Sacar foto"
               className="sr-only-file-input"
               accept="image/*"
               capture="environment"
@@ -188,6 +189,7 @@ export function AttachmentsPicker({
             <input
               id={`${id}-video`}
               type="file"
+              aria-label="Grabar video"
               className="sr-only-file-input"
               accept="video/*"
               capture="environment"

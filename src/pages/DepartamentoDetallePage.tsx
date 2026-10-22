@@ -46,16 +46,9 @@ import { describeSupabaseError } from '../lib/api/errors'
 import { EditConflictPanel } from '../components/EditConflictPanel'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
+import { useConfirm } from '../hooks/useConfirm'
+import { DEPARTMENT_ACTIVITY_TYPE_LABEL } from '../lib/labels'
 
-export const DEPARTMENT_ACTIVITY_TYPE_LABEL: Record<DepartmentActivityType, string> = {
-  reunion: 'Reunión',
-  capacitacion: 'Capacitación',
-  practica: 'Práctica',
-  mantenimiento: 'Mantenimiento',
-  gestion: 'Gestión',
-  informe: 'Informe',
-  otro: 'Otro',
-}
 
 const MONTH_LABEL_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -323,8 +316,16 @@ export function DepartamentoDetallePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredReports, stations, subsedes])
 
+  const confirm = useConfirm()
+
   async function handleDeleteReport(report: DepartmentActivityReport) {
-    if (!window.confirm(`¿Eliminar el informe "${report.title}"? Esta acción no se puede deshacer.`)) return
+    const confirmed = await confirm({
+      title: `¿Eliminar el informe "${report.title}"?`,
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar informe',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     setDeletingReportId(report.id)
     try {
@@ -374,7 +375,13 @@ export function DepartamentoDetallePage() {
 
   async function handleDelete() {
     if (!id) return
-    if (!window.confirm('¿Eliminar este departamento? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este departamento?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar departamento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     try {
       await deleteDepartment(id)
@@ -764,7 +771,7 @@ export function DepartamentoDetallePage() {
 
         {canManage && (
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-            <select value={newMemberProfileId} onChange={(e) => setNewMemberProfileId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
+            <select value={newMemberProfileId} aria-label="Usuario a agregar como miembro" onChange={(e) => setNewMemberProfileId(e.target.value)} style={{ flex: 1, minWidth: 160 }}>
               <option value="">Seleccionar usuario…</option>
               {availableProfiles.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -880,7 +887,7 @@ export function DepartamentoDetallePage() {
             )}
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" className="btn btn-primary" disabled={savingManualMember}>
-                {savingManualMember ? 'Guardando…' : 'Guardar'}
+                {savingManualMember ? 'Guardando…' : manualMemberForm.id ? 'Guardar cambios' : 'Agregar integrante'}
               </button>
               <button type="button" className="btn btn-outlined" onClick={() => setManualMemberForm(null)}>
                 Cancelar
@@ -1037,7 +1044,7 @@ export function DepartamentoDetallePage() {
 
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: reports.length > 0 ? 16 : 0 }}>
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={typeFilter} aria-label="Filtrar por tipo de actividad" onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todos los tipos</option>
             {(Object.entries(DEPARTMENT_ACTIVITY_TYPE_LABEL) as [DepartmentActivityType, string][]).map(([value, label]) => (
               <option key={value} value={value}>
@@ -1045,7 +1052,7 @@ export function DepartamentoDetallePage() {
               </option>
             ))}
           </select>
-          <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={stationFilter} aria-label="Filtrar por cuartel" onChange={(e) => setStationFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todos los cuarteles</option>
             {stations.map((s) => (
               <option key={s.id} value={s.id}>
@@ -1053,7 +1060,7 @@ export function DepartamentoDetallePage() {
               </option>
             ))}
           </select>
-          <select value={subsedeFilter} onChange={(e) => setSubsedeFilter(e.target.value)} style={{ fontSize: 12 }}>
+          <select value={subsedeFilter} aria-label="Filtrar por subsede" onChange={(e) => setSubsedeFilter(e.target.value)} style={{ fontSize: 12 }}>
             <option value="">Todas las subsedes</option>
             {subsedes.map((s) => (
               <option key={s.id} value={s.id}>

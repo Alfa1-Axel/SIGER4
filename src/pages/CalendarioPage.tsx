@@ -10,24 +10,9 @@ import { fetchVisibleDepartments } from '../lib/api/departments'
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType, Region, Station, Subsede, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
+import { EVENT_TYPE_LABEL, EVENT_STATUS_LABEL } from '../lib/labels'
 
-export const EVENT_TYPE_LABEL: Record<CalendarEventType, string> = {
-  regional: 'Regional',
-  cuartel: 'Cuartel',
-  escuela: 'Escuela',
-  capacitacion: 'Capacitación',
-  vencimiento: 'Vencimiento',
-  guardia: 'Guardia',
-  reunion: 'Reunión',
-  mantenimiento: 'Mantenimiento',
-  otro: 'Otro',
-}
 
-export const EVENT_STATUS_LABEL: Record<CalendarEventStatus, string> = {
-  programado: 'Programado',
-  cancelado: 'Cancelado',
-  finalizado: 'Finalizado',
-}
 
 const EVENT_STATUS_BADGE: Record<CalendarEventStatus, string> = {
   programado: 'badge-success',
@@ -173,7 +158,7 @@ export function CalendarioPage() {
       )}
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={typeFilter} aria-label="Filtrar por tipo" onChange={(e) => setTypeFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los tipos</option>
           {Object.entries(EVENT_TYPE_LABEL)
             .filter(([value]) => !isDepartmentOnly || DEPARTMENT_EVENT_TYPES.includes(value as CalendarEventType))
@@ -183,7 +168,7 @@ export function CalendarioPage() {
               </option>
             ))}
         </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={statusFilter} aria-label="Filtrar por estado" onChange={(e) => setStatusFilter(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">Todos los estados</option>
           {Object.entries(EVENT_STATUS_LABEL).map(([value, label]) => (
             <option key={value} value={value}>
@@ -215,7 +200,7 @@ export function CalendarioPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <button
               type="button"
-              className="btn btn-outlined btn-sm"
+              className="btn btn-outlined btn-icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
               aria-label="Mes anterior"
             >
@@ -226,7 +211,7 @@ export function CalendarioPage() {
             </strong>
             <button
               type="button"
-              className="btn btn-outlined btn-sm"
+              className="btn btn-outlined btn-icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
               aria-label="Mes siguiente"
             >
@@ -259,7 +244,6 @@ export function CalendarioPage() {
                       borderRadius: 'var(--radius-lg)',
                       border: isSelected ? '2px solid var(--color-primary)' : isToday ? '1px solid var(--color-primary)' : '1px solid transparent',
                       background: isSelected ? 'var(--color-primary-soft)' : 'transparent',
-                      opacity: inMonth ? 1 : 0.35,
                       cursor: 'pointer',
                       display: 'flex',
                       flexDirection: 'column',
@@ -267,9 +251,9 @@ export function CalendarioPage() {
                       gap: 2,
                     }}
                   >
-                    <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400 }}>{day.getDate()}</span>
+                    <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: inMonth ? undefined : 'var(--color-text-muted)' }}>{day.getDate()}</span>
                     {dayEvents.length > 0 && (
-                      <span style={{ display: 'flex', gap: 2 }}>
+                      <span style={{ display: 'flex', gap: 2, opacity: inMonth ? 1 : 0.6 }}>
                         {dayEvents.slice(0, 3).map((e) => (
                           <span
                             key={e.id}

@@ -24,6 +24,7 @@ import { useDepartmentReportsAccess } from '../hooks/useDepartmentReportsAccess'
 import { useFormDraft } from '../hooks/useFormDraft'
 import { DraftRecoveryBanner, DraftStatusLine } from '../components/FormDraftUi'
 import type { Department, DepartmentReport, DepartmentReportFile, DepartmentReportType, DepartmentReportWithFiles } from '../types/database'
+import { useConfirm } from '../hooks/useConfirm'
 
 type Mode = 'redactar' | 'cargar'
 
@@ -176,9 +177,17 @@ export function DepartamentoInformeFormPage() {
     if (!title.trim() && next.length > 0 && mode === 'cargar') setTitle(titleFromFileName(next[0].name))
   }
 
+  const confirm = useConfirm()
+
   async function handleRemoveExistingFile(file: DepartmentReportFile) {
     if (!existing) return
-    if (!window.confirm(`¿Quitar "${file.file_name}" del informe? El archivo se borra.`)) return
+    const confirmed = await confirm({
+      title: `¿Quitar "${file.file_name}" del informe?`,
+      message: 'El archivo se borra.',
+      confirmLabel: 'Quitar archivo',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setRemovingFileId(file.id)
     setError(null)
     try {

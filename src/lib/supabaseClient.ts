@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { fetchWithTimeout } from './fetchWithTimeout'
 
 // Exportadas para las subidas con progreso (lib/api/storage.ts), que van
 // por XMLHttpRequest al mismo endpoint de Storage que usa supabase-js.
@@ -19,6 +20,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const passkeysEnabled = import.meta.env.VITE_PASSKEYS_ENABLED === 'true'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  // Los pedidos a la base y a la autenticación tienen tiempo máximo (lib/fetchWithTimeout.ts).
+  global: { fetch: fetchWithTimeout },
   auth: {
     persistSession: true,
     autoRefreshToken: true,

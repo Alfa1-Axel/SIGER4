@@ -12,13 +12,14 @@ import {
   fetchInventoryItemById,
   fetchInventoryItemHistory,
 } from '../lib/api/inventory'
-import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from './InventarioPage'
+import { INVENTORY_CATEGORY_LABEL, INVENTORY_STATUS_LABEL } from '../lib/labels'
 import type { InventoryCategory, InventoryItemHistory, InventoryStatus, Region, Station, Subsede } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { describeSupabaseError } from '../lib/api/errors'
 import { EditConflictPanel } from '../components/EditConflictPanel'
 import { isEditConflict } from '../lib/concurrency'
 import type { RowSnapshot } from '../lib/concurrency'
+import { useConfirm } from '../hooks/useConfirm'
 
 export function InventarioFormPage() {
   const { id } = useParams<{ id?: string }>()
@@ -139,9 +140,17 @@ export function InventarioFormPage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleDelete() {
     if (!id) return
-    if (!window.confirm('¿Eliminar este elemento del inventario regional? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Eliminar este elemento del inventario regional?',
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar elemento',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     await deleteInventoryItem(id)
     navigate('/inventario')
   }

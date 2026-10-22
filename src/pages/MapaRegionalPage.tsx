@@ -26,6 +26,7 @@ import type { RowSnapshot } from '../lib/concurrency'
 import type { MapPointSubtype, MapReferencePoint, MapReferencePointType, MapSupplyPointStatus, Region, Station, StationBasic, Subsede } from '../types/database'
 import { describeSupabaseError } from '../lib/api/errors'
 import { useAuth } from '../hooks/useAuth'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Centro aproximado de la Regional 4 (Córdoba) -- solo se usa como vista
 // inicial del mapa cuando no hay ningún cuartel con coordenadas todavía;
@@ -466,8 +467,16 @@ export function MapaRegionalPage() {
   // solo para no ofrecer una acción que el backend va a rechazar) -- el
   // resto de los roles con permiso de gestión usa "Desactivar" (soft-delete)
   // para sacar un punto de circulación sin perder el historial.
+  const confirm = useConfirm()
+
   async function handleDelete(point: MapReferencePoint) {
-    if (!window.confirm(`¿Eliminar definitivamente "${point.name}"? Esta acción no se puede deshacer.`)) return
+    const confirmed = await confirm({
+      title: `¿Eliminar definitivamente "${point.name}"?`,
+      message: 'Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar punto',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     try {
       await deleteMapReferencePoint(point.id)
       await loadAll()
@@ -481,7 +490,7 @@ export function MapaRegionalPage() {
 
   return (
     <AppShell title="Mapa Regional">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div>
           <h1 className="page-title">Mapa Regional</h1>
           <p className="page-subtitle">
@@ -554,6 +563,7 @@ export function MapaRegionalPage() {
                   key={station.id}
                   position={[station.latitude as number, station.longitude as number]}
                   icon={stationDivIcon}
+                  title={station.name}
                 >
                   <Popup>
                     <StationPopupContent station={station} />
@@ -562,7 +572,7 @@ export function MapaRegionalPage() {
               ))}
               {showReferenceLayer &&
                 filteredPoints.map((point) => (
-                  <Marker key={point.id} position={[point.latitude, point.longitude]} icon={referenceDivIcon(point.type)}>
+                  <Marker key={point.id} position={[point.latitude, point.longitude]} icon={referenceDivIcon(point.type)} title={point.name}>
                     <Popup>
                       <ReferencePopupContent
                         point={point}
@@ -812,7 +822,7 @@ export function MapaRegionalPage() {
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? 'Guardando…' : 'Guardar'}
+                    {submitting ? 'Guardando…' : 'Guardar punto'}
                   </button>
                   <button type="button" className="btn btn-outlined" onClick={() => setFormOpen(false)} disabled={submitting}>
                     Cancelar

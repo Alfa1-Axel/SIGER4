@@ -13,6 +13,7 @@ import type { DocumentFolder, DocumentRecord, Profile, Region, Station, Subsede,
 import { useAuth } from '../hooks/useAuth'
 import { useDocumentAccess } from '../hooks/useDocumentAccess'
 import { describeSupabaseError } from '../lib/api/errors'
+import { useConfirm } from '../hooks/useConfirm'
 
 const RETENTION_DAYS = 30
 
@@ -106,8 +107,16 @@ export function PapeleraDocumentosPage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handlePurgeOne(doc: DocumentRecord) {
-    if (!window.confirm(`¿Borrar "${doc.title}" definitivamente? Esta acción no se puede deshacer y borra también el archivo.`)) return
+    const confirmed = await confirm({
+      title: `¿Borrar "${doc.title}" definitivamente?`,
+      message: 'Esta acción no se puede deshacer y borra también el archivo.',
+      confirmLabel: 'Borrar definitivamente',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     setInfo(null)
     setBusyId(doc.id)
@@ -127,7 +136,13 @@ export function PapeleraDocumentosPage() {
   }
 
   async function handlePurgeExpired() {
-    if (!window.confirm('¿Borrar definitivamente todos los documentos vencidos (más de 30 días en la papelera)? Esta acción no se puede deshacer.')) return
+    const confirmed = await confirm({
+      title: '¿Borrar definitivamente todos los documentos vencidos?',
+      message: 'Son los que llevan más de 30 días en la papelera. Esta acción no se puede deshacer.',
+      confirmLabel: 'Borrar vencidos',
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setError(null)
     setInfo(null)
     setPurgingAll(true)
@@ -212,6 +227,7 @@ export function PapeleraDocumentosPage() {
                       className="btn btn-danger-outline"
                       disabled={busyId === doc.id}
                       onClick={() => handlePurgeOne(doc)}
+                      aria-label={`Borrar definitivamente ${doc.title}`}
                     >
                       <Icon name="trash" size={14} />
                       <span className="btn-label-full">Borrar ya</span>

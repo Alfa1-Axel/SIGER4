@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
@@ -33,6 +33,10 @@ interface AuthContextValue {
   // antes de redirigir al login, en vez de un error crudo o una pantalla en
   // blanco.
   deactivated: boolean
+  // Mensaje cuando hay sesión pero no se pudo cargar el perfil (red caída, servidor ocupado):
+  // ProtectedRoute muestra "No pudimos cargar tu perfil" con reintento, en vez de una app sin permisos.
+  profileError: string | null
+  retryProfile: () => void
   signIn: (email: string, password: string) => Promise<{ error: string | null; code?: string; status?: number }>
   signOut: () => Promise<void>
   hasRole: (...role: RoleKey[]) => boolean
@@ -50,15 +54,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberDepartmentIds, setMemberDepartmentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [deactivated, setDeactivated] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const profileLoadedRef = useRef(false)
+  profileLoadedRef.current = profile !== null
 
   useEffect(() => {
     let active = true
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return
-      setSession(data.session)
-      if (!data.session) setLoading(false)
-    })
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!active) return
+        setSession(data.session)
+        if (!data.session) setLoading(false)
+      })
+      .catch((err) => {
+        // Sin este catch, un fallo al leer la sesión guardada deja el spinner de pantalla completa
+        // para siempre. Se trata como "sin sesión": la persona vuelve a ingresar.
+        console.warn('[SIGER4] No se pudo leer la sesión guardada:', err)
+        if (!active) return
+        setSession(null)
+        setLoading(false)
+      })
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
@@ -94,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // navegación real, pero contribuía a la sensación de "recarga" al
     // volver de background.
     if (!profile) setLoading(true)
+    setProfileError(null)
     fetchCurrentUserContext(session.user.id)
       .then((ctx) => {
         if (!active) return
@@ -131,14 +150,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // volver de background con conectividad inestable — el mismo caso
         // que este archivo ya intenta manejar mejor en otros puntos.
         console.warn('[SIGER4] No se pudo cargar el perfil del usuario:', err)
-        if (active) setLoading(false)
+        if (!active) return
+        // Si ya había un perfil cargado se conserva (un refresco fallido no desarma la sesión en curso).
+        if (!profileLoadedRef.current) setProfileError('Revisá tu conexión y volvé a intentar.')
+        setLoading(false)
       })
 
     return () => {
       active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id])
+  }, [session?.user?.id, reloadKey])
 
   const roles = useMemo(() => userRoles.map((r) => r.role), [userRoles])
   const isAdmin = useMemo(() => roles.some((r) => ADMIN_ROLES.includes(r)), [roles])
@@ -158,6 +180,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSuperAdmin,
     isDepartmentOnly,
     deactivated,
+    profileError,
+    retryProfile() {
+      setLoading(true)
+      setReloadKey((key) => key + 1)
+    },
     async signIn(email, password) {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       return { error: error?.message ?? null, code: error?.code, status: error?.status }
@@ -174,7 +201,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async refreshProfile() {
       if (!session?.user) return
-      const ctx = await fetchCurrentUserContext(session.user.id)
+      let ctx: Awaited<ReturnType<typeof fetchCurrentUserContext>>
+      try {
+        ctx = await fetchCurrentUserContext(session.user.id)
+      } catch (err) {
+        // Un refresco que falla deja todo como estaba: la sesión en curso no se desarma.
+        console.warn('[SIGER4] No se pudo actualizar el perfil:', err)
+        return
+      }
       if (ctx) {
         if (!ctx.profile.is_active) {
           setDeactivated(true)

@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
 import type { Notification } from '../../types/database'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 interface NotificationDetailModalProps {
   notification: Notification
@@ -19,16 +20,12 @@ interface NotificationDetailModalProps {
 // patrón que ReasonPromptModal.tsx (createPortal, Escape para cerrar, click
 // afuera para cerrar) para mantener consistencia visual con el resto del sistema.
 export function NotificationDetailModal({ notification, typeLabel, scopeLabel, onClose, onOpenRelated }: NotificationDetailModalProps) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialogRef, onClose)
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={notification.title}

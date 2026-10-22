@@ -59,7 +59,7 @@ export function SupportContact({ variant = 'card', lead }: SupportContactProps) 
         Si tenés una duda o un problema con SIGER4, consultá al {SUPPORT_NAME} contando qué querías hacer y en qué pantalla estabas.
       </p>
       <div className="support-contact-actions">
-        <a className="btn btn-primary" href={mailto}>
+        <a className="btn btn-outlined" href={mailto}>
           <Icon name="mail" size={16} />
           Enviar email
         </a>

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap');
-
 /* ============================================================
    SIGER4 - Sistema de diseño
    ============================================================
@@ -29,7 +27,7 @@
   --color-surface-pressed: #e6eaef;
   --color-border: #dfe3e8;
   --color-border-strong: #c3cad3;
-  --color-input-border: #8c96a3;
+  --color-input-border: #818b99;
 
   /* Texto */
   --color-text-primary: #18212d;
@@ -258,6 +256,15 @@ h3 {
   color: var(--color-primary-soft-text);
 }
 
+/* Pantallas táctiles: los controles suben a 44px (campos, botones) y 40px (los chicos y los chips) para
+   que sean cómodos de tocar. El encabezado conserva 40px para no perder lugar en el celular. */
+@media (pointer: coarse) {
+  :root {
+    --control-height: 44px;
+    --control-height-sm: 40px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -265,6 +272,13 @@ h3 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Un indicador de carga que no gira parece colgado: sigue girando, más despacio. */
+  .spinner,
+  .loading-state::before {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
   }
 }
 
@@ -378,6 +392,23 @@ h3 {
   outline-offset: 2px;
 }
 
+/* El logo (24px) y la foto (32px) llevan un área de toque de 40px que no cambia el diseño. */
+@media (pointer: coarse) {
+  .app-header-home,
+  .app-header-avatar-link {
+    position: relative;
+  }
+  .app-header-home::after,
+  .app-header-avatar-link::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .app-header-avatar-link::after {
+    inset: -4px;
+  }
+}
+
 .app-header-logo {
   height: 24px;
   width: 24px;
@@ -472,6 +503,16 @@ h3 {
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
+}
+
+.app-content:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Con el botón flotante "+" en pantalla, el final de la lista queda libre para que no lo tape. */
+.app-content:has(.fab, .fab-menu) {
+  padding-bottom: 88px;
 }
 
 .sidebar-drawer-backdrop {
@@ -792,7 +833,7 @@ button.link-muted {
   button.link-muted {
     display: inline-flex;
     align-items: center;
-    min-height: 32px;
+    min-height: 40px;
   }
 }
 
@@ -1170,20 +1211,16 @@ a.row-item:focus-visible {
 }
 
 @media (pointer: coarse) {
-  .btn {
-    min-height: 40px;
+  /* Un botón solo de ícono (siempre lleva aria-label) no baja de 40px de ancho. No se aplica a todos los botones: fijar un
+     ancho mínimo en un botón con texto dentro de una fila flexible lo deja achicarse por debajo de su contenido y el texto
+     se sale del borde. */
+  .btn[aria-label] {
+    min-width: var(--control-height-sm);
+    flex-shrink: 0;
   }
-  .btn-sm {
-    min-height: 36px;
-  }
-  .btn-icon {
+  .app-header .btn-icon {
     width: 40px;
     height: 40px;
-  }
-  .btn-icon.btn-sm,
-  .btn-icon-sm {
-    width: 36px;
-    height: 36px;
   }
 }
 
@@ -1290,12 +1327,6 @@ a.row-item:focus-visible {
 .chip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-@media (pointer: coarse) {
-  .chip {
-    min-height: 36px;
-  }
 }
 
 .filter-chips {
@@ -1612,6 +1643,10 @@ input[type='file']::file-selector-button:hover {
   .file-picker-camera {
     display: none;
   }
+  /* Y su input también: no queda un control invisible al que llegar con el Tab. */
+  .sr-only-file-input:has(+ .file-picker-camera) {
+    display: none;
+  }
 }
 
 @media (max-width: 599px) {
@@ -1677,7 +1712,8 @@ input[type='file']::file-selector-button:hover {
    de archivo real usa el mismo patrón, distinto de display:none a
    propósito. */
 .sr-only,
-.sr-only-file-input {
+.sr-only-file-input,
+.page-title--same-as-header {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1707,6 +1743,7 @@ input[type='file']::file-selector-button:hover {
   font-weight: 600;
   line-height: 1.5;
   max-width: 100%;
+  flex-shrink: 0;
   overflow-wrap: anywhere;
 }
 
@@ -2084,7 +2121,7 @@ input[type='file']::file-selector-button:hover {
   color: inherit;
   font-family: var(--font-mono);
   font-size: 11px;
-  opacity: 0.75;
+  opacity: 0.9;
 }
 
 @media (max-width: 899px) {
@@ -2101,6 +2138,13 @@ input[type='file']::file-selector-button:hover {
   .header-search-label,
   .header-search-kbd {
     display: none;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 899px) {
+  .header-search {
+    width: 40px;
+    height: 40px;
   }
 }
 
@@ -2323,10 +2367,17 @@ kbd {
   outline-offset: 2px;
 }
 
-.home-search span {
+.home-search > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* En pantallas angostas queda solo "Buscar en SIGER4": la lista de lo que se puede buscar no entra y se cortaba. */
+@media (max-width: 480px) {
+  .home-search-hint {
+    display: none;
+  }
 }
 
 /* Contacto directo con Informática y Estadística (components/SupportContact.tsx). */
@@ -3252,8 +3303,8 @@ kbd {
   }
   .list-item-actions .btn,
   .list-item-actions .btn-icon-sm {
-    min-height: 36px;
-    min-width: 36px;
+    min-height: var(--control-height-sm);
+    min-width: var(--control-height-sm);
   }
   .list-item-actions .btn span.btn-label-full {
     display: none;
@@ -3322,6 +3373,67 @@ kbd {
   white-space: nowrap;
 }
 
+/* Tabla de muchas columnas: ancho mínimo en pantalla grande y, en el celular, una tarjeta por fila con la etiqueta
+   de cada dato (data-label), en lugar de obligar a desplazarse hacia los costados. */
+.data-table--stacked {
+  min-width: 760px;
+}
+
+@media (max-width: 599px) {
+  .data-table--stacked {
+    min-width: 0;
+  }
+  .data-table--stacked thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+  .data-table--stacked,
+  .data-table--stacked tbody,
+  .data-table--stacked tr,
+  .data-table--stacked td {
+    display: block;
+    width: 100%;
+  }
+  .data-table--stacked tbody tr {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .data-table--stacked tbody tr:last-child {
+    border-bottom: none;
+  }
+  .data-table--stacked td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 4px 12px;
+    border-bottom: none;
+    max-width: none !important;
+    text-align: right;
+    white-space: normal;
+  }
+  .data-table--stacked td::before {
+    content: attr(data-label);
+    flex: 0 0 84px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+  }
+  .data-table--stacked td:not([data-label])::before {
+    display: none;
+  }
+  .data-table--stacked td.col-actions {
+    justify-content: flex-end;
+  }
+  .data-table--stacked tbody tr:hover td {
+    background: transparent;
+  }
+}
+
 /* ============================================================
    Modales
    ============================================================ */
@@ -3367,6 +3479,10 @@ kbd {
 .modal-body {
   font-size: 14px;
   color: var(--color-text-secondary);
+}
+
+.confirm-message {
+  margin: 0;
 }
 
 .modal-actions {
@@ -3427,6 +3543,27 @@ kbd {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   padding: 28px 24px;
+}
+
+/* Pantalla de aviso a página completa (error de pantalla, perfil que no cargó): comparte el marco del ingreso. */
+.fallback-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.fallback-message {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.fallback-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .login-logos {
@@ -3574,6 +3711,12 @@ kbd {
   text-decoration: none;
   font-size: 14px;
   border-radius: var(--radius-sm);
+}
+
+@media (pointer: coarse) {
+  .contact-link {
+    min-height: 40px;
+  }
 }
 
 .contact-link:hover,
@@ -4088,6 +4231,24 @@ kbd {
   border: none;
 }
 
+/* Controles de zoom de Leaflet: 30px de fábrica, 40px al tacto. */
+@media (pointer: coarse) {
+  .leaflet-container.leaflet-touch .leaflet-bar a {
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+  }
+}
+
+@media (pointer: coarse) {
+  .map-station-marker::after,
+  .map-reference-marker::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
 /* Inicio del modo departamento sin departamento asignado. */
 .dept-home-empty {
   display: flex;
@@ -4325,7 +4486,7 @@ kbd {
 }
 
 .draft-status .btn {
-  min-height: 36px;
+  min-height: var(--control-height-sm);
 }
 
 /* ---------------------------------------------------------------

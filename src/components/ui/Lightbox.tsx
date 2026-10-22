@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icon'
+import { useDialogFocus } from '../../hooks/useDialogFocus'
 
 interface LightboxProps {
   src: string
@@ -13,16 +14,12 @@ interface LightboxProps {
 // también cierran. Pensado para reutilizarse en cualquier imagen del sistema
 // (cuartel, documentos, perfiles), no solo en el detalle de cuartel.
 export function Lightbox({ src, alt, onClose }: LightboxProps) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialogRef, onClose)
 
   return createPortal(
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={alt}

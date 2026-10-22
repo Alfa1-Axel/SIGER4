@@ -14,6 +14,7 @@ import type { DocumentRecord, VisibleDepartment } from '../types/database'
 import { useAuth } from '../hooks/useAuth'
 import { useDocumentAccess } from '../hooks/useDocumentAccess'
 import { describeSupabaseError } from '../lib/api/errors'
+import { useConfirm } from '../hooks/useConfirm'
 
 // Espacio documental de un departamento: lo que cargan su coordinador y sus
 // integrantes. Lo ven ellos e Informática; no se mezcla con otros departamentos.
@@ -62,8 +63,15 @@ export function DocumentosDepartamentoPage() {
     }
   }
 
+  const confirm = useConfirm()
+
   async function handleTrash(doc: DocumentRecord) {
-    if (!window.confirm(`¿Enviar "${doc.title}" a la papelera? Va a poder restaurarse durante 30 días.`)) return
+    const confirmed = await confirm({
+      title: `¿Enviar "${doc.title}" a la papelera?`,
+      message: 'Va a poder restaurarse durante 30 días.',
+      confirmLabel: 'Enviar a la papelera',
+    })
+    if (!confirmed) return
     setError(null)
     setTrashingId(doc.id)
     try {

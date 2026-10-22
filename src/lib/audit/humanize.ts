@@ -280,6 +280,7 @@ const NOTIFICATION_TYPE_LABELS: Record<string, string> = {
   prestamo_por_vencer: 'Préstamo por vencer',
   prestamo_vencido: 'Préstamo vencido',
   actualizacion_sistema: 'Novedad del sistema',
+  actualizacion_publicada: 'Actualización',
 }
 
 const BOOLEAN_LABELS: Record<string, string> = { true: 'Sí', false: 'No' }

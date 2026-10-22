@@ -5,7 +5,9 @@ import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 
 export default [
-  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'supabase/functions/**', 'public/**'] },
+  // scripts/** y tests/**: programas de Node (y de Playwright) que no corren en la aplicación; el comprobador de tipos
+  // y las propias pruebas los ejercitan.
+  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'tests/**', 'supabase/functions/**', 'public/**'] },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

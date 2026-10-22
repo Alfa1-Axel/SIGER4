@@ -12,6 +12,7 @@ import {
   NOTIFICATION_CATEGORY_ICON,
   NOTIFICATION_CATEGORY_LABEL,
   NOTIFICATION_TYPE_LABEL,
+  RELEASE_NOTIFICATION_TYPE,
   isImportantNotification,
   isNotificationForRole,
   openableNotificationLink,
@@ -136,6 +137,8 @@ export function NotificacionesPage() {
   function originLabel(n: Notification): string {
     // Avisos de un departamento (0106): personales, pero con su origen.
     if (n.department_id) return `Departamento ${departmentNames.get(n.department_id) ?? ''}`.trim()
+    // La actualización llega a cada persona como una notificación suya, pero es un aviso del sistema.
+    if (n.type === RELEASE_NOTIFICATION_TYPE) return 'Sistema'
     if (n.profile_id) return 'Para vos'
     if (n.station_id) return `Cuartel ${stations.find((s) => s.id === n.station_id)?.name ?? ''}`.trim()
     if (n.subsede_id) return `Subsede ${subsedes.find((s) => s.id === n.subsede_id)?.name ?? ''}`.trim()

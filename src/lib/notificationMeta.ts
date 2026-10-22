@@ -11,6 +11,12 @@ import type { AppModule } from './moduleAccess'
 // la búsqueda.
 export const HIDDEN_NOTIFICATION_TYPE: NotificationType = 'actualizacion_sistema'
 
+// En cambio, el aviso breve "Nueva actualización" de cada versión publicada (una sola
+// notificación por versión, sin versión técnica ni historial de novedades) sí se muestra:
+// en la bandeja, el contador de la campana, la búsqueda y, mientras no se lee, en el
+// Inicio. Es de baja prioridad: no pide hacer nada.
+export const RELEASE_NOTIFICATION_TYPE: NotificationType = 'actualizacion_publicada'
+
 export type NotificationCategory = 'sistema' | 'escuela' | 'inventario' | 'documentos' | 'calendario' | 'cuarteles' | 'departamentos'
 
 export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
@@ -34,6 +40,7 @@ export const NOTIFICATION_TYPE_LABEL: Record<NotificationType, string> = {
   actualizacion_sistema: 'Novedad del sistema',
   informe_departamento: 'Informe de departamento',
   aviso_departamento: 'Aviso de departamento',
+  actualizacion_publicada: 'Actualización',
 }
 
 export const NOTIFICATION_CATEGORY: Record<NotificationType, NotificationCategory> = {
@@ -57,6 +64,7 @@ export const NOTIFICATION_CATEGORY: Record<NotificationType, NotificationCategor
   prestamo_vencido: 'inventario',
   informe_departamento: 'departamentos',
   aviso_departamento: 'departamentos',
+  actualizacion_publicada: 'sistema',
 }
 
 // Módulo de un aviso: los que vienen de un departamento (0106) van a

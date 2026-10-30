@@ -12,7 +12,7 @@
 
 import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 const ROOT = process.cwd()
@@ -118,6 +118,17 @@ section('Código del navegador (controles 9, 15 y 12)')
   check('no se usan cookies propias (la sesión de Supabase vive en localStorage)', offenders(/document\.cookie/).length === 0, offenders(/document\.cookie/).join(', '))
   check('no hay registro abierto de usuarios (signUp)', offenders(/\.auth\.signUp\(/).length === 0, offenders(/\.auth\.signUp\(/).join(', '))
   check('ninguna llamada a http:// en el código (todo por https)', offenders(/['"`]http:\/\/(?!localhost|127\.0\.0\.1)/).length === 0, offenders(/['"`]http:\/\/(?!localhost|127\.0\.0\.1)/).join(', '))
+  // Separación frontend/backend: la interfaz no puede importar nada de fuera de frontend/ (Edge Functions, scripts del
+  // servidor, migraciones ni pruebas), así nada del backend termina en el sitio publicado. Se miran los imports relativos;
+  // los paquetes de npm vienen de node_modules.
+  const frontendDir = join(ROOT, 'frontend')
+  const outside = []
+  for (const f of [...files, join(frontendDir, 'vite.config.ts')]) {
+    for (const m of readFileSync(f, 'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)['"](\.{1,2}\/[^'"]+)['"]/g)) {
+      if (!resolve(dirname(f), m[1]).startsWith(frontendDir + sep)) outside.push(`${relative(ROOT, f)} → ${m[1]}`)
+    }
+  }
+  check('la interfaz no importa nada de fuera de frontend/ (ni del backend ni de las pruebas)', outside.length === 0, outside.slice(0, 3).join(' | '))
 }
 
 // ---------------------------------------------------------------------------

@@ -1,8 +1,8 @@
-# Pruebas de pantalla (tests/ui)
+# Pruebas de pantalla (tests/frontend/ui)
 
 Recorren la aplicación como lo haría cada variante de rol, en celular y en escritorio, en claro y en oscuro, y fallan si
 una pantalla se rompe. **No usan ningún servidor real**: todo el tráfico a Supabase lo contesta un backend simulado, con datos
-ficticios, dentro del navegador (`backend/`). No se corren en el build ni en Vercel: son una verificación manual antes de
+ficticios, dentro del navegador (`mock-supabase/`). No se corren en el build ni en Vercel: son una verificación manual antes de
 subir cambios de interfaz.
 
 ## Qué comprueban
@@ -47,7 +47,7 @@ Variantes de rol: `informatica`, `integrante`, `sec_regional`, `presidente_cd`, 
 
 - `check.mjs`: el recorrido y los controles.
 - `personas.mjs`: las variantes de rol y las pantallas (con ids reales del simulado).
-- `backend/`: el Supabase simulado. `fixtures.mjs` son los datos ficticios; `mock.mjs`, `mock70.mjs` y `mock71.mjs` contestan
+- `mock-supabase/`: el Supabase simulado. `fixtures.mjs` son los datos ficticios; `mock.mjs`, `mock70.mjs` y `mock71.mjs` contestan
   REST, RPC, Auth y Storage con las reglas de visibilidad de cada rol que necesitan las pantallas.
 
 ## Dependencias de desarrollo
@@ -61,5 +61,5 @@ Ninguna de las dos entra en el sitio publicado.
 ## Cuando una pantalla nueva necesita datos
 
 Si una pantalla nueva consulta una tabla o una función que el simulado no conoce, devuelve una lista vacía y la prueba lo
-muestra como una pantalla vacía, no como una falla. Para probarla con datos, sumá las filas en `backend/fixtures.mjs` y, si
-hace falta una función nueva, su respuesta en `backend/mock.mjs`.
+muestra como una pantalla vacía, no como una falla. Para probarla con datos, sumá las filas en `mock-supabase/fixtures.mjs` y, si
+hace falta una función nueva, su respuesta en `mock-supabase/mock.mjs`.

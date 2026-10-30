@@ -1,9 +1,9 @@
-// Personas (un perfil por variante de rol del sistema) y pantallas que recorre tests/ui/check.mjs. Cada persona parte de un
+// Personas (un perfil por variante de rol del sistema) y pantallas que recorre tests/frontend/ui/check.mjs. Cada persona parte de un
 // perfil del backend simulado y le aplica los roles y el alcance de su variante. Los ids de las rutas salen del mismo
 // simulado: las pantallas de detalle y de edición se abren con registros que existen.
-import { AUTH, ST, DEP, PROF, buildTables } from './backend/fixtures.mjs'
-import { addFixtures70 } from './backend/mock70.mjs'
-import { addFixtures71 } from './backend/mock71.mjs'
+import { AUTH, ST, DEP, PROF, buildTables } from './mock-supabase/fixtures.mjs'
+import { addFixtures70 } from './mock-supabase/mock70.mjs'
+import { addFixtures71 } from './mock-supabase/mock71.mjs'
 
 // ---------- Personas: los 14 roles, varios roles y sin rol ----------
 const REGION = '11111111-1111-4111-8111-111111111111'

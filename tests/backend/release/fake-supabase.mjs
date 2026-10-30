@@ -1,6 +1,6 @@
 // Supabase falso, en memoria, solo con lo que usa la función announce-release: la función SQL announce_release() de la
 // migración 0122, con sus mismas reglas de fondo (versión única, mismo texto, una notificación por perfil activo con cuenta).
-// La lógica real de la base se prueba aparte, contra PostgreSQL, en tests/db/test_0122_release_announcements.sql.
+// La lógica real de la base se prueba aparte, contra PostgreSQL, en tests/backend/db/test_0122_release_announcements.sql.
 export const db = {
   releases: [], // { version, modules, commit, recipients }
   profiles: [], // { id, is_active, auth_user_id }

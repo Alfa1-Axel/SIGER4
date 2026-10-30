@@ -1,5 +1,5 @@
 // Pruebas de pantalla de SIGER4. Recorre cada persona (variante de rol) por cada pantalla, ancho y tema contra un backend de
-// Supabase simulado (tests/ui/backend) y falla si encuentra:
+// Supabase simulado (tests/frontend/ui/mock-supabase) y falla si encuentra:
 //   - una pantalla que no abre o queda en blanco;
 //   - desborde horizontal (la página o el contenido principal más anchos que la ventana) o texto que se sale de su botón;
 //   - fallas de accesibilidad de gravedad seria o crítica (axe-core, WCAG 2.0/2.1 A y AA), contraste incluido;
@@ -11,15 +11,15 @@
 //   npm run test:ui -- --full               las 16 variantes, 6 anchos, claro y oscuro (varias horas)
 //   npm run test:ui -- --personas informatica --viewports 320,360 --themes dark --routes calendario,mapa
 //   npm run test:ui -- --noaxe              sin accesibilidad (más rápido)
-// Más opciones y detalles en tests/ui/README.md.
+// Más opciones y detalles en tests/frontend/ui/README.md.
 import { chromium } from 'playwright-core'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { installMock } from './backend/mock.mjs'
-import { AUTH } from './backend/fixtures.mjs'
+import { installMock } from './mock-supabase/mock.mjs'
+import { AUTH } from './mock-supabase/fixtures.mjs'
 import { PERSONAS, ROUTES } from './personas.mjs'
 
 const require = createRequire(import.meta.url)
@@ -78,7 +78,7 @@ async function startApp() {
     throw new Error(`Ya hay algo escuchando en ${BASE}. Cerralo, o pasá --url si es la app levantada contra el simulado (VITE_SUPABASE_URL=https://mock.supabase.local).`)
   }
   // La interfaz vive en frontend/: Vite se levanta ahí (su raíz y su configuración), con el vite que instala ese paquete.
-  const frontend = fileURLToPath(new URL('../../frontend/', import.meta.url))
+  const frontend = fileURLToPath(new URL('../../../frontend/', import.meta.url))
   const viteBin = join(dirname(createRequire(join(frontend, 'package.json')).resolve('vite/package.json')), 'bin', 'vite.js')
   const child = spawn(process.execPath, [viteBin, '--port', String(PORT), '--strictPort'], {
     cwd: frontend,

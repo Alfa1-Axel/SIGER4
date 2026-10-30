@@ -1,4 +1,4 @@
-// Backend de Supabase simulado para las pruebas de pantalla (tests/ui). Responde las rutas REST/RPC/Auth/Storage que usa
+// Backend de Supabase simulado para las pruebas de pantalla (tests/frontend/ui). Responde las rutas REST/RPC/Auth/Storage que usa
 // la aplicación con datos ficticios, dentro del navegador (Playwright route). No se conecta a ningún servidor real.
 import { AUTH, DEP, PROF, RPC, ST, buildTables } from './fixtures.mjs'
 import { addFixtures70, createMock70 } from './mock70.mjs'

@@ -1,10 +1,10 @@
 #!/bin/bash
 # Arma una base local desde cero con TODAS las migraciones del repositorio (0001 en adelante), cada una en su propia
 # ejecución, como se corren en Supabase. Necesita un PostgreSQL 16 local (nunca un servidor real).
-#   Uso: tests/db/rebuild.sh <nombre_base> [hasta_numero]
+#   Uso: tests/backend/db/rebuild.sh <nombre_base> [hasta_numero]
 #   Variables: PSQL (ruta de psql), PGPORT (por defecto 54329), PGUSER (por defecto postgres).
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
+REPO="$(cd "$HERE/../../.." && pwd)"
 PSQL="${PSQL:-psql}"
 PORT="${PGPORT:-54329}"
 USER_="${PGUSER:-postgres}"

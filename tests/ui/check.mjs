@@ -16,6 +16,7 @@ import { chromium } from 'playwright-core'
 import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { installMock } from './backend/mock.mjs'
 import { AUTH } from './backend/fixtures.mjs'
@@ -76,8 +77,11 @@ async function startApp() {
   if (await isUp(BASE)) {
     throw new Error(`Ya hay algo escuchando en ${BASE}. Cerralo, o pasá --url si es la app levantada contra el simulado (VITE_SUPABASE_URL=https://mock.supabase.local).`)
   }
-  const viteBin = fileURLToPath(new URL('../../node_modules/vite/bin/vite.js', import.meta.url))
+  // La interfaz vive en frontend/: Vite se levanta ahí (su raíz y su configuración), con el vite que instala ese paquete.
+  const frontend = fileURLToPath(new URL('../../frontend/', import.meta.url))
+  const viteBin = join(dirname(createRequire(join(frontend, 'package.json')).resolve('vite/package.json')), 'bin', 'vite.js')
   const child = spawn(process.execPath, [viteBin, '--port', String(PORT), '--strictPort'], {
+    cwd: frontend,
     env: { ...process.env, VITE_SUPABASE_URL: 'https://mock.supabase.local', VITE_SUPABASE_ANON_KEY: 'fake-anon-key', VITE_VAPID_PUBLIC_KEY: '' },
     stdio: 'ignore',
   })

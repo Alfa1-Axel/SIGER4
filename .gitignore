@@ -41,7 +41,7 @@ supabase/.branches
 .vercel
 
 # Copias originales de logos en la raiz (fuente de donde se copiaron a
-# public/logos/, que es lo que la app realmente usa) — no hace falta
+# frontend/public/logos/, que es lo que la app realmente usa) — no hace falta
 # versionarlas dos veces.
 /Logo escuela.png
 /LG INFORMATICA Y ESTADÍSTICA.png
@@ -49,7 +49,7 @@ supabase/.branches
 # Salidas generadas/temporales que no deben versionarse (reportes de prueba,
 # capturas, backups de base de datos, exports puntuales).
 *.pdf
-!public/**/*.pdf
+!frontend/public/**/*.pdf
 *.bak
 *.backup
 *.dump

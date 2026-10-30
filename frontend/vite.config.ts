@@ -24,11 +24,13 @@ function resolveBuildVersion(): string {
 
 const BUILD_VERSION = resolveBuildVersion()
 const BUILD_TIME = new Date().toISOString()
-// Versión técnica del sistema (ej. "1.11.0"), la de package.json. Es solo para
-// el control del desarrollo: se ve únicamente en el panel de versión que
-// Informática tiene en Mi perfil y ajustes. No se muestra a los usuarios ni
-// hay changelog dentro de la aplicación.
-const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')).version as string
+// Versión técnica del sistema (ej. "1.11.0"), la del package.json de la raíz del
+// repositorio: es la versión de todo SIGER4 (interfaz, base y funciones), la
+// misma que verifica `npm run release:announce`. Es solo para el control del
+// desarrollo: se ve únicamente en el panel de versión que Informática tiene en
+// Mi perfil y ajustes. No se muestra a los usuarios ni hay changelog dentro de
+// la aplicación.
+const APP_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version as string
 
 // Cada despliegue publica /version.json con la versión técnica, el commit y el servidor de datos con el que se armó. Lo usa
 // `npm run release:announce` (y la función announce-release) para confirmar que producción YA sirve la versión que se va a

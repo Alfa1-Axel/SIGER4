@@ -5,9 +5,9 @@ import tsParser from '@typescript-eslint/parser'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 
 export default [
-  // scripts/** y tests/**: programas de Node (y de Playwright) que no corren en la aplicación; el comprobador de tipos
-  // y las propias pruebas los ejercitan.
-  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'tests/**', 'supabase/functions/**', 'public/**'] },
+  // scripts/**: programas de Node que no corren en la aplicación. Las pruebas (tests/), el backend (backend/) y sus
+  // scripts viven fuera de frontend/ y no entran en este lint, igual que antes de la separación.
+  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'public/**'] },
   js.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],

@@ -81,10 +81,10 @@ const tracked = execFileSync('git', ['ls-files'], { cwd: ROOT, encoding: 'utf8' 
   check('ningún secreto con formato conocido en archivos versionados', hits.length === 0, hits.join(' | '))
   check('ningún JWT pegado en archivos versionados', jwtHits.length === 0, jwtHits.join(' | '))
 
-  const front = tracked.filter((f) => f.startsWith('src/') || f === 'index.html' || f.startsWith('public/'))
+  const front = tracked.filter((f) => f.startsWith('frontend/src/') || f === 'frontend/index.html' || f.startsWith('frontend/public/'))
   // Se buscan VALORES (un JWT con ese rol, sb_secret_<valor>), no la palabra: varios comentarios y mensajes del código la nombran.
   const serviceValueInFront = front.filter((f) => /sb_secret_[A-Za-z0-9_-]{20,}/.test(readFileSync(join(ROOT, f), 'utf8')) || /(SERVICE_ROLE_KEY|service_role_key)\s*[:=]\s*['"`][A-Za-z0-9._-]{20,}/.test(readFileSync(join(ROOT, f), 'utf8')))
-  check('ninguna clave service_role (valor) en el código del navegador (src, public, index.html)', serviceValueInFront.length === 0, serviceValueInFront.join(', '))
+  check('ninguna clave service_role (valor) en el código del navegador (frontend: src, public, index.html)', serviceValueInFront.length === 0, serviceValueInFront.join(', '))
   const viteVars = new Set()
   for (const f of front) for (const m of readFileSync(join(ROOT, f), 'utf8').matchAll(/import\.meta\.env\.([A-Z0-9_]+)/g)) viteVars.add(m[1])
   const secretLooking = [...viteVars].filter((v) => /SECRET|PRIVATE|SERVICE|PASSWORD/i.test(v))
@@ -111,7 +111,7 @@ section('Código del navegador (controles 9, 15 y 12)')
       else if (/\.(ts|tsx)$/.test(name)) files.push(full)
     }
   }
-  walk(join(ROOT, 'src'))
+  walk(join(ROOT, 'frontend', 'src'))
   const offenders = (re) => files.filter((f) => re.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))
   check('ningún dangerouslySetInnerHTML ni innerHTML (el texto se muestra siempre escapado)', offenders(/dangerouslySetInnerHTML|\.innerHTML\s*=/).length === 0, offenders(/dangerouslySetInnerHTML|\.innerHTML\s*=/).join(', '))
   check('ningún eval ni new Function', offenders(/\beval\(|new Function\(/).length === 0, offenders(/\beval\(|new Function\(/).join(', '))
@@ -134,7 +134,7 @@ section('Aviso de "Nueva actualización" (DEPLOYMENT.md, sección 75)')
       else if (/\.(ts|tsx)$/.test(name)) srcFiles.push(full)
     }
   }
-  walkSrc(join(ROOT, 'src'))
+  walkSrc(join(ROOT, 'frontend', 'src'))
   const callers = srcFiles.filter((f) => /announce[_-]release|release_announcement|app_releases/.test(readFileSync(f, 'utf8'))).map((f) => relative(ROOT, f))
   check('la aplicación no llama a announce_release ni toca app_releases (solo el comando de publicación)', callers.length === 0, callers.join(', '))
   check('announce_release() se ejecuta solo con la clave de servicio (sin permiso para anon ni authenticated)', /revoke all on function announce_release\([^)]*\) from public, anon, authenticated/i.test(migration) && /grant execute on function announce_release\([^)]*\) to service_role/i.test(migration) && !/grant execute on function announce_release\([^)]*\) to [^;]*authenticated/i.test(migration))
@@ -142,7 +142,7 @@ section('Aviso de "Nueva actualización" (DEPLOYMENT.md, sección 75)')
   check('la función announce-release compara el secreto en tiempo constante y exige 32 caracteres o más', /constantTimeEqual\(/.test(fn) && /RELEASE_ANNOUNCE_TOKEN\.length < 32/.test(fn))
   check('la función announce-release no usa el secreto de las tareas programadas ni ninguna clave escrita en el código', !/x-cron-secret|cron_shared_secret/.test(fn) && !/eyJ[A-Za-z0-9_-]{20,}/.test(fn))
   check('la función announce-release verifica que producción sirva esa versión antes de anunciar', /version\.json/.test(fn) && /served\.build\?\.version !== version/.test(fn))
-  const form = read('src/pages/NotificacionFormPage.tsx')
+  const form = read('frontend/src/pages/NotificacionFormPage.tsx')
   check('el formulario de notificaciones no ofrece el tipo "actualizacion_publicada"', !/actualizacion_publicada/.test(form))
 }
 
@@ -163,13 +163,13 @@ section('Funciones puras de seguridad (controles 15 y 16)')
       const out = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText
       return import(`data:text/javascript;base64,${Buffer.from(out).toString('base64')}`)
     }
-    const contact = await load('src/lib/contact.ts')
+    const contact = await load('frontend/src/lib/contact.ts')
     check('los enlaces web solo aceptan http(s): "javascript:" se rechaza', contact.normalizeUrl('javascript:alert(1)') === null && contact.buildInstagramUrl('javascript:alert(1)') === null)
     check('un "data:" o "vbscript:" tampoco se convierte en enlace', contact.normalizeUrl('data:text/html,<script>1</script>') === null && contact.normalizeUrl('vbscript:msgbox(1)') === null)
     check('un correo con comillas o signos de HTML no arma un mailto:', contact.buildMailto('a@b.c"><script>') === null && contact.buildMailto("o'neil@ejemplo.org") !== null)
     check('un dominio común sí se normaliza a https', contact.normalizeUrl('ejemplo.org/pagina') === 'https://ejemplo.org/pagina')
 
-    const sig = await load('src/lib/fileSignature.ts')
+    const sig = await load('frontend/src/lib/fileSignature.ts')
     const bytes = (...b) => new Uint8Array(b)
     check('firma de archivos: reconoce PNG, JPEG y WEBP por su contenido', sig.detectFormat(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) === 'png' && sig.detectFormat(bytes(0xff, 0xd8, 0xff, 0xe0)) === 'jpeg' && sig.detectFormat(bytes(0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50)) === 'webp')
     check('firma de archivos: reconoce un PDF', sig.detectFormat(new TextEncoder().encode('%PDF-1.7\n')) === 'pdf')
@@ -228,7 +228,7 @@ section('Migraciones (controles 4, 8 y 13)')
 }
 
 // ---------------------------------------------------------------------------
-if (existsSync(join(ROOT, 'dist'))) {
+if (existsSync(join(ROOT, 'frontend', 'dist'))) {
   section('Bundle compilado (control 1)')
   const bad = []
   const walk = (dir) => {
@@ -249,7 +249,7 @@ if (existsSync(join(ROOT, 'dist'))) {
       }
     }
   }
-  walk(join(ROOT, 'dist'))
+  walk(join(ROOT, 'frontend', 'dist'))
   check('el bundle compilado no contiene claves service_role ni secretos', bad.length === 0, bad.join(', '))
 }
 

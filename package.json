@@ -12,9 +12,13 @@
     "build": "npm run build --workspace frontend --",
     "preview": "npm run preview --workspace frontend --",
     "lint": "npm run lint --workspace frontend --",
-    "security:check": "node backend/scripts/security-check.mjs",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:frontend": "npm run test:ui --",
+    "test:backend": "npm run test:release && npm run test:db",
     "test:ui": "node tests/frontend/ui/check.mjs",
     "test:release": "node tests/backend/release/check.mjs",
+    "test:db": "node tests/backend/db/run.mjs",
+    "security:check": "node backend/scripts/security-check.mjs",
     "release:announce": "node backend/scripts/announce-release.mjs"
   },
   "devDependencies": {

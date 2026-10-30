@@ -1,5 +1,6 @@
 -- Pruebas de 0121 y 0122: avisos de actualización publicada.
--- Se corre sobre una base armada con tests/backend/db/rebuild.sh, desde esta carpeta:
+-- La corre `npm run test:db` (tests/backend/db/run.mjs), que antes arma la base con todas las migraciones. A mano, sobre
+-- una base ya armada y desde esta carpeta:
 --   psql -p 54329 -U postgres -d <base> -q -f test_0122_release_announcements.sql
 -- Todo ocurre dentro de una transacción que se deshace al final.
 \set QUIET on

@@ -35,6 +35,8 @@ npm run test:ui -- --noaxe              # sin accesibilidad (más rápido)
 npm run test:ui -- --url http://localhost:5173   # app ya levantada CONTRA EL SIMULADO
 ```
 
+`npm run test:frontend` es el mismo recorrido y acepta las mismas opciones (`npm run test:frontend -- --full`).
+
 El comando levanta Vite en el puerto 5199 apuntando al simulado (`VITE_SUPABASE_URL=https://mock.supabase.local`) y lo apaga
 al terminar. Si ese puerto está ocupado, se detiene sin tocar nada: nunca se reutiliza un servidor que pudiera estar
 conectado a la base real. Termina con código 1 si hay alguna falla, y lista cada una (variante · pantalla · ancho · tema).

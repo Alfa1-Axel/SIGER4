@@ -12,7 +12,7 @@ DB="${1:?Indicá el nombre de la base a crear (se borra si existe)}"
 UPTO="${2:-9999}"
 "$PSQL" -p "$PORT" -U "$USER_" -q -c "drop database if exists $DB;" -c "create database $DB;" 2>&1 | grep -v NOTICE
 "$PSQL" -p "$PORT" -U "$USER_" -d "$DB" -q -f "$HERE/bootstrap.sql" 2>&1 | grep ERROR | grep -v "already exists"
-for f in "$REPO"/supabase/migrations/*.sql; do
+for f in "$REPO"/backend/supabase/migrations/*.sql; do
   b=$(basename "$f")
   n=${b%%_*}
   if [ "$((10#$n))" -gt "$((10#$UPTO))" ]; then continue; fi

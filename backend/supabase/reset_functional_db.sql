@@ -11,7 +11,7 @@
 -- perfil de administrador (informatica_r4, alcance de sistema completo)
 -- listo para volver a usar.
 --
--- Diferencia con supabase/cleanup_test_data.sql: ese script está pensado
+-- Diferencia con backend/supabase/cleanup_test_data.sql: ese script está pensado
 -- para conservar datos reales ya cargados y borrar solo "lo de prueba" que
 -- vos identifiques. Este script es más directo — borra TODOS los datos
 -- operativos sin excepción (no hay lista de exclusión) y recrea el perfil
@@ -272,5 +272,5 @@ order by 1, 2;
 -- querés limpiarlos también, hacelo manualmente desde el dashboard
 -- (Storage → cada bucket → seleccionar carpetas y borrar), no por SQL: eso
 -- requeriría la service_role key, que no corresponde usar desde un script
--- como este. Ver supabase/cleanup_test_data.sql (sección 4) para el detalle
+-- como este. Ver backend/supabase/cleanup_test_data.sql (sección 4) para el detalle
 -- carpeta por carpeta si hace falta.

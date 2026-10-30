@@ -70,8 +70,8 @@ const parsed = parseReleaseRequest({
 if (!parsed.ok) fail(1, parsed.message)
 const { version, modules, commit } = parsed.value
 
-// 2. La versión que se anuncia tiene que ser la de este repositorio.
-const packageVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
+// 2. La versión que se anuncia tiene que ser la de este repositorio (package.json de la raíz).
+const packageVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version
 if (packageVersion !== version) {
   fail(1, `La versión no coincide: este repositorio está en ${packageVersion} y pediste anunciar ${version}. Posicionate en el commit publicado (o corregí --version).`)
 }

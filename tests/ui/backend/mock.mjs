@@ -630,7 +630,7 @@ export async function installMock(context, opts = {}) {
       } catch {}
       rpcCalls.push({ fn: 'admin-create-user', body })
       if (opts.v73) {
-        // Reglas del servidor (supabase/functions/_shared/delegatedMemberCreation.ts): el coordinador solo crea
+        // Reglas del servidor (backend/supabase/functions/_shared/delegatedMemberCreation.ts): el coordinador solo crea
         // Miembros de Departamento en departamentos activos que coordina; sin cuartel ni otro alcance.
         const me = PROF[opts.who ?? 'admin']
         const myRoles = tables.user_roles.filter((r) => r.profile_id === me).map((r) => r.role)

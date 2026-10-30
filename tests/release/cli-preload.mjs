@@ -1,4 +1,4 @@
-// Precarga para correr scripts/announce-release.mjs de punta a punta SIN red: reemplaza fetch por una producción falsa
+// Precarga para correr backend/scripts/announce-release.mjs de punta a punta SIN red: reemplaza fetch por una producción falsa
 // (/version.json) y por la Edge Function REAL corriendo en este mismo proceso contra el Supabase falso.
 //
 // Escenario por variable de entorno FAKE_SCENARIO (JSON):

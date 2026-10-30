@@ -1,8 +1,8 @@
 // Pruebas del aviso de "Nueva actualización" que NO necesitan base de datos ni red (`npm run test:release`):
-//   1. el contrato compartido (supabase/functions/_shared/releaseAnnouncement.ts);
+//   1. el contrato compartido (backend/supabase/functions/_shared/releaseAnnouncement.ts);
 //   2. que ese contrato y la migración 0122 digan lo mismo (módulos, rutas, texto);
 //   3. la Edge Function announce-release REAL, contra un Supabase falso y una producción falsa;
-//   4. el comando scripts/announce-release.mjs REAL, de punta a punta (comando → producción falsa → función → base falsa).
+//   4. el comando backend/scripts/announce-release.mjs REAL, de punta a punta (comando → producción falsa → función → base falsa).
 // La lógica de la base (versión única, permisos, una notificación por perfil, lecturas independientes) se prueba contra
 // PostgreSQL en tests/db/test_0122_release_announcements.sql. Nada de acá toca producción.
 import { register } from 'node:module'
@@ -13,13 +13,13 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 register('./hooks.mjs', import.meta.url)
-const shared = await import('../../supabase/functions/_shared/releaseAnnouncement.ts')
+const shared = await import('../../backend/supabase/functions/_shared/releaseAnnouncement.ts')
 const { db, reset } = await import('./fake-supabase.mjs')
 const { loadFunction } = await import('./function-harness.mjs')
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
-const migration = readFileSync(join(root, 'supabase/migrations/0122_release_announcements.sql'), 'utf8')
+const migration = readFileSync(join(root, 'backend/supabase/migrations/0122_release_announcements.sql'), 'utf8')
 
 const results = []
 const check = (name, ok, detail = '') => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}${!ok && detail ? ' — ' + detail : ''}`)
@@ -219,7 +219,7 @@ globalThis.fetch = realFetch
 // ------------------------------------------------------------------ 4. El comando real, de punta a punta
 const tmp = mkdtempSync(join(tmpdir(), 'siger4-release-'))
 const preload = new URL('./cli-preload.mjs', import.meta.url).href
-const script = join(root, 'scripts/announce-release.mjs')
+const script = join(root, 'backend/scripts/announce-release.mjs')
 const FUNCTIONS = `https://${PROJECT}/functions/v1`
 const baseEnv = { RELEASE_ANNOUNCE_TOKEN: TOKEN, SIGER4_PUBLIC_URL: PUBLIC, SIGER4_FUNCTIONS_URL: FUNCTIONS }
 let runs = 0

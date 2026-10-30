@@ -25,7 +25,7 @@ const ESCUELA_ROLES: RoleKey[] = ['director_escuela', 'instructor', 'coordinador
 // propio cuartel. Confirmado explícitamente: nunca jefe_cuerpo_activo (no
 // puede crear otro con su mismo rol), nunca nada regional/escuela/informática.
 // Espejo del mismo array server-side en
-// supabase/functions/admin-create-user/index.ts — esto es solo para no
+// backend/supabase/functions/admin-create-user/index.ts — esto es solo para no
 // mostrar opciones que el backend va a rechazar; la autorización real vive
 // en la Edge Function.
 const JEFE_CUERPO_ACTIVO_ASSIGNABLE_ROLES: RoleKey[] = [

@@ -124,8 +124,8 @@ section('Código del navegador (controles 9, 15 y 12)')
 section('Aviso de "Nueva actualización" (DEPLOYMENT.md, sección 75)')
 {
   const read = (rel) => readFileSync(join(ROOT, rel), 'utf8')
-  const migration = read('supabase/migrations/0122_release_announcements.sql')
-  const fn = read('supabase/functions/announce-release/index.ts')
+  const migration = read('backend/supabase/migrations/0122_release_announcements.sql')
+  const fn = read('backend/supabase/functions/announce-release/index.ts')
   const srcFiles = []
   const walkSrc = (dir) => {
     for (const name of readdirSync(dir)) {
@@ -205,7 +205,7 @@ section('Encabezados y HTTPS configurados en vercel.json (controles 18 y 19)')
 // ---------------------------------------------------------------------------
 section('Migraciones (controles 4, 8 y 13)')
 {
-  const dir = join(ROOT, 'supabase', 'migrations')
+  const dir = join(ROOT, 'backend', 'supabase', 'migrations')
   const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()
   const sql = files.map((f) => readFileSync(join(dir, f), 'utf8')).join('\n')
   // Tablas de public creadas por las migraciones que quedaron sin RLS.

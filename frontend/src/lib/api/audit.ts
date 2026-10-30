@@ -9,7 +9,7 @@ export interface AuditEntryInput {
 }
 
 // La mayoría de los cambios se auditan automáticamente vía triggers de PostgreSQL
-// (ver supabase/migrations). Este helper es para eventos que no pasan por una
+// (ver backend/supabase/migrations). Este helper es para eventos que no pasan por una
 // tabla con trigger propio (hoy: "reporte generado"). Usa la RPC
 // record_manual_audit_event en vez de insertar directo en audit_logs: esa RPC
 // fuerza el actor real (current_profile_id(), no lo que mande el cliente) y

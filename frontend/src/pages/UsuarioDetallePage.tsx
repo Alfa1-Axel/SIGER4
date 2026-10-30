@@ -38,7 +38,7 @@ const SCOPE_LABEL: Record<ScopeType, string> = {
 
 // Roles que jefe_cuerpo_activo nunca puede ver/editar en este formulario, ni
 // siquiera de su propio cuartel (mismo PRIVILEGED_TARGET_ROLES que valida
-// server-side supabase/functions/admin-update-user/index.ts). Incluye los
+// server-side backend/supabase/functions/admin-update-user/index.ts). Incluye los
 // roles de Avales regionales: si no, un jefe_cuerpo_activo podría resetear la
 // contraseña de un usuario de Escuela de su cuartel y entrar a los avales.
 // Lo mismo vale para quien coordina un departamento (ver

@@ -12,10 +12,10 @@
     "build": "npm run build --workspace frontend --",
     "preview": "npm run preview --workspace frontend --",
     "lint": "npm run lint --workspace frontend --",
-    "security:check": "node scripts/security-check.mjs",
+    "security:check": "node backend/scripts/security-check.mjs",
     "test:ui": "node tests/ui/check.mjs",
     "test:release": "node tests/release/check.mjs",
-    "release:announce": "node scripts/announce-release.mjs"
+    "release:announce": "node backend/scripts/announce-release.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.14.0",

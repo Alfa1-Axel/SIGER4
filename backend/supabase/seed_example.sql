@@ -38,7 +38,7 @@
 -- Limpieza: para sacar SOLO estos datos de ejemplo (no cualquier otro dato
 -- de prueba que hayas cargado a mano), ver la Sección 2 al final de este
 -- archivo — borra por nombre exacto del cuartel demo, no por fecha ni por
--- "todo lo que no sea real" (para eso existe supabase/cleanup_test_data.sql,
+-- "todo lo que no sea real" (para eso existe backend/supabase/cleanup_test_data.sql,
 -- que es más general y requiere revisión manual antes de correrlo).
 
 -- ============================================================================

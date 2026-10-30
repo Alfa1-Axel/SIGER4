@@ -36,8 +36,11 @@ yarn-error.log*
 dev-dist
 *.tsbuildinfo
 
-supabase/.temp
-supabase/.branches
+# Estado local de la CLI de Supabase (proyecto vinculado). Vive en
+# backend/supabase/; el patrón cubre también una carpeta supabase/ creada por
+# error al correr la CLI desde otro lugar.
+**/supabase/.temp
+**/supabase/.branches
 .vercel
 
 # Copias originales de logos en la raiz (fuente de donde se copiaron a

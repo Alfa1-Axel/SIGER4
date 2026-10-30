@@ -76,7 +76,7 @@ export interface ProfileInput {
 // is_informatica_r4() por RLS, así que director_escuela/jefe_cuerpo_activo
 // nunca podrían asignarlos por su cuenta. La función valida server-side la
 // matriz de permisos completa (quién puede crear con qué rol/alcance) — ver
-// comentario en supabase/functions/admin-create-user/index.ts.
+// comentario en backend/supabase/functions/admin-create-user/index.ts.
 export interface CreateUserAccountInput extends ProfileInput {
   password: string
   roles: RoleKey[]

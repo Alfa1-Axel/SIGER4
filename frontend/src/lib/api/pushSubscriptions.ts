@@ -33,7 +33,7 @@ export async function removePushSubscription(endpoint: string): Promise<void> {
 // El navegador puede seguir devolviendo una PushSubscription local (via
 // getSubscription()) aunque la fila correspondiente en push_subscriptions ya
 // no exista — por ejemplo, si send-push la borró porque el endpoint quedó
-// invalido (404/410, ver supabase/functions/send-push/index.ts), o si el
+// invalido (404/410, ver backend/supabase/functions/send-push/index.ts), o si el
 // usuario reinstaló la PWA en otro momento y la fila vieja de un endpoint
 // distinto quedó huérfana. En ese caso "activar push" en la UI mostraría
 // como suscripto un dispositivo que en realidad no va a recibir nada. Se usa

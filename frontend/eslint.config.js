@@ -1,0 +1,131 @@
+import js from '@eslint/js'
+import reactHooks from 'eslint-plugin-react-hooks'
+import reactRefresh from 'eslint-plugin-react-refresh'
+import tsParser from '@typescript-eslint/parser'
+import tsPlugin from '@typescript-eslint/eslint-plugin'
+
+export default [
+  // scripts/**: programas de Node que no corren en la aplicación. Las pruebas (tests/), el backend (backend/) y sus
+  // scripts viven fuera de frontend/ y no entran en este lint, igual que antes de la separación.
+  { ignores: ['dist', 'dev-dist', 'node_modules', 'scripts/**', 'public/**'] },
+  js.configs.recommended,
+  {
+    files: ['**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+      globals: {
+        window: 'readonly',
+        document: 'readonly',
+        navigator: 'readonly',
+        console: 'readonly',
+        File: 'readonly',
+        fetch: 'readonly',
+        FileReader: 'readonly',
+        URL: 'readonly',
+        KeyboardEvent: 'readonly',
+        localStorage: 'readonly',
+        sessionStorage: 'readonly',
+        AudioContext: 'readonly',
+        BufferSource: 'readonly',
+        atob: 'readonly',
+        Notification: 'readonly',
+        NotificationPermission: 'readonly',
+        PushSubscription: 'readonly',
+        ServiceWorkerRegistration: 'readonly',
+        crypto: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        AbortController: 'readonly',
+        AbortSignal: 'readonly',
+        Response: 'readonly',
+        RequestInfo: 'readonly',
+        RequestInit: 'readonly',
+        Navigator: 'readonly',
+        ErrorEvent: 'readonly',
+        PromiseRejectionEvent: 'readonly',
+        PageTransitionEvent: 'readonly',
+        HTMLInputElement: 'readonly',
+        HTMLDivElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        PointerEvent: 'readonly',
+        Node: 'readonly',
+        FormData: 'readonly',
+        XMLHttpRequest: 'readonly',
+        URLSearchParams: 'readonly',
+        Event: 'readonly',
+        HTMLElement: 'readonly',
+        MouseEvent: 'readonly',
+        PublicKeyCredential: 'readonly',
+        caches: 'readonly',
+        Blob: 'readonly',
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
+        __SIGER4_APP_VERSION__: 'readonly',
+        __SIGER4_BUILD_VERSION__: 'readonly',
+        __SIGER4_BUILD_TIME__: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      ...reactHooks.configs.recommended.rules,
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    // vite.config.ts corre en Node en tiempo de build (no en el navegador,
+    // a diferencia de todo lo demás en src/) — bloque separado en vez de
+    // sumar "process" al set de globals de browser de arriba, para no
+    // mezclar dos entornos de ejecución distintos bajo el mismo config.
+    files: ['vite.config.ts'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+  {
+    files: ['src/sw.ts'],
+    languageOptions: {
+      parser: tsParser,
+      ecmaVersion: 2020,
+      sourceType: 'module',
+      globals: {
+        self: 'readonly',
+        ServiceWorkerGlobalScope: 'readonly',
+        WindowClient: 'readonly',
+        indexedDB: 'readonly',
+        IDBDatabase: 'readonly',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: {
+      ...tsPlugin.configs.recommended.rules,
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+    },
+  },
+]

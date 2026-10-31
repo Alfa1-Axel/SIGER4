@@ -1,0 +1,169 @@
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+
+// Versión de build visible en Ajustes/diagnóstico (ver AjustesPage.tsx) —
+// necesaria para poder confirmar, mirando la propia pantalla del celular,
+// si el dispositivo está corriendo el JS del último deploy o uno viejo (ver
+// DEPLOYMENT.md, causa real de "los fixes no se reflejan en el
+// dispositivo"). VERCEL_GIT_COMMIT_SHA es la variable que Vercel expone en
+// el entorno de build (no llega al cliente sin pasar por acá); en un build
+// local sin ese entorno, se cae a git rev-parse directo. Si ninguno está
+// disponible (build sin git, ej. un export limpio), queda "unknown" en vez
+// de romper el build.
+function resolveBuildVersion(): string {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD').toString().trim()
+  } catch {
+    return 'unknown'
+  }
+}
+
+const BUILD_VERSION = resolveBuildVersion()
+const BUILD_TIME = new Date().toISOString()
+// Versión técnica del sistema (ej. "1.11.0"), la del package.json de la raíz del
+// repositorio: es la versión de todo SIGER4 (interfaz, base y funciones), la
+// misma que verifica `npm run release:announce`. Es solo para el control del
+// desarrollo: se ve únicamente en el panel de versión que Informática tiene en
+// Mi perfil y ajustes. No se muestra a los usuarios ni hay changelog dentro de
+// la aplicación.
+const APP_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8')).version as string
+
+// Cada despliegue publica /version.json con la versión técnica, el commit y el servidor de datos con el que se armó. Lo usa
+// `npm run release:announce` (y la función announce-release) para confirmar que producción YA sirve la versión que se va a
+// anunciar. No lo lee la aplicación, no se muestra a nadie y no entra en el service worker (el .json no se precachea).
+function versionFilePlugin(): Plugin {
+  let env: Record<string, string> = {}
+  return {
+    name: 'siger4-version-file',
+    apply: 'build',
+    configResolved(config) {
+      env = loadEnv(config.mode, process.cwd(), 'VITE_')
+    },
+    generateBundle() {
+      let supabaseHost: string | null = null
+      try {
+        supabaseHost = new URL(env.VITE_SUPABASE_URL ?? '').host
+      } catch {
+        supabaseHost = null
+      }
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify({ version: APP_VERSION, commit: BUILD_VERSION, builtAt: BUILD_TIME, supabaseHost }) + String.fromCharCode(10),
+      })
+    },
+  }
+}
+
+export default defineConfig({
+  define: {
+    __SIGER4_APP_VERSION__: JSON.stringify(APP_VERSION),
+    __SIGER4_BUILD_VERSION__: JSON.stringify(BUILD_VERSION),
+    __SIGER4_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
+  plugins: [
+    react(),
+    versionFilePlugin(),
+    VitePWA({
+      // 'prompt' (antes 'autoUpdate'): con autoUpdate, la librería manda
+      // skipWaiting() sola apenas detecta un SW nuevo instalado, y sin
+      // onNeedReload hace window.location.reload() apenas se activa — sin
+      // aviso, perdiendo cualquier dato/ruta en curso. Esa combinación era
+      // la causa real de recargas inesperadas al volver de background (ej.
+      // tras responder WhatsApp) cuando hubo un deploy mientras la app
+      // estaba en segundo plano. Con 'prompt', el SW nuevo queda esperando
+      // hasta que el cliente confirma explícitamente — ver main.tsx
+      // (onNeedRefresh) y src/components/SwUpdateBanner.tsx (el banner que
+      // deja elegir al usuario cuándo actualizar, en vez de recargar solo).
+      //
+      // El plugin, por default, inyecta un <script> en index.html que solo
+      // hace navigator.serviceWorker.register(...) a secas — sin ningún
+      // listener de actualización/recarga. Se registra a mano en main.tsx
+      // usando `virtual:pwa-register`, que sí agrega esos listeners.
+      registerType: 'prompt',
+      injectRegister: false,
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,svg,png,jpg,jpeg,ico,woff2}'],
+      },
+      includeAssets: [
+        'logos/logo-escuela.png',
+        'logos/logo-informatica.png',
+        'icons/manifest-icon-192.png',
+        'icons/manifest-icon-512.png',
+        'icons/manifest-icon-maskable-192.png',
+        'icons/manifest-icon-maskable-512.png',
+      ],
+      manifest: {
+        id: '/',
+        name: 'SIGER4',
+        short_name: 'SIGER4',
+        description: 'Sistema para el mejor manejo y conservación de datos de la Regional 4 de bomberos voluntarios',
+        theme_color: '#284f86',
+        background_color: '#f3f5f7',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        start_url: '/',
+        scope: '/',
+        lang: 'es',
+        // Tamaños estándar 192/512 explícitos (antes solo había un icono de
+        // 1254x1254 sin declarar los tamaños que Android/Chrome esperan para
+        // el selector de instalación y el ícono de app — un solo tamaño
+        // gigante sin los estándares declarados puede hacer que el launcher
+        // caiga a un ícono genérico). El "purpose: maskable" usa una versión
+        // con el logo reducido al ~70% del lienzo y fondo del color de tema,
+        // para que sobreviva el recorte a círculo/squircle que aplican los
+        // launchers de Android sin cortar el emblema (ver
+        // public/icons/manifest-icon-maskable-*.png).
+        icons: [
+          {
+            src: '/icons/manifest-icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/manifest-icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any',
+          },
+          {
+            src: '/icons/manifest-icon-maskable-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+          {
+            src: '/icons/manifest-icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+      devOptions: {
+        enabled: false,
+      },
+    }),
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          supabase: ['@supabase/supabase-js'],
+          // jsPDF NO va en un grupo aparte: ese grupo se llevaba también el ayudante de carga de archivos de Vite
+          // (__vitePreload), que el archivo principal necesita, y así el principal bajaba ~140 KiB de jsPDF en cada
+          // visita. Sin grupo, jsPDF queda dentro del archivo de los reportes, que se baja recién al generar uno.
+        },
+      },
+    },
+  },
+})

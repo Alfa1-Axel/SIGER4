@@ -36,12 +36,15 @@ yarn-error.log*
 dev-dist
 *.tsbuildinfo
 
-supabase/.temp
-supabase/.branches
+# Estado local de la CLI de Supabase (proyecto vinculado). Vive en
+# backend/supabase/; el patrón cubre también una carpeta supabase/ creada por
+# error al correr la CLI desde otro lugar.
+**/supabase/.temp
+**/supabase/.branches
 .vercel
 
 # Copias originales de logos en la raiz (fuente de donde se copiaron a
-# public/logos/, que es lo que la app realmente usa) — no hace falta
+# frontend/public/logos/, que es lo que la app realmente usa) — no hace falta
 # versionarlas dos veces.
 /Logo escuela.png
 /LG INFORMATICA Y ESTADÍSTICA.png
@@ -49,7 +52,7 @@ supabase/.branches
 # Salidas generadas/temporales que no deben versionarse (reportes de prueba,
 # capturas, backups de base de datos, exports puntuales).
 *.pdf
-!public/**/*.pdf
+!frontend/public/**/*.pdf
 *.bak
 *.backup
 *.dump

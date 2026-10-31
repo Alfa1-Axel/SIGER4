@@ -11531,7 +11531,9 @@ Línea base: `main` (`335636b`) en un clon limpio, antes de mover nada. Después
 
 Además se comprobó que las pruebas nuevas fallan cuando tienen que fallar: `test:db` ante una migración que `psql` no puede leer, una suite con `FAIL` o con un error de SQL, un `PGHOST` de otro equipo y un puerto sin servidor; el control nuevo de `security:check` ante un `import` estático, de efecto, dinámico y una reexportación desde `backend/` o `tests/`.
 
-**No verificado:** el preview de Vercel de la rama (se mira en el pull request), producción después del merge, un deploy real de Edge Functions (no hacía falta), Deno, un celular físico, Safari e iOS. Producción se consultó solo para leer `/version.json` antes del cambio.
+**Preview de Vercel de la rama:** el armado en Vercel terminó bien con la configuración nueva de `vercel.json` (estado "Deployment has completed" del commit `1397bb4`, sin cambios en el panel). Su contenido no se pudo abrir desde la revisión porque el preview está protegido por el inicio de sesión de Vercel: hay que mirarlo con la cuenta del proyecto (76.8).
+
+**No verificado:** el contenido del preview, producción después del merge, un deploy real de Edge Functions (no hacía falta), Deno, un celular físico, Safari e iOS. Producción se consultó solo para leer `/version.json` antes del cambio.
 
 ### 76.6 Hallazgos previos a la separación
 

@@ -2,7 +2,8 @@ import { ReportBuilder, renderBarChartToDataUrl } from './reportBuilder'
 import { shortSubsedeName, stationSummaryLine } from './reportText'
 import type { ReportSection } from './reportSections'
 import { formatBytes, truncateDecimals } from '../format'
-import { STAFFING_CATEGORIES, STAFFING_NIVEL_4_LABEL, STAFFING_SEPARATE_CATEGORIES, STAFFING_TOTAL_CATEGORIES, STAFFING_TOTAL_LABEL, STAFFING_TOTAL_NOTE } from '../staffing'
+import { STAFFING_CATEGORIES, STAFFING_TOTAL_LABEL, STAFFING_TOTAL_NOTE } from '../staffing'
+import type { StaffingCategoryKey } from '../staffing'
 import {
   fetchAttendanceReportData,
   fetchCoursesReportData,
@@ -109,7 +110,7 @@ function attendanceVariations(rows: Pick<AttendanceSummary, 'station_id' | 'peri
 }
 
 const REFERENCE_NOTE =
-  'Efectivos de referencia: el total de efectivos que tenía el cuartel al cargar el resumen (sin Bomberos Nivel 4); no cambian si después cambian sus efectivos. "—" indica que todavía no tenía efectivos cargados.'
+  'Efectivos de referencia: el total de efectivos que tenía el cuartel al cargar el resumen; no cambian si después cambian sus efectivos. "—" indica que todavía no tenía efectivos cargados.'
 
 export async function generateAttendanceReport(ctx: ReportRunContext) {
   const rows = await fetchAttendanceReportData(ctx.filters)
@@ -358,7 +359,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   const asOf = ctx.filters.periodEnd ? dmy(ctx.filters.periodEnd) : null
 
   builder.addKpiRow([
-    { label: asOf ? `Efectivos al ${asOf} (sin Nivel 4)` : 'Efectivos (sin Nivel 4)', value: data.staffing ? String(data.staffing.total) : '—' },
+    { label: asOf ? `Efectivos al ${asOf}` : 'Efectivos', value: data.staffing ? String(data.staffing.total) : '—' },
     { label: 'Asistencia promedio', value: data.attendance.length ? pct(avgAttendance) : '—' },
     { label: 'Intervenciones', value: String(totalInterventions) },
     { label: 'Móviles', value: String(data.vehicles.length) },
@@ -368,7 +369,7 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
   builder.addExecutiveSummary([
     stationSummaryLine(data.station),
     data.staffing
-      ? `Efectivos${asOf ? ` al ${asOf}` : ''}: ${data.staffing.total} (no incluye ${data.staffing.bomberos_nivel_4} ${STAFFING_NIVEL_4_LABEL}), año ${data.staffing.reference_year}, cargados el ${dmy(data.staffing.recorded_at)}.`
+      ? `Efectivos${asOf ? ` al ${asOf}` : ''}: ${data.staffing.total}, año ${data.staffing.reference_year}, cargados el ${dmy(data.staffing.recorded_at)}.`
       : asOf
         ? `El cuartel todavía no tenía efectivos cargados al ${asOf}.`
         : 'El cuartel todavía no cargó sus efectivos por categoría.',
@@ -396,9 +397,8 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
       builder.addTable(
         ['Categoría', 'Cantidad'],
         [
-          ...STAFFING_TOTAL_CATEGORIES.map((c) => [c.label, staffing[c.key]]),
-          [`${STAFFING_TOTAL_LABEL} (no incluye ${STAFFING_NIVEL_4_LABEL})`, staffing.total],
-          ...STAFFING_SEPARATE_CATEGORIES.map((c) => [`${c.label} (se informa aparte, no suma)`, staffing[c.key]]),
+          ...STAFFING_CATEGORIES.map((c) => [c.label, staffing[c.key]]),
+          [STAFFING_TOTAL_LABEL, staffing.total],
         ],
         `Efectivos${asOf ? ` al ${asOf}` : ''} · año ${staffing.reference_year}`,
         [120, 'auto'],
@@ -481,13 +481,12 @@ export async function generateStationGeneralReport(ctx: ReportRunContext) {
 }
 
 // Encabezados cortos de las categorías para la tabla que compara cuarteles.
-const SHORT_CATEGORY_LABEL: Record<string, string> = {
+const SHORT_CATEGORY_LABEL: Record<StaffingCategoryKey, string> = {
   aspirantes_menores: 'Asp. menores',
   aspirantes_mayores: 'Asp. mayores',
   bomberos_nivel_1: 'Nivel 1',
   bomberos_nivel_2: 'Nivel 2',
   bomberos_nivel_3: 'Nivel 3',
-  bomberos_nivel_4: 'Nivel 4',
   personal_reserva: 'Reserva',
   cuerpo_auxiliar: 'C. auxiliar',
 }
@@ -516,7 +515,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
 
   builder.addKpiRow([
     { label: 'Cuarteles', value: String(data.stations.length) },
-    { label: asOf ? `Efectivos al ${asOf} (sin Nivel 4)` : 'Efectivos (sin Nivel 4)', value: data.staffing.size > 0 ? String(totalEffectives) : '—' },
+    { label: asOf ? `Efectivos al ${asOf}` : 'Efectivos', value: data.staffing.size > 0 ? String(totalEffectives) : '—' },
     { label: 'Asistencia promedio', value: data.attendance.length ? pct(avgAttendance) : '—' },
     { label: 'Intervenciones', value: String(totalInterventions) },
     { label: 'Móviles', value: String(data.vehicles.length) },
@@ -526,7 +525,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
   builder.addExecutiveSummary([
     `La Regional cuenta con ${data.stations.length} cuarteles dentro del alcance seleccionado.`,
     data.staffing.size > 0
-      ? `Los efectivos${asOf ? ` al ${asOf}` : ''} suman ${totalEffectives} (sin contar a los ${STAFFING_NIVEL_4_LABEL}); ${data.staffing.size} de ${data.stations.length} cuarteles los tenían cargados por categoría.`
+      ? `Los efectivos${asOf ? ` al ${asOf}` : ''} suman ${totalEffectives}; ${data.staffing.size} de ${data.stations.length} cuarteles los tenían cargados por categoría.`
       : `Todavía no hay efectivos cargados${asOf ? ` al ${asOf}` : ''} en los cuarteles del alcance seleccionado.`,
     data.attendance.length ? `La asistencia promedio del período fue de ${pct(avgAttendance)}.` : 'Sin resúmenes de asistencia cargados en el período.',
     totalInterventions ? `Se registraron ${totalInterventions} intervenciones en el período.` : 'Sin intervenciones registradas en el período.',
@@ -559,7 +558,7 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
   const head = ['Cuartel', 'Subsede']
   const widths: (number | 'auto')[] = [52, 32]
   if (has(ctx, 'efectivos')) {
-    head.push('Efectivos (sin Nivel 4)')
+    head.push('Efectivos')
     widths.push('auto')
   }
   if (has(ctx, 'asistencia')) {
@@ -603,28 +602,22 @@ export async function generateRegionalConsolidatedReport(ctx: ReportRunContext) 
   if (has(ctx, 'efectivos')) {
     const withData = data.stations.filter((s) => data.staffing.has(s.id))
     if (withData.length > 0) {
-      const sumOf = (key: (typeof STAFFING_CATEGORIES)[number]['key']) => withData.reduce((sum, s) => sum + (data.staffing.get(s.id)?.[key] ?? 0), 0)
+      const sumOf = (key: StaffingCategoryKey) => withData.reduce((sum, s) => sum + (data.staffing.get(s.id)?.[key] ?? 0), 0)
       builder.addTable(
-        ['Cuartel', ...STAFFING_TOTAL_CATEGORIES.map((c) => SHORT_CATEGORY_LABEL[c.key]), 'Total (sin Nivel 4)', ...STAFFING_SEPARATE_CATEGORIES.map((c) => `${SHORT_CATEGORY_LABEL[c.key]} (aparte)`)],
+        ['Cuartel', ...STAFFING_CATEGORIES.map((c) => SHORT_CATEGORY_LABEL[c.key]), 'Total'],
         [
           ...data.stations.map((s) => {
             const snapshot = data.staffing.get(s.id)
-            return [
-              s.name,
-              ...STAFFING_TOTAL_CATEGORIES.map((c) => (snapshot ? snapshot[c.key] : '—')),
-              snapshot ? snapshot.total : '—',
-              ...STAFFING_SEPARATE_CATEGORIES.map((c) => (snapshot ? snapshot[c.key] : '—')),
-            ]
+            return [s.name, ...STAFFING_CATEGORIES.map((c) => (snapshot ? snapshot[c.key] : '—')), snapshot ? snapshot.total : '—']
           }),
           [
             'Total de la Regional',
-            ...STAFFING_TOTAL_CATEGORIES.map((c) => sumOf(c.key)),
+            ...STAFFING_CATEGORIES.map((c) => sumOf(c.key)),
             withData.reduce((sum, s) => sum + (data.staffing.get(s.id)?.total ?? 0), 0),
-            ...STAFFING_SEPARATE_CATEGORIES.map((c) => sumOf(c.key)),
           ],
         ],
         `Efectivos por categoría${asOf ? ` al ${asOf}` : ''}`,
-        [52, 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+        [52, ...STAFFING_CATEGORIES.map((): 'auto' => 'auto'), 'auto'],
       )
       builder.addNote(`${STAFFING_TOTAL_NOTE} ${withData.length} de ${data.stations.length} cuarteles tenían efectivos cargados; los demás figuran con "—" y no suman.`)
     } else {

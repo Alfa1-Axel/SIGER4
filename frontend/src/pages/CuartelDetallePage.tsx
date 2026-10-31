@@ -501,7 +501,7 @@ export function CuartelDetallePage() {
           )}
 
           <div className="card-grid" style={{ marginBottom: 20 }}>
-            <div className="kpi-card" style={{ textAlign: 'center' }} title="Total de efectivos: no incluye Bomberos Nivel 4">
+            <div className="kpi-card" style={{ textAlign: 'center' }} title="Total de efectivos">
               <div className="kpi-value">{station.personnel_count}</div>
               <div className="kpi-label">Efectivos</div>
             </div>

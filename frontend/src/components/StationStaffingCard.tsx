@@ -7,9 +7,6 @@ import {
   EMPTY_STAFFING,
   MAX_STAFFING_COUNT,
   STAFFING_GROUPS,
-  STAFFING_NIVEL_4_LABEL,
-  STAFFING_SEPARATE_HINT,
-  STAFFING_TOTAL_EXCLUDES,
   STAFFING_TOTAL_LABEL,
   STAFFING_TOTAL_NOTE,
   sameStaffing,
@@ -41,9 +38,9 @@ function formatUpdated(row: Pick<StationStaffing, 'updated_at' | 'updated_by_nam
 }
 
 // Efectivos del cuartel: cantidad de personas por categoría, que se edita
-// cuando cambian (no es una carga mensual). El total se calcula solo (sin
-// Bomberos Nivel 4, que se carga y se ve pero no suma, 0118) y cada cambio
-// queda en el historial. Se muestra en la ficha del cuartel (id "efectivos").
+// cuando cambian (no es una carga mensual). El total se calcula solo y cada
+// cambio queda en el historial. Se muestra en la ficha del cuartel (id
+// "efectivos").
 export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved }: StationStaffingCardProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -90,8 +87,6 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
   const baselineYear = saved?.reference_year ?? new Date().getFullYear()
   const dirty = !sameStaffing(counts, baseline) || year !== baselineYear
   const total = sumStaffing(counts)
-  // Solo hay Bomberos Nivel 4: se cargan, pero el total queda en 0.
-  const onlyNivel4 = total === 0 && counts.bomberos_nivel_4 > 0
   // Se ofrece también el año ya guardado, aunque ya no esté entre los recientes.
   const years = [...new Set([...staffingYearOptions(), baselineYear, year])].sort((a, b) => b - a)
 
@@ -111,7 +106,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
   async function handleSave(event: FormEvent) {
     event.preventDefault()
     if (!saved && total === 0) {
-      setSaveError(counts.bomberos_nivel_4 > 0 ? 'Cargá al menos una categoría que sume al total: Bomberos Nivel 4 se informa aparte y no suma.' : 'Cargá al menos una categoría antes de guardar.')
+      setSaveError('Cargá al menos una categoría antes de guardar.')
       return
     }
     setSaving(true)
@@ -144,7 +139,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
       </div>
       <div className="card staffing-card" style={{ marginBottom: 20 }}>
         <p className="staffing-intro">
-          Cantidad de efectivos por categoría. Se actualiza cuando cambian; el total se calcula solo y no hace falta cargar nombres. {STAFFING_NIVEL_4_LABEL} se carga y se ve, pero no suma al total.
+          Cantidad de efectivos por categoría. Se actualiza cuando cambian; el total se calcula solo y no hace falta cargar nombres.
         </p>
 
         {status === 'loading' && (
@@ -173,10 +168,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
                     <dl className="staffing-list">
                       {group.categories.map((c) => (
                         <div key={c.key}>
-                          <dt>
-                            {c.label}
-                            {!c.countsInTotal && <span className="staffing-separate"> (no suma al total)</span>}
-                          </dt>
+                          <dt>{c.label}</dt>
                           <dd>{saved[c.key]}</dd>
                         </div>
                       ))}
@@ -188,8 +180,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
                   <span className="staffing-total-value">{saved.total}</span>
                 </div>
                 <p className="staffing-meta">
-                  {STAFFING_TOTAL_EXCLUDES}
-                  {saved.bomberos_nivel_4 > 0 && ` Bomberos Nivel 4 cargados: ${saved.bomberos_nivel_4}.`} {STAFFING_TOTAL_NOTE} Última actualización: {formatUpdated(saved)}
+                  {STAFFING_TOTAL_NOTE} Última actualización: {formatUpdated(saved)}
                 </p>
               </>
             ) : (
@@ -239,7 +230,6 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
                       min={0}
                       max={MAX_STAFFING_COUNT}
                       disabled={saving}
-                      hint={c.countsInTotal ? undefined : STAFFING_SEPARATE_HINT}
                       onChange={(value) => change(c.key, value)}
                     />
                   ))}
@@ -255,9 +245,7 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
               </span>
             </div>
             <p className="staffing-meta">
-              {STAFFING_TOTAL_EXCLUDES}
-              {counts.bomberos_nivel_4 > 0 && ` Bomberos Nivel 4 cargados: ${counts.bomberos_nivel_4}.`}
-              {onlyNivel4 && ' Solo hay Bomberos Nivel 4: cargá las demás categorías para que el total refleje los efectivos.'} {STAFFING_TOTAL_NOTE} Cada categoría va de 0 a {MAX_STAFFING_COUNT}.
+              {STAFFING_TOTAL_NOTE} Cada categoría va de 0 a {MAX_STAFFING_COUNT}.
               {saved && ` Última actualización: ${formatUpdated(saved)}.`}
             </p>
 
@@ -293,7 +281,6 @@ export function StationStaffingCard({ stationId, canEdit, currentTotal, onSaved 
                 <li key={h.id}>
                   <span>
                     {formatDay(h.recorded_at)} · {h.total} {h.total === 1 ? 'efectivo' : 'efectivos'} · año {h.reference_year}
-                    {h.bomberos_nivel_4 > 0 && ` · Nivel 4: ${h.bomberos_nivel_4} (no suma)`}
                   </span>
                   {h.recorded_by_name && <span className="staffing-history-by">{h.recorded_by_name}</span>}
                 </li>

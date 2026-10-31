@@ -2675,11 +2675,6 @@ kbd {
   font-weight: 400;
 }
 
-.staffing-separate {
-  font-weight: 400;
-  color: var(--color-text-secondary);
-}
-
 .staffing-actions {
   display: flex;
   flex-wrap: wrap;

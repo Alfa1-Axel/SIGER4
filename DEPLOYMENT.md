@@ -20,6 +20,8 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 76):** el repositorio se separó en `frontend/`, `backend/` y `tests/`. Las secciones 1 a 75 conservan las rutas de su momento: `src/`, `public/`, `index.html`, `vite.config.ts` y `.env` están ahora en `frontend/`; `supabase/` en `backend/supabase/`; `scripts/` en `backend/scripts/` (salvo `generate-icons.cjs`, en `frontend/scripts/`); `tests/ui`, `tests/db` y `tests/release` en `tests/frontend/ui`, `tests/backend/db` y `tests/backend/release`, y `tests/db/rebuild.sh` se reemplazó por `npm run test:db`. **Todo comando `supabase …` de este documento se corre desde `backend/`** (o con `--workdir backend` desde la raíz). Los comandos `npm run …` siguen corriéndose desde la raíz. Tabla completa de equivalencias en `docs/estructura.md`.
 
+> **Nota (sección 77):** **Bomberos Nivel 4 ya no existe** como categoría de efectivos (versión 1.20.0): no se carga, no se muestra y no figura en los reportes. Lo que dicen de esa categoría las secciones 65, 67 y 72 (y la nota de la 72, más arriba) queda como historial. La base conserva lo cargado antes, sin uso y sin sumar al total; no hubo migración.
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
@@ -11572,3 +11574,47 @@ Además se comprobó que las pruebas nuevas fallan cuando tienen que fallar: `te
 - **Volver atrás:** revertir el merge (`git revert -m 1 <commit del merge>`) y dejar que Vercel publique, o en Vercel volver a promover el despliegue anterior. No hay datos ni migraciones que deshacer.
 - **El build de Vercel no encuentra `frontend/dist` o no arranca:** confirmar que el Root Directory del proyecto en Vercel sea la raíz del repositorio y que `vercel.json` esté en la raíz.
 - **La CLI de Supabase no encuentra una función:** se corrió desde la raíz; repetir desde `backend/`.
+
+## 77. Se retira la categoría Bomberos Nivel 4 de los efectivos (2026-10-30) — versión 1.20.0, sin migraciones
+
+Bomberos Nivel 4 dejó de existir como categoría. Desde esta versión no se carga, no se muestra en ninguna pantalla y no figura en los reportes. **No hay migración: no se borra ni se modifica ningún dato**, no cambian permisos ni funciones, y el total de efectivos de cada cuartel sigue igual (el Nivel 4 ya no sumaba desde la sección 72).
+
+### 77.1 Qué cambia, en lenguaje de todos los días
+
+- En la ficha del cuartel, **Efectivos del cuartel** tiene siete categorías: aspirantes menores y mayores, Bomberos Nivel 1, 2 y 3, reserva y cuerpo auxiliar. El **Total de efectivos** es la suma de las siete.
+- Desaparecen las aclaraciones "no incluye Bomberos Nivel 4" de la ficha del cuartel, el listado de Cuarteles, el Inicio y la carga de Asistencia, y el Nivel 4 del historial de actualizaciones de los efectivos.
+- Los reportes PDF del cuartel y de la Regional ya no tienen columnas ni aclaraciones de Nivel 4: la tabla de efectivos muestra las siete categorías y el total.
+
+### 77.2 Qué pasa con lo que ya estaba cargado
+
+- La base conserva la columna `bomberos_nivel_4` (en `station_staffing` y en `station_staffing_history`) con lo que se cargó antes. No se ve en ninguna pantalla ni reporte y no suma al total. La aplicación ya no la envía al guardar, así que ese valor no cambia.
+- Un cuartel que solo tenía Bomberos Nivel 4 cargados queda con total 0, igual que antes, y Asistencia le pide cargar los efectivos.
+- Si las personas que estaban en Nivel 4 pasaron a otra categoría, cada cuartel lo actualiza en sus efectivos.
+- Borrar la columna de la base es opcional y sería una migración nueva (0123): **borra para siempre** esos valores y su historial, y se corre recién después de publicar esta versión de la aplicación (la anterior todavía la usa).
+
+### 77.3 Archivos tocados
+
+- `frontend/src/lib/staffing.ts`: las siete categorías y el texto del total; se quita lo que distinguía categorías que no suman, que solo existía para el Nivel 4.
+- `frontend/src/components/StationStaffingCard.tsx`, `frontend/src/pages/AsistenciaFormPage.tsx`, `frontend/src/components/HomeResumen.tsx`, `frontend/src/pages/CuartelDetallePage.tsx`, `frontend/src/pages/CuartelesPage.tsx` y `frontend/src/lib/pdf/reportGenerators.ts`: textos, campo, historial y reportes.
+- `frontend/src/types/database.ts`: comentarios (los tipos siguen reflejando la base, que tiene la columna). `frontend/src/styles.css`: una regla que quedó sin uso.
+- `package.json` y `package-lock.json`: versión 1.20.0.
+- **Sin cambios:** migraciones, Edge Functions, RLS, `backend/supabase/security_audit.sql` (sus controles de la 0118 siguen valiendo: la columna existe y no suma) y el Supabase simulado de las pruebas, que sigue reflejando la base.
+
+### 77.4 Pruebas, por tipo de evidencia
+
+- **Código:** build (107 piezas en el precache), lint (0 errores y el aviso de siempre), `npm run security:check` 48 de 48, `npm run test:release` 122 de 122. No queda ningún texto visible que nombre al Nivel 4.
+- **Servidor simulado en navegador (Chrome de escritorio), con cuarteles que ya tenían Nivel 4 guardado, en la fila actual y en el historial — 20 comprobaciones, 0 fallas:** la ficha muestra siete campos y el total de las siete categorías; el historial no muestra el Nivel 4; al guardar un cambio, el pedido a la base no lleva `bomberos_nivel_4` y el valor guardado queda igual; la vista de solo lectura (Invitado) muestra siete categorías; el Inicio, la carga de Asistencia (total de referencia, y un cuartel que solo tenía Nivel 4) y el listado de Cuarteles no lo nombran; los PDF del cuartel y de la Regional no lo nombran y tienen su tabla de efectivos con el total. La misma verificación sobre la versión anterior da 13 fallas: detecta el Nivel 4 en cada uno de esos lugares.
+- **`npm run test:frontend`:** 512 vistas (4 variantes de rol, celular claro y escritorio oscuro), 0 fallas.
+- **Base local:** no corresponde; la base no cambia.
+- **No verificado:** producción y un celular físico.
+
+### 77.5 Qué correr y en qué orden
+
+1. En Supabase: nada.
+2. Publicar la aplicación (merge a `main`; Vercel publica producción).
+3. Comprobar que `https://<sitio>/version.json` muestre 1.20.0.
+4. Opcional: avisar a las personas usuarias con `npm run release:announce -- --version 1.20.0 --modules "Efectivos"` (sección 75), primero con `--dry-run`.
+
+### 77.6 Si algo sale mal
+
+- **Volver atrás:** publicar la versión anterior (revertir el merge). Como no se borró nada, el Nivel 4 vuelve a verse con lo que tenía cargado cada cuartel.

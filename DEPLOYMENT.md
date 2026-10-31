@@ -18,12 +18,14 @@ matriz de permisos final y checklist de prueba manual.**
 
 > **Nota (sección 73):** todos los usuarios activos ven la **ficha institucional básica** de cada cuartel y de cada departamento (y los cuarteles en el Mapa), sin acceso a nada interno ni a ninguna edición (migración 0119, sin cambios de RLS); y el **Coordinador de Departamento da de alta a sus miembros** (siempre como Miembro de Departamento y solo de su departamento: migración 0120 y Edge Function `admin-create-user`). El modo departamento (secciones 63 y 64) ahora ve la ficha de los cuarteles y de los demás departamentos; lo interno sigue cerrado. Hay que **correr 0119 y 0120, desplegar la función y publicar el frontend**, en ese orden (sección 73.7).
 
+> **Nota (sección 76):** el repositorio se separó en `frontend/`, `backend/` y `tests/`. Las secciones 1 a 75 conservan las rutas de su momento: `src/`, `public/`, `index.html`, `vite.config.ts` y `.env` están ahora en `frontend/`; `supabase/` en `backend/supabase/`; `scripts/` en `backend/scripts/` (salvo `generate-icons.cjs`, en `frontend/scripts/`); `tests/ui`, `tests/db` y `tests/release` en `tests/frontend/ui`, `tests/backend/db` y `tests/backend/release`, y `tests/db/rebuild.sh` se reemplazó por `npm run test:db`. **Todo comando `supabase …` de este documento se corre desde `backend/`** (o con `--workdir backend` desde la raíz). Los comandos `npm run …` siguen corriéndose desde la raíz. Tabla completa de equivalencias en `docs/estructura.md`.
+
 ## 0. Checklist rápido antes de desplegar
 
 Si ya tenés un proyecto de Supabase funcionando y solo querés confirmar que está todo al día antes
 de un deploy a Vercel, revisá esto (el detalle de cada paso está en las secciones siguientes):
 
-- [ ] **Migraciones**: todas las migraciones de `supabase/migrations/` corridas en orden, desde
+- [ ] **Migraciones**: todas las migraciones de `backend/supabase/migrations/` corridas en orden, desde
       `0001` hasta la última numerada (`0079` al momento de escribir esto — la numeración solo
       crece, confirmá el número más alto real en la carpeta antes de dar por completo este paso).
       Ver sección 1.2 para el detalle de las primeras 24; el resto se documentó incrementalmente en
@@ -41,11 +43,12 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
       sistema sigue funcionando igual con las notificaciones internas (`/notificaciones`).
 - [ ] **Al menos un usuario `informatica_r4` creado** (sección 1.5), para poder administrar el
       sistema apenas esté desplegado.
-- [ ] **Build/lint/audit locales sin errores nuevos**: `npm run build`, `npm run lint`,
-      `npm audit --audit-level=high` (la única advisory esperada es la de React Router en modo RSC,
-      no aplicable a esta SPA — ver sección 4).
-- [ ] **Vercel**: Build Command `npm run build`, Output Directory `dist`, Framework Preset Vite
-      (sección 2.2).
+- [ ] **Build/lint/audit/seguridad locales sin errores nuevos** (desde la raíz): `npm run build`,
+      `npm run lint`, `npm audit --audit-level=high` y `npm run security:check`. `npm audit` muestra
+      4 avisos de severidad baja de `vite-plugin-pwa` sin arreglo compatible (sección 76); ninguno
+      alto ni crítico.
+- [ ] **Vercel**: `vercel.json` define Build Command `npm run build` y Output Directory
+      `frontend/dist`; Framework Preset Vite y Root Directory en la raíz del repositorio (sección 2.2).
 - [ ] **PWA verificada** en la URL de producción real (sección 2.5) — el manifest/service worker
       usan rutas absolutas, así que solo se puede confirmar del todo en el dominio final, no en
       `localhost`.
@@ -53,7 +56,7 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
 ### Antes de dar acceso a usuarios reales (no solo de prueba)
 
 - [ ] **Datos de prueba limpiados** si corriste el sistema en modo de pruebas: ver sección 1.6bis
-      y `supabase/cleanup_test_data.sql` (plantilla a revisar y customizar, no un script para
+      y `backend/supabase/cleanup_test_data.sql` (plantilla a revisar y customizar, no un script para
       correr a ciegas).
 - [ ] **Sesión de pruebas funcionales conjunta** hecha al menos una vez sobre los flujos
       principales (login, alta de cuartel, carga de asistencia/intervención/personal, generación
@@ -76,33 +79,33 @@ de un deploy a Vercel, revisá esto (el detalle de cada paso está en las seccio
 1. En el panel del proyecto, ir a **SQL Editor** → **New query**.
 2. Pegar y ejecutar, **en este orden exacto**, el contenido de cada archivo (una migración por
    query, esperando a que cada una termine antes de pasar a la siguiente):
-   - `supabase/migrations/0001_schema.sql`
-   - `supabase/migrations/0002_rls_helpers.sql`
-   - `supabase/migrations/0003_rls_policies.sql`
-   - `supabase/migrations/0004_audit_triggers.sql`
-   - `supabase/migrations/0005_user_invites.sql`
-   - `supabase/migrations/0006_station_status_simplify.sql`
+   - `backend/supabase/migrations/0001_schema.sql`
+   - `backend/supabase/migrations/0002_rls_helpers.sql`
+   - `backend/supabase/migrations/0003_rls_policies.sql`
+   - `backend/supabase/migrations/0004_audit_triggers.sql`
+   - `backend/supabase/migrations/0005_user_invites.sql`
+   - `backend/supabase/migrations/0006_station_status_simplify.sql`
    - Antes de continuar, verificar en el SQL Editor: `select count(*) from stations;` → si da
      `0`, seguir sin problema (no hace falta backfill de `subsede_id`).
-   - `supabase/migrations/0007_subsedes.sql`
-   - `supabase/migrations/0008_role_key_simplify.sql`
-   - `supabase/migrations/0009_scope_type_add_subsede.sql`
-   - `supabase/migrations/0010_user_scopes_subsede.sql`
-   - `supabase/migrations/0011_vehicles_fields.sql`
-   - `supabase/migrations/0012_courses_fields.sql`
-   - `supabase/migrations/0013_vehicles_count_sync.sql`
-   - `supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
-   - `supabase/migrations/0015_notifications_subsede_and_audit.sql`
-   - `supabase/migrations/0016_attendance_intervention_audit.sql`
-   - `supabase/migrations/0017_institutional_profiles_and_storage.sql`
-   - `supabase/migrations/0018_super_admin_protection.sql`
-   - `supabase/migrations/0019_documents_module.sql`
-   - `supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
-   - `supabase/migrations/0021_personnel_module.sql`
-   - `supabase/migrations/0022_intervention_summaries_operational_fields.sql`
-   - `supabase/migrations/0023_automatic_notifications.sql`
-   - `supabase/migrations/0024_push_subscriptions.sql`
-3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `supabase/seed_example.sql`
+   - `backend/supabase/migrations/0007_subsedes.sql`
+   - `backend/supabase/migrations/0008_role_key_simplify.sql`
+   - `backend/supabase/migrations/0009_scope_type_add_subsede.sql`
+   - `backend/supabase/migrations/0010_user_scopes_subsede.sql`
+   - `backend/supabase/migrations/0011_vehicles_fields.sql`
+   - `backend/supabase/migrations/0012_courses_fields.sql`
+   - `backend/supabase/migrations/0013_vehicles_count_sync.sql`
+   - `backend/supabase/migrations/0014_subsede_scope_gaps_and_audit_territory.sql`
+   - `backend/supabase/migrations/0015_notifications_subsede_and_audit.sql`
+   - `backend/supabase/migrations/0016_attendance_intervention_audit.sql`
+   - `backend/supabase/migrations/0017_institutional_profiles_and_storage.sql`
+   - `backend/supabase/migrations/0018_super_admin_protection.sql`
+   - `backend/supabase/migrations/0019_documents_module.sql`
+   - `backend/supabase/migrations/0020_audit_logs_subsede_station_scope.sql`
+   - `backend/supabase/migrations/0021_personnel_module.sql`
+   - `backend/supabase/migrations/0022_intervention_summaries_operational_fields.sql`
+   - `backend/supabase/migrations/0023_automatic_notifications.sql`
+   - `backend/supabase/migrations/0024_push_subscriptions.sql`
+3. (Opcional) Para tener datos de prueba en el dashboard, ejecutar también `backend/supabase/seed_example.sql`
    (solo tiene sentido si ya cargaste cuarteles reales o vas a usar datos de ejemplo temporales).
 
 **Nota:** si tu proyecto Supabase ya tenía el esquema aplicado desde antes (instalación previa),
@@ -197,7 +200,7 @@ recién agregado dentro de la misma transacción que lo creó, por eso todo lo q
 1. Ir a **Project Settings → API**.
 2. `VITE_SUPABASE_URL` = el valor de "Project URL".
 3. `VITE_SUPABASE_ANON_KEY` = el valor de "anon public" (¡no uses la "service_role"!).
-4. Copiar `.env.example` a `.env` en el proyecto local y completar ambos valores para desarrollo.
+4. Copiar `frontend/.env.example` a `frontend/.env` en el proyecto local y completar ambos valores para desarrollo.
 
 ### 1.5 Crear usuarios de prueba
 1. Ir a **Authentication → Users → Add user** (o "Invite").
@@ -216,7 +219,7 @@ recién agregado dentro de la misma transacción que lo creó, por eso todo lo q
    insert into user_roles (profile_id, role)
    values (
      (select id from profiles where email = 'usuario@bomberos.gob.ar'),
-     'informatica_r4' -- o el rol que corresponda, ver src/types/roles.ts
+     'informatica_r4' -- o el rol que corresponda, ver frontend/src/types/roles.ts
    );
    ```
 4. Para un usuario de cuartel, además asignar `station_id` en `profiles` y/o crear una fila en
@@ -232,7 +235,7 @@ recién agregado dentro de la misma transacción que lo creó, por eso todo lo q
 ### 1.6bis Limpiar datos de prueba antes de pasar a producción
 
 Si cargaste datos de prueba mientras desarrollabas/probabas SIGER4 y ahora vas a empezar a usarlo
-con cuarteles y personal reales, `supabase/cleanup_test_data.sql` es una plantilla de limpieza —
+con cuarteles y personal reales, `backend/supabase/cleanup_test_data.sql` es una plantilla de limpieza —
 **no un script para correr a ciegas**. Instrucciones completas dentro del archivo; en resumen:
 
 1. Abrí el archivo y reemplazá `'admin@tudominio.com'` por tu email real en los lugares indicados.
@@ -255,7 +258,7 @@ resumen ejecutivo), sin ninguna llamada a servicios de IA. La integración con G
 antes se desactivó por falta de cuota/presupuesto (la API devolvía error 429 de forma recurrente) y
 el frontend ya no la invoca ni depende de ella.
 
-La Edge Function `supabase/functions/analyze-report/index.ts` sigue en el repositorio pero
+La Edge Function `backend/supabase/functions/analyze-report/index.ts` sigue en el repositorio pero
 **no se usa ni hace falta desplegarla**. Queda como base para una posible fase futura si en algún
 momento se dispone de presupuesto para una cuota de IA estable.
 
@@ -270,35 +273,35 @@ en `notifications` — ya sea porque el propio frontend la creó (formulario man
 `/notificaciones/nueva`, confirmación de "reporte generado") o porque la creó un trigger automático
 de Postgres (curso nuevo, documento nuevo, cambio de estado, carga de asistencia/intervención — ver
 migración 0023). Para detectar estas últimas sin que el frontend tenga que estar en la pantalla que
-las originó, `src/components/NotificationPushBridge.tsx` mantiene una suscripción Realtime a
+las originó, `frontend/src/components/NotificationPushBridge.tsx` mantiene una suscripción Realtime a
 inserts en `notifications` durante toda la sesión (montada una sola vez en `App.tsx`), respetando
 el mismo alcance que ya define RLS para esa tabla. No se usa un trigger de Postgres llamando a la
 Edge Function directamente (pg_net): la lógica de decisión y reintento queda del lado del cliente,
 que ya sabe mostrar la notificación en pantalla.
 
 **Piezas:**
-- `supabase/migrations/0024_push_subscriptions.sql`: tabla `push_subscriptions` (endpoint, claves
+- `backend/supabase/migrations/0024_push_subscriptions.sql`: tabla `push_subscriptions` (endpoint, claves
   del navegador, perfil dueño), RLS (cada usuario solo ve/crea/borra sus propias suscripciones), y
   agrega `notifications` a la publicación `supabase_realtime`.
-- `src/sw.ts`: service worker custom (ver nota de `injectManifest` más abajo) con los listeners
+- `frontend/src/sw.ts`: service worker custom (ver nota de `injectManifest` más abajo) con los listeners
   `push` (muestra la notificación del sistema) y `notificationclick` (enfoca/abre la app en la URL
   indicada por el payload).
-- `src/hooks/usePushNotifications.ts`: pide permiso, suscribe el navegador (`pushManager.subscribe`)
+- `frontend/src/hooks/usePushNotifications.ts`: pide permiso, suscribe el navegador (`pushManager.subscribe`)
   y guarda la suscripción en Supabase. Si el navegador no soporta push, o el usuario no acepta el
   permiso, el hook expone ese estado sin romper nada más.
-- `src/pages/AjustesPage.tsx` ("Mi Perfil"): botón para activar/desactivar notificaciones push.
-- `supabase/functions/send-push/index.ts`: Edge Function que recibe `{title, body, url, tag,
+- `frontend/src/pages/AjustesPage.tsx` ("Mi Perfil"): botón para activar/desactivar notificaciones push.
+- `backend/supabase/functions/send-push/index.ts`: Edge Function que recibe `{title, body, url, tag,
   profileId|regionId|subsedeId|stationId}`, resuelve las suscripciones del alcance indicado, y
   envía el push real con la librería `web-push` usando las claves VAPID. Limpia automáticamente las
   suscripciones que el navegador ya invalidó (404/410).
-- `src/components/NotificationPushBridge.tsx`: dispara `send-push` para cada notificación nueva, y
+- `frontend/src/components/NotificationPushBridge.tsx`: dispara `send-push` para cada notificación nueva, y
   reproduce un sonido corto (Web Audio API) si la app está abierta — nunca es la única alerta, el
   push del sistema operativo funciona igual si la app está cerrada.
 
 **Nota sobre injectManifest:** el service worker pasó de `generateSW` (autogenerado por
 `vite-plugin-pwa`, sin forma de agregar listeners propios) a `strategies: 'injectManifest'`, con el
-código fuente en `src/sw.ts`. Esto es necesario para poder escuchar `push`/`notificationclick`; el
-precache y el runtime caching (Supabase/imágenes) que antes vivían en la config de `vite.config.ts`
+código fuente en `frontend/src/sw.ts`. Esto es necesario para poder escuchar `push`/`notificationclick`; el
+precache y el runtime caching (Supabase/imágenes) que antes vivían en la config de `frontend/vite.config.ts`
 ahora viven como código explícito dentro de `sw.ts`, con el mismo comportamiento de antes.
 
 **Generar las claves VAPID** (una sola vez, se reutilizan siempre):
@@ -308,9 +311,10 @@ npx web-push generate-vapid-keys
 Esto imprime un par de claves pública/privada. Guardalas: la privada no se puede recuperar después.
 
 **Configurar:**
-1. Clave pública, en el frontend (`.env`/Vercel), variable `VITE_VAPID_PUBLIC_KEY` — es pública por
+1. Clave pública, en el frontend (`frontend/.env`/Vercel), variable `VITE_VAPID_PUBLIC_KEY` — es pública por
    diseño, viaja al navegador en `pushManager.subscribe()`.
-2. Claves como secretos de la Edge Function (nunca en el frontend ni en el repositorio):
+2. Claves como secretos de la Edge Function (nunca en el frontend ni en el repositorio), con la CLI
+   desde `backend/`:
    ```
    supabase secrets set VAPID_PUBLIC_KEY=tu-clave-publica
    supabase secrets set VAPID_PRIVATE_KEY=tu-clave-privada
@@ -318,7 +322,7 @@ Esto imprime un par de claves pública/privada. Guardalas: la privada no se pued
    ```
    (`VAPID_SUBJECT` es un contacto de referencia exigido por el estándar Web Push, no una clave
    secreta — se puede omitir, hay un valor por defecto en el código.)
-3. Desplegar la función:
+3. Desplegar la función (desde `backend/`):
    ```
    supabase functions deploy send-push
    ```
@@ -337,16 +341,22 @@ viendo y recibiendo solo lo que ya podía ver antes.
 2. Seleccionar el repositorio de SIGER4 (ver sección "GitHub" más abajo si todavía no lo subiste).
 
 ### 2.2 Configuración del proyecto
-- **Framework Preset**: Vite (Vercel lo detecta automáticamente).
-- **Build Command**: `npm run build`
-- **Output Directory**: `dist`
-- **Install Command**: `npm install` (por defecto)
+- **Root Directory**: la raíz del repositorio (no cambiarla: `vercel.json` vive ahí).
+- **Framework Preset**: Vite.
+- **Build Command**: `npm run build`, definido en `vercel.json` (desde la sección 76).
+- **Output Directory**: `frontend/dist`, definido en `vercel.json` (desde la sección 76; antes era `dist`).
+- **Install Command**: `npm install` (por defecto): desde la raíz instala el workspace completo.
+
+Lo que define `vercel.json` tiene prioridad sobre estos campos del panel.
 
 ### 2.3 Variables de entorno
 En **Project Settings → Environment Variables**, agregar (en Production, Preview y Development):
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_VAPID_PUBLIC_KEY` (opcional — solo si activaste notificaciones push, ver sección 1.8)
+- `VITE_PASSKEYS_ENABLED` (opcional — `true` solo si el ingreso con passkey está habilitado, ver sección 57.5)
+
+Qué es cada variable y cuáles son secretas: `docs/variables-de-entorno.md`.
 
 ### 2.4 Deploy
 1. Hacer clic en "Deploy". Vercel construye el proyecto y publica una URL `https://<proyecto>.vercel.app`.
@@ -11440,3 +11450,123 @@ La salida nunca imprime el secreto. Necesita Node 22.18 o más nuevo (lee el con
 | Media | Un anuncio es **irreversible hacia las personas** (se notifica y puede salir un push): por eso el comando es manual, verifica producción y tiene `--dry-run` | Decisión de diseño: no se anuncia desde un despliegue automático |
 | Baja | El aviso de baja prioridad queda detrás de "Ver todos" cuando hay cuatro o más pendientes más urgentes | Por diseño: no desplaza lo urgente; sigue en la campana y la bandeja |
 | Baja | El push de un aviso por persona dispara un envío individual por cada perfil activo (una sola llamada a la Edge Function por aviso) | Es el mismo mecanismo de todas las notificaciones; con muchos perfiles el envío se reparte en el tiempo. Sin cambios |
+
+## 76. Separación del repositorio en frontend, backend y pruebas (2026-10-30) — versión 1.19.0 sin cambios, sin migraciones
+
+Reorganización técnica, hecha en la rama `separacion-frontend-backend`: la interfaz, el backend y las pruebas quedan en carpetas separadas y todos los comandos se corren desde la raíz. **No cambia ninguna función, permiso, dato, ruta ni pantalla.** Las migraciones y las Edge Functions quedaron idénticas byte a byte: no hay nada que correr en Supabase ni funciones que redesplegar. Lo único que cambia en el sitio publicado es una actualización de seguridad de una dependencia (76.7) y el texto de un aviso de consola para desarrollo.
+
+### 76.1 Estructura nueva
+
+```text
+frontend/   src/, public/, index.html, vite.config.ts, tsconfig*.json, eslint.config.js, .env.example, package.json (workspace)
+backend/    supabase/ (migraciones, Edge Functions, scripts SQL de operación) y scripts/ (security-check, announce-release)
+tests/      frontend/ui (pantallas), backend/db (base local), backend/release (anuncio de versiones)
+docs/       estructura.md, desarrollo.md, variables-de-entorno.md
+raíz        package.json, package-lock.json, vercel.json, .gitignore, README.md, DEPLOYMENT.md
+```
+
+Todo se movió con `git mv`, así que el historial de cada archivo se conserva (`git log --follow`). Equivalencias completas con las rutas anteriores y motivos de cada ubicación: `docs/estructura.md`.
+
+| Qué | Antes | Ahora | Archivos |
+|---|---|---|---|
+| Interfaz | `src/`, `public/`, `index.html`, configuración de Vite, TypeScript y ESLint, `.env.example` | `frontend/` | 212 |
+| Generador de íconos | `scripts/generate-icons.cjs` | `frontend/scripts/` | 1 |
+| Supabase | `supabase/` | `backend/supabase/` | 138 |
+| Scripts del servidor | `scripts/security-check.mjs`, `scripts/announce-release.mjs` | `backend/scripts/` | 2 |
+| Pruebas de pantalla | `tests/ui/` (con `backend/`) | `tests/frontend/ui/` (con `mock-supabase/`) | 7 |
+| Pruebas de la base | `tests/db/` | `tests/backend/db/` | 5 (`rebuild.sh` se reemplazó, 76.4) |
+| Pruebas del anuncio | `tests/release/` | `tests/backend/release/` | 6 |
+
+**Quedan en la raíz** `package.json` (raíz del workspace: versión del sistema, `overrides` y comandos), `package-lock.json` (npm usa uno solo por workspace), `vercel.json` (Vercel lo lee desde la raíz del proyecto, que en el panel es la raíz del repositorio), `.gitignore`, `README.md` y este archivo. **No se creó una carpeta `shared/`**: lo único compartido es `backend/supabase/functions/_shared/`, que usan las funciones y el comando de publicación (todo backend); la interfaz no importa nada del backend.
+
+### 76.2 Comandos
+
+| Comando | Qué hace | Estado |
+|---|---|---|
+| `npm install` | Una sola vez, en la raíz: instala la interfaz y las herramientas | igual que antes |
+| `npm run dev` / `build` / `preview` / `lint` | Delegan en `frontend/`; el build queda en `frontend/dist` | mismo comando |
+| `npm test` | `test:backend` y después `test:frontend` | nuevo |
+| `npm run test:frontend` | Pruebas de pantalla (es `test:ui`) | nuevo |
+| `npm run test:backend` | `test:release` y `test:db` | nuevo |
+| `npm run test:ui`, `test:release` | Las mismas suites, en su carpeta nueva | mismo comando |
+| `npm run test:db` | Todas las migraciones desde una base vacía, suites SQL, reaplicación de las idempotentes y `security_audit.sql`, contra PostgreSQL 16 local | nuevo (reemplaza a `tests/db/rebuild.sh`) |
+| `npm run security:check` | 48 comprobaciones (una nueva, 76.7) | mismo comando |
+| `npm run release:announce` | El mismo procedimiento de la sección 75 | mismo comando |
+| `supabase …` | Desde `backend/` (o `--workdir backend` desde la raíz) | **cambia de carpeta** |
+
+**No hay `npm run test:integration`:** no existe hoy ninguna prueba automática de la interfaz contra un backend real (haría falta Supabase local con Docker). La integración se verifica a mano en el preview o en producción (sección 2.6 y la lista de cada versión). Detalle de cada suite: `tests/README.md`.
+
+### 76.3 Vercel
+
+- **No hay que cambiar nada en el panel.** `vercel.json` ahora declara `"buildCommand": "npm run build"` y `"outputDirectory": "frontend/dist"`, que tienen prioridad sobre lo que diga el panel. El Root Directory sigue siendo la raíz del repositorio, el preset Vite y la instalación `npm install` (desde la raíz instala el workspace completo). Las variables de entorno no cambian.
+- Producción sigue saliendo de `main` y cada rama sigue teniendo su preview. Las reescrituras (toda ruta abre `index.html`), los encabezados de seguridad y el caché de `/assets/` no cambiaron.
+- Si en el panel hubiera configurado un "Ignored Build Step" con rutas (no figura en este documento), revisarlo: las rutas cambiaron.
+
+### 76.4 Supabase
+
+- **Nada que correr:** sin migraciones y sin funciones que redesplegar.
+- **La CLI se corre desde `backend/`.** Se comprobó con la CLI 2.122.0 en una copia del repositorio: desde `backend/` (o desde una subcarpeta, o con `--workdir backend` desde la raíz) encuentra `backend/supabase/`; desde la raíz sin `--workdir` no encuentra nada, así que un deploy lanzado por costumbre desde la raíz falla sin desplegar. No se hizo ningún deploy real.
+- El proyecto vinculado de la CLI (`supabase/.temp/`, ignorado por Git) se movió junto con la carpeta en este equipo. En otro equipo que ya tenga el repositorio, `git pull` no lo mueve: hay que moverlo a mano a `backend/supabase/.temp/` (o vincular de nuevo desde `backend/`), igual que el `.env` a `frontend/.env` (`docs/desarrollo.md`, "Errores frecuentes").
+- No se creó `config.toml`: cambiaría la verificación de JWT de las funciones (sección 51).
+- Si el proyecto tuviera activada la integración de Supabase con GitHub (no figura en este documento; las migraciones se corren a mano), su "Supabase directory" pasaría a ser `backend/supabase`.
+
+### 76.5 Pruebas, por tipo de evidencia
+
+Línea base: `main` (`335636b`) en un clon limpio, antes de mover nada. Después: la rama, en un clon limpio nuevo y en la carpeta de trabajo.
+
+| Prueba | Antes | Después |
+|---|---|---|
+| Instalación desde cero (`npm install` sin `node_modules`) | correcta | correcta: 482 paquetes; el lockfile no cambia al instalar |
+| Lockfile | — | las 530 dependencias con la misma versión, integridad y marcas; solo se agrega el enlace del workspace (y lo de 76.7) |
+| `npm run build` | 107 piezas precacheadas | 107 piezas; los mismos 103 archivos, 101 del mismo tamaño; `manifest.webmanifest`, `theme-init.js` e `index.html` (sin los hashes) idénticos. Cambian `index.js` (+18 B: el texto del aviso de consola) y el archivo de `dompurify` (+1.069 B: 76.7) |
+| `/version.json` | 1.19.0 | 1.19.0 (se sigue leyendo del `package.json` de la raíz) |
+| `npm run lint` | 195 archivos, 0 errores, 1 aviso | 195 archivos, 0 errores, el mismo aviso (`useAuth.tsx`) |
+| `npm audit --audit-level=high` | **falla** (crítico en `dompurify`) | pasa (quedan 4 bajos sin arreglo compatible) |
+| `npm run security:check` | 46 de 47 (falla el audit) | 48 de 48 |
+| `npm run test:release` (servidor simulado) | 122 de 122 | 122 de 122 |
+| Base local, PostgreSQL 16.14 | todas las migraciones desde base vacía sin fallas (`rebuild.sh`); suite 0122: 72 de 72; 13 migraciones idempotentes reaplicadas sin errores; `security_audit.sql` sin errores | `npm run test:db`: 120 migraciones aplicadas (0006 y 0008 salteadas, 38 errores tolerados hasta la 0093, los mismos que antes); 72 de 72; 13 de 13 reaplicadas; 72 de 72 otra vez; auditoría sin errores |
+| Pantallas, `npm run test:frontend` (Chrome 156 de escritorio con emulación de Android y de escritorio, Supabase simulado) | 512 vistas (4 variantes de rol × 64 pantallas × celular claro y escritorio oscuro), 0 fallas | 512 vistas, 0 fallas |
+| `npm run preview` (build de producción en local) | — | `/`, `/panel`, `/pendientes`, `/cuarteles/<id>`, `/notificaciones`, `/documentos`, `/mapa`, `/escuela/avales` y una ruta inexistente abren la aplicación; `manifest.webmanifest` ("SIGER4"), `sw.js`, `version.json`, `theme-init.js`, logos e íconos responden |
+| `npm run dev` | — | arranca desde la raíz y desde `frontend/`; las rutas directas abren |
+
+Además se comprobó que las pruebas nuevas fallan cuando tienen que fallar: `test:db` ante una migración que `psql` no puede leer, una suite con `FAIL` o con un error de SQL, un `PGHOST` de otro equipo y un puerto sin servidor; el control nuevo de `security:check` ante un `import` estático, de efecto, dinámico y una reexportación desde `backend/` o `tests/`.
+
+**No verificado:** el preview de Vercel de la rama (se mira en el pull request), producción después del merge, un deploy real de Edge Functions (no hacía falta), Deno, un celular físico, Safari e iOS. Producción se consultó solo para leer `/version.json` antes del cambio.
+
+### 76.6 Hallazgos previos a la separación
+
+| Severidad | Hallazgo | Qué se hizo |
+|---|---|---|
+| Alta | `npm audit --audit-level=high` fallaba en `main` por avisos nuevos: crítico en `dompurify` 3.4.16 (lo trae `jspdf` para `doc.html()`, que SIGER4 no usa), moderado en `fast-uri` y bajo en `serialize-javascript` (solo del armado) | Corregido en un commit aparte (76.7) |
+| Media | `tests/db/rebuild.sh` salteaba en silencio una migración si `psql` no podía leer el archivo (solo buscaba "ERROR"); pasa con rutas de más de 260 caracteres en Windows | `npm run test:db` lo trata como falla |
+| Media | Faltaba un objeto en el `.git` de este equipo (una versión de 2026-08-20 de `logo-escuela.png`); el árbol actual estaba completo | Se recuperó de GitHub verificando su hash; `git fsck` sin errores. Probablemente viene de tener el repositorio en una carpeta sincronizada (OneDrive): conviene clonarlo fuera de ella en cada equipo |
+| Baja | El `node_modules` de este equipo no coincidía con el lockfile (`vite` 7.3.6 instalado, 7.3.7 en el lockfile) | Reinstalado con `npm ci` |
+| Baja | `frontend/scripts/generate-icons.cjs` genera dos íconos que ya no usa nada | Se conserva (decisión de la sección 68.3); se puede borrar |
+| Informativa | Tres comentarios de las Edge Functions (`_shared/releaseAnnouncement.ts` y `announce-release/index.ts`) nombran las rutas viejas de las pruebas y del comando | No se tocaron para que las funciones sigan idénticas a las desplegadas |
+
+### 76.7 Cambios que no son movimientos
+
+- **Dependencias:** `npm audit fix` sin `--force`, solo en `package-lock.json` y dentro de los rangos declarados: `dompurify` 3.4.17, `fast-uri` 3.1.9, `serialize-javascript` 7.1.4; `workbox-build` cambia de lugar en el árbol con la misma versión.
+- **`frontend/vite.config.ts`:** lee la versión del `package.json` de la raíz (antes, el de su misma carpeta, que era la raíz).
+- **`frontend/eslint.config.js`:** deja de excluir rutas que ya no están en `frontend/`; revisa los mismos 195 archivos.
+- **`vercel.json`:** `buildCommand` y `outputDirectory` (76.3). El resto, igual.
+- **`.gitignore`:** `**/supabase/.temp`, `**/supabase/.branches` y `!frontend/public/**/*.pdf`.
+- **`npm run test:db`** (`tests/backend/db/run.mjs`) reemplaza a `rebuild.sh` con la misma lógica, funciona desde PowerShell, solo se conecta a un PostgreSQL local y agrega la reaplicación de las migraciones idempotentes y la auditoría.
+- **`security:check`:** control nuevo, "la interfaz no importa nada de fuera de `frontend/`".
+- **Aviso de consola** por variables faltantes (solo desarrollo): nombra `frontend/.env`.
+- Comentarios con rutas viejas en la interfaz, los scripts SQL de operación y las pruebas.
+
+### 76.8 Qué hacer para publicar
+
+1. Revisar el pull request y su preview de Vercel (el build tiene que terminar bien y la aplicación abrir).
+2. Hacer el merge a `main`: Vercel publica producción solo.
+3. Comprobar producción: `https://<sitio>/version.json` muestra el commit del merge y la versión 1.19.0; `npm run security:check -- --url https://<sitio>` sin fallas; abrir la aplicación instalada y aceptar el aviso de actualización.
+4. En Supabase: nada.
+5. En cada equipo que ya tenga el repositorio: mover `.env` a `frontend/.env` y `supabase/.temp/` a `backend/supabase/.temp/`, y correr `npm ci` (`docs/desarrollo.md`).
+6. No hace falta `npm run release:announce`: no hay nada nuevo para las personas usuarias y la versión sigue siendo 1.19.0.
+
+### 76.9 Si algo sale mal
+
+- **Volver atrás:** revertir el merge (`git revert -m 1 <commit del merge>`) y dejar que Vercel publique, o en Vercel volver a promover el despliegue anterior. No hay datos ni migraciones que deshacer.
+- **El build de Vercel no encuentra `frontend/dist` o no arranca:** confirmar que el Root Directory del proyecto en Vercel sea la raíz del repositorio y que `vercel.json` esté en la raíz.
+- **La CLI de Supabase no encuentra una función:** se corrió desde la raíz; repetir desde `backend/`.

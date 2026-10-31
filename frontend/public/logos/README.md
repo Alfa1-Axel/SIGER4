@@ -15,7 +15,7 @@
 
 - Logo de la Escuela Regional ("Anexo Escuela Regional 4 · Don Carlos Merlo"): NO está en esta carpeta.
   Vive en `src/assets/Logo escuela.png`, copia exacta (mismo nombre y mismos bytes) del original
-  `Logo escuela.png` de la raíz, que sigue excluido de git. Se importa desde
+  `Logo escuela.png` de la raíz del repositorio, que sigue excluido de git. Se importa desde
   `src/components/EscuelaHeader.tsx`, así Vite lo empaqueta con hash. 300×300px, PNG con
   transparencia: se ve bien en tema claro y oscuro. Se muestra a 48-56px dentro del módulo Escuela.
 
